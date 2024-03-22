@@ -16,9 +16,7 @@ def load_configuration(config_path):
 def main(args):
     sampler = getattr(samplers, args.sampler.pop('type'))(**args.sampler) 
     # runner = getattr(runners, args.runner.pop('type'))(**args.runner) 
-    print(sampler.__dict__)
     executor = getattr(executors, args.executor.pop('type'))(sampler, args.runner, **args.executor)  
-    print(executor.__dict__)
     # executor.initialize(sampler=sampler, runner=runner, parser=parser)
     executor.start_runs()
 
@@ -27,6 +25,5 @@ if __name__ == "__main__":
     # TODO: this should be argument with argparse
     config_path = "/scratch/project_2009007/enchanted-surrogates/tests/simple/test.yaml"
     config = load_configuration(config_path)
-    print(config)
     args = argparse.Namespace(**config)
     main(args)
