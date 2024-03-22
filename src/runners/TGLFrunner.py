@@ -4,10 +4,10 @@ import numpy as np
 from .base import Runner
 import parsers.TGLFparser as tglfparser
 import subprocess
+
 class TGLFrunner(Runner):
     def __init__(self, *args, **kwargs): 
         self.parser = tglfparser()
-        pass 
 
     def single_code_run(self, params: dict, run_dir: str):
         """ Logic to run TGLF """
@@ -27,6 +27,9 @@ class TGLFrunner(Runner):
         subprocess.run(['tglf', '-e', f'{tglf_sim_dir}'])
 
         # process code
-        return True 
+        self.parser.read_output_file(run_dir)
+
+        output = self.parser.fluxes
+        return output
 
     
