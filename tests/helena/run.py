@@ -22,7 +22,7 @@ def main(args):
 import argparse 
 if __name__ == "__main__":
     # TODO: this should be argument with argparse
-    config_path = "/scratch/project_2007009/.../example_input.yaml"
+    config_path = "/scratch/project_2009007/enchanted-surrogates/tests/helena/test.yaml"
     config = load_configuration(config_path)
     args = argparse.Namespace(**config)
     main(args)

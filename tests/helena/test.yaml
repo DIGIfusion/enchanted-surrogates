@@ -6,9 +6,9 @@ sampler:
 
 runner:
   type: HELENArunner
-  executable_path: "/scratch/project_2007009/HELENA/bin/hel13_64"
+  executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {}
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2007009/test
+  base_run_dir: /scratch/project_2009007/test-enchanted/helena
