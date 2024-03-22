@@ -1,14 +1,27 @@
 sampler:
   type: HypercubeSampler
   bounds: [[0, 1], [0, 1]]
-  num_samples: 128
+  num_samples: 10
   parameters: ['tria', 'ellip']
 
 runner:
   type: HELENArunner
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
-  other_params: {}
+  other_params: {"input_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/helena/fort.10"}
 
 executor:
   type: DaskExecutor
   base_run_dir: /scratch/project_2009007/test-enchanted/helena
+  worker_args: # to be specified for the SLURMCluster in DASK
+    account: "project_2009007"
+    queue: "medium"
+    cores: 1 
+    memory: "12GB"
+    processes: 1
+    walltime: "00:10:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    interface: "ib0"
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'module load python-data'
+      # - 'cd /scratch/project_2007159/cursed-tglf/'
+      # - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src' # NB: to use the enchanted-surrogate library
+  num_workers: 10
