@@ -1,8 +1,8 @@
 sampler:
-  type: HypercubeSampler
-  bounds: [[0, 1], [0, 1]]
-  num_samples: 128
-  parameters: ['alpha', 'beta']
+  type: Grid
+  bounds: [[0, 1], [0, 0.4]]
+  num_samples: 10
+  parameters: ['RMIN_LOC', 'DELTA_LOC']
 
 runner:
   type: TGLFrunner
@@ -14,7 +14,7 @@ executor:
   base_run_dir: /scratch/project_2007159/cursed-tglf/trial_dask
   num_workers: 4
   worker_args: # to be specified for the SLURMCluster in DASK
-    account: "project_2005083"
+    account: "project_2007159"
     queue: "medium"
     cores: 1 
     memory: "12GB"

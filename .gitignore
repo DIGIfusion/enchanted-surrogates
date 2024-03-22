@@ -1,8 +1,9 @@
 gacode/
-trial_simdir/
+trial_*/
 notebooks/
 tglf_setup.sh
 .venv/
 *.out
 *.err
 __pycache__/
+.vscode/
