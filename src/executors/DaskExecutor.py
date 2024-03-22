@@ -16,36 +16,39 @@ def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     return result, params_from_sampler
 
 class DaskExecutor: 
-    def __init__(self, sampler, runner_args, base_run_dir: str): 
+    def __init__(self, sampler, runner_args, base_run_dir: str, worker_args: dict, num_workers: int): 
         print("Starting Setup")
         self.sampler = sampler 
         self.runner_args = runner_args 
         self.base_run_dir = base_run_dir 
         self.max_samples = sampler.num_samples
-        # TODO: this is argument
-        self.job_script_prologue = ['module load python-data', 'cd /scratch/project_2007159/cursed-tglf/', 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src']
+        self.num_workers = num_workers
+
+        print(f'Making directory of simulations at: {self.base_run_dir}')
         os.makedirs(base_run_dir, exist_ok=True)
+
+        print('Beginning Cluster Generation')
+
+        ### Create the SLURMCluster and define the resources for each of the SLURM worker jobs. 
+        ### Note, that this is the reservation for ONE SLURM worker job.
+        self.cluster = SLURMCluster(**worker_args)
+        
+        ### This launches the cluster (submits the worker SLURM jobs)
+        self.cluster.scale(num_workers) 
+        self.client = Client(self.cluster)
+        print('Finished Setup')
         
     def start_runs(self): 
-        print('Beginning Cluster Generation')
-        cluster = SLURMCluster(account="project_2005083",
-                                    queue="medium",
-                                    cores=1, 
-                                    memory="12GB", 
-                                    processes=1, 
-                                    walltime="00:10:00", 
-                                    interface='ib0', 
-                                    job_script_prologue=self.job_script_prologue)
-        cluster.scale(1)
-        client = Client(cluster)
-        print('Finished Setup')
+        print(100*'=')
         print('Starting Database generation')
-
+        
         print('Creating initial runs')
         futures = [] 
+
+        # TODO: implement get_initial_parameters() from sampler 
         for _ in range(5): 
             params = self.sampler.get_next_parameter()
-            new_future = client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
+            new_future = self.client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
             futures.append(new_future)
 
         print('Starting search')
@@ -57,7 +60,7 @@ class DaskExecutor:
             print(res, completed)
             # TODO: is this waiting for an open node or are we just pushing to queue? 
             if self.max_samples > completed: 
-                params = self.sampler.get_next_parameter()
-                new_future = client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
+                # TODO: pass the previous result and parameters..
+                params = self.sampler.get_next_parameter() 
+                new_future = self.client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
                 seq.add(new_future)
- 
