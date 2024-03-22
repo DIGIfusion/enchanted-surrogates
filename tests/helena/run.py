@@ -1,6 +1,7 @@
 # run.py
 import yaml 
-
+import sys
+sys.path.append('/scratch/project_2009007/enchanted-surrogates/src')
 import samplers
 import runners 
 import executors 
