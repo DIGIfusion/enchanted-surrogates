@@ -1,0 +1,14 @@
+sampler:
+  type: HypercubeSampler
+  bounds: [[0, 1], [0, 1]]
+  num_samples: 128
+  parameters: ['tria', 'ellip']
+
+runner:
+  type: HELENArunner
+  executable_path: "/scratch/project_2007009/HELENA/bin/hel13_64"
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /scratch/project_2007009/test
