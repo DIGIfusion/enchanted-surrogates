@@ -16,12 +16,13 @@ class Grid(Sampler):
     """
     def __init__(self, bounds, num_samples, parameters):
         # check for stupidity
+        self.total_budget = (num_samples)**(len(parameters))
         if (num_samples)**(len(parameters)) > 100000: 
             raise Exception(f'Can not do grid search on more than 10000 samples, you requested {(num_samples)**(len(parameters))}')
         
         self.parameters = parameters
         self.bounds = bounds
-        self.num_samples = num_samples
+        self.num_samples = self.num_initial_points = num_samples
         self.samples = list(self.generate_parameters())
         self.current_index = 0 
 

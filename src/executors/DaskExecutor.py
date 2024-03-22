@@ -21,7 +21,7 @@ class DaskExecutor:
         self.sampler = sampler 
         self.runner_args = runner_args 
         self.base_run_dir = base_run_dir 
-        self.max_samples = sampler.num_samples
+        self.max_samples = sampler.total_budget
         self.num_workers = num_workers
 
         print(f'Making directory of simulations at: {self.base_run_dir}')
@@ -34,7 +34,7 @@ class DaskExecutor:
         self.cluster = SLURMCluster(**worker_args)
         
         ### This launches the cluster (submits the worker SLURM jobs)
-        self.cluster.scale(num_workers) 
+        self.cluster.scale(self.num_workers) 
         self.client = Client(self.cluster)
         print('Finished Setup')
         
@@ -46,7 +46,7 @@ class DaskExecutor:
         futures = [] 
 
         # TODO: implement get_initial_parameters() from sampler 
-        for _ in range(5): 
+        for _ in range(self.sampler.num_initial_points): 
             params = self.sampler.get_next_parameter()
             new_future = self.client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
             futures.append(new_future)
@@ -60,7 +60,10 @@ class DaskExecutor:
             print(res, completed)
             # TODO: is this waiting for an open node or are we just pushing to queue? 
             if self.max_samples > completed: 
-                # TODO: pass the previous result and parameters..
+                # TODO: pass the previous result and parameters.. For active learning
                 params = self.sampler.get_next_parameter() 
-                new_future = self.client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
-                seq.add(new_future)
+                if params == None: # This is hacky
+                    continue 
+                else: 
+                    new_future = self.client.submit(run_simulation_task, self.runner_args, params, self.base_run_dir)
+                    seq.add(new_future)
