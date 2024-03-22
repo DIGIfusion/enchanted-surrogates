@@ -1,0 +1,14 @@
+sampler:
+  type: HypercubeSampler
+  bounds: [[0, 1], [0, 1]]
+  num_samples: 128
+  parameters: ['alpha', 'beta']
+
+runner:
+  type: TGLFrunner
+  executable_path: "/path/to/simulation/executable"
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /scratch/project_2007159/cursed-tglf/trial_dask

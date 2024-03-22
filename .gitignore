@@ -1,0 +1,7 @@
+gacode/
+trial_simdir/
+notebooks/
+tglf_setup.sh
+.venv/
+*.out
+__pycache__/
