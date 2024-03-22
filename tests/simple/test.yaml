@@ -10,7 +10,7 @@ runner:
   other_params: {}
 
 executor:
-  type: DaskExecutor
+  type: LocalDaskExecutor
   base_run_dir: /scratch/project_2009007/test-enchanted/trial_dask
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
