@@ -27,14 +27,10 @@ class LocalDaskExecutor:
         print(f'Making directory of simulations at: {self.base_run_dir}')
         os.makedirs(base_run_dir, exist_ok=True)
 
-        print('Beginning Cluster Generation')
+        print('Beginning local Cluster Generation')
 
-        ### Create the SLURMCluster and define the resources for each of the SLURM worker jobs. 
-        ### Note, that this is the reservation for ONE SLURM worker job.
-        # self.cluster = SLURMCluster(**worker_args)
-        
-        ### This launches the cluster (submits the worker SLURM jobs)
-        # self.cluster.scale(num_workers) 
+        # calling Client with no arguments creates a local cluster
+        # it is possible to add arguments like: n_workers=2, threads_per_worker=4
         self.client = Client()
         print('Finished Setup')
         
