@@ -4,6 +4,7 @@ import numpy as np
 from .base import Runner
 import parsers.HELENAparser as helenaparser
 import subprocess
+import os
 
 class HELENArunner(Runner):
     def __init__(self, *args, **kwargs): 
@@ -16,6 +17,7 @@ class HELENArunner(Runner):
         self.parser.write_input_file(params, run_dir)
 
         # run code
+        os.chdir(run_dir)
         subprocess.call([self.executable_path])
 
         # process output
