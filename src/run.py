@@ -20,9 +20,13 @@ def main(args):
     executor.start_runs()
 
 import argparse 
+
+
 if __name__ == "__main__":
-    # TODO: this should be argument with argparse
-    config_path = "/scratch/project_2007159/cursed-tglf/src/test.yaml"
-    config = load_configuration(config_path)
+    parser = argparse.ArgumentParser(description='Runner')
+    parser.add_argument('-cf', '--config_file', type=str, default='base', help='name of configuration file!')
+    config_args = parser.parse_args() 
+    # config_path = "/scratch/project_2007159/cursed-tglf/src/test.yaml"
+    config = load_configuration(config_args.config_file)
     args = argparse.Namespace(**config)
     main(args)
