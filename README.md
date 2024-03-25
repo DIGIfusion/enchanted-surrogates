@@ -40,6 +40,9 @@ In the simplest case, the iterative process could be automated via `batch` job s
 - `main` branch is for stable code
 - `develop/{feature}` for the individual improvements to be `pushed` to main
 - don't use `Issues`
+- Be crystal clear in each commit about what changes you have made so if we need to revert back we can.
+- Don't change file names since then we loose history
+- Use .gitignore for large files you don't want on the repo.
 
 ## TODO
 
