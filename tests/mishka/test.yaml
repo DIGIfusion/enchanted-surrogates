@@ -1,17 +1,19 @@
 sampler:
   type: HypercubeSampler
-  bounds: [[1, 30]]
-  num_samples: 30
+  bounds: [[1, 3]]
+  num_samples: 3
   parameters: ['ntor']
 
 runner:
   type: MISHKArunner
   executable_path: "/scratch/project_2009007/MISHKA/bin/mishka1fast"
   other_params: {
-    "input_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/MISHKA/fort.10"}
+    "input_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/mishka/fort.10",
+    "input_fort12": "/scratch/project_2009007/mishka-nn/data/240313_saarelmathesis/test_tria0.24_pzjz0.16/fort.12",
+    "input_density": "/scratch/project_2009007/mishka-nn/data/240313_saarelmathesis/test_tria0.24_pzjz0.16/density"}
 
 executor:
-  type: DaskExecutor
+  type: LocalDaskExecutor
   base_run_dir: /scratch/project_2009007/test-enchanted/MISHKA_2024-03-25
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"

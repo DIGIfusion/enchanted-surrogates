@@ -4,6 +4,7 @@ import os
 import f90nml
 import numpy as np
 
+
 class MISHKAparser(Parser):
     """ An I/O parser for MISHKA """ 
     def __init__(self): 
@@ -15,12 +16,12 @@ class MISHKAparser(Parser):
         print('Writing to', run_dir)
         if os.path.exists(run_dir): 
             input_fpath = os.path.join(run_dir, 'fort.10')
-        else: 
+        else:
             raise FileNotFoundError(f'Couldnt find {run_dir}')
         
         # TODO: params should be dict, not list
         namelist = f90nml.read(self.default_namelist)
-        namelist['newrun'][0]['ntor'] = params[0]
+        namelist['newrun'][0]['ntor'] = -int(params[0])
 
         f90nml.write(namelist, input_fpath)
         print(input_fpath)
