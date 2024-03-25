@@ -21,10 +21,10 @@ class HELENAparser(Parser):
         # TODO: params should be dict, not list
         namelist = f90nml.read(self.default_namelist)
         namelist['shape']['tria'] = params[0]
-        namelist['shape']['ellip'] = params[1]
-        namelist['shape']['xr2'] = 1 - params[2] / 2.0
-        namelist['shape']['sig2'] = params[2]
-        namelist['profile']['zjz'] = self.make_init_zjz_profile(pedestal_delta=params[2], npts=namelist['profile']['npts'])
+        # namelist['shape']['ellip'] = params[1]
+        namelist['shape']['xr2'] = 1 - params[1] / 2.0
+        namelist['shape']['sig2'] = params[1]
+        namelist['profile']['zjz'] = self.make_init_zjz_profile(pedestal_delta=params[1], npts=namelist['profile']['npts'])
 
         f90nml.write(namelist, input_fpath)
         print(input_fpath)

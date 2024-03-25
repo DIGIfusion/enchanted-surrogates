@@ -1,8 +1,8 @@
 sampler:
   type: HypercubeSampler
-  bounds: [[0, 0.5], [1.4, 1.7], [0.02, 0.05]]
-  num_samples: 5
-  parameters: ['tria', 'ellip', 'pedestal_delta']
+  bounds: [[0.1, 0.5], [0.02, 0.05]]
+  num_samples: 2
+  parameters: ['tria', 'pedestal_delta']
 
 runner:
   type: HELENArunner
@@ -11,7 +11,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/test-enchanted/helena
+  base_run_dir: /scratch/project_2009007/test-enchanted/helena_2024-03-25
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"
