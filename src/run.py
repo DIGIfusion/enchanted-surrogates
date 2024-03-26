@@ -8,6 +8,7 @@ import executors
 def load_configuration(config_path):
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
+    config = argparse.Namespace(**config)
     return config
 
 
@@ -27,6 +28,5 @@ if __name__ == "__main__":
     parser.add_argument('-cf', '--config_file', type=str, default='base', help='name of configuration file!')
     config_args = parser.parse_args() 
     # config_path = "/scratch/project_2007159/cursed-tglf/src/test.yaml"
-    config = load_configuration(config_args.config_file)
-    args = argparse.Namespace(**config)
+    args = load_configuration(config_args.config_file)
     main(args)
