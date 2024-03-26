@@ -24,6 +24,6 @@ import argparse
 if __name__ == "__main__":
     # TODO: this should be argument with argparse
     config_path = "/scratch/project_2009007/enchanted-surrogates/tests/helena/test.yaml"
-    config = load_configuration(config_path)
-    args = argparse.Namespace(**config)
+    config = load_configuration(config_path) 
+    args = argparse.Namespace(**config) #Daniel: I don't understant why you need to convert it to a namespace. Isn't main(**config), just fine??
     main(args)
