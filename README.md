@@ -54,10 +54,17 @@ In the simplest case, the iterative process could be automated via `batch` job s
 2. Restart from save using simulation dir
 
 ## Coding Style Standards
-Classes defined with an uper case first letter and the rest is lower case.
-variables defined with full words seperated by _ all lower case.
 
-All variables that a user might wish to change should be defined in a config file
+The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used. 
+This includes for example:
+- Use 4 space indentation
+- Classes defined with an upper case first letter (CamelCase)
+- Variables and functions are defined with full words seperated by _ all lower case
+- Constants on module level in all capital letters
+
+For good docstring conventions, see [PEP257](https://peps.python.org/pep-0257/).
+
+All variables that a user might wish to change should be defined in a config file.
 
 
 
