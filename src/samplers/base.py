@@ -1,7 +1,9 @@
 # samplers/base.py
 
 from abc import ABC, abstractmethod
-from typing import Dict, Union
+from typing import Dict     # , Union
+
+
 class Sampler(ABC):
     """ Parameter Space Samplers """
     """
@@ -11,6 +13,6 @@ class Sampler(ABC):
         pass
     """
     @abstractmethod
-    def get_next_parameter(self)-> Dict[str, float]:
+    def get_next_parameter(self) -> Dict[str, float]:
         raise NotImplementedError('Sampling not implemented yet')
-        pass 
+        pass
