@@ -1,6 +1,6 @@
 # runners/MISHKA.py
 
-import numpy as np
+# import numpy as np
 from .base import Runner
 import parsers.MISHKAparser as MISHKAparser
 import subprocess
@@ -16,8 +16,8 @@ class MISHKArunner(Runner):
 
     For example, the executable path in the config file is
         executable_path: "/bin/mishka1fast"
-    and the toroidal mode number is n=20, which according to the europed standards
-    gives the poloidal mode number m=71.
+    and the toroidal mode number is n=20, which according to the europed
+    standards gives the poloidal mode number m=71.
     The runner will expect the executable to be "/bin/mishka1fast_71".
 
     """
@@ -26,15 +26,19 @@ class MISHKArunner(Runner):
             **kwargs):
         self.parser = MISHKAparser()
         self.executable_path = executable_path
-        self.input_namelist = other_params['input_namelist']  
+        self.input_namelist = other_params['input_namelist']
         self.input_fort12 = other_params['input_fort12']
         self.input_density = other_params['input_density']
 
         if not os.path.exists(self.input_namelist):
-            raise FileNotFoundError(f"Couldn't find {self.input_namelist}. other_params: {other_params}")
+            raise FileNotFoundError(
+                f"Couldn't find {self.input_namelist}. ",
+                f"other_params: {other_params}")
 
         if not os.path.exists(self.input_fort12):
-            raise FileNotFoundError(f"Couldn't find {self.input_fort12}. other_params: {other_params}")
+            raise FileNotFoundError(
+                f"Couldn't find {self.input_fort12}. ",
+                f"other_params: {other_params}")
 
         # MISHKA can run without density file
         if not os.path.exists(self.input_density):
@@ -53,6 +57,8 @@ class MISHKArunner(Runner):
         # run code
         os.chdir(run_dir)
         subprocess.call([f"{self.executable_path}_{mpol}"])
+
+        # TODO: if iteration 20 at instability found, restart with new guess
 
         # process output
         # self.parser.read_output_file(run_dir)
