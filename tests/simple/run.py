@@ -1,10 +1,9 @@
 # run.py
 import yaml
 import argparse
-# import sys
-from ...src import samplers
-# from ...src import runners
-from ...src import executors
+import samplers
+# import runners
+import executors
 
 
 def load_configuration(config_path):
@@ -24,7 +23,7 @@ def main(args):
 
 if __name__ == "__main__":
     # TODO: this should be argument with argparse
-    config_path = "/enchanted-surrogates/tests/simple/test.yaml"
+    config_path = "test.yaml"
     config = load_configuration(config_path)
     args = argparse.Namespace(**config)
     main(args)

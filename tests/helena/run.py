@@ -1,10 +1,9 @@
 # run.py
 import yaml
 import argparse
-# import sys
-from ...src import samplers
-# from ...src import runners
-from ...src import executors
+import samplers
+# import runners
+import executors
 
 
 def load_configuration(config_path):
