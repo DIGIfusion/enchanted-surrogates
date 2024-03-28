@@ -8,7 +8,24 @@ import math
 
 
 class MISHKAparser(Parser):
-    """An I/O parser for MISHKA"""
+    """An I/O parser for MISHKA
+
+     Attributes
+    ----------
+
+
+    Methods
+    -------
+    write_input_file
+        Writes the inputfile fort.10.
+
+    read_output_file_fort20
+        Not implemented.
+
+    read_output_file_fort22
+        Reads the output file fort.22.
+
+    """
 
     def __init__(self):
         pass
