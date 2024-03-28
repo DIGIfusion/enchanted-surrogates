@@ -21,24 +21,24 @@ class MISHKArunner(Runner):
     The runner will expect the executable to be "/bin/mishka1fast_71".
 
     """
-    def __init__(
-            self, executable_path: str, other_params: dict, *args,
-            **kwargs):
+
+    def __init__(self, executable_path: str, other_params: dict, *args, **kwargs):
         self.parser = MISHKAparser()
         self.executable_path = executable_path
-        self.input_namelist = other_params['input_namelist']
-        self.input_fort12 = other_params['input_fort12']
-        self.input_density = other_params['input_density']
+        self.default_namelist = other_params["input_namelist"]
+        self.input_fort12 = other_params["input_fort12"]
+        self.input_density = other_params["input_density"]
 
         if not os.path.exists(self.input_namelist):
             raise FileNotFoundError(
                 f"Couldn't find {self.input_namelist}. ",
-                f"other_params: {other_params}")
+                f"other_params: {other_params}",
+            )
 
         if not os.path.exists(self.input_fort12):
             raise FileNotFoundError(
-                f"Couldn't find {self.input_fort12}. ",
-                f"other_params: {other_params}")
+                f"Couldn't find {self.input_fort12}. ", f"other_params: {other_params}"
+            )
 
         # MISHKA can run without density file
         if not os.path.exists(self.input_density):
@@ -46,7 +46,8 @@ class MISHKArunner(Runner):
             print(f"Couldn't find {self.input_density}")
 
     def single_code_run(self, params: dict, run_dir: str):
-        """ Logic to run MISHKA """
+        """Logic to run MISHKA"""
+        print(params)
         # check if equilibrium files exist and copy them to run_dir
         self.get_equilibrium_files(run_dir)
 
@@ -57,8 +58,6 @@ class MISHKArunner(Runner):
         # run code
         os.chdir(run_dir)
         subprocess.call([f"{self.executable_path}_{mpol}"])
-
-        # TODO: if iteration 20 at instability found, restart with new guess
 
         # process output
         # self.parser.read_output_file(run_dir)
@@ -72,7 +71,14 @@ class MISHKArunner(Runner):
         return
 
     def get_mpol(self, n):
-        # Europed model set_harmonic(self,n):
+        """
+        Chooses the maximum poloidal harmonic to use in MISHKA.
+        As this class assumes that the MISHKA verions are
+        pre-compiled, this function chooses which version to
+        use.
+        Implementation following the Europed model set_harmonic(self,n)
+        for europed input parameter 0.
+        """
         nint = int(n)
         if nint < 4:
             harmonic = 21
