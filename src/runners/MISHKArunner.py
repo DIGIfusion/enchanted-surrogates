@@ -2,7 +2,7 @@
 
 # import numpy as np
 from .base import Runner
-import parsers.MISHKAparser as MISHKAparser
+from parsers import MISHKAparser
 import subprocess
 import os
 import shutil
