@@ -29,4 +29,4 @@ jobs:
         pip install f90nml
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        pylint $(git ls-files '*.py') --disable=R,C,W

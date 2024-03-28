@@ -2,19 +2,22 @@
 
 # import numpy as np
 from .base import Runner
-import parsers.SIMPLEparser as SIMPLEparser
 import subprocess
+from parsers import SIMPLEparser
 
 
 class SIMPLErunner(Runner):
-    def __init__(self, *args, **kwargs):
+    """
+    Runner class for simple test scenarios.
+    """
+
+    def __init__(self, executable_path: str, *args, **kwargs):
         self.parser = SIMPLEparser()
-        pass
+        self.executable_path = executable_path
 
     def single_code_run(self, params: dict, run_dir: str):
-        """ Logic to run a simple test program like a bash script """
+        """Logic to run a simple test program like a bash script"""
         self.parser.write_input_file(params, run_dir)
-        subprocess.run([
-            'bash', '/pathtoexecutablescript/simple.sh', f'{params}'])
+        subprocess.run(["bash", self.executable_path, f"{params}"])
 
         return True
