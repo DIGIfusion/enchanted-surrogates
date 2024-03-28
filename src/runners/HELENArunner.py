@@ -2,19 +2,19 @@
 
 # import numpy as np
 from .base import Runner
-import parsers.HELENAparser as helenaparser
+from parsers import HELENAparser
 import subprocess
 import os
 
 
 class HELENArunner(Runner):
     def __init__(self, *args, **kwargs):
-        self.parser = helenaparser()
+        self.parser = HELENAparser()
         self.executable_path = "/scratch/project_2009007/HELENA/bin/hel13_64"
         pass
 
     def single_code_run(self, params: dict, run_dir: str):
-        """ Logic to run HELENA """
+        """Logic to run HELENA"""
         self.parser.write_input_file(params, run_dir)
 
         # run code
