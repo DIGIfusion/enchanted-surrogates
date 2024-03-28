@@ -5,5 +5,5 @@ flake8
 matplotlib
 pytest 
 PyYAML
-"dask[complete]"
+dask[complete]
 dask-jobqueue
