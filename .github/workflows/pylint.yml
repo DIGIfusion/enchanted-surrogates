@@ -24,7 +24,7 @@ jobs:
         pip install pylint
         pip install numpy
         pip install pyyaml
-        pip install dask
+        pip install "dask[complete]"
         pip install f90nml
     - name: Analysing the code with pylint
       run: |
