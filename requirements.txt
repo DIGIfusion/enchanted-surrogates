@@ -1,0 +1,9 @@
+pylint
+numpy
+f90nml==1.4.4
+flake8 
+matplotlib
+pytest 
+PyYAML
+dask[complete]
+dask-jobqueue
