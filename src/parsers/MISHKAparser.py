@@ -27,11 +27,11 @@ class MISHKAparser(Parser):
 
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, default_namelist: str):
+        self.default_namelist = default_namelist
 
     def write_input_file(self, params: dict, run_dir: str):
-        print(run_dir, params)
+        print("parser params", params)
         print("Writing to", run_dir)
 
         if os.path.exists(run_dir):
@@ -40,7 +40,7 @@ class MISHKAparser(Parser):
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
         # TODO: params should be dict, not list
-        namelist = f90nml.read(params["input_namelist"])
+        namelist = f90nml.read(self.default_namelist)
         namelist["newrun"][0]["ntor"] = -int(params[0])
 
         f90nml.write(namelist, input_fpath)

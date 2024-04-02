@@ -1,20 +1,20 @@
 sampler:
   type: HypercubeSampler
-  bounds: [[1, 3]]
+  bounds: [[4, 20]]
   num_samples: 3
   parameters: ['ntor']
 
 runner:
   type: MISHKArunner
-  executable_path: "/scratch/project_2009007/MISHKA/bin/mishka1fast"
+  executable_path: "/scratch/project_2009007/MISHKA/bin/mishka/mishka1fast_gfortran"
   other_params: {
     "default_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/mishka/fort.10",
     "input_fort12": "/scratch/project_2009007/mishka-nn/data/240313_saarelmathesis/test_tria0.24_pzjz0.16/fort.12",
-    "input_density": "/scratch/project_2009007/mishka-nn/data/240313_saarelmathesis/test_tria0.24_pzjz0.16/density"}
+    "input_density": ""}
 
 executor:
-  type: LocalDaskExecutor
-  base_run_dir: /scratch/project_2009007/test-enchanted/MISHKA_2024-03-25
+  type: DaskExecutor
+  base_run_dir: /scratch/project_2009007/test-enchanted/MISHKA_2024-04-02
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"

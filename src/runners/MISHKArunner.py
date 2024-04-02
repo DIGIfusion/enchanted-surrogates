@@ -10,15 +10,15 @@ import shutil
 
 class MISHKArunner(Runner):
     """
+    Class for running MISHKA.
     Assumes that pre-compiled MISHKA binaries exist for m=(21,31,41,51,71).
     Adding "_m" at the end of the name of the defined executable path.
 
-
-    For example, the executable path in the config file is
+    For example, if the executable path in the config file is
         executable_path: "/bin/mishka1fast"
     and the toroidal mode number is n=20, which according to the europed
-    standards gives the poloidal mode number m=71.
-    The runner will expect the executable to be "/bin/mishka1fast_71".
+    standards gives the poloidal mode number m=71, then
+    the runner will expect the executable to be found at "/bin/mishka1fast_71".
 
     Attributes
     ----------
@@ -39,7 +39,7 @@ class MISHKArunner(Runner):
     """
 
     def __init__(self, executable_path: str, other_params: dict, *args, **kwargs):
-        self.parser = MISHKAparser()
+        self.parser = MISHKAparser(default_namelist=other_params["default_namelist"])
         self.executable_path = executable_path
         self.default_namelist = other_params["default_namelist"]
         self.input_fort12 = other_params["input_fort12"]
@@ -95,7 +95,8 @@ class MISHKArunner(Runner):
         """
         Copies the equilibirum files to the run directory.
         - fort.12 is needed
-        - density (fort.17) is optional (not used in all MISHKA versions?)
+        - density (fort.17) is optional (it is actually not used at all in our
+          MISHKA versions?)
 
         Parameters
         ----------
