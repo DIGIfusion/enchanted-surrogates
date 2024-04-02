@@ -7,7 +7,7 @@ on:
       - 'feature/**'
       - 'test/**'
 jobs:
-  build:
+  pytest:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,6 +25,6 @@ jobs:
     - name: Running pytest
       run: |
         coverage run -m pytest tests/test_hypercube.py -v -s
-     - name: Generate Coverage Report  
-        run: |  
-          coverage report -m
+    - name: Generate Coverage Report  
+      run: |  
+        coverage report -m
