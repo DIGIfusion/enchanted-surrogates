@@ -1,7 +1,5 @@
 # run.py
 import yaml
-import shutil
-import os
 import samplers
 # import runners
 import executors
@@ -13,7 +11,6 @@ def load_configuration(config_path):
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
     config.executor['config_filepath'] = config_path
-    print(config.executor)
     return config
 
 
