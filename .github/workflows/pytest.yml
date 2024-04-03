@@ -25,6 +25,7 @@ jobs:
     - name: Running pytest
       run: |
         coverage run -m pytest tests/test_hypercube.py -v -s
+        coverage run -m pytest tests/test_simple.py -v -s
     - name: Generate Coverage Report  
       run: |  
         coverage report -m
