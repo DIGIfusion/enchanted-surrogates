@@ -27,7 +27,8 @@ class SIMPLEparser(Parser):
             with open(file_name, "r") as file:
                 lines = file.readlines()
                 numbers_as_strings = lines[0].strip()[1:-1].split(",")
-                params_out = [float(num.strip()) for num in numbers_as_strings]
+                params_out = [float(num.strip()) for num in numbers_as_strings if num.strip() != '']
+                
             return params == params_out
         else:
             print(f"File '{file_name}' does not exist.")

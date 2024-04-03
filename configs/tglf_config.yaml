@@ -11,7 +11,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2007159/cursed-tglf/trial_dask2                 # where to store runs 
+  base_run_dir: /scratch/project_2007159/cursed-tglf/trial_dask3                 # where to store runs 
   num_workers: 4                                                                 # how many workers to run in parallel
   # below is the setup for an individual worker, each worker spams runs of a code
   worker_args:
