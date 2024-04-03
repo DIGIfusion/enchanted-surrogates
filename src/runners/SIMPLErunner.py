@@ -1,4 +1,5 @@
 # runners/SIMPLE.py
+import os
 
 # import numpy as np
 from .base import Runner
@@ -17,7 +18,8 @@ class SIMPLErunner(Runner):
 
     def single_code_run(self, params: dict, run_dir: str):
         """Logic to run a simple test program like a bash script"""
+        # os.chdir(run_dir)
         self.parser.write_input_file(params, run_dir)
-        subprocess.run(["bash", self.executable_path, f"{params}"])
-
-        return True
+        subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
+        res = self.parser.read_output_file(params, run_dir)
+        return res

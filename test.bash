@@ -15,7 +15,7 @@ module load python-data
 current_dir=$(pwd)
 export PYTHONPATH=$PYTHONPATH:$current_dir/src
 
-config_file=$current_dir/src/tglf_config.yaml
+config_file=$current_dir/configs/tglf_config.yaml
 
 echo $config_file
 srun python3 src/run.py -cf=$config_file

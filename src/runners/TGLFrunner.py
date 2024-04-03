@@ -12,11 +12,7 @@ class TGLFrunner(Runner):
 
     def single_code_run(self, params: dict, run_dir: str):
         """Logic to run TGLF"""
-        """
-        # TODO: change run_dir?
-        run_dir, as it is now, is the full path,
-        so we need to extract just the db_dir + simdir TGLF
-        """
+
         # write input file
         self.parser.write_input_file(params, run_dir)
 
@@ -24,11 +20,12 @@ class TGLFrunner(Runner):
         tglf_sim_dir = "/".join(run_dir.split("/")[-2:])
         subprocess.run(["tglf", "-i", f"{tglf_sim_dir}"])
 
-        # run code
+        # run TGLF
         subprocess.run(["tglf", "-e", f"{tglf_sim_dir}"])
 
-        # process code
+        # process TGLF
         self.parser.read_output_file(run_dir)
 
+        # return fluxes
         output = self.parser.fluxes
         return output

@@ -16,7 +16,7 @@ executor:
     account: "project_2009007"
     queue: "medium"
     cores: 2 
-    memory: "12GB"
+    memory: "1GB"
     processes: 1
     walltime: "00:10:00" # Adam: survival length of worker, so possibly just set to max in cluster
     interface: "ib0"
