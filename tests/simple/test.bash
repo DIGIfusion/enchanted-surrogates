@@ -14,4 +14,5 @@ module load python-data
 # source $WRKDIR/.venv/bin/activate
 # export PYTHONUNBUFFERED=1
 export PYTHONPATH=$PYTHONPATH:$WRKDIR/src
-srun python3 -u /scratch/project_2009007/enchanted-surrogates/tests/simple/run.py
+# srun python3 -u /scratch/project_2009007/enchanted-surrogates/tests/simple/run.py
+srun python3 -u /scratch/project_2009007/enchanted-surrogates/src/run.py --config_file /scratch/project_2009007/enchanted-surrogates/tests/simple/test.yaml
