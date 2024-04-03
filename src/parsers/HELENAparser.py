@@ -6,7 +6,23 @@ import numpy as np
 
 
 class HELENAparser(Parser):
-    """ An I/O parser for HELENA """
+    """ An I/O parser for HELENA
+
+    Attributes
+    ----------
+
+
+    Methods
+    -------
+    write_input_file
+        Writes the inputfile fort.10.
+
+    read_output_file_fort20
+        Not implemented.
+
+    read_output_file_fort22
+        Reads the output file fort.22.
+    """
     def __init__(self):
         self.default_namelist = ""
         pass
@@ -32,10 +48,16 @@ class HELENAparser(Parser):
         print(input_fpath)
 
     def read_output_file(self, run_dir: str):
-        pass
+        """
+        The main output file fort.20.
+        """
+        raise NotImplementedError
 
     def make_init_zjz_profile(self, pedestal_delta, npts):
-        # Makes the initial ZJZ profile based on the pressure profile
+        """
+        Makes the initial ZJZ profile based on the pressure profile
+        according to Europed implementation.
+        """
         alpha1, alpha2 = 1.0, 1.5
         x = np.linspace(0, 1, npts)
 
