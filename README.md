@@ -54,5 +54,9 @@ The `tests` folder contains unit tests. These can be run manually by using the c
 
 and will also be automatically run by Github Actions at certain pushes.
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
+To check the linting locally and get a full overview of all possible issues, run:
 
+    pylint src/runners/SIMPLErunner.py 
+
+where the argument is the path to the file you want to check.
 
