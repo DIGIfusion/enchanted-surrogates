@@ -5,6 +5,7 @@ import uuid
 import runners
 from dask.distributed import as_completed
 import os
+import shutil
 
 
 def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
@@ -17,6 +18,21 @@ def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
 
 
 class Executor(ABC):
+    def __init__(self, sampler, runner_args, base_run_dir, config_filepath, *args, **kwargs):
+        print("Starting Setup")
+        self.sampler = sampler  # kwargs.get('sampler')
+        self.runner_args = runner_args  # kwargs.get('runner_args')
+        self.base_run_dir = base_run_dir  # , kwargs.get('base_run_dir')
+        self.max_samples = self.sampler.total_budget
+        config_filepath = config_filepath  # kwargs.get('config_filepath')
+        print(config_filepath)
+        print(f'Making directory of simulations at: {self.base_run_dir}')
+        os.makedirs(self.base_run_dir, exist_ok=True)
+
+        print('Base Executor Initialization')
+
+        shutil.copyfile(config_filepath, os.path.join(self.base_run_dir, 'CONFIG.yaml'))
+
     def start_runs(self):
         print(100*'=')
         print('Starting Database generation')
