@@ -24,10 +24,39 @@ class HELENArunner(Runner):
         Runs MISHKA after copying and writing the input files
 
     """
-    def __init__(self, *args, **kwargs):
+
+    def __init__(
+        self,
+        executable_path,
+        other_params: dict,
+        *args,
+        **kwargs,
+    ):
+        """
+        Initialie HELENA runner class.
+
+        Parameters
+        ----------
+        executable_path : str
+            The path to where the executable binary.
+
+        namelist_path : str
+            The namelist constaining the HELENA values to be kept constant during the run.
+
+        only_generate_files: bool
+            Flag for either only creating input files or creating the files and running HELENA.
+        Returns
+        -------
+        None
+        """
         self.parser = HELENAparser()
-        self.executable_path = "/scratch/project_2009007/HELENA/bin/hel13_64"
-        pass
+        self.executable_path = (
+            executable_path  # "/scratch/project_2009007/HELENA/bin/hel13_64"
+        )
+        self.namelist_path = other_params["namelist_path"]
+        self.only_generate_files = True
+
+        self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -42,13 +71,30 @@ class HELENArunner(Runner):
         -------
         None
         """
-        self.parser.write_input_file(params, run_dir)
+
+        self.parser.write_input_file(params, run_dir, self.namelist_path)
 
         # run code
-        os.chdir(run_dir)
-        subprocess.call([self.executable_path])
+        if not self.only_generate_files:
+            os.chdir(run_dir)
+            subprocess.call([self.executable_path])
 
         # process output
         # self.parser.read_output_file(run_dir)
 
         return True
+
+    def pre_run_check(self):
+        # Does executable exist?
+        if not os.path.isfile(self.executable_path):
+            raise FileNotFoundError(
+                f"The executable path ({self.executable_path}) provided to the HELENA runner is not found. Exiting."
+            )
+        # Does base namelist exist?
+        if not os.path.isfile(self.namelist_path):
+            raise FileNotFoundError(
+                f"The namelist path ({self.namelist_path}) provided to the HELENA runner is not found. Exiting."
+            )
+        # TODO: Does base namelist contain paramters that this structure can handle or that makes sense?
+        # neped > nesep
+        return

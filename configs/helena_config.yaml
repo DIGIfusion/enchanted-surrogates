@@ -1,16 +1,18 @@
 sampler:
-  type: HypercubeSampler
-  bounds: [[0.1, 0.5], [0.02, 0.05]]
-  num_samples: 2
-  parameters: ['tria', 'pedestal_delta']
+  type: Grid
+  bounds: [[0.1, 0.5], [0.01, 0.05], [0.5, 0.9], [1, 10]]
+  num_samples: 3
+  parameters: ['tria', 'pedestal_delta', 'n_esep', 'n_eped']
 
 runner:
   type: HELENArunner
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
-  other_params: {"input_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/helena/fort.10"}
+  other_params: {
+    "namelist_path": "/scratch/project_2009007/europed_rewrite/helena_width_scans_240308124851248459/0/fort.10",
+    "only_generate_files": True}
 
 executor:
-  type: DaskExecutor
+  type: LocalDaskExecutor
   base_run_dir: /scratch/project_2009007/test-enchanted/helena_2024-03-25
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
