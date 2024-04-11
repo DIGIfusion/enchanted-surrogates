@@ -7,3 +7,4 @@ pytest
 PyYAML
 dask[complete]
 dask-jobqueue
+coverage
