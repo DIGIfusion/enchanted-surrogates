@@ -5,7 +5,8 @@ on:
     branches:
       - main
       - 'feature/**'
-      - 'test/**'
+  pull_request:
+    types: [opened, reopened]
 jobs:
   pytest:
     runs-on: ubuntu-latest
