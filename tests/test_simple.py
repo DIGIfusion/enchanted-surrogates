@@ -2,7 +2,7 @@ import pytest
 import os
 import sys
 import argparse
-import yaml 
+import yaml
 
 sys.path.append(os.getcwd() + "/src")
 from runners import SIMPLErunner
@@ -16,7 +16,7 @@ def test_simple_initialization():
 
 
 def test_simple_localexecutor():
-    """ 
+    """
     config = {
         "sampler": {
             "type": "HypercubeSampler",
@@ -48,9 +48,9 @@ def test_simple_localexecutor():
         },
     }
     """
-    config_filepath = os.path.join(os.getcwd(), 'tests/test_config.yaml')
+    config_filepath = os.path.join(os.getcwd(), "tests/test_config.yaml")
     args = run.load_configuration(config_filepath)
-    args.executor['config_filepath'] = config_filepath 
+    args.executor["config_filepath"] = config_filepath
     run.main(args)
 
     assert True
