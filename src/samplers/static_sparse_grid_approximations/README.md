@@ -1,1 +1,0 @@
-# static-sparse-grid-approximations
