@@ -32,38 +32,53 @@ class GENEparser(Parser):
 
         # then they can be parsed into a dictionary and added to the nml
 
-        self.base_nml = f90nml.read(base_params_dir)
-        print(self.base_nml.todict)
+        self.base_namelist = f90nml.read(base_params_dir) #odict_keys(['parallelization', 'box', 'in_out', 'general', 'geometry', '_grp_species_0', '_grp_species_1', 'units'])
+        
         # print(type(self.base_params))
 
-        patch_nml = f90nml.namelist.Namelist({'box':{'n_spec':'ii'}})
-        self.base_nml.patch(patch_nml)
-        print(self.base_nml)
+        # patch_nml = f90nml.namelist.Namelist({'box':{'n_spec':'ii'}})
+        # self.base_nml.patch(patch_nml)
+        # print(self.base_nml)
     
     def write_input_file(self, params: dict, run_dir: str):
-        self.base_nml.patch()
+        #self.base_nml.patch()
+        params_keys = list(params.keys())
+        params_values = list(params.values())
+        patch = {}
+
+        for key, value in zip(params_keys,params_values):
+            group_name, variable_name = key.split('-')
+            if list(patch.keys()).count(group_name) > 0:
+                patch[group_name][variable_name] = value
+            else: patch[group_name] = {variable_name:value}
+
+        namelist = self.base_namelist
+        patch = f90nml.namelist.Namelist(patch)
+        namelist.patch(patch)
         
-        # give some parameters write to a new input file!
-        # TODO: write a standard input file based on somthing?
-        print("parser params", params)
-        print("Writing to", run_dir)
-        if os.path.exists(run_dir):
-            input_fpath = os.path.join(run_dir, 'input.gene')
-            subprocess.run(['touch', f'{input_fpath}'])
-        else:
-            raise FileNotFoundError(f'Couldnt find {run_dir}')
+        f90nml.write(namelist, os.path.join(run_dir,'parameters'))
+
+        # # give some parameters write to a new input file!
+        # # TODO: write a standard input file based on somthing?
+        # print("parser params", params)
+        # print("Writing to", run_dir)
+        # if os.path.exists(run_dir):
+        #     input_fpath = os.path.join(run_dir, 'input.gene')
+        #     subprocess.run(['touch', f'{input_fpath}'])
+        # else:
+        #     raise FileNotFoundError(f'Couldnt find {run_dir}')
 
         
 
 
-        with open(input_fpath, 'w') as file:
-            for param_name, val in params.items():
-                default_params.pop(param_name)
-                file.write(f'{param_name}={val}\n')
-            for default_param_name, default_param_dict in default_params.items():
-                default_val = default_param_dict['default']
-                file.write(f'{default_param_name}={default_val}\n')
-        # TODO: check for input comparisons with available inputs for code?
+        # with open(input_fpath, 'w') as file:
+        #     for param_name, val in params.items():
+        #         default_params.pop(param_name)
+        #         file.write(f'{param_name}={val}\n')
+        #     for default_param_name, default_param_dict in default_params.items():
+        #         default_val = default_param_dict['default']
+        #         file.write(f'{default_param_name}={default_val}\n')
+        # # TODO: check for input comparisons with available inputs for code?
 
     def read_output_file(self, run_dir: str):
         ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
@@ -136,4 +151,7 @@ class GENEparser(Parser):
         return parameters_dict
     
 if __name__ == '__main__':
-    pa = GENEparser(base_params_dir='/home/djdaniel/Downloads/parameters_miller')
+    bounds = [[0.1, 300],[2,3.5],[4,6.8]]
+    params = {'box-kymin':100.1, '_grp_species_0-omt': 2.75, '_grp_species_1-omt':5.1, '_grp_species_1-dens':9000}
+    parser = GENEparser(base_params_dir='/home/djdaniel/Downloads/parameters')
+    parser.write_input_file(params,run_dir=os.getcwd())
