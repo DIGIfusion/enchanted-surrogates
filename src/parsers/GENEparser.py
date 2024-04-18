@@ -66,25 +66,9 @@ class GENEparser(Parser):
         
         f90nml.write(namelist, os.path.join(run_dir,'parameters'))
 
-    # def read_output_file(self, run_dir: str):
-    #     ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
-    #     growth_rate_freq_file_path = os.path.join(
-    #         run_dir, self.growth_rate_freq_file)
-    #     flux_spectrum_file_path = os.path.join(
-    #         run_dir, self.flux_spectrum_file)
-
-    #     self.ky_spectrum = np.genfromtxt(
-    #         ky_spectrum_file_path, dtype=None, skip_header=2)
-    #     self.eigenvalue_spectrum = np.genfromtxt(
-    #         growth_rate_freq_file_path, dtype=None, skip_header=2)
-    #     self.flux_spectrums = self.parse_flux_spectrum(flux_spectrum_file_path)
-    #     self.fluxes = []
-    #     for species in self.flux_spectrums:
-    #         energy_flux = species[:, 1].sum()
-    #         particle_flux = species[:, 0].sum()
-    #         self.fluxes.extend([energy_flux, particle_flux])
-    #     # self.fluxes = [flux_spec.sum() for flux_spec in self.flux_spectrums]
-
+    # what is returned here is returned to the runner for a single code run, which goes though the base executor to get to the future 
+    def read_output_file(self, run_dir: str):
+        raise NotImplementedError
     
 if __name__ == '__main__':
     bounds = [[0.1, 300],[2,3.5],[4,6.8]]
