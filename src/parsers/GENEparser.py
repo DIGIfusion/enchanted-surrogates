@@ -66,75 +66,25 @@ class GENEparser(Parser):
         
         f90nml.write(namelist, os.path.join(run_dir,'parameters'))
 
-    def read_output_file(self, run_dir: str):
-        ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
-        growth_rate_freq_file_path = os.path.join(
-            run_dir, self.growth_rate_freq_file)
-        flux_spectrum_file_path = os.path.join(
-            run_dir, self.flux_spectrum_file)
+    # def read_output_file(self, run_dir: str):
+    #     ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
+    #     growth_rate_freq_file_path = os.path.join(
+    #         run_dir, self.growth_rate_freq_file)
+    #     flux_spectrum_file_path = os.path.join(
+    #         run_dir, self.flux_spectrum_file)
 
-        self.ky_spectrum = np.genfromtxt(
-            ky_spectrum_file_path, dtype=None, skip_header=2)
-        self.eigenvalue_spectrum = np.genfromtxt(
-            growth_rate_freq_file_path, dtype=None, skip_header=2)
-        self.flux_spectrums = self.parse_flux_spectrum(flux_spectrum_file_path)
-        self.fluxes = []
-        for species in self.flux_spectrums:
-            energy_flux = species[:, 1].sum()
-            particle_flux = species[:, 0].sum()
-            self.fluxes.extend([energy_flux, particle_flux])
-        # self.fluxes = [flux_spec.sum() for flux_spec in self.flux_spectrums]
+    #     self.ky_spectrum = np.genfromtxt(
+    #         ky_spectrum_file_path, dtype=None, skip_header=2)
+    #     self.eigenvalue_spectrum = np.genfromtxt(
+    #         growth_rate_freq_file_path, dtype=None, skip_header=2)
+    #     self.flux_spectrums = self.parse_flux_spectrum(flux_spectrum_file_path)
+    #     self.fluxes = []
+    #     for species in self.flux_spectrums:
+    #         energy_flux = species[:, 1].sum()
+    #         particle_flux = species[:, 0].sum()
+    #         self.fluxes.extend([energy_flux, particle_flux])
+    #     # self.fluxes = [flux_spec.sum() for flux_spec in self.flux_spectrums]
 
-    def parse_flux_spectrum(self, file_path) -> List[np.ndarray]:
-        data_sets = []
-        current_data_set = []
-        with open(file_path, 'r') as file:
-            for line in file:
-                # Check if the line is a species marker indicating
-                # a new data set
-                if line.startswith(' species ='):
-                    # If we already have data collected, convert it to a NumPy
-                    # array and reset for the next set
-                    if current_data_set:
-                        data_sets.append(
-                            np.array(current_data_set, dtype=float))
-                        current_data_set = []
-                    # Skip the next line which contains column names
-                    next(file)
-                else:
-                    # Collect data lines into the current set
-                    data_values = line.split()
-                    if data_values:  # Ensure it's not an empty line
-                        current_data_set.append(
-                            [float(value) for value in data_values])
-            # Don't forget to add the last set if the file ends without
-            # a new marker
-            if current_data_set:
-                data_sets.append(np.array(current_data_set, dtype=float))
-        return data_sets
-
-    def input_dict(self, ) -> dict: 
-        parameters_dict = self.default_ga_input()
-
-        # BASED ON ASTRA INTERFACE FILE, ALL SET BEFORE THE RADIAL LOOP 
-        parameters_dict["KYGRID_MODEL"]['default'] = "4"
-        parameters_dict["SAT_RULE"]['default'] = "2"
-        parameters_dict["XNU_MODEL"]['default'] = "3" # SAT_RULE 2
-        parameters_dict["ALPHA_ZF"] = {'interface_parameter': 'tglf_alpha_zf_in', 'default': "1"} # SAT_RULE 2
-        
-        parameters_dict['USE_BPER']['default'] = ".True."
-        parameters_dict['USE_MHD_RULE']['default'] = ".Frue."
-
-        parameters_dict['NMODES']['default'] = str(int(parameters_dict['NS']['default']) + 2)
-        parameters_dict['NBASIS_MAX']['default'] = 6
-        parameters_dict['NKY']['default'] = 19
-        parameters_dict['UNITS']['default'] = 'CGYRO'
-
-        parameters_dict['VPAR_SHEAR_MODEL']['default'] = 1
-        
-
-   
-        return parameters_dict
     
 if __name__ == '__main__':
     bounds = [[0.1, 300],[2,3.5],[4,6.8]]
