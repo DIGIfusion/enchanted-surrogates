@@ -1,4 +1,4 @@
-from base import Parser # add . for relative import
+from .base import Parser # add . for relative import
 import subprocess
 import os
 import numpy as np
@@ -22,26 +22,34 @@ class GENEparser(Parser):
 
     """
     def __init__(self, base_params_dir):
-        # in other files the parameters are a list of strings.
-        # their format should be box-n_spec for unique &name entries
-        # for non unique ones like species it should be
-        # species-e-omn for &species
-                            #name = 'e'
-                            #omn = 
-        # where e is the uniquely identifying attribute
+        """
+        Generates the base f90nml namelist from the GENE parameters file at base_params_dir.
 
-        # then they can be parsed into a dictionary and added to the nml
-
+        Parameters
+        ----------
+            base_params_dir (string or path): The directory pointing to the base GENE parameters file.
+            The base GENE parameters file must contain all parameters necessary for GENE to run.
+            Any parameters to be sampled will be inserted into the base parameter file before each run.
+            Any value of a sampled parameter in the base file will be ignored. 
+        Returns
+        -------
+            Nothing 
+        """
         self.base_namelist = f90nml.read(base_params_dir) #odict_keys(['parallelization', 'box', 'in_out', 'general', 'geometry', '_grp_species_0', '_grp_species_1', 'units'])
         
-        # print(type(self.base_params))
+        
+    def write_input_file(self, params: dict, run_dir):
+        """
+        Write the GENE input file to the run directory specified. 
+        
+        Parameters
+        ----------
+            params (dict): The keys store strings of the names of the parameters as specified in the enchanted surrogates *_config.yaml configuration file.
+            The values stores floats of the parameter values to be ran in GENE.
 
-        # patch_nml = f90nml.namelist.Namelist({'box':{'n_spec':'ii'}})
-        # self.base_nml.patch(patch_nml)
-        # print(self.base_nml)
-    
-    def write_input_file(self, params: dict, run_dir: str):
-        #self.base_nml.patch()
+            run_dir (string or path): A directory in the machine intended for the run of GENE.  
+
+        """
         params_keys = list(params.keys())
         params_values = list(params.values())
         patch = {}
@@ -57,28 +65,6 @@ class GENEparser(Parser):
         namelist.patch(patch)
         
         f90nml.write(namelist, os.path.join(run_dir,'parameters'))
-
-        # # give some parameters write to a new input file!
-        # # TODO: write a standard input file based on somthing?
-        # print("parser params", params)
-        # print("Writing to", run_dir)
-        # if os.path.exists(run_dir):
-        #     input_fpath = os.path.join(run_dir, 'input.gene')
-        #     subprocess.run(['touch', f'{input_fpath}'])
-        # else:
-        #     raise FileNotFoundError(f'Couldnt find {run_dir}')
-
-        
-
-
-        # with open(input_fpath, 'w') as file:
-        #     for param_name, val in params.items():
-        #         default_params.pop(param_name)
-        #         file.write(f'{param_name}={val}\n')
-        #     for default_param_name, default_param_dict in default_params.items():
-        #         default_val = default_param_dict['default']
-        #         file.write(f'{default_param_name}={default_val}\n')
-        # # TODO: check for input comparisons with available inputs for code?
 
     def read_output_file(self, run_dir: str):
         ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
