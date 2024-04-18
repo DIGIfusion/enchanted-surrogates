@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.9.2" />
+<title>sys API documentation</title>
+<meta name="description" content="This module provides access to some objects used or maintained by the
+interpreter and to functions that interact strongly with the interpreter …" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>sys</code></h1>
+</header>
+<section id="section-intro">
+<p>This module provides access to some objects used or maintained by the
+interpreter and to functions that interact strongly with the interpreter.</p>
+<p>Dynamic objects:</p>
+<p>argv &ndash; command line arguments; argv[0] is the script pathname if known
+path &ndash; module search path; path[0] is the script directory, else ''
+modules &ndash; dictionary of loaded modules</p>
+<p>displayhook &ndash; called to show results in an interactive session
+excepthook &ndash; called to handle any uncaught exception other than SystemExit
+To customize printing in an interactive session or to install a custom
+top-level exception handler, assign other functions to replace these.</p>
+<p>stdin &ndash; standard input file object; used by input()
+stdout &ndash; standard output file object; used by print()
+stderr &ndash; standard error object; used for error messages
+By assigning other file objects (or objects that behave like files)
+to these, it is possible to redirect all of the interpreter's I/O.</p>
+<p>last_type &ndash; type of last uncaught exception
+last_value &ndash; value of last uncaught exception
+last_traceback &ndash; traceback of last uncaught exception
+These three are only available in an interactive session after a
+traceback has been printed.</p>
+<p>Static objects:</p>
+<p>builtin_module_names &ndash; tuple of module names built into this interpreter
+copyright &ndash; copyright notice pertaining to this interpreter
+exec_prefix &ndash; prefix used to find the machine-specific Python library
+executable &ndash; absolute path of the executable binary of the Python interpreter
+float_info &ndash; a named tuple with information about the float implementation.
+float_repr_style &ndash; string indicating the style of repr() output for floats
+hash_info &ndash; a named tuple with information about the hash algorithm.
+hexversion &ndash; version information encoded as a single integer
+implementation &ndash; Python implementation information.
+int_info &ndash; a named tuple with information about the int implementation.
+maxsize &ndash; the largest supported length of containers.
+maxunicode &ndash; the value of the largest Unicode code point
+platform &ndash; platform identifier
+prefix &ndash; prefix used to find the Python library
+thread_info &ndash; a named tuple with information about the thread implementation.
+version &ndash; the version of this interpreter as a string
+version_info &ndash; version information as a named tuple
+<strong>stdin</strong> &ndash; the original stdin; don't touch!
+<strong>stdout</strong> &ndash; the original stdout; don't touch!
+<strong>stderr</strong> &ndash; the original stderr; don't touch!
+<strong>displayhook</strong> &ndash; the original displayhook; don't touch!
+<strong>excepthook</strong> &ndash; the original excepthook; don't touch!</p>
+<p>Functions:</p>
+<p>displayhook() &ndash; print an object to the screen, and save it in builtins._
+excepthook() &ndash; print an exception and its traceback to sys.stderr
+exception() &ndash; return the current thread's active exception
+exc_info() &ndash; return information about the current thread's active exception
+exit() &ndash; exit the interpreter by raising SystemExit
+getdlopenflags() &ndash; returns flags to be used for dlopen() calls
+getprofile() &ndash; get the global profiling function
+getrefcount() &ndash; return the reference count for an object (plus one :-)
+getrecursionlimit() &ndash; return the max recursion depth for the interpreter
+getsizeof() &ndash; return the size of an object in bytes
+gettrace() &ndash; get the global debug tracing function
+setdlopenflags() &ndash; set the flags to be used for dlopen() calls
+setprofile() &ndash; set the global profiling function
+setrecursionlimit() &ndash; set the max recursion depth for the interpreter
+settrace() &ndash; set the global debug tracing function</p>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="sys.addaudithook"><code class="name flex">
+<span>def <span class="ident">addaudithook</span></span>(<span>hook)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Adds a new audit hook callback.</p></div>
+</dd>
+<dt id="sys.audit"><code class="name flex">
+<span>def <span class="ident">audit</span></span>(<span>event, *args)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Passes the event to any audit hooks that are attached.</p></div>
+</dd>
+<dt id="sys.breakpointhook"><code class="name flex">
+<span>def <span class="ident">breakpointhook</span></span>(<span>*args, **kws)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>This hook function is called by built-in breakpoint().</p></div>
+</dd>
+<dt id="sys.call_tracing"><code class="name flex">
+<span>def <span class="ident">call_tracing</span></span>(<span>func, args, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Call func(*args), while tracing is enabled.</p>
+<p>The tracing state is saved, and restored afterwards.
+This is intended
+to be called from a debugger from a checkpoint, to recursively debug
+some other code.</p></div>
+</dd>
+<dt id="sys.displayhook"><code class="name flex">
+<span>def <span class="ident">displayhook</span></span>(<span>object, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Print an object to sys.stdout and also save it in builtins._</p></div>
+</dd>
+<dt id="sys.exc_info"><code class="name flex">
+<span>def <span class="ident">exc_info</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return current exception information: (type, value, traceback).</p>
+<p>Return information about the most recent exception caught by an except
+clause in the current stack frame or in an older stack frame.</p></div>
+</dd>
+<dt id="sys.excepthook"><code class="name flex">
+<span>def <span class="ident">excepthook</span></span>(<span>exctype, value, traceback, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Handle an exception by displaying it with a traceback on sys.stderr.</p></div>
+</dd>
+<dt id="sys.exception"><code class="name flex">
+<span>def <span class="ident">exception</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the current exception.</p>
+<p>Return the most recent exception caught by an except clause
+in the current stack frame or in an older stack frame, or None
+if no such exception exists.</p></div>
+</dd>
+<dt id="sys.exit"><code class="name flex">
+<span>def <span class="ident">exit</span></span>(<span>status=None, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Exit the interpreter by raising SystemExit(status).</p>
+<p>If the status is omitted or None, it defaults to zero (i.e., success).
+If the status is an integer, it will be used as the system exit status.
+If it is another kind of object, it will be printed and the system
+exit status will be one (i.e., failure).</p></div>
+</dd>
+<dt id="sys.get_asyncgen_hooks"><code class="name flex">
+<span>def <span class="ident">get_asyncgen_hooks</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the installed asynchronous generators hooks.</p>
+<p>This returns a namedtuple of the form (firstiter, finalizer).</p></div>
+</dd>
+<dt id="sys.get_coroutine_origin_tracking_depth"><code class="name flex">
+<span>def <span class="ident">get_coroutine_origin_tracking_depth</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Check status of origin tracking for coroutine objects in this thread.</p></div>
+</dd>
+<dt id="sys.get_int_max_str_digits"><code class="name flex">
+<span>def <span class="ident">get_int_max_str_digits</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the maximum string digits limit for non-binary int&lt;-&gt;str conversions.</p></div>
+</dd>
+<dt id="sys.getallocatedblocks"><code class="name flex">
+<span>def <span class="ident">getallocatedblocks</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the number of memory blocks currently allocated.</p></div>
+</dd>
+<dt id="sys.getdefaultencoding"><code class="name flex">
+<span>def <span class="ident">getdefaultencoding</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the current default encoding used by the Unicode implementation.</p></div>
+</dd>
+<dt id="sys.getdlopenflags"><code class="name flex">
+<span>def <span class="ident">getdlopenflags</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the current value of the flags that are used for dlopen calls.</p>
+<p>The flag constants are defined in the os module.</p></div>
+</dd>
+<dt id="sys.getfilesystemencodeerrors"><code class="name flex">
+<span>def <span class="ident">getfilesystemencodeerrors</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the error mode used Unicode to OS filename conversion.</p></div>
+</dd>
+<dt id="sys.getfilesystemencoding"><code class="name flex">
+<span>def <span class="ident">getfilesystemencoding</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the encoding used to convert Unicode filenames to OS filenames.</p></div>
+</dd>
+<dt id="sys.getprofile"><code class="name flex">
+<span>def <span class="ident">getprofile</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the profiling function set with sys.setprofile.</p>
+<p>See the profiler chapter in the library manual.</p></div>
+</dd>
+<dt id="sys.getrecursionlimit"><code class="name flex">
+<span>def <span class="ident">getrecursionlimit</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the current value of the recursion limit.</p>
+<p>The recursion limit is the maximum depth of the Python interpreter
+stack.
+This limit prevents infinite recursion from causing an overflow
+of the C stack and crashing Python.</p></div>
+</dd>
+<dt id="sys.getrefcount"><code class="name flex">
+<span>def <span class="ident">getrefcount</span></span>(<span>object, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the reference count of object.</p>
+<p>The count returned is generally one higher than you might expect,
+because it includes the (temporary) reference as an argument to
+getrefcount().</p></div>
+</dd>
+<dt id="sys.getsizeof"><code class="name flex">
+<span>def <span class="ident">getsizeof</span></span>(<span>object, default)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>getsizeof(object [, default]) -&gt; int</p>
+<p>Return the size of object in bytes.</p></div>
+</dd>
+<dt id="sys.getswitchinterval"><code class="name flex">
+<span>def <span class="ident">getswitchinterval</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the current thread switch interval; see sys.setswitchinterval().</p></div>
+</dd>
+<dt id="sys.gettrace"><code class="name flex">
+<span>def <span class="ident">gettrace</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the global debug tracing function set with sys.settrace.</p>
+<p>See the debugger chapter in the library manual.</p></div>
+</dd>
+<dt id="sys.intern"><code class="name flex">
+<span>def <span class="ident">intern</span></span>(<span>string, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>``Intern'' the given string.</p>
+<p>This enters the string in the (global) table of interned strings whose
+purpose is to speed up dictionary lookups. Return the string itself or
+the previously interned string object with the same value.</p></div>
+</dd>
+<dt id="sys.is_finalizing"><code class="name flex">
+<span>def <span class="ident">is_finalizing</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return True if Python is exiting.</p></div>
+</dd>
+<dt id="sys.set_asyncgen_hooks"><code class="name flex">
+<span>def <span class="ident">set_asyncgen_hooks</span></span>(<span>firstiter, finalizer)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>set_asyncgen_hooks([firstiter] [, finalizer])</p>
+<p>Set a finalizer for async generators objects.</p></div>
+</dd>
+<dt id="sys.set_coroutine_origin_tracking_depth"><code class="name flex">
+<span>def <span class="ident">set_coroutine_origin_tracking_depth</span></span>(<span>depth)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Enable or disable origin tracking for coroutine objects in this thread.</p>
+<p>Coroutine objects will track 'depth' frames of traceback information
+about where they came from, available in their cr_origin attribute.</p>
+<p>Set a depth of 0 to disable.</p></div>
+</dd>
+<dt id="sys.set_int_max_str_digits"><code class="name flex">
+<span>def <span class="ident">set_int_max_str_digits</span></span>(<span>maxdigits)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the maximum string digits limit for non-binary int&lt;-&gt;str conversions.</p></div>
+</dd>
+<dt id="sys.setdlopenflags"><code class="name flex">
+<span>def <span class="ident">setdlopenflags</span></span>(<span>flags, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the flags used by the interpreter for dlopen calls.</p>
+<p>This is used, for example, when the interpreter loads extension
+modules. Among other things, this will enable a lazy resolving of
+symbols when importing a module, if called as sys.setdlopenflags(0).
+To share symbols across extension modules, call as
+sys.setdlopenflags(os.RTLD_GLOBAL).
+Symbolic names for the flag
+modules can be found in the os module (RTLD_xxx constants, e.g.
+os.RTLD_LAZY).</p></div>
+</dd>
+<dt id="sys.setprofile"><code class="name flex">
+<span>def <span class="ident">setprofile</span></span>(<span>function)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the profiling function.
+It will be called on each function call
+and return.
+See the profiler chapter in the library manual.</p></div>
+</dd>
+<dt id="sys.setrecursionlimit"><code class="name flex">
+<span>def <span class="ident">setrecursionlimit</span></span>(<span>limit, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the maximum depth of the Python interpreter stack to n.</p>
+<p>This limit prevents infinite recursion from causing an overflow of the C
+stack and crashing Python.
+The highest possible limit is platform-
+dependent.</p></div>
+</dd>
+<dt id="sys.setswitchinterval"><code class="name flex">
+<span>def <span class="ident">setswitchinterval</span></span>(<span>interval, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the ideal thread switching delay inside the Python interpreter.</p>
+<p>The actual frequency of switching threads can be lower if the
+interpreter executes long sequences of uninterruptible code
+(this is implementation-specific and workload-dependent).</p>
+<p>The parameter must represent the desired switching delay in seconds
+A typical value is 0.005 (5 milliseconds).</p></div>
+</dd>
+<dt id="sys.settrace"><code class="name flex">
+<span>def <span class="ident">settrace</span></span>(<span>function)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the global debug tracing function.
+It will be called on each
+function call.
+See the debugger chapter in the library manual.</p></div>
+</dd>
+<dt id="sys.unraisablehook"><code class="name flex">
+<span>def <span class="ident">unraisablehook</span></span>(<span>unraisable, /)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Handle an unraisable exception.</p>
+<p>The unraisable argument has the following attributes:</p>
+<ul>
+<li>exc_type: Exception type.</li>
+<li>exc_value: Exception value, can be None.</li>
+<li>exc_traceback: Exception traceback, can be None.</li>
+<li>err_msg: Error message, can be None.</li>
+<li>object: Object causing the exception, can be None.</li>
+</ul></div>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="sys.addaudithook" href="#sys.addaudithook">addaudithook</a></code></li>
+<li><code><a title="sys.audit" href="#sys.audit">audit</a></code></li>
+<li><code><a title="sys.breakpointhook" href="#sys.breakpointhook">breakpointhook</a></code></li>
+<li><code><a title="sys.call_tracing" href="#sys.call_tracing">call_tracing</a></code></li>
+<li><code><a title="sys.displayhook" href="#sys.displayhook">displayhook</a></code></li>
+<li><code><a title="sys.exc_info" href="#sys.exc_info">exc_info</a></code></li>
+<li><code><a title="sys.excepthook" href="#sys.excepthook">excepthook</a></code></li>
+<li><code><a title="sys.exception" href="#sys.exception">exception</a></code></li>
+<li><code><a title="sys.exit" href="#sys.exit">exit</a></code></li>
+<li><code><a title="sys.get_asyncgen_hooks" href="#sys.get_asyncgen_hooks">get_asyncgen_hooks</a></code></li>
+<li><code><a title="sys.get_coroutine_origin_tracking_depth" href="#sys.get_coroutine_origin_tracking_depth">get_coroutine_origin_tracking_depth</a></code></li>
+<li><code><a title="sys.get_int_max_str_digits" href="#sys.get_int_max_str_digits">get_int_max_str_digits</a></code></li>
+<li><code><a title="sys.getallocatedblocks" href="#sys.getallocatedblocks">getallocatedblocks</a></code></li>
+<li><code><a title="sys.getdefaultencoding" href="#sys.getdefaultencoding">getdefaultencoding</a></code></li>
+<li><code><a title="sys.getdlopenflags" href="#sys.getdlopenflags">getdlopenflags</a></code></li>
+<li><code><a title="sys.getfilesystemencodeerrors" href="#sys.getfilesystemencodeerrors">getfilesystemencodeerrors</a></code></li>
+<li><code><a title="sys.getfilesystemencoding" href="#sys.getfilesystemencoding">getfilesystemencoding</a></code></li>
+<li><code><a title="sys.getprofile" href="#sys.getprofile">getprofile</a></code></li>
+<li><code><a title="sys.getrecursionlimit" href="#sys.getrecursionlimit">getrecursionlimit</a></code></li>
+<li><code><a title="sys.getrefcount" href="#sys.getrefcount">getrefcount</a></code></li>
+<li><code><a title="sys.getsizeof" href="#sys.getsizeof">getsizeof</a></code></li>
+<li><code><a title="sys.getswitchinterval" href="#sys.getswitchinterval">getswitchinterval</a></code></li>
+<li><code><a title="sys.gettrace" href="#sys.gettrace">gettrace</a></code></li>
+<li><code><a title="sys.intern" href="#sys.intern">intern</a></code></li>
+<li><code><a title="sys.is_finalizing" href="#sys.is_finalizing">is_finalizing</a></code></li>
+<li><code><a title="sys.set_asyncgen_hooks" href="#sys.set_asyncgen_hooks">set_asyncgen_hooks</a></code></li>
+<li><code><a title="sys.set_coroutine_origin_tracking_depth" href="#sys.set_coroutine_origin_tracking_depth">set_coroutine_origin_tracking_depth</a></code></li>
+<li><code><a title="sys.set_int_max_str_digits" href="#sys.set_int_max_str_digits">set_int_max_str_digits</a></code></li>
+<li><code><a title="sys.setdlopenflags" href="#sys.setdlopenflags">setdlopenflags</a></code></li>
+<li><code><a title="sys.setprofile" href="#sys.setprofile">setprofile</a></code></li>
+<li><code><a title="sys.setrecursionlimit" href="#sys.setrecursionlimit">setrecursionlimit</a></code></li>
+<li><code><a title="sys.setswitchinterval" href="#sys.setswitchinterval">setswitchinterval</a></code></li>
+<li><code><a title="sys.settrace" href="#sys.settrace">settrace</a></code></li>
+<li><code><a title="sys.unraisablehook" href="#sys.unraisablehook">unraisablehook</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+</footer>
+</body>
+</html>
