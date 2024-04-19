@@ -4,6 +4,7 @@ import os
 import numpy as np
 from typing import List
 from copy import deepcopy
+import numpy as np 
 
 class TGLFparser(Parser):
     """ An I/O parser for TGLF """
@@ -11,7 +12,18 @@ class TGLFparser(Parser):
         self.ky_spectrum_file = 'out.tglf.ky_spectrum'
         self.growth_rate_freq_file = 'out.tglf.eigenvalue_spectrum'
         self.flux_spectrum_file = 'out.tglf.sum_flux_spectrum'
-        self.default_parameters = self.input_dict()
+        self.default_parameters = self.get_default_tokamak_parameters()
+
+        self.kb   = 1.3806E-23 # m^2kg/s^2K
+        self.k0   = 1.6022E-12 # erg/ev
+        self.e0   = 4.8032E-10 # elementary charge (statcoulombs)
+        self.e00  = 1.6020E-19 # elementary charge (C)
+        self.c0   = 2.9979E+10 # speed of light (cm/sec)
+        self.me   = 9.1093E-28 # electron mass (g)
+        self.mee   = 9.1093E-31 # electron mass (kg)
+        self.mp   = 1.6726E-24 # proton mass (g)
+        self.mpp  = 1.6726E-27 # proton mass (kg)
+        self.pi   = np.pi
 
     def write_input_file(self, params: dict, run_dir: str):
         # give some parameters write to a new input file!
@@ -23,16 +35,18 @@ class TGLFparser(Parser):
         else:
             raise FileNotFoundError(f'Couldnt find {run_dir}')
 
-        default_params: dict = deepcopy(self.default_parameters)
+        run_parameters: dict = deepcopy(self.default_parameters)
+        
+        for param_name, val in params.items():
+            if param_name not in run_parameters.keys(): 
+                raise ValueError(f'{param_name} not included in the variables changable, please consult')
+            run_parameters[param_name] = val 
+        
+        tglf_params = self.get_tglf_inputs_from_tokamak_parameters(run_parameters)
         
         with open(input_fpath, 'w') as file:
-            for param_name, val in params.items():
-                default_params.pop(param_name)
+            for param_name, val in tglf_params.items(): 
                 file.write(f'{param_name}={val}\n')
-            for default_param_name, default_param_dict in default_params.items():
-                default_val = default_param_dict['default']
-                file.write(f'{default_param_name}={default_val}\n')
-        # TODO: check for input comparisons with available inputs for code?
 
     def read_output_file(self, run_dir: str):
         ky_spectrum_file_path = os.path.join(run_dir, self.ky_spectrum_file)
@@ -81,6 +95,270 @@ class TGLFparser(Parser):
                 data_sets.append(np.array(current_data_set, dtype=float))
         return data_sets
 
+    def get_default_tokamak_parameters(self, ) -> dict: 
+        geometric_params = {
+            'ELON':  1.58,    # Elongation of a magnetic surface [-]
+            'TRIA':  0.22,    # Triangularity of a magnetic surface [-]
+            'A0':    0.5,     # mid plane major radius last closed flux surface [m] <- Not included in ASTRA input since it is last value of AMETR profile
+            'BTOR':  2.5,     # toroidal field strength [T] 
+            # need equilibrium file for below
+            'RTOR':  1.6,     # major radius on toroidal axis [m], includes shafranov shift
+            'RHO':   0.03,    # normalized flux coordinate (x-axis) [m]
+            'VRS':   1.0,     # Volume gradient on intermediate grid at time t [m^2]
+            'AMETR': 0.25,    # Magnetic surface radius in a mid-plane [m]
+            # 'SHIF':  0.0,     # Shafranov shift of a magnetic surface 
+            'G11':   1.0,     # <\grad(rho)^2>VRS [m^2]
+            'MU':    0.17,    # inverse safety factor 1 / q? 
+        }
+
+        # these are not included in the ASTRA stuff but necessary
+        gradient_params = {
+            # "drhodrmin":   1.0,
+            "drmin":  0.01,
+            "dqdrmin" : 0.01, # used in q_prime and s
+            "drmaj":  1.0,
+            "dptotdrmin":  0.1,
+            "drmajdrmin": 0.1, 
+            'dq':     1.0,
+            'dtriandrmin': 0.1, 
+            'delondrmin':  0.1,
+            'dvperdrmin':  0.1, # in principle is the same as ER
+            'dv_rdrmin':        1.0, # line 349, difference in VPAR
+            # normalized density gradients
+            'dnedrmin':    -3.885974E-3, # E16, 
+            'dtedrmin':    1.2641052E-3, 
+            'dnidrmin':    -3.885974E-3,# E16, 
+            'dtidrmin':    1.2641052E-3, 
+            'dzti1drmin':  0.0,
+            'dzti2drmin':  0.0, # impurity temperature gradient
+            'dzti3drmin':  0.0,
+            'dzni1drmin':  0.0,
+            'dzni2drmin':  0.0,
+            'dzni3drmin':  0.0,
+        }
+
+        # Main Plasma Parameters
+        main_plasma_params = {
+            # 'NE':  5.5446718,# E19,     # density electron
+            'TE':  1.5961982,     # temperature electron [keV, as it will be multiplied by 1000] [1-]
+            'NI':  5.5446718, # E19,     # density main ion species
+            'TI':  1.5961982,     # temperature main ion species [keV, as it will be multiplied by 1000]
+            'AMJ': 1.0,           # Main ion mass 
+            'ZMJ': 1.0,           # Main ion charge
+            'ZEF': 5.0,           # Integral by electron number (density * charge) -> profile
+        }
+
+        # Impurities
+        impurity_params = {
+            'NIZ1': 1E-9,   # density impurity species 1
+            'NIZ2': 1E-9,   # density impurity species 2
+            'NIZ3': 1E-9,   # density impurity species 3
+            'ZIM1': 2.0,   # Charge (Ionization) of impurity 1 
+            'ZIM2': 3.0,   # Charge (Ionization) of impurity 2 
+            'ZIM3': 4.0,   # Charge (Ionization) of impurity 3
+            "AIM1": 3.0,   # atomic mass of impurity 1 
+            "AIM2": 3.0,   # atomic mass of impurity 2 
+            "AIM3": 3.0,   # atomic mass of impurity 3
+            "TIZ1": 1E-9,   # Temperature of impurity 1 [eV]
+            "TIZ2": 1E-9,   # Temperature of impurity 1 [eV]
+            "TIZ3": 1E-9,   # Temperature of impurity 1 [eV]
+        }
+
+        # Auxiliary Plasma Parameters
+
+        # can condense P into just one total pressure
+        auxiliary_plasma_params = {
+            'VPOL': 0.0,   # Velocity of ions in poloidal direction
+            'VTOR': 0.0,   # Velocity of ions in toroidal direction
+            'ER': 0.0,     # radial electric field [V/m]
+            'PFAST': 0.0,  # Pressure of fast ions [10^19 keV / m^3]
+            'PBLON': 0.0,  # longitudinal Pressure of fast ions [10^19 keV / m^3]
+            'PBPER': 0.0,  # Perpendicular pressure of fast ions [10^19 keV / m^3]
+        }
+
+        # Downstream 
+        additional_params = {
+            'SHEAR': 0.0,  # ??? (Current profile shearing)
+        }
+
+        params = {**additional_params, **auxiliary_plasma_params, **impurity_params, **main_plasma_params, **geometric_params, **gradient_params}
+
+        return params 
+
+    def get_astra_default_static_parameters(self, ) -> dict: 
+        # TODO: static parameters
+        static_parameters = {
+            "XWELL_SA": 0.0,
+            "THETA0_SA": 0.0,
+            "S_ZETA_LOC": 0.0, 
+            "ZETA_LOC": 0.0, 
+            "DZMAJDX_LOC": 0.0,
+            "DRMINDX_LOC": 1.0,
+            "ZMAJ_LOC": 0.0,
+            "B_MODEL_SA": 1, 
+            "FT_MODEL_SA": 1, 
+            "VPAR_SHEAR_MODEL": 1, 
+            "VPAR_MODEL": 0, 
+            "ETG_FACTOR": 1.25,
+            "DEBYE_FACTOR": 1.0, 
+            "XNU_FACTOR": 1.0, 
+            "ALPHA_QUENCH": 0.0, 
+            "ALPHA_MACH": 0.0, 
+            "ALPHA_P": 1.0, 
+            "ALPHA_E": 1.0, 
+            "KX0_LOC": 0.0, 
+            "UNITS": "CGYRO",
+            "NKY": 19, 
+            "NBASIS_MAX": 6, 
+            "NMODES": 7,
+            "USE_MHD_RULE": ".False.",
+            "USE_BPER": ".True."
+        }
+
+        # TODO: loose params 
+
+        variable_parameters = {
+            "SAT_RULE": 2,
+            "KYGRID_MODEL": 4, 
+            "XNU_MODEL": 3,  
+            "ALPHA_ZF": 1,
+            # "WDIA_TRAP": 1,        
+        }
+
+        return {**variable_parameters, **static_parameters}
+
+
+    def get_tglf_inputs_from_tokamak_parameters(self, t_params: dict) -> dict:
+        Rmaj = t_params['RTOR']  # +  t_params['drmajdrmin'] # could add shafranov shift here!
+        q = 1.0/t_params['MU']
+        a0 = t_params['A0'] # minor radius of LCFS 
+        r = t_params['AMETR']
+        dr = t_params['AMETR']/a0
+        main_ion_mass = t_params['AMJ']*self.mp
+
+        # GYRO CONVENTIONS
+        TE_GYRO = 1E3*t_params['TE']
+
+        # NOTE: we do quasi-neutrality by not passing NE directly but by computing it
+        # NE_GYRO = 1E13*t_params['NE']
+        # total_charge_density = sum([species_parameters[f'ZS_{i}']*species_parameters[f'AS_{i}'] for i in [1, 2, 3, 4, 5]])
+        electron_density = sum([t_params[f'ZIM{i}']*t_params[f'NIZ{i}'] for i in [1,2,3]] + [t_params['NI']*t_params['ZMJ']]) 
+        electron_density_gradient = sum([t_params[f'dzni{i}drmin']*t_params[f'ZIM{i}']*t_params[f'NIZ{i}'] for i in [1,2,3]] + [t_params['dnidrmin']*t_params['NI']*t_params['ZMJ']]) 
+        total_charge = (1.0 / electron_density) * (sum([(t_params[f'ZIM{i}']**2)*t_params[f'NIZ{i}'] for i in [1,2,3]] + [t_params['NI']*(t_params['ZMJ'])**2]) )
+        NE_GYRO =  1E13*(electron_density)
+        BUNIT = 1E4*t_params['BTOR'] # *(t_params['drhodrmin'])*t_params['RHO']/t_params['AMETR'] # Miller geometry magnetic field unit
+        # above reasoning; rho,r ~unity for small r/rho, whereas for large rho, a, this can be > 1, so essentially just scan BT accordingly
+
+
+        # some reused quantities
+        # cuts corners using TE, should maybe use (TI_GYRO + TE_GYRO) instead but...
+        ion_thermal_velocity = np.sqrt(self.k0*TE_GYRO / main_ion_mass) # cm / s
+        ion_gyrofrequency = self.e0*BUNIT / (main_ion_mass*self.c0) # 1/sec
+        ion_gyroradius = ion_thermal_velocity / ion_gyrofrequency # cm
+        lnlamda = 24.0 - 0.5*np.log(NE_GYRO) + np.log(TE_GYRO) # collision term? 
+        electron_collision_time = 3.44E5 * (TE_GYRO)**(1.5) / (NE_GYRO*lnlamda) # seconds
+
+        BPOLZ = t_params['BTOR']*r / (q*Rmaj)
+        BMOD = np.sqrt(t_params['BTOR']**2 + BPOLZ**2)
+        VPAR = t_params['VTOR']*t_params['BTOR'] / BMOD + t_params['VPOL']*BPOLZ/BMOD
+        
+        geometry_parameters = {
+            # geometry parameters
+            "Q_LOC": q, 
+            "Q_PRIME_LOC": (q*(a0**2)/r)*t_params['dqdrmin'], # q / (t_params['AMETR'] / a0)*(t_params['dq']/dr),
+            "P_PRIME_LOC": (self.k0/BUNIT**2)*(q*a0**2/r)*t_params['dptotdrmin'], # (self.k0/BUNIT**2)*(q/(r / a0))*(t_params['dptot']/dr),
+            "S_DELTA_LOC": r*t_params['dtriandrmin'],
+            "S_KAPPA_LOC": r*t_params['delondrmin'],
+            "DELTA_LOC":   t_params['TRIA'],
+            "KAPPA_LOC":   t_params['ELON'],
+            "DRMAJDX_LOC": t_params['drmajdrmin'], 
+            "RMAJ_LOC":    Rmaj / a0,
+            "RMIN_LOC":    r/a0,
+        }
+
+        shear_parameters = {
+            # Shearing parameters
+            'ALPHA_SA': -(8.0*self.pi*self.k0/BUNIT**2)*(q**2)*(Rmaj*t_params['dptotdrmin']),
+            'SHAT_SA': (r / q)*t_params['dqdrmin'], # (r / q)*(t_params['dq']/t_params['drmin']),
+            'Q_SA': q, 
+            'RMAJ_SA': Rmaj / a0, 
+            "RMIN_SA": r / a0,
+        }     
+
+        plasma_paramters = {
+            # plasma parameters
+            "ZEFF": total_charge, # t_params['ZEF'],
+            "XNUE": 0.75*np.sqrt(self.pi)*a0 / (ion_thermal_velocity*electron_collision_time),
+            "BETAE": (8.0*self.pi)*(self.k0*NE_GYRO*TE_GYRO) / BUNIT**2,
+            "DEBYE": np.sqrt(self.k0*TE_GYRO / (4.0*self.pi*NE_GYRO*self.e0**2)) / ion_gyroradius,
+            "VEXB_SHEAR": -1E2*(a0*r/q)*t_params['dvperdrmin'] / ion_thermal_velocity, # Waltz-miller definition 
+            # TODO: TGLF MAN PAGE SAYS BELOW IS NOT IN USE; SEE VPAR  
+            "VEXB": 1E2*(-t_params['ER']/BMOD)/ion_thermal_velocity, # TODO: check if the 1E2 is needed?
+        }
+
+        species_parameters = {
+            # electron
+            "RLNS_1": electron_density_gradient * (a0 / electron_density),
+            "RLTS_1": t_params['dtedrmin'] * (a0 / t_params['TE']),
+            "AS_1": 1.0,    # electron density is reference
+            "TAUS_1": 1.0,  # electron temperature is reference
+            "ZS_1": -1.0, 
+            "MASS_1": 5.4447E-4 / t_params['AMJ'],
+            "VPAR_1": 1E2*VPAR / ion_thermal_velocity, # same as VPAR_2
+            "VPAR_SHEAR_1": -1E2*Rmaj*a0*t_params['dv_rdrmin'] / (ion_thermal_velocity), # same as VPAR_SHEAR 2
+
+
+            # main ion species
+            "RLNS_2": t_params['dnidrmin'] * (a0 / t_params['NI']),
+            "RLTS_2": t_params['dtidrmin'] * (a0/ t_params['TI']),
+            "AS_2": t_params['NI'] / electron_density,
+            "TAUS_2": t_params['TI'] / t_params['TE'],
+            "ZS_2": t_params['ZMJ'],
+            "MASS_2": 1.0, 
+            "VPAR_2": 1E2*VPAR / ion_thermal_velocity,
+            "VPAR_SHEAR_2": -1E2*Rmaj*a0*t_params['dv_rdrmin'] / (ion_thermal_velocity), # same as VPAR_SHEAR 2
+            
+            # impurities
+            "RLNS_3": t_params['dzni1drmin'] * (a0 / t_params['NIZ1']),
+            "RLTS_3": t_params['dzti1drmin'] * (a0 / t_params['TIZ1']),
+            "AS_3": t_params['NIZ1'] / electron_density,
+            "TAUS_3": t_params['TIZ1'] / t_params['TE'],
+            "ZS_3": t_params['ZIM1'],
+            "MASS_3": t_params['AIM1'] / t_params['AMJ'],
+            "VPAR_3": 1E2*VPAR / ion_thermal_velocity, # same as VPAR_2
+            "VPAR_SHEAR_3": -1E2*Rmaj*a0*t_params['dv_rdrmin'] / (ion_thermal_velocity), # same as VPAR_SHEAR 2
+            
+            "RLNS_4": t_params['dzni2drmin'] * (a0 / t_params['NIZ2']),
+            "RLTS_4": t_params['dzti2drmin'] * (a0 / t_params['TIZ2']),
+            "AS_4": t_params['NIZ2'] / electron_density,
+            "TAUS_4": t_params['TIZ2'] / t_params['TE'],
+            "ZS_4": t_params['ZIM2'],
+            "MASS_4": t_params['AIM2'] / t_params['AMJ'],
+            "VPAR_4":  1E2*VPAR / ion_thermal_velocity, # same as VPAR_2
+            "VPAR_SHEAR_4": -1E2*Rmaj*a0*t_params['dv_rdrmin'] / (ion_thermal_velocity), # same as VPAR_SHEAR 2
+
+            "RLNS_5": t_params['dzni3drmin'] * (a0 / t_params['NIZ3']),
+            "RLTS_5": t_params['dzti3drmin'] * (a0 / t_params['TIZ3']),
+            "AS_5": t_params['NIZ3'] / electron_density,
+            "TAUS_5": t_params['TIZ3'] / t_params['TE'],
+            "ZS_5": t_params['ZIM3'],
+            "MASS_5": t_params['AIM3'] / t_params['AMJ'],
+            "VPAR_5":  1E2*VPAR / ion_thermal_velocity, # same as VPAR_2
+            "VPAR_SHEAR_5": -1E2*Rmaj*a0*t_params['dv_rdrmin'] / (ion_thermal_velocity), # same as VPAR_SHEAR 2
+        }
+
+
+        # quasi-neutrality for density and density gradient 
+        # total_charge_density = sum([species_parameters[f'ZS_{i}']*species_parameters[f'AS_{i}'] for i in [1, 2, 3, 4, 5]])
+        # total_charge_density_gradient = sum([species_parameters[f'RLNS_{i}']*species_parameters[f'ZS_{i}']*species_parameters[f'AS_{i}'] for i in [1, 2, 3, 4, 5]])
+        # species_parameters['AS_2'] = -(1.0 /species_parameters['ZS_2']) *(total_charge_density  - species_parameters['AS_2']*species_parameters['ZS_2'])
+        # species_parameters['RLNS_2'] = -(1.0 / (species_parameters['AS_2']*species_parameters['ZS_2']))*(total_charge_density_gradient - species_parameters['AS_2']*species_parameters['ZS_2']*species_parameters['RLNS_2'])
+        # NOTE: we do quasi-neutrality by not passing NE directly but by computing it
+
+
+        static_parameters = self.get_astra_default_static_parameters()
+        return {**shear_parameters, **geometry_parameters, **plasma_paramters, **species_parameters, **static_parameters}
+        
     def input_dict(self, ) -> dict: 
         parameters_dict = self.default_ga_input()
 
