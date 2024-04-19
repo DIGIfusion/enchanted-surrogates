@@ -15,24 +15,33 @@ class Grid(Sampler):
         so hard limit at 100.000
 
     """
+
     def __init__(self, bounds, num_samples, parameters):
+        if isinstance(num_samples, int):
+            num_samples = [num_samples] * len(parameters)
+
         # check for stupidity
-        self.total_budget = (num_samples)**(len(parameters))
-        if (num_samples)**(len(parameters)) > 100000:
-            raise Exception((
-                'Can not do grid search on more than 10000 samples, ',
-                f'you requested {(num_samples)**(len(parameters))}'))
+        self.total_budget = np.prod(np.array(num_samples))
+        if self.total_budget > 100000:
+            raise Exception(
+                (
+                    "Can not do grid search on more than 10000 samples, ",
+                    f"you requested {self.total_budget}",
+                )
+            )
 
         self.parameters = parameters
         self.bounds = bounds
-        self.num_samples = self.num_initial_points = num_samples
+        self.num_initial_points = np.prod(num_samples)
+        self.num_samples = num_samples
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
     def generate_parameters(self):
         samples = [
-            np.linspace(bound[0], bound[1], self.num_samples)
-            for bound in self.bounds]
+            np.linspace(self.bounds[i][0], self.bounds[i][1], self.num_samples[i])
+            for i in range(len(self.bounds))
+        ]
         # Use itertools.product to create a Cartesian product of sample
         # points, representing the hypercube
         for params_tuple in product(*samples):
@@ -43,8 +52,7 @@ class Grid(Sampler):
         if self.current_index < len(self.samples):
             params = self.samples[self.current_index]
             self.current_index += 1
-            param_dict = {
-                key: value for key, value in zip(self.parameters, params)}
+            param_dict = {key: value for key, value in zip(self.parameters, params)}
             return param_dict
         else:
-            return None     # TODO: implement when done iterating!
+            return None  # TODO: implement when done iterating!

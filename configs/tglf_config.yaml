@@ -1,8 +1,8 @@
 sampler:
   type: Grid
-  bounds: [[0, 1], [0, 0.4]]
-  num_samples: 10
-  parameters: ['RMIN_LOC', 'DELTA_LOC']
+  bounds: [[0.001, 1.00]]
+  num_samples: 100
+  parameters: [dtedrmin]
 
 runner:
   type: TGLFrunner
@@ -11,8 +11,8 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2007159/cursed-tglf/trial_dask3                 # where to store runs 
-  num_workers: 4                                                                 # how many workers to run in parallel
+  base_run_dir: /scratch/project_2007159/cursed-tglf/tglf_trials3                 # where to store runs 
+  num_workers: 8                                                                 # how many workers to run in parallel
   # below is the setup for an individual worker, each worker spams runs of a code
   worker_args:
     account: "project_2007159"                                                   # changes based on HPC 
@@ -20,7 +20,7 @@ executor:
     cores: 1                                                                     # changes based on CODE needs
     memory: "12GB"                                                               # changes based on CODE needs
     processes: 1                                                                 # changes based on CODE needs
-    walltime: "01:00:00"                                                         # changes based on HPC/CODE (length of nanny)
+    walltime: "02:00:00"                                                         # changes based on HPC/CODE (length of nanny)
     interface: "ib0"                                                             # changes based on HPC (mahti it is needed)
     job_script_prologue:                                                         # changes based on CODE, all workers will execute this in submission
       - 'module load python-data'                                                # changes based on HPC
