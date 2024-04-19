@@ -1,6 +1,6 @@
 # import numpy as np
 from .base import Runner
-from parsers import GENEparser as geneparser
+from parsers.GENEparser import GENE_scan_parser, GENE_single_parser
 import subprocess
 import os
 
@@ -8,9 +8,9 @@ import os
 class GENErunner(Runner):
     def __init__(self, executable_path, is_gene_scan: bool, *args, **kwargs):
         if is_gene_scan:
-            self.parser = geneparser()
+            self.parser = GENE_scan_parser()
         else:
-            self.parser = gene_scan_parser()
+            self.parser = GENE_single_parser()
         self.executable_dir = executable_path
     def single_code_run(self, params: dict, run_dir):
         """Logic to run GENE"""

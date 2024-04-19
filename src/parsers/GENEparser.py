@@ -37,8 +37,10 @@ class GENEparser(Parser):
             Nothing 
         """
         self.base_namelist = f90nml.read(base_params_dir) #odict_keys(['parallelization', 'box', 'in_out', 'general', 'geometry', '_grp_species_0', '_grp_species_1', 'units'])
-        
-        
+
+
+class GENE_single_parser(GENEparser):
+
     def write_input_file(self, params: dict, run_dir):
         """
         Write the GENE input file to the run directory specified. 
@@ -80,6 +82,12 @@ class GENEparser(Parser):
         f90nml.write(namelist, input_fpath)
 
     # what is returned here is returned to the runner for a single code run, which goes though the base executor to get to the future 
+    def read_output_file(self, run_dir: str):
+        raise NotImplementedError
+    
+class GENE_scan_parser(GENEparser): 
+    def write_input_file(self, params: dict, run_dir):
+        raise NotImplementedError
     def read_output_file(self, run_dir: str):
         raise NotImplementedError
     
