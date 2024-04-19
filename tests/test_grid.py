@@ -5,7 +5,7 @@ import sys
 sys.path.append(os.getcwd() + "/src")
 from samplers import Grid
 import run
-
+import numpy as np 
 
 def test_initialization():
     sampler = Grid(bounds=[[0, 9], [0, 9]], num_samples=10, parameters=["a", "b"])
@@ -31,3 +31,9 @@ def test_next_parameter():
     sampler = Grid(bounds=[[0, 9], [0, 9]], num_samples=[10, 5], parameters=["a", "b"])
     assert sampler.get_next_parameter() == {"a": 0.0, "b": 0.0}
     assert sampler.get_next_parameter() == {"a": 0.0, "b": 2.25}
+
+def test_total_num_samples(): 
+    sampler = Grid(bounds=[[0, 9], [0, 9]], num_samples=[10, 5], parameters=["a", "b"])
+
+    assert sampler.num_initial_points == np.prod(sampler.num_samples)
+    assert sampler.num_initial_points == 50
