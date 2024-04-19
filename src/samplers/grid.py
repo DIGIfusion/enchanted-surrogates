@@ -32,7 +32,8 @@ class Grid(Sampler):
 
         self.parameters = parameters
         self.bounds = bounds
-        self.num_samples = self.num_initial_points = num_samples
+        self.num_initial_points = sum(num_samples)
+        self.num_samples = num_samples
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
