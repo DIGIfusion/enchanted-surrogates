@@ -1,19 +1,19 @@
 sampler:
   type: Grid
-  bounds: [[0.1, 0.5], [0.01, 0.05], [0.5, 0.9], [1, 10]]
-  num_samples: 3
-  parameters: ['tria', 'pedestal_delta', 'n_esep', 'n_eped']
+  bounds: [[0.1, 0.5], [0.02, 0.05], [1, 10], [1,3], [1,3.5], [0.3, 0.6]]
+  num_samples: [1, 2, 1, 1, 1, 2]  # num_samples: [3, 5, 5, 5, 5, 5]
+  parameters: ['tria', 'pedestal_delta', 'n_eped', 'bvac', 'ip', 'teped_multip']
 
 runner:
   type: HELENArunner
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {
-    "namelist_path": "/scratch/project_2009007/europed_rewrite/helena_width_scans_240308124851248459/0/fort.10",
+    "namelist_path": "/scratch/project_2009007/ench-surr-helper/helena/fort.10",
     "only_generate_files": True}
 
 executor:
   type: LocalDaskExecutor
-  base_run_dir: /scratch/project_2009007/test-enchanted/helena_2024-03-25
+  base_run_dir: /scratch/project_2009007/test-enchanted/helena_2024-04-19
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"

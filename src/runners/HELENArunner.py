@@ -81,6 +81,8 @@ class HELENArunner(Runner):
 
         # process output
         # self.parser.read_output_file(run_dir)
+        self.parser.write_summary(run_dir, params)
+        self.parser.clean_output_files(run_dir)
 
         return True
 
@@ -96,5 +98,5 @@ class HELENArunner(Runner):
                 f"The namelist path ({self.namelist_path}) provided to the HELENA runner is not found. Exiting."
             )
         # TODO: Does base namelist contain paramters that this structure can handle or that makes sense?
-        # neped > nesep
+        # TODO: neped > nesep
         return
