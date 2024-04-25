@@ -5,6 +5,7 @@ import os
 import f90nml
 import numpy as np
 import math
+import json
 
 
 class MISHKAparser(Parser):
@@ -39,20 +40,34 @@ class MISHKAparser(Parser):
         else:
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
-        # TODO: params should be dict, not list
+        # Update toroidal mode number
         namelist = f90nml.read(self.default_namelist)
-        namelist["newrun"][0]["ntor"] = -int(params[0])
+        namelist["newrun"][0]["ntor"] = -int(params["ntor"])
 
         f90nml.write(namelist, input_fpath)
         print(input_fpath)
 
-    def read_output_file_fort20(self, run_dir: str):
+    def read_output_fort20(self, run_dir: str):
         """
         The main output file.
+        Looking for line:
+         INSTABILITY FOUND :   -10    9  0.3076E+00  0.2167E-08
         """
-        raise NotImplementedError
+        filename = run_dir + "/fort.20"
+        file = open(filename, "r")
+        lines = file.readlines()
+        success = False
+        growthrate = None
+        for line in lines:
+            if "INSTABILITY" in line:
+                print(line)
+                spl = line.split()
+                growthrate = math.sqrt(float(spl[5]))
+                success = True
 
-    def read_output_file_fort22(self, run_dir: str):
+        return success, growthrate
+
+    def read_output_fort22(self, run_dir: str):
         """
         Read the output file fort.22 which contains a list of
         eigenvalues (real, complex). The eigenvalues are listed
@@ -242,3 +257,55 @@ class MISHKAparser(Parser):
             res = res + line.split()
         res = [float(x) for x in res]
         return res, endline
+
+    def clean_output_files(self, run_dir):
+        """
+        Removes unnecessary files.
+
+        Parameters
+        ----------
+        run_dir : str
+            Path to the run directory.
+        """
+        files_to_remove = [
+            # "fort.21",
+            "fort.24",
+            "fort.26",
+            # "fort.41",
+            "CASPLOT",
+        ]
+        for file_name in files_to_remove:
+            if os.path.exists(run_dir + "/" + file_name):
+                os.remove(run_dir + "/" + file_name)
+
+        return
+
+    def write_summary(self, run_dir: str, mpol: int, params: dict):
+        """
+        Generates a summary file with run directory and parameters, along with
+        success and stability criteria.
+
+        Parameters
+        ----------
+        run_dir : str
+            Path to the run directory.
+        params : dict
+            Dictionary containing input parameters.
+
+        Returns
+        -------
+        dict
+            Summary dictionary containing run directory, parameters, success
+            status, Mercier criterion presence, and ballooning criterion
+            presence.
+        """
+        file_name = "summary.json"
+        summary = {"run_dir": run_dir, "params": params}
+        success, growthrate = self.read_output_fort20(run_dir)
+        summary["success"] = success
+        summary["mpol"] = mpol
+        summary["growthrate"] = growthrate
+
+        with open(file_name, "w") as outfile:
+            json.dump(summary, outfile)
+        return summary

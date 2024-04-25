@@ -6,12 +6,13 @@ from parsers import MISHKAparser
 import subprocess
 import os
 import shutil
+import json
 
 
 class MISHKArunner(Runner):
     """
     Class for running MISHKA.
-    Assumes that pre-compiled MISHKA binaries exist for m=(21,31,41,51,71).
+    Requires that pre-compiled MISHKA binaries exist for m=(21,31,41,51,71).
     Adding "_m" at the end of the name of the defined executable path.
 
     For example, if the executable path in the config file is
@@ -80,7 +81,7 @@ class MISHKArunner(Runner):
 
         # write input file
         self.parser.write_input_file(params, run_dir)
-        mpol = self.get_mpol(params[0])
+        mpol = self.get_mpol(params["ntor"])
 
         # run code
         os.chdir(run_dir)
@@ -88,6 +89,8 @@ class MISHKArunner(Runner):
 
         # process output
         # self.parser.read_output_file(run_dir)
+        self.parser.write_summary(run_dir, mpol, params)
+        self.parser.clean_output_files(run_dir)
 
         return True
 
