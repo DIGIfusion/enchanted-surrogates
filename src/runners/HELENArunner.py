@@ -5,6 +5,9 @@ from .base import Runner
 from parsers import HELENAparser
 import subprocess
 import os
+from dask.distributed import print
+
+# import logging
 
 
 class HELENArunner(Runner):
@@ -41,10 +44,13 @@ class HELENArunner(Runner):
             The path to where the executable binary.
 
         namelist_path : str
-            The namelist constaining the HELENA values to be kept constant during the run.
+            The namelist constaining the HELENA values to be kept constant
+            during the run.
 
         only_generate_files: bool
-            Flag for either only creating input files or creating the files and running HELENA.
+            Flag for either only creating input files or creating the files
+            and running HELENA.
+
         Returns
         -------
         None
@@ -54,7 +60,7 @@ class HELENArunner(Runner):
             executable_path  # "/scratch/project_2009007/HELENA/bin/hel13_64"
         )
         self.namelist_path = other_params["namelist_path"]
-        self.only_generate_files = True
+        self.only_generate_files = other_params["only_generate_files"]
 
         self.pre_run_check()
 
@@ -71,12 +77,12 @@ class HELENArunner(Runner):
         -------
         None
         """
-
+        print(f"single_code_run: {run_dir}", flush=True)
         self.parser.write_input_file(params, run_dir, self.namelist_path)
 
+        os.chdir(run_dir)
         # run code
         if not self.only_generate_files:
-            os.chdir(run_dir)
             subprocess.call([self.executable_path])
 
         # process output

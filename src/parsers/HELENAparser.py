@@ -1,7 +1,8 @@
 import os
+import math
 import f90nml
 import numpy as np
-import yaml
+import json
 from .base import Parser
 
 # import subprocess
@@ -74,28 +75,31 @@ class HELENAparser(Parser):
         namelist = f90nml.read(namelist_path)
 
         # Update namelist with input parameters
-        for key, value in params.items():
-            if key == "tria":
-                namelist["shape"]["tria"] = value
-            elif key == "ellip":
-                namelist["shape"]["ellip"] = value
-            elif key == "bvac":
-                namelist["phys"]["bvac"] = value
-            elif key == "pedestal_delta":
-                namelist["shape"]["xr2"] = 1 - value / 2.0
-                namelist["shape"]["sig2"] = value
+        helena_shape_params = ["tria", "ellip", "quad"]
+        for p in helena_shape_params:
+            if p in params:
+                namelist["shape"][p] = params[p]
 
-        if "bvac" in params and "ip" in params:
-            namelist["phys"]["bvac"] = value
-            namelist["phys"]["xiab"] = (
-                params["ip"]
-                * mu_0
-                / (params["bvac"] * namelist["phys"]["eps"] * namelist["phys"]["rvac"])
-            )
+        if "bvac" in params:
+            namelist["phys"]["bvac"] = params["bvac"]
+            if "ip" in params:
+                namelist["phys"]["xiab"] = (
+                    params["ip"]
+                    * 1e6
+                    * mu_0
+                    / (
+                        params["bvac"]
+                        * namelist["phys"]["eps"]
+                        * namelist["phys"]["rvac"]
+                    )
+                )
         # Europed profiles
         if "pedestal_delta" in params:
-            # Update density profile parameters
             d_ped = params["pedestal_delta"]
+            namelist["shape"]["xr2"] = 1 - d_ped / 2.0
+            namelist["shape"]["sig2"] = d_ped
+
+            # Update density profile parameters
             density_shift = 0.0
             psi_mid = 1.0 - 0.5 * d_ped + density_shift
 
@@ -119,7 +123,10 @@ class HELENAparser(Parser):
 
             # Update electron temperature profile
             tesep = 0.1 if "T_esep" not in params else params["T_esep"]
-            teped = 1.0 if "T_eped" not in params else params["T_eped"]
+            if "teped_multip" in params and "ip" in params:
+                teped = params["teped_multip"] * params["ip"] ** 2 / neped
+            else:
+                teped = 1.0 if "T_eped" not in params else params["T_eped"]
             at0 = (teped - tesep) / (np.tanh(1) * 2)
             if "core_to_ped_te" in params:
                 at1 = params["core_to_ped_te"] * teped
@@ -149,7 +156,7 @@ class HELENAparser(Parser):
             namelist["phys"]["gti"] = namelist["phys"]["gte"]
             namelist["phys"]["hti"] = namelist["phys"]["hte"]
 
-            if namelist["phys"]["ipai"] != 18:
+            if namelist["profile"]["ipai"] != 18:
                 coret = (teped * 2 + at1 + tesep) * 1000
                 coren = an0 * 2 + nesep + an1
                 corep = (
@@ -170,13 +177,19 @@ class HELENAparser(Parser):
             pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
         )
 
+        # teped_multip
+
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
 
     def read_output_file(self, run_dir: str):
         """
         Reads the main output file fort.20.
-        Crashed: if 'ALPHA1' is not found or 'MERCIER' is not found
+        Crashed: if 'ALPHA1' is not found or 'MERCIER' is not found.
+
+        Mercier stability
+        Ballooning stability
+        NeoClassical Stability Condition
 
         Parameters
         ----------
@@ -189,24 +202,30 @@ class HELENAparser(Parser):
             A tuple indicating success (bool), Mercier criterion presence (bool), and ballooning criterion presence (bool).
         """
         success = False
-        ballooning = True
-        mercier = True
+        ballooning_stable = True
+        mercier_stable = True
 
         try:
-            file = open(run_dir + "fort.20", "r")
+            file = open(run_dir + "/fort.20", "r")
         except FileNotFoundError as e:
             print(str(e))
-            return success, mercier, ballooning
+            return success, mercier_stable, ballooning_stable
 
         for line in file.readlines():
+            if line.find("UNSTABLE AT T =") > -1:
+                ballooning_stable = False
             if line.find("ALPHA1") > -1:
                 success = True
             if line.find("MERCIER") > -1:
                 success = True
+            if line.find("Mercier Unstable") > -1:
+                mercier_stable = False
 
-        return success, mercier, ballooning
+        return success, mercier_stable, ballooning_stable
 
-    def make_init_zjz_profile(self, pedestal_delta, npts):
+    def make_init_zjz_profile(
+        self, pedestal_delta, npts, pzjzmultip=0.5, max_pres_grad_loc=0.97
+    ):
         """
         Makes the initial ZJZ profile based on the pressure profile according to Europed implementation.
 
@@ -228,9 +247,6 @@ class HELENAparser(Parser):
         base = 0.9 * (1 - x**alpha1) ** alpha2 + 0.1 * (
             1 + np.tanh((1 - pedestal_delta / 2 - x) / pedestal_delta * 2)
         )
-
-        pzjzmultip = 0.5  # TODO: as input?
-        max_pres_grad_loc = 0.97  # TODO: add calculation from europed
 
         pedestal_current = pzjzmultip * np.exp(
             -(((max_pres_grad_loc - x) / pedestal_delta * 1.5) ** 2)
@@ -327,7 +343,7 @@ class HELENAparser(Parser):
 
         return sep + a_0 * term1 + term2
 
-    def clean_output_files(self):
+    def clean_output_files(self, run_dir: str):
         """
         Removes unnecessary files except for fort.10, fort.20, and fort.12.
         (fort.30 is an input-output file which can be useful)
@@ -342,6 +358,7 @@ class HELENAparser(Parser):
             "fort.25",
             "fort.27",
             "fort.41",
+            "fort.51",
             "eliteinp",
             "density",
             "helena_bnd",
@@ -349,14 +366,15 @@ class HELENAparser(Parser):
             "PCUBEQ",
         ]
         for file_name in files_to_remove:
-            if os.path.exists(file_name):
-                os.remove(file_name)
+            if os.path.exists(run_dir + "/" + file_name):
+                os.remove(run_dir + "/" + file_name)
 
         return
 
     def write_summary(self, run_dir: str, params: dict):
         """
-        Generates a summary file with run directory and parameters, along with success and stability criteria.
+        Generates a summary file with run directory and parameters, along with
+        success and stability criteria.
 
         Parameters
         ----------
@@ -368,14 +386,118 @@ class HELENAparser(Parser):
         Returns
         -------
         dict
-            Summary dictionary containing run directory, parameters, success status, Mercier criterion presence, and ballooning criterion presence.
+            Summary dictionary containing run directory, parameters,
+            success status, Mercier criterion presence, and ballooning
+            criterion presence.
         """
-        file_name = "summary.yml"
+        file_name = run_dir + "/summary.yml"
         summary = {"run_dir": run_dir, "params": params}
-        success, mercier, ballooning = self.read_output_file(run_dir)
+        success, mercier_stable, ballooning_stable = self.read_output_file(run_dir)
         summary["success"] = success
-        summary["mercier"] = mercier
-        summary["ballooning"] = ballooning
+        summary["mercier_stable"] = mercier_stable
+        summary["ballooning_stable"] = ballooning_stable
         with open(file_name, "w") as outfile:
-            yaml.dump(summary, outfile, default_flow_style=False)
+            json.dump(summary, outfile)
         return summary
+
+    def read_final_zjz(self, output_dir):
+        """
+        zjz(   1)=     1.00000,
+        zjz(   2)=     1.01337,
+        zjz(   3)=     0.83545,
+        """
+
+        filename = output_dir + "/final_zjz"
+        file = open(filename, "r")
+        lines = file.readlines()
+        zjz = []
+        for line in lines:
+            zjz.append(float(line.split("=")[-1].replace(",", "")))
+
+        return np.array(zjz)
+
+    def read_multiline_list(
+        self, lines, startline, n_listitems, n_columns=4, dtype=float
+    ):
+        n_rows = math.ceil(n_listitems / n_columns)
+        endline = startline + n_rows
+        lines = lines[startline:endline]
+        res = []
+        for line in lines:
+            res = res + line.split()
+        res = [float(x) for x in res]
+        return res, endline
+
+    def read_fort12(self, output_dir):
+        """
+        Read the output file fort.12 which is used as input by MISHKA.
+        """
+        filename = output_dir + "/" + "fort.12"
+        file = open(filename, "r")
+        lines = file.readlines()
+        JS0 = int(lines[0].split()[0])
+        CS, endline = self.read_multiline_list(lines, startline=1, n_listitems=JS0 + 1)
+        QS, endline = self.read_multiline_list(
+            lines, startline=endline, n_listitems=JS0 + 1
+        )
+        DQS_1, DQEC = float(lines[endline].split()[0]), float(lines[endline].split()[1])
+        DQS, endline = self.read_multiline_list(
+            lines, startline=endline + 1, n_listitems=JS0
+        )
+        CURJ, endline = self.read_multiline_list(
+            lines, startline=endline, n_listitems=JS0 + 1
+        )
+        DJ0, DJE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
+        NCHI = int(lines[endline + 1].split()[0])
+        CHI, endline = self.read_multiline_list(
+            lines, startline=endline + 2, n_listitems=NCHI + 1
+        )
+        GEM11, endline = self.read_multiline_list(
+            lines,
+            startline=endline,
+            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
+        )
+        GEM12, endline = self.read_multiline_list(
+            lines,
+            startline=endline,
+            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
+        )
+        CPSURF, RADIUS = float(lines[endline].split()[0]), float(
+            lines[endline].split()[1]
+        )
+        GEM33, endline = self.read_multiline_list(
+            lines,
+            startline=endline + 1,
+            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
+        )
+        RAXIS = float(lines[endline].split()[0])
+        P0, endline = self.read_multiline_list(
+            lines, startline=endline + 1, n_listitems=JS0 + 1
+        )
+        DP0, DPE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
+        RBPHI, endline = self.read_multiline_list(
+            lines, startline=endline + 1, n_listitems=JS0 + 1
+        )
+        DRBPHI0, DRBPHIE = float(lines[endline].split()[0]), float(
+            lines[endline].split()[1]
+        )
+
+        # Vacuum data
+        VX, endline = self.read_multiline_list(
+            lines, startline=endline + 1, n_listitems=NCHI
+        )
+        VY, endline = self.read_multiline_list(
+            lines, startline=endline, n_listitems=NCHI
+        )
+        EPS = float(lines[endline].split()[0])
+        # XOUT, endline = self.read_multiline_list(
+        #     lines,
+        #     startline=endline + 1,
+        #     n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
+        # )
+        # YOUT, endline = self.read_multiline_list(
+        #     lines,
+        #     startline=endline,
+        #     n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
+        # )
+        return CS, QS, DQS, CURJ, CHI, GEM11, GEM12, GEM33, P0, RBPHI, VX, VY
