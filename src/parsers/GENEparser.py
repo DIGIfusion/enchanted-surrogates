@@ -1,4 +1,4 @@
-from .base import Parser # add . for relative import
+from base import Parser # add . for relative import
 import subprocess
 import os
 import numpy as np
@@ -61,7 +61,6 @@ class GENE_single_parser(GENEparser):
         print('Writing to', run_dir)
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, 'parameters')
-            subprocess.run(['touch', f'{input_fpath}'])
         else:
             raise FileNotFoundError(f'Couldnt find {run_dir}')
 
@@ -87,12 +86,37 @@ class GENE_single_parser(GENEparser):
     
 class GENE_scan_parser(GENEparser): 
     def write_input_file(self, params: dict, run_dir):
-        raise NotImplementedError
+
+        print('Writing to', run_dir)
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, 'parameters')
+        else:
+            raise FileNotFoundError(f'Couldnt find {run_dir}')
+
+        params_keys = list(params.keys())
+        params_values = list(params.values())
+        params_scan_strings = []
+        patch = {}
+
+
+
+        for key, value in zip(params_keys,params_values):
+            group_name, variable_name = key.split('-')
+            if list(patch.keys()).count(group_name) > 0:
+                patch[group_name][variable_name] = value
+            else: patch[group_name] = {variable_name:value}
+
+        namelist = self.base_namelist
+        patch = f90nml.namelist.Namelist(patch)
+        namelist.patch(patch)
+        
+        f90nml.write(namelist, input_fpath)
+
     def read_output_file(self, run_dir: str):
         raise NotImplementedError
     
 if __name__ == '__main__':
     bounds = [[0.1, 300],[2,3.5],[4,6.8]]
     params = {'box-kymin':100.1, '_grp_species_0-omt': 2.75, '_grp_species_1-omt':5.1}
-    parser = GENEparser(base_params_dir='/home/djdaniel/Downloads/parameters')
+    parser = GENE_scan_parser(base_params_dir='/home/djdaniel/Downloads/parameters')
     parser.write_input_file(params,run_dir=os.getcwd())
