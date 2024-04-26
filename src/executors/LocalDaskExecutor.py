@@ -1,10 +1,10 @@
 # executors/DaskExecutor.py
 
 from dask.distributed import Client
-from .base import Executor
+from .base import DaskExecutor
 
 
-class LocalDaskExecutor(Executor):
+class LocalDaskExecutor(DaskExecutor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Beginning local Cluster Generation')
