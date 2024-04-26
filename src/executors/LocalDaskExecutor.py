@@ -1,7 +1,7 @@
 # executors/DaskExecutor.py
 
 from dask.distributed import Client
-from .base import DaskExecutor
+from .DaskExecutor import DaskExecutor
 
 
 class LocalDaskExecutor(DaskExecutor):
