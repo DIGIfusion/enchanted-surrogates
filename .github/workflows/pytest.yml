@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'feature/**'
+      - executor_base_change
   pull_request:
     types: [opened, reopened]
 jobs:
