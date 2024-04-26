@@ -21,3 +21,5 @@ class DaskExecutor(Executor):
         self.cluster.scale(self.num_workers)
         self.client = Client(self.cluster)
         print('Finished Setup')
+
+    
