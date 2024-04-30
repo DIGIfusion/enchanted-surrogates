@@ -135,17 +135,12 @@ class GENE_scan_parser(GENEparser):
         namelist_string = namelist_string[:var_end] + scanlist + namelist_string[var_end:]
         #----------------------
         
+        #determines the irdinal position of the scanned paramters for var_name
         def var_ordinal(namelist,var_name):
-            first_var_loc = 0
-            for g in namelist.groups():
-                #e.g. print(g) --> (('parallelization', 'n_procs_x'), 1)
-                if g[0][1]==var_name:
-                    break        
-                else:
-                    first_var_loc += 1
-
-            # print(f'FIRST {var_name} LOCATION: it is the,{first_var_loc}th variable in the parameters file.')
-            return first_var_loc
+            namelist_string = str(namelist)
+            kymin_loc = namelist_string.find(var_name)
+            var_ordinal = namelist_string[:kymin_loc].count('!scan')
+            return var_ordinal
 
         def make_scanwith(namelist, var_name, values):
             kymin_loc = var_ordinal(namelist, 'kymin')
