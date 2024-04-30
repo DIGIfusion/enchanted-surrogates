@@ -1,4 +1,13 @@
-from base import Parser # add . for relative import
+try:
+    from base import Parser # add . for relative import
+except:
+    None
+
+try:
+    from .base import Parser # add . for relative import
+except:
+    raise ImportError
+
 import subprocess
 import os
 import numpy as np

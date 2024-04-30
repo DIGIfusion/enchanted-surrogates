@@ -4,11 +4,25 @@ from os import sys
 from os import getcwd
 from os import path
 
-from base import Sampler # add .
+try:
+    from base import Sampler # add .
+    from static_sparse_grid_approximations.sg_lib.grid.grid import Grid #add . for relative import
+    from static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
+
+except:
+    None
+
+try:
+    from .base import Sampler # add . for relative import
+    from .static_sparse_grid_approximations.sg_lib.grid.grid import Grid #add . for relative import
+    from .static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
+
+except:
+    raise ImportError
+
+
 import numpy as np
 from itertools import product
-from static_sparse_grid_approximations.sg_lib.grid.grid import Grid #add . for relative import
-from static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
 
 class StaticSparseGrid(Sampler):
     """
