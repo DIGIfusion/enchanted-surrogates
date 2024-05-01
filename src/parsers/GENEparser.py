@@ -1,12 +1,10 @@
 try:
     from base import Parser # add . for relative import
 except:
-    None
-
-try:
-    from .base import Parser # add . for relative import
-except:
-    raise ImportError
+    try:
+        from .base import Parser # add . for relative import
+    except:
+        raise ImportError
 
 import subprocess
 import os
@@ -95,6 +93,13 @@ class GENE_single_parser(GENEparser):
     
 class GENE_scan_parser(GENEparser): 
     def write_input_file(self, params: dict, run_dir, file_name='parameters'):
+        namelist = self.base_namelist
+        namelist_string=str(namelist)
+        
+        #populate params: dict with all omn's required. Since each should be identical
+        for i in range(namelist_string.count('&species')):
+            params[f'_grp_species_{i}-omn'] = params['species-omn']
+        params.pop('species-omn')
 
         # checking run dir exists and making Path for scan file
         print('Writing to', run_dir)
@@ -102,9 +107,7 @@ class GENE_scan_parser(GENEparser):
             input_fpath = os.path.join(run_dir, file_name)
         else:
             raise FileNotFoundError(f'Couldnt find {run_dir}')
-        namelist = self.base_namelist
-        namelist_string=str(namelist)
-    
+        
         def find_nth_occurrence(string, sub_string, n):
             start_index = string.find(sub_string)
             while start_index >= 0 and n > 1:
@@ -151,20 +154,20 @@ class GENE_scan_parser(GENEparser):
             var_ordinal = namelist_string[:kymin_loc].count('!scan')
             return var_ordinal
 
-        def make_scanwith(namelist, var_name, values):
+        def make_scanwith(namelist, values):
             kymin_loc = var_ordinal(namelist, 'kymin')
             # print(f'Generating scanwith string for {var_name}')
             
             # print('VALUES',values)
             scanwith = f'       !scanwith: {kymin_loc}, {values[0]}'
-            for omn in values[1:]:
-                scanwith += f', {omn}'
+            for v in values[1:]:
+                scanwith += f', {v}'
             return scanwith
 
         scanwith = {}
         params.pop('box-kymin')
         for var_name in params.keys():
-            scanwith[var_name] = make_scanwith(namelist, var_name, values=params[var_name])
+            scanwith[var_name] = make_scanwith(namelist, values=params[var_name])
         # print('SCANWITH',scanwith)
             # finds the string location at the end of the line for a variable, just before \n
         
@@ -187,8 +190,7 @@ if __name__ == '__main__':
     generator = np.random.default_rng(seed=238476592)
     omn = generator.uniform(5,60,5)
     params = {'box-kymin':generator.uniform(0.05,1,5),
-          '_grp_species_0-omn':omn,
-          '_grp_species_1-omn':omn,
+          'species-omn':omn,
           '_grp_species_1-omt':generator.uniform(10,70,5)}
     parser = GENE_scan_parser(base_params_dir = os.path.join(os.getcwd(),'src','parsers','parameters_base'))
     parser.write_input_file(params,run_dir=os.getcwd(),file_name='parameters_scanwith')
