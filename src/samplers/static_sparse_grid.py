@@ -70,7 +70,6 @@ class StaticSparseGrid(Sampler):
                 samples[param].append(point[i])
                 i+=1
         
-        print('SAMPLES',samples)
         return samples, num_samples
 
     def get_next_parameter(self):
