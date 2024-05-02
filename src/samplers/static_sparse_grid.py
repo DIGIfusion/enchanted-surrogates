@@ -75,9 +75,8 @@ class StaticSparseGrid(Sampler):
 
     def get_next_parameter(self):
         if self.current_index < len(self.samples):
-            params = self.samples[self.current_index]
+            param_dict = {k : v[self.current_index] for k,v in self.samples.items()}
             self.current_index += 1
-            param_dict = {key: value for key, value in zip(self.parameters, params)}
             return param_dict
         else:
             return None  # TODO: implement when done iterating!
