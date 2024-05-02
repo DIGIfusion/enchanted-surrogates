@@ -10,15 +10,13 @@ try:
     from static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
 
 except:
-    None
+    try:
+        from .base import Sampler # add . for relative import
+        from .static_sparse_grid_approximations.sg_lib.grid.grid import Grid #add . for relative import
+        from .static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
 
-try:
-    from .base import Sampler # add . for relative import
-    from .static_sparse_grid_approximations.sg_lib.grid.grid import Grid #add . for relative import
-    from .static_sparse_grid_approximations.sg_lib.algebraic.multiindex import Multiindex #add . for relative import
-
-except:
-    raise ImportError
+    except:
+        raise ImportError
 
 
 import numpy as np
@@ -62,7 +60,18 @@ class StaticSparseGrid(Sampler):
         ## we then map the grid points to our domain of interest
         # returns a list of lists, each sublist is a set of points
         mapped_sg_points = self.Grid_obj.map_std_sg_surplus_points(std_sg_points, self.left_stoch_boundary, self.right_stoch_boundary)
-        return mapped_sg_points, num_samples
+        
+        #making a samples dictionary like this {param1:[list of values in points], param2:[list of values in points]}
+        # the first value in each list makes 1 point, the second is the second point and so on. 
+        samples = {k:v for k,v in zip(self.parameters, [[] for _ in range(len(self.parameters))])}
+        for point in mapped_sg_points:
+            i = 0
+            for param in parameters:
+                samples[param].append(point[i])
+                i+=1
+        
+        print('SAMPLES',samples)
+        return samples, num_samples
 
     def get_next_parameter(self):
         if self.current_index < len(self.samples):
@@ -77,5 +86,7 @@ if __name__ == '__main__':
     parameters = ['love', 'peace', 'harmony']
     bounds = [(1,2),(300,400),(5000,6000)]
     samp = StaticSparseGrid(bounds, parameters, level=3)
-    for _ in range(samp.num_samples):
-        print(samp.get_next_parameter())
+    # print(samp.samples)
+    
+    # for _ in range(samp.num_samples):
+    #     print(samp.get_next_parameter())
