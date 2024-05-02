@@ -97,9 +97,10 @@ class GENE_scan_parser(GENEparser):
         namelist_string=str(namelist)
         
         #populate params: dict with all omn's required. Since each should be identical
-        for i in range(namelist_string.count('&species')):
-            params[f'_grp_species_{i}-omn'] = params['species-omn']
-        params.pop('species-omn')
+        if 'species-omn' in params:
+            for i in range(namelist_string.count('&species')):
+                params[f'_grp_species_{i}-omn'] = params['species-omn']
+            params.pop('species-omn')
 
         # checking run dir exists and making Path for scan file
         print('Writing to', run_dir)
@@ -190,7 +191,7 @@ if __name__ == '__main__':
     generator = np.random.default_rng(seed=238476592)
     omn = generator.uniform(5,60,5)
     params = {'box-kymin':generator.uniform(0.05,1,5),
-          'species-omn':omn,
+          'species-omnmmmmm':omn,
           '_grp_species_1-omt':generator.uniform(10,70,5)}
     parser = GENE_scan_parser(base_params_dir = os.path.join(os.getcwd(),'src','parsers','parameters_base'))
     parser.write_input_file(params,run_dir=os.getcwd(),file_name='parameters_scanwith')
