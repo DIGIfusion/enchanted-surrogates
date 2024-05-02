@@ -66,7 +66,7 @@ class StaticSparseGrid(Sampler):
         samples = {k:v for k,v in zip(self.parameters, [[] for _ in range(len(self.parameters))])}
         for point in mapped_sg_points:
             i = 0
-            for param in parameters:
+            for param in self.parameters:
                 samples[param].append(point[i])
                 i+=1
         
