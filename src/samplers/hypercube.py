@@ -3,9 +3,10 @@
 import numpy as np
 from .base import Sampler
 from itertools import product
-
+from common import S
 
 class HypercubeSampler(Sampler):
+    sampler_interface = S.SEQUENTIAL
     def __init__(self, bounds, num_samples, parameters):
         # check for stupidity
         self.total_budget = (num_samples)**(len(parameters))
@@ -30,12 +31,16 @@ class HypercubeSampler(Sampler):
         for params_tuple in product(*samples):
             # Convert tuples to list to ensure serializability
             yield list(params_tuple)
+    
+    def get_initial_parameters(self, ): 
+        return [self.get_next_parameter() for _ in range(self.num_initial_points)]
 
     def get_next_parameter(self):
         if self.current_index < len(self.hypercube_grid):
             params = self.hypercube_grid[self.current_index]
+            param_dict = {key: value for key, value in zip(self.parameters, params)}
             self.current_index += 1
-            return params
+            return param_dict
         else:
             # Handle the case where all parameters have been iterated over
             return 1

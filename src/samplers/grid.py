@@ -3,7 +3,7 @@
 from .base import Sampler
 import numpy as np
 from itertools import product
-
+from common import S
 
 class Grid(Sampler):
     """
@@ -15,7 +15,7 @@ class Grid(Sampler):
         so hard limit at 100.000
 
     """
-
+    sampler_interface = S.SEQUENTIAL
     def __init__(self, bounds, num_samples, parameters):
         if isinstance(num_samples, int):
             num_samples = [num_samples] * len(parameters)
@@ -37,6 +37,10 @@ class Grid(Sampler):
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
+    def get_initial_parameters(self, ): 
+        # self.samples[:self.num_initial_points]
+        return [self.get_next_parameter() for _ in range(self.num_initial_points)]
+ 
     def generate_parameters(self):
         samples = [
             np.linspace(self.bounds[i][0], self.bounds[i][1], self.num_samples[i])

@@ -1,6 +1,6 @@
 import os
 from .base import Parser
-
+import ast 
 
 class SIMPLEparser(Parser):
     """An I/O parser for testing"""
@@ -19,17 +19,18 @@ class SIMPLEparser(Parser):
 
     def read_output_file(self, params: dict, run_dir: str):
         """
-        The output file should contain the imput parameters.
+        The output file should contain the input parameters.
         """
         file_name = run_dir + "/output.txt"
         params_out = None
         if os.path.exists(file_name):
             with open(file_name, "r") as file:
                 lines = file.readlines()
-                numbers_as_strings = lines[0].strip()[1:-1].split(",")
-                params_out = [float(num.strip()) for num in numbers_as_strings if num.strip() != '']
-                
+                params_out = ast.literal_eval(lines[0])
+                # numbers_as_strings = lines[0].strip()[1:-1].split(",")
+                # params_out = [float(num.strip()) for num in numbers_as_strings if num.strip() != '']
+                assert isinstance(params_out, dict)
             return params == params_out
         else:
-            print(f"File '{file_name}' does not exist.")
+            raise FileNotFoundError(f'{file_name}')
             return False
