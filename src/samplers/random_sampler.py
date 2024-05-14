@@ -9,6 +9,8 @@ class RandomSampler(Sampler):
     """
     Returns a number of random samples within the specified bounds.
 
+    Number of samples should be specified as an integer.
+
     This throws errors if you are asking for something insane,
         e.g., 10 parameters  for 10 samples each -> 10 billion
         so hard limit at 100.000
@@ -16,11 +18,13 @@ class RandomSampler(Sampler):
     """
 
     def __init__(self, bounds, num_samples, parameters):
-        if isinstance(num_samples, int):
-            num_samples = [num_samples] * len(parameters)
+        if not isinstance(num_samples, int):
+            raise TypeError(
+                f"The input parameter num_samples should be an integer. {num_samples}"
+            )
 
+        self.total_budget = num_samples
         # check for stupidity
-        self.total_budget = np.prod(np.array(num_samples))
         if self.total_budget > 100000:
             raise Exception(
                 (
@@ -31,21 +35,17 @@ class RandomSampler(Sampler):
 
         self.parameters = parameters
         self.bounds = bounds
-        self.num_initial_points = np.prod(num_samples)
+        self.num_initial_points = self.total_budget
         self.num_samples = num_samples
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
     def generate_parameters(self):
         samples = [
-            np.random.uniform(self.bounds[i][0], self.bounds[i][1], self.num_samples[i])
-            for i in range(len(self.bounds))
+            [np.random.uniform(bound[0], bound[1]) for bound in self.bounds]
+            for _ in range(self.num_samples)
         ]
-        # Use itertools.product to create a Cartesian product of sample
-        # points, representing the hypercube
-        for params_tuple in product(*samples):
-            # Convert tuples to list to ensure serializability
-            yield list(params_tuple)
+        return samples
 
     def get_next_parameter(self):
         if self.current_index < len(self.samples):

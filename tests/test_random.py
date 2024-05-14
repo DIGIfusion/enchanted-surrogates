@@ -8,17 +8,17 @@ from samplers import RandomSampler
 
 def test_output_shape():
     bounds = [[0, 1], [0, 100]]
-    num_samples = [5, 25]
+    num_samples = 25
     parameters = ["a", "b"]
     sampler = RandomSampler(
         bounds=bounds, num_samples=num_samples, parameters=parameters
     )
-    assert len(sampler.samples) == np.prod(num_samples), "Output shape is incorrect"
+    assert len(sampler.samples) == num_samples, "Output shape is incorrect"
 
 
 def test_output_range():
     bounds = [[0, 1], [0, 100]]
-    num_samples = [5, 25]
+    num_samples = 25
     parameters = ["a", "b"]
     sampler = RandomSampler(
         bounds=bounds, num_samples=num_samples, parameters=parameters
@@ -36,7 +36,7 @@ def test_functionality():
     result = True
     try:
         bounds = [[0, 1], [0, 100]]
-        num_samples = [5, 25]
+        num_samples = 25
         parameters = ["a", "b"]
         sampler = RandomSampler(
             bounds=bounds, num_samples=num_samples, parameters=parameters
@@ -45,5 +45,5 @@ def test_functionality():
     except Exception as e:
         print(e)
         result = False
-    assert sampler.get_next_parameter() != sampler.get_next_parameter()
     assert result
+    assert sampler.get_next_parameter() != sampler.get_next_parameter()
