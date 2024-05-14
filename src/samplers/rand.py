@@ -10,7 +10,6 @@ def get_parameter_distributions(bounds: list[list[Union[int,float]]],
     param_distributions = [] 
 
     for param_dist_string, bound in zip(parameter_distributions, bounds): 
-        # TODO: fancy distribution stuff? 
         lbound, upbound = bound
         param_dist = getattr(torch.distributions, param_dist_string)(lbound, upbound)
         param_distributions.append(param_dist)

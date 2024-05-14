@@ -1,18 +1,29 @@
 # executors/DaskExecutor.py
 
 from dask.distributed import Client, as_completed
+from dask_jobqueue import SLURMCluster
 from .base import Executor, run_simulation_task
 from common import S
 
-class LocalDaskExecutor(Executor):
-    def __init__(self, **kwargs):
+class DaskALExecutor(Executor):
+    def __init__(self, num_workers, worker_args, **kwargs):
         super().__init__(**kwargs)
-        print('Beginning local Cluster Generation')
+        self.num_workers = num_workers  # kwargs.get('num_workers')
+        self.worker_args = worker_args  # kwargs.get('worker_args')
+        self.simulator_worker_args = worker_args['simulator_args']
+        self.learner_worker_args = worker_args['activelearner_args']
+        print('Beginning SLURMCluster Generation')
 
-        # calling Client with no arguments creates a local cluster
-        # it is possible to add arguments like:
-        # n_workers=2, threads_per_worker=4
-        self.client = Client()
+        # Create the SLURMCluster and define the resources for each of the
+        # SLURM worker jobs.
+        # Note, that this is the reservation for ONE SLURM worker job.
+        self.simulator_cluster = SLURMCluster(**self.simulator_worker_args)
+        self.activelearner_cluster = SLURMCluster(self.learner_worker_args)
+
+        # This launches the cluster (submits the worker SLURM jobs)
+        self.cluster.scale(self.num_workers)
+
+        self.client = Client(self.cluster)
         print('Finished Setup')
 
     def start_runs(self):

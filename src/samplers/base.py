@@ -2,9 +2,9 @@
 
 from abc import ABC, abstractmethod
 from typing import Union
-
-
 from common import S
+
+
 class Sampler(ABC):
     """ Parameter Space Samplers """
     # TODO: param_dict = {key: value for key, value in zip(self.parameters, params)} globally
