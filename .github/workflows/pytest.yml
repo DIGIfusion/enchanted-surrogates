@@ -28,6 +28,7 @@ jobs:
         coverage run -m pytest tests/test_hypercube.py -v -s
         coverage run -m pytest tests/test_grid.py -v -s
         coverage run -m pytest tests/test_simple.py -v -s
+        coverage run -m pytest tests/test_random.py -v -s
     - name: Generate Coverage Report  
       run: |  
         coverage report -m
