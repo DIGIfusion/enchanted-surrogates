@@ -22,6 +22,7 @@ def main(args):
 
     # executor.initialize(sampler=sampler, runner=runner, parser=parser)
     executor.start_runs()
+    executor.clean()
 
 
 if __name__ == "__main__":

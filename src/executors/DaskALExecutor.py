@@ -21,11 +21,16 @@ class DaskALExecutor(Executor):
         self.activelearner_cluster = SLURMCluster(self.learner_worker_args)
 
         # This launches the cluster (submits the worker SLURM jobs)
-        self.cluster.scale(self.num_workers)
+        self.simulator_cluster.scale(self.num_workers)
 
-        self.client = Client(self.cluster)
+        self.simulator_client = Client(self.simulator_cluster)
         print('Finished Setup')
+        self.clients = [self.simulator_client]
 
+    def scale_learner_cluster_client(self, ):
+        pass 
+    
+    
     def start_runs(self):
         sampler_interface = self.sampler.sampler_interface
         print(100 * "=")
@@ -36,7 +41,7 @@ class DaskALExecutor(Executor):
         initial_parameters = self.sampler.get_initial_parameters()
 
         for params in initial_parameters:
-            new_future = self.client.submit(
+            new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
             )
             futures.append(new_future)
@@ -55,7 +60,7 @@ class DaskALExecutor(Executor):
                 if sampler_interface in [S.BATCH]: 
                     param_list = self.sampler.get_next_parameter() 
                     for params in param_list: 
-                        new_future = self.client.submit(
+                        new_future = self.simulator_client.submit(
                             run_simulation_task, self.runner_args, params, self.base_run_dir
                         )
                     seq.add(new_future)
@@ -64,7 +69,7 @@ class DaskALExecutor(Executor):
                     if params is None:  # This is hacky
                         continue
                     else:
-                        new_future = self.client.submit(
+                        new_future = self.simulator_client.submit(
                             run_simulation_task, self.runner_args, params, self.base_run_dir
                         )
                         seq.add(new_future)

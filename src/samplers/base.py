@@ -19,5 +19,5 @@ class Sampler(ABC):
         raise NotImplementedError('sampler_interface is not set')
 
     @abstractmethod 
-    def get_initial_parameters() -> list[dict[str, float]]: 
+    def get_initial_parameters(self,) -> list[dict[str, float]]: 
         raise NotImplementedError('Getting initial parameters is not implemented yet!')

@@ -26,7 +26,7 @@ class Executor(ABC):
         self.base_run_dir = base_run_dir  # , kwargs.get('base_run_dir')
         self.max_samples = self.sampler.total_budget
         self.config_filepath = config_filepath  # kwargs.get('config_filepath')
-        self.client = None
+        self.clients = []
         print(config_filepath)
         print(f"Making directory of simulations at: {self.base_run_dir}")
         os.makedirs(self.base_run_dir, exist_ok=True)
@@ -38,3 +38,7 @@ class Executor(ABC):
     @abstractmethod
     def start_runs(self):
         raise NotImplementedError()
+
+    def clean(self): 
+        for client in self.clients: 
+            client.close()

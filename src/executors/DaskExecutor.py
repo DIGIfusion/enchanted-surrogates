@@ -20,6 +20,7 @@ class DaskExecutor(Executor):
         # This launches the cluster (submits the worker SLURM jobs)
         self.cluster.scale(self.num_workers)
         self.client = Client(self.cluster)
+        self.clients.append(self.client)
         print('Finished Setup')
 
     def start_runs(self):

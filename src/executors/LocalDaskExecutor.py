@@ -13,6 +13,7 @@ class LocalDaskExecutor(Executor):
         # it is possible to add arguments like:
         # n_workers=2, threads_per_worker=4
         self.client = Client()
+        self.clients.append(self.client)
         print('Finished Setup')
 
     def start_runs(self):
