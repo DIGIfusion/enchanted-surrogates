@@ -1,6 +1,6 @@
 import os
+import ast
 from .base import Parser
-import ast 
 
 class SIMPLEparser(Parser):
     """An I/O parser for testing"""
@@ -33,4 +33,3 @@ class SIMPLEparser(Parser):
             return params == params_out
         else:
             raise FileNotFoundError(f'{file_name}')
-            return False
