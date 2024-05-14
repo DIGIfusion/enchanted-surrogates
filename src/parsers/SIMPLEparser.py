@@ -13,7 +13,7 @@ class SIMPLEparser(Parser):
         Writes a sample input file.
         """
         print("Writing to", run_dir)
-        file_name = run_dir + "/input.txt"
+        file_name = run_dir + "./input.txt"
         with open(file_name, "w") as file:
             file.write("Simple start.")
 
