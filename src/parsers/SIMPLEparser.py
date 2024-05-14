@@ -13,7 +13,7 @@ class SIMPLEparser(Parser):
         Writes a sample input file.
         """
         print("Writing to", run_dir)
-        file_name = run_dir + "./input.txt"
+        file_name = os.path.join(run_dir, "input.txt") 
         with open(file_name, "w") as file:
             file.write("Simple start.")
 
@@ -21,7 +21,7 @@ class SIMPLEparser(Parser):
         """
         The output file should contain the input parameters.
         """
-        file_name = run_dir + "/output.txt"
+        file_name = os.path.join(run_dir, 'output.txt')
         params_out = None
         if os.path.exists(file_name):
             with open(file_name, "r") as file:
