@@ -398,6 +398,17 @@ class HELENAparser(Parser):
         summary["ballooning_stable"] = ballooning_stable
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
+        try:
+            CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
+                run_dir
+            )
+            np.save(run_dir + "/qs.npy", QS)
+            np.save(run_dir + "/cs.npy", CS)
+            np.save(run_dir + "/p0.npy", P0)
+            np.save(run_dir + "/rbphi.npy", RBPHI)
+            np.save(run_dir + "/vxvy.npy", (VX, VY))
+        except Exception:
+            print(f"error reading and summarizing fort.12 in dir {run_dir}")
         return summary
 
     def read_final_zjz(self, output_dir):
@@ -428,7 +439,7 @@ class HELENAparser(Parser):
         res = [float(x) for x in res]
         return res, endline
 
-    def read_fort12(self, output_dir):
+    def read_output_fort12(self, output_dir):
         """
         Read the output file fort.12 which is used as input by MISHKA.
         """
