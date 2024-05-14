@@ -1,20 +1,26 @@
 sampler:
-  type: HypercubeSampler
-  bounds: [[4, 20]]
-  num_samples: 3
-  parameters: ['ntor']
+  type: ArraySampler
+  bounds: [
+    [5,7,10,15,20,30,50],
+    [
+      "/scratch/project_2009007/data_HELENA/success/88a75109-8c3e-4864-a6df-689cdf869bc4",
+      "/scratch/project_2009007/data_HELENA/success/62990ab5-514f-4dca-9b27-fd10d032302c",
+      "/scratch/project_2009007/data_HELENA/success/08d70aa3-2ef4-4d2b-b960-60c172f802b4"
+    ]]
+  num_samples: [7, 3]
+  parameters: ['ntor', 'helena_dir']
 
 runner:
   type: MISHKArunner
   executable_path: "/scratch/project_2009007/MISHKA/bin/mishka/mishka1fast_gfortran"
   other_params: {
-    "default_namelist": "/scratch/project_2009007/enchanted-surrogates/tests/mishka/fort.10",
-    "input_fort12": "/scratch/project_2009007/mishka-nn/data/240313_saarelmathesis/test_tria0.24_pzjz0.16/fort.12",
+    "default_namelist": "/scratch/project_2009007/ench-surr-helper/mishka/fort.10",
+    "input_fort12": "",
     "input_density": ""}
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/test-enchanted/MISHKA_2024-04-02
+  base_run_dir: /scratch/project_2009007/data_MISHKA/m5
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"

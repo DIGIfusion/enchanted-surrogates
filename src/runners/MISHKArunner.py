@@ -1,12 +1,12 @@
 # runners/MISHKA.py
 
 # import numpy as np
-from .base import Runner
-from parsers import MISHKAparser
-import subprocess
 import os
 import shutil
+import subprocess
 import json
+from parsers import MISHKAparser
+from .base import Runner
 
 
 class MISHKArunner(Runner):
@@ -52,15 +52,15 @@ class MISHKArunner(Runner):
                 f"other_params: {other_params}",
             )
 
-        if not os.path.exists(self.input_fort12):
+        if len(self.input_fort12) > 0 and not os.path.exists(self.input_fort12):
             raise FileNotFoundError(
                 f"Couldn't find {self.input_fort12}. ", f"other_params: {other_params}"
             )
 
         # MISHKA can run without density file
-        if not os.path.exists(self.input_density):
-            self.input_density = None
-            print(f"Couldn't find {self.input_density}")
+        # if not os.path.exists(self.input_density):
+        #     self.input_density = None
+        #     print(f"Couldn't find {self.input_density}")
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -77,7 +77,7 @@ class MISHKArunner(Runner):
         """
         print(params)
         # check if equilibrium files exist and copy them to run_dir
-        self.get_equilibrium_files(run_dir)
+        self.get_equilibrium_files(run_dir, params)
 
         # write input file
         self.parser.write_input_file(params, run_dir)
@@ -94,7 +94,7 @@ class MISHKArunner(Runner):
 
         return True
 
-    def get_equilibrium_files(self, run_dir: str):
+    def get_equilibrium_files(self, run_dir: str, params: dict):
         """
         Copies the equilibirum files to the run directory.
         - fort.12 is needed
@@ -110,9 +110,14 @@ class MISHKArunner(Runner):
         -------
         None
         """
-        shutil.copy(self.input_fort12, run_dir)
-        if self.input_density is not None:
-            shutil.copy(self.input_density, run_dir)
+        if "helena_dir" in params:
+            file_path = params["helena_dir"] + "/fort.12"
+        else:
+            file_path = self.input_fort12
+        shutil.copy(file_path, run_dir)
+
+        # if self.input_density is not None:
+        #     shutil.copy(self.input_density, run_dir)
         return
 
     def get_mpol(self, n):

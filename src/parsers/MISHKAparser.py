@@ -53,18 +53,20 @@ class MISHKAparser(Parser):
         Looking for line:
          INSTABILITY FOUND :   -10    9  0.3076E+00  0.2167E-08
         """
-        filename = run_dir + "/fort.20"
-        file = open(filename, "r")
-        lines = file.readlines()
         success = False
         growthrate = None
-        for line in lines:
-            if "INSTABILITY" in line:
-                print(line)
-                spl = line.split()
-                growthrate = math.sqrt(float(spl[5]))
-                success = True
-
+        filename = run_dir + "/fort.20"
+        try:
+            file = open(filename, "r")
+            lines = file.readlines()
+            for line in lines:
+                if "INSTABILITY" in line:
+                    print(line)
+                    spl = line.split()
+                    growthrate = (float(spl[5]), float(spl[6]))
+                    success = True
+        except FileNotFoundError as e:
+            print(f"(read_output_fort20) FileNotFoundError: {e}")
         return success, growthrate
 
     def read_output_fort22(self, run_dir: str):
@@ -304,7 +306,12 @@ class MISHKAparser(Parser):
         success, growthrate = self.read_output_fort20(run_dir)
         summary["success"] = success
         summary["mpol"] = mpol
+        summary["ntor"] = params["ntor"]
         summary["growthrate"] = growthrate
+        summary["growthrate_c"] = growthrate
+
+        if "helena_dir" in params:
+            summary["helena_dir"] = params["helena_dir"]
 
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
