@@ -26,3 +26,10 @@ def test_simple_random_seq_localexecutor():
     config_filepath = os.path.join(os.getcwd(), "tests/configs/random_seq.yaml")
     args = run.load_configuration(config_filepath)
     args.executor["config_filepath"] = config_filepath
+    run.main(args)
+
+def test_simple_random_batch_localexecutor(): 
+    config_filepath = os.path.join(os.getcwd(), "tests/configs/random_batch.yaml")
+    args = run.load_configuration(config_filepath)
+    args.executor["config_filepath"] = config_filepath
+    run.main(args)

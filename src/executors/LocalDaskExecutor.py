@@ -59,7 +59,7 @@ class LocalDaskExecutor(Executor):
                     )
                     futures.append(new_future)
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]: 
-            seq = wait(futures)
+            wait(futures)
             # Do the active learning step and model training
             train, valid = self.sampler.get_train_valid()
             # we need to figure out how to handle multiple regressors with one output each
