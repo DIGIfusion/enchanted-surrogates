@@ -14,8 +14,16 @@ class ActiveLearner(Sampler):
         self.parameters = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.batch_size = kwargs.get('batch_size', 1)
         self.init_num_samples = kwargs.get('num_initial_points', self.batch_size)
-        self.targets = kwargs.get('targets')
+        self.target_keys = kwargs.get('target')
+        self.input_keys = kwargs.get('inputs')
+        self.keep_keys = self.target_keys+self.input_keys
+        self.mapping_column_indices = self.get_column_idx_mapping()
+        self.input_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.input_keys]
+        self.output_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.target_keys]
 
+    def get_column_idx_mapping(self):
+        return {idx: col for col, idx in zip(self.data.columns, range(len(self.data.columns)))}
+    
     def get_initial_parameters(self):
         # random samples 
         batch_samples = [] 
@@ -24,6 +32,9 @@ class ActiveLearner(Sampler):
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             batch_samples.append(param_dict)
         return batch_samples
+
+    def get_train_valid(self):
+        return self.train, self.valid
 
     def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
         # 
@@ -76,17 +87,18 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         self.train, self.valid, self.test, self.pool = data_split(self.data, **self.data_args)
 
         # somehow needs to handle cases 
-        self.mapping_column_indices = self.get_column_idx_mapping()
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)
-
-    def get_column_idx_mapping(self):
-        return {idx: col for col, idx in zip(self.data.columns, range(len(self.data.columns)))}
     
     def get_initial_parameters(self):
         return self.data.sample(self.init_num_samples)
+    
+    def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
+        idxs = super().get_next_parameter(model, train, pool)
+        result = {'input': pool[idxs,self.input_col_idxs], 'output': pool.loc[idxs,self.output_col_idxs]}
+        return result 
     
     def update_pool_and_train(self, new_idxs):
         pool_idxs = torch.as_tensor(self.pool.index.values)

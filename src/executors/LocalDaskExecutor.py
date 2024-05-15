@@ -3,6 +3,7 @@
 from dask.distributed import Client, as_completed, wait
 from .base import Executor, run_simulation_task, run_train_model
 from common import S
+from torch.utils.data import Dataset
 
 class LocalDaskExecutor(Executor):
     def __init__(self, **kwargs):
@@ -61,13 +62,18 @@ class LocalDaskExecutor(Executor):
                     futures.append(new_future)
                 completed += self.sampler.batch_size
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
-            seq = wait(futures)
+            seq = wait(futures) # outputs should be a list of tuples we ignore in this case
+            outputs = []
+            for res in seq.done: 
+                outputs.append(res.result())
+            outputs = collect(outputs) 
+
             # Do the active learning step and model training
             model = InstantiateModel(**kwargs)
-            train, valid = self.sampler.get_train_valid(target=)
+            train, valid = self.sampler.get_train_valid()
             # we need to figure out how to handle multiple regressors with one output each
-            train = Dataset(train)
-            valid = Dataset(train)
+            train = Dataset(train[:,self.sampler.input_col_idxs], train[:,self.sampler.output_col_idxs])
+            valid = Dataset(valid[:,self.sampler.input_col_idxs], valid[:,self.sampler.output_col_idxs])
                 
             new_model_training = self.client.submit(
                 run_train_model, train, valid
