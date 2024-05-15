@@ -66,12 +66,11 @@ class DaskExecutor(Executor):
                         )
                         seq.add(new_future)
                 if sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
-                    train, valid = sampler.get_train_valid()
+                    train, valid = self.sampler.get_train_valid()
                     # we need to figure out how to handle multiple regressors with one output each
                     train = Dataset(train)
                     valid = Dataset(train)
                     
                     new_future = self.active_client.submit(
                         run_train_model, train, valid
-                    )             
-    
+                    )

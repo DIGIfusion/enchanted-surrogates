@@ -1,0 +1,39 @@
+sampler:
+  type: ActiveLearner
+  bounds: 
+    - [1, 3]
+    - [1, 3]
+  batch_size: 50
+  total_budget: 100
+  parameters: ["m", "n"]
+  kernel_transform:  # TODO: make method to handle kernel transform properly...
+    - ['rp', [512]]
+    #   - 'rp'
+    #   - 
+    #     - 512
+  AL_kwargs: 
+    data_args: 
+      - 'train_size': 10
+      - 'valid_size': 10
+      - 'test_size': 10
+  # kernel_transform: [('rp', [512])]
+
+runner:
+  type: SIMPLErunner
+  executable_path: tests/simple/simple.sh
+  other_params: {}
+
+executor:
+  type: LocalDaskExecutor
+  base_run_dir: simple_test_runs/
+  worker_args:
+    account: project_2009007
+    queue: medium
+    cores: 2
+    memory: 1GB
+    processes: 1
+    walltime: '00:10:00'
+    interface: ib0
+    job_script_prologue:
+      - export PYTHONPATH=$PYTHONPATH:/src
+  num_workers: 2

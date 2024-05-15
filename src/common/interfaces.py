@@ -3,7 +3,7 @@ from enum import Enum
 class S(Enum):
     # Samplers ENUM
     SEQUENTIAL=0
-    BATCH=1 
+    BATCH=1
     ACTIVE=2
     ACTIVEDB=3
 

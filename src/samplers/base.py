@@ -10,7 +10,7 @@ class Sampler(ABC):
     # TODO: param_dict = {key: value for key, value in zip(self.parameters, params)} globally
 
     @abstractmethod
-    def get_next_parameter(self) -> Union[list[dict[str, float]], dict[str, float]]:
+    def get_next_parameter(self, *args, **kwargs) -> Union[list[dict[str, float]], dict[str, float]]:
         raise NotImplementedError('Sampling not implemented yet')
 
     @property 

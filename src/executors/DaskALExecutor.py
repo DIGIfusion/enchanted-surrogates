@@ -6,7 +6,7 @@ from .base import Executor, run_simulation_task
 from common import S
 
 class DaskALExecutor(Executor):
-    sampler_interfaces = [S.ACTIVE]
+    sampler_interfaces = [S.ACTIVE, S.BATCH]
     def __init__(self, num_activelearner_workers: int, num_simulator_workers: int, worker_args: dict, **kwargs):
         super().__init__(**kwargs)
         self.num_activelearner_workers = num_activelearner_workers  # kwargs.get('num_workers')

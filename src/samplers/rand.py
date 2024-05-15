@@ -16,16 +16,16 @@ def get_parameter_distributions(bounds: list[list[Union[int,float]]],
     return param_distributions
 
 class RandBatchSampler(Sampler): 
-    sampler_interface = S.BATCH 
+    sampler_interface = S.BATCH
     def __init__(self, 
                  bounds: list[[list[Union[int,float]]]], 
                  batch_size: int, 
                  total_budget: int,
-                 parameters: list[str], ): 
+                 parameters: list[str], ):
 
         self.total_budget = total_budget
-        self.parameters = parameters 
-        self.bounds = bounds 
+        self.parameters = parameters
+        self.bounds = bounds
         if batch_size <= 1: 
             raise ValueError('Batch size needs to be greator than 1, if 1 then use RandSampler')
 
@@ -33,10 +33,10 @@ class RandBatchSampler(Sampler):
         parameter_strings = ['Uniform' for _ in range(len(bounds))]
         self.parameter_distributions = get_parameter_distributions(bounds, parameter_strings)
        
-    def get_next_parameter(self, ): 
-        # batch version of get next parameter 
+    def get_next_parameter(self, ):
+        # batch version of get next parameter
         batch_samples = [] 
-        for _ in range(self.batch_size): 
+        for _ in range(self.batch_size):
             params = [dist.sample().item() for dist in self.parameter_distributions]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             batch_samples.append(param_dict)
@@ -45,9 +45,10 @@ class RandBatchSampler(Sampler):
     def get_initial_parameters(self, ): 
         return self.get_next_parameter()
 
-class RandSampler(Sampler): 
+
+class RandSampler(Sampler):
     sampler_interface = S.SEQUENTIAL
-    def __init__(self, bounds, num_samples, parameters): 
+    def __init__(self, bounds, num_samples, parameters):
         self.parameters = parameters 
         self.bounds = bounds 
         self.num_initial_points = num_samples
