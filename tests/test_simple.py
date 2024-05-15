@@ -12,7 +12,7 @@ import run
 
 def test_simple_initialization():
     runner = SIMPLErunner(executable_path="tests/simple/simple.sh")
-    assert runner.single_code_run(params={'a': 1, 'b': 2, 'c':3}, run_dir="simple_test_runs/")
+    assert runner.single_code_run(params={'a': 1, 'b': 2, 'c':3}, run_dir="./simple_test_runs")
 
     
 def test_simple_grid_localexecutor():
