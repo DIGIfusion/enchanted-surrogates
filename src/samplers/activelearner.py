@@ -1,4 +1,6 @@
 from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
+from bmdal.bmdal_reg.bmdal.algorithms import select_batch
+from bmdal.bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
 from .base import Sampler 
 from typing import Dict
@@ -12,6 +14,7 @@ class ActiveLearner(Sampler):
         self.parameters = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.batch_size = kwargs.get('batch_size', 1)
         self.init_num_samples = kwargs.get('num_initial_points', self.batch_size)
+        self.targets = kwargs.get('targets')
 
     def get_initial_parameters(self):
         # random samples 
@@ -25,13 +28,14 @@ class ActiveLearner(Sampler):
     def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
         # 
         # TODO: fix pseudocode
-        # train = TensorFeatureData(train.x)
-        # pool = TensorFeatureData(pool.x)
-        # y_train = train.y
-        # feature_data =  {'train': train, 'pool': pool}
-        # new_idxs, al_stats = select_batch(models=[model], data=feature_data, y_train=y_train,
-        #                                 selection_method='lcmd', sel_with_train=True, 
-        #                                 base_kernel='grad', kernel_transforms=[('rp', [512])])
+
+        train = TensorFeatureData(train.x)
+        pool = TensorFeatureData(pool.x)
+        y_train = train.y
+        feature_data =  {'train': train, 'pool': pool}
+        new_idxs, al_stats = select_batch(models=[model], data=feature_data, y_train=y_train,
+                                        selection_method='lcmd', sel_with_train=True, 
+                                        base_kernel='grad', kernel_transforms=[('rp', [512])])
         new_idxs, _ = None, None
         return new_idxs
     

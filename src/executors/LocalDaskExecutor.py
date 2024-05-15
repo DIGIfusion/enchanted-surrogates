@@ -63,7 +63,8 @@ class LocalDaskExecutor(Executor):
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             seq = wait(futures)
             # Do the active learning step and model training
-            train, valid = self.sampler.get_train_valid()
+            model = InstantiateModel(**kwargs)
+            train, valid = self.sampler.get_train_valid(target=)
             # we need to figure out how to handle multiple regressors with one output each
             train = Dataset(train)
             valid = Dataset(train)
