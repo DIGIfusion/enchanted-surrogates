@@ -4,6 +4,7 @@ class S(Enum):
     # Samplers ENUM
     SEQUENTIAL=0
     BATCH=1 
+    ACTIVE=2
 
 """
 
