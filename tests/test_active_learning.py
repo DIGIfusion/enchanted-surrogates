@@ -36,3 +36,4 @@ def test_integrate_sampler_with_local_executor():
             args.sampler['data_path'] = data_path
         args.executor["config_filepath"] = config_filepath
         run.main(args)
+

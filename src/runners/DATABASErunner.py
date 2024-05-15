@@ -1,7 +1,7 @@
 from .base import Runner
 
 class DATABASErunner(Runner): 
-    def __init__(self, *kwargs, **kwargs): 
+    def __init__(self, *args, **kwargs): 
         """ This is a dummy class as for the moment the sampler handles everything"""
         pass 
 
