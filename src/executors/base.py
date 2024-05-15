@@ -15,6 +15,8 @@ def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     result = runner.single_code_run(params_from_sampler, run_dir)
     return result, params_from_sampler
 
+def run_train_model():
+    pass
 
 class Executor(ABC):
     def __init__(
