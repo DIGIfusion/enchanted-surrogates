@@ -5,6 +5,7 @@ class S(Enum):
     SEQUENTIAL=0
     BATCH=1 
     ACTIVE=2
+    ACTIVEDB=3
 
 """
 
