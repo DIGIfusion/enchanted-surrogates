@@ -1,11 +1,10 @@
 import pytest
 import os
 import sys
-
+import numpy as np 
 sys.path.append(os.getcwd() + "/src")
 from samplers import Grid
 import run
-import numpy as np 
 
 def test_initialization():
     sampler = Grid(bounds=[[0, 9], [0, 9]], num_samples=10, parameters=["a", "b"])

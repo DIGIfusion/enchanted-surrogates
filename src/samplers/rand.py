@@ -8,7 +8,6 @@ import torch
 def get_parameter_distributions(bounds: list[list[Union[int,float]]], 
                                 parameter_distributions: list[str]) -> list[torch.distributions.distribution.Distribution]: 
     param_distributions = [] 
-
     for param_dist_string, bound in zip(parameter_distributions, bounds): 
         lbound, upbound = bound
         param_dist = getattr(torch.distributions, param_dist_string)(lbound, upbound)

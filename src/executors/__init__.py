@@ -1,3 +1,3 @@
 from .DaskExecutor import DaskExecutor
 from .LocalDaskExecutor import LocalDaskExecutor
-from .DaskALExecutor import DaskALExecutor
+from .DaskALExecutor import DaskCPUGPUExecutor

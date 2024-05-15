@@ -28,3 +28,11 @@ def test_load_sampler_from_file():
 
         parameter_list = sampler.get_initial_parameters()
         assert len(parameter_list) == sampler.init_num_samples
+
+def test_integrate_sampler_with_local_executor(): 
+    for config_filepath in config_filepaths: 
+        args = run.load_configuration(config_filepath)
+        if args.sampler['type'] == 'ActiveLearningStaticPoolSampler':
+            args.sampler['data_path'] = data_path
+        args.executor["config_filepath"] = config_filepath
+        run.main(args)

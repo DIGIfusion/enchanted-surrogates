@@ -1,7 +1,7 @@
 # executors/DaskExecutor.py
 
-from dask.distributed import Client, as_completed
-from .base import Executor, run_simulation_task
+from dask.distributed import Client, as_completed, wait
+from .base import Executor, run_simulation_task, run_train_model
 from common import S
 
 class LocalDaskExecutor(Executor):
@@ -31,25 +31,15 @@ class LocalDaskExecutor(Executor):
             )
             futures.append(new_future)
 
-        print("Starting search")
-        seq = as_completed(futures)
         completed = 0
-        for future in seq:
-            res = future.result()
-            completed += 1
-            print(res, completed)
-            # TODO: is this waiting for an open node or are we just
-            # pushing to queue?
-            if self.max_samples > completed:
-                # TODO: pass the previous result and parameters.. (Active Learning )
-                if sampler_interface in [S.BATCH]: 
-                    param_list = self.sampler.get_next_parameter() 
-                    for params in param_list: 
-                        new_future = self.client.submit(
-                            run_simulation_task, self.runner_args, params, self.base_run_dir
-                        )
-                    seq.add(new_future)
-                elif sampler_interface in [S.SEQUENTIAL]: 
+        print("Starting search")
+        if sampler_interface in [S.SEQUENTIAL]:
+            seq = as_completed(futures)
+            for future in seq:
+                res = future.result()
+                completed += 1
+                print(res, completed)
+                if self.max_samples > completed:
                     params = self.sampler.get_next_parameter()
                     if params is None:  # This is hacky
                         continue
@@ -58,4 +48,66 @@ class LocalDaskExecutor(Executor):
                             run_simulation_task, self.runner_args, params, self.base_run_dir
                         )
                         seq.add(new_future)
+        elif sampler_interface in [S.BATCH]:
+            while completed < self.max_samples: 
+                seq = wait(futures)
+                param_list = self.sampler.get_next_parameter() 
+                futures = []
+                for params in param_list: 
+                    new_future = self.client.submit(
+                        run_simulation_task, self.runner_args, params, self.base_run_dir
+                    )
+                    futures.append(new_future)
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]: 
+            seq = wait(futures)
+            # Do the active learning step and model training
+            train, valid = self.sampler.get_train_valid()
+            # we need to figure out how to handle multiple regressors with one output each
+            train = Dataset(train)
+            valid = Dataset(train)
+                
+            new_model_training = self.client.submit(
+                run_train_model, train, valid
+            )
+            trained_model = wait(new_model_training)
 
+            param_list = self.sampler.get_next_parameter(train, valid, ) 
+            futures = []
+            for params in param_list: 
+                new_future = self.client.submit(
+                    run_simulation_task, self.runner_args, params, self.base_run_dir
+                )
+                futures.append(new_future)
+
+            
+
+
+            
+                        
+
+        # seq = as_completed(futures)
+        
+        # §for future in seq:
+        # §    res = future.result()
+        # §    completed += 1
+        # §    print(res, completed)
+        # §    # TODO: is this waiting for an open node or are we just
+        # §    # pushing to queue?
+        # §    if self.max_samples > completed:
+        # §        # TODO: pass the previous result and parameters.. (Active Learning )
+        # §        if sampler_interface in [S.BATCH]: 
+        # §            param_list = self.sampler.get_next_parameter() 
+        # §            for params in param_list: 
+        # §                new_future = self.client.submit(
+        # §                    run_simulation_task, self.runner_args, params, self.base_run_dir
+        # §                )
+        # §            seq.add(new_future)
+        # §        elif sampler_interface in [S.SEQUENTIAL]: 
+        # §            params = self.sampler.get_next_parameter()
+        # §            if params is None:  # This is hacky
+        # §                continue
+        # §            else:
+        # §                new_future = self.client.submit(
+        # §                    run_simulation_task, self.runner_args, params, self.base_run_dir
+        # §                )
+        # §                seq.add(new_future)
