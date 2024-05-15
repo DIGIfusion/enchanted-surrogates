@@ -51,15 +51,17 @@ class LocalDaskExecutor(Executor):
         elif sampler_interface in [S.BATCH]:
             while completed < self.max_samples: 
                 seq = wait(futures)
-                param_list = self.sampler.get_next_parameter() 
+                print(seq)
+                param_list = self.sampler.get_next_parameter()
                 futures = []
                 for params in param_list: 
                     new_future = self.client.submit(
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     futures.append(new_future)
-        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]: 
-            wait(futures)
+                completed += self.sampler.batch_size
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
+            seq = wait(futures)
             # Do the active learning step and model training
             train, valid = self.sampler.get_train_valid()
             # we need to figure out how to handle multiple regressors with one output each
@@ -71,7 +73,7 @@ class LocalDaskExecutor(Executor):
             )
             trained_model = wait(new_model_training)
 
-            param_list = self.sampler.get_next_parameter(train, valid, ) 
+            param_list = self.sampler.get_next_parameter(train, valid, None) 
             futures = []
             for params in param_list: 
                 new_future = self.client.submit(
