@@ -15,4 +15,4 @@ from .TGLFparser import TGLFparser
 from .SIMPLEparser import SIMPLEparser
 from .HELENAparser import HELENAparser
 from .MISHKAparser import MISHKAparser
-from .DATABASEparser import DATABASEparser
+from .STATICPOOLparser import STATICPOOLparser

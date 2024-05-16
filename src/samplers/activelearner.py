@@ -8,27 +8,20 @@ from bmdal.bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
 from .base import Sampler 
 from typing import Dict
+import parsers
 
 
 class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
-    def __init__(self, total_budget: int, parameters, *args, **kwargs): 
+    def __init__(self, total_budget: int, parameters, parser_args, *args, **kwargs): 
         self.total_budget = total_budget
         self.bounds = kwargs.get('bounds')
         self.parameters = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.batch_size = kwargs.get('batch_size', 1)
         self.init_num_samples = kwargs.get('num_initial_points', self.batch_size)
         # TODO: below is specific to the dataset, we should have the parser handle this stuff...., or introduce the parser
-        self.target_keys = kwargs.get('target')
-        self.input_keys = kwargs.get('inputs')
-        self.keep_keys = self.target_keys+self.input_keys
-        self.mapping_column_indices = self.get_column_idx_mapping()
-        self.input_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.input_keys]
-        self.output_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.target_keys]
+        self.parser = getattr(parsers, parser_args.pop('type'))(**parser_args)
 
-    def get_column_idx_mapping(self):
-        return {idx: col for col, idx in zip(self.data.columns, range(len(self.data.columns)))}
-    
     def get_initial_parameters(self):
         # random samples 
         batch_samples = [] 
@@ -72,11 +65,13 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
         super().__init__(self, **kwargs)
+        
+        #ToDd assert that the parser is an instance of STATICPOOLparser, or an enum
         self.extension = data_path.split('.')[-1]
         self.data_args = AL_kwargs['data_args']
 
         if self.extension not in ['csv','h5','pkl']:
-            raise ValueError(f"Extension {self.extension} not allowed. Please use any of {allowed_extensions}")
+            raise ValueError(f"Extension {self.extension} not allowed. Please use any of {['csv','h5','pkl']}")
 
         if self.extension == 'csv':
             self.data = CSVLoader(data_path=data_path).load_data()
@@ -102,7 +97,7 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     
     def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
         idxs = super().get_next_parameter(model, train, pool)
-        result = {'input': pool[idxs,self.input_col_idxs], 'output': pool.loc[idxs,self.output_col_idxs]}
+        result = {'input': pool[idxs,self.parser.input_col_idxs], 'output': pool.loc[idxs,self.parser.output_col_idxs]}
         return result 
     
     def update_pool_and_train(self, new_idxs):
