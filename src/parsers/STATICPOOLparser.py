@@ -55,9 +55,10 @@ class STATICPOOLparser(Parser):
         logical_new_idxs[new_idxs] = True
         # We now append the new indices to the training set
         train_idxs = torch.cat([train_idxs, pool_idxs[logical_new_idxs]], dim=-1)
+        train_new = torch.cat([self.train, self.pool[new_idxs]])
         # and remove them from the pool set
         pool_idxs = pool_idxs[~logical_new_idxs]
-        self.train = self.train[train_idxs]
+        self.train = train_new
         self.pool = self.pool[pool_idxs]
 
     def write_input_file(self):
