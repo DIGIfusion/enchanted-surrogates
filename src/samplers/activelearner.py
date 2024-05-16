@@ -34,17 +34,15 @@ class ActiveLearner(Sampler):
         return batch_samples
 
     def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
-        # 
         # TODO: fix pseudocode
 
-        train = TensorFeatureData(train.x)
-        pool = TensorFeatureData(pool.x)
-        y_train = train.y
+        y_train = train[:, self.parser.output_col_idxs]
+        train = TensorFeatureData(train[:, self.parser.input_col_idxs])
+        pool = TensorFeatureData(pool[:, self.parser.input_col_idxs])
         feature_data =  {'train': train, 'pool': pool}
         new_idxs, al_stats = select_batch(models=[model], data=feature_data, y_train=y_train,
-                                        selection_method='lcmd', sel_with_train=True, 
+                                        selection_method='random', sel_with_train=True, batch_size=25,
                                         base_kernel='grad', kernel_transforms=[('rp', [512])])
-        new_idxs, _ = None, None
         return new_idxs
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
@@ -78,11 +76,19 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         self.init_num_samples = init_num_samples
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
-        idxs_as_tensor = torch.tensor([res['pool_idxs'] for res in results])
+        # iputs coming since we don't care about hte outputs in the static pool 
+        idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
     
-    def get_initial_parameters(self):
-        return self.parser.data.sample(self.init_num_samples)
+    def get_initial_parameters(self) -> list[dict]:
+        # get a set of random initial parameters
+        params = []
+        for _ in range(self.init_num_samples): 
+            idxs = np.random.randint(0, len(self.parser.pool))
+            # idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)
+            result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
+            params.append(result)
+        return params # self.parser.data.sample(self.init_num_samples)
     
     def get_next_parameter(self, model) -> Dict[str, float]:
         idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)

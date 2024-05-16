@@ -47,8 +47,10 @@ class STATICPOOLparser(Parser):
         """
         This is essentially the read_outputs argument of  parser
         """
-        pool_idxs = torch.as_tensor(self.pool.index.values)
-        train_idxs = torch.as_tensor(self.train.index.values)
+        # NOTE: I think we don't care exactly about the old indicies so we can reindex here? 
+
+        pool_idxs = torch.arange(0, len(self.pool)) # (self.pool.index.values)
+        train_idxs = torch.arange(0, len(self.train)) # (self.train.index.values)
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
         # We now append the new indices to the training set

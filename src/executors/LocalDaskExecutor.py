@@ -3,7 +3,7 @@
 from dask.distributed import Client, as_completed, wait
 from .base import Executor, run_simulation_task, run_train_model
 from common import S
-from torch.utils.data import Dataset
+# from torch.utils.data import Dataset
 
 
 class LocalDaskExecutor(Executor):
@@ -65,6 +65,7 @@ class LocalDaskExecutor(Executor):
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             
             while completed < self.max_samples: 
+                print(20*'=', completed, 20*'=')
                 # NOTE: ------ Run Samples ------
                 seq = wait(futures) # outputs should be a list of tuples we ignore in this case
 
@@ -72,6 +73,7 @@ class LocalDaskExecutor(Executor):
                 outputs = []
                 for res in seq.done:
                     outputs.append(res.result())
+                
                 outputs = self.sampler.collect_batch_results(outputs) # TODO: this should probably be in parser
                 # outputs is a tensor of the batch - it's the training data (for the active learning)
                 # for static pool it outputs the idxs that need to be appended/deleted
@@ -79,10 +81,11 @@ class LocalDaskExecutor(Executor):
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
 
+                print('Updated Pool', len(self.sampler.parser.pool), len(self.sampler.parser.train), len(self.sampler.parser.test))
 
                 train, valid = self.sampler.parser.get_train_valid()
-                x_train, y_train = train[:, self.sampler.parser.input_col_idxs], train[:,self.sampler.parser.output_col_idxs]
-                x_valid, y_valid = valid[:, self.sampler.parser.input_col_idxs], valid[:,self.sampler.parser.output_col_idxs] 
+                x_train, y_train = train[:, self.sampler.parser.input_col_idxs], train[:, self.sampler.parser.output_col_idxs]
+                x_valid, y_valid = valid[:, self.sampler.parser.input_col_idxs], valid[:, self.sampler.parser.output_col_idxs] 
                 train_data, valid_data = (x_train, y_train), (x_valid, y_valid)
 
                 # NOTE: ------ Submit model training job ------
@@ -93,14 +96,15 @@ class LocalDaskExecutor(Executor):
                 # valid = Dataset(valid[:,self.sampler.parser.input_col_idxs], valid[:,self.sampler.parser.output_col_idxs])
                 
                 new_model_training = self.client.submit(
-                    run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
+                    run_train_model, self.sampler.model_kwargs, train_data, valid_data
                 )
 
                 train_model_run = wait([new_model_training])
 
                 # NOTE: ------ Collect model training job ------
-                trained_model_res = train_model_run.done[0]
-                _, _, trained_model = trained_model_res
+                trained_model_res = [res.result() for res in train_model_run.done]
+
+                _, _, trained_model = trained_model_res[0]
                 
                 # NOTE: ------ Check if out of budget ------
                 # TODO: We should break likley much earlier? if completed greator than budget 

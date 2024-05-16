@@ -24,20 +24,21 @@ sampler:
       valid_size: 0.3
       test_size: 0.1
   model_kwargs:
-    type: REGRESSOR
+    target_idx: -1
+
   train_kwargs:
     stuff: stuff 
 
   # kernel_transform: [('rp', [512])]
 
 runner:
-  type: SIMPLErunner
-  executable_path: tests/simple/simple.sh
+  type: STATICPOOLrunner
+  executable_path: None
   other_params: {}
 
 executor:
   type: LocalDaskExecutor
-  base_run_dir: simple_test_runs/
+  base_run_dir: simple_test_runs2/
   worker_args:
     account: project_2009007
     queue: medium
@@ -48,4 +49,5 @@ executor:
     interface: ib0
     job_script_prologue:
       - export PYTHONPATH=$PYTHONPATH:/src
+
   num_workers: 2

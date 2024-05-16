@@ -1,9 +1,12 @@
+import torch
 import torch.nn as nn
-from sklearn.preprocessing import StandardScaler
-import tqdm 
+# from sklearn.preprocessing import StandardScaler
+from common import Scaler
+from tqdm import tqdm 
 import numpy as np 
 from torch.utils.data import DataLoader, Dataset
 from typing import Union, Tuple, List
+from torchmetrics import R2Score # TODO: remove depdency
 
 class Regressor(nn.Module):  # type: ignore
     def __init__(
@@ -13,7 +16,7 @@ class Regressor(nn.Module):  # type: ignore
         outputs=1,
         model_size=8,
         dropout=0.1,
-        scaler=StandardScaler,
+        scaler=Scaler,
         device=None,
     ) -> None:
         super().__init__()
@@ -28,6 +31,7 @@ class Regressor(nn.Module):  # type: ignore
         layers.append(nn.Linear(512, outputs))
         self.model = nn.Sequential(*layers)
         self.set_device(device)
+        self.loss = nn.MSELoss(reduction='mean')
         return
 
     def set_device(self, device) -> None:
@@ -57,7 +61,7 @@ class Regressor(nn.Module):  # type: ignore
                 m.train()
 
     def loss_function(self, y, y_hat, train=True):  # type: ignore
-
+        y_hat = y_hat.squeeze()
         loss = self.loss(y_hat, y.float())
         loss = torch.sum(loss)
         if not train:
@@ -71,7 +75,7 @@ class Regressor(nn.Module):  # type: ignore
     def train_step(self, dataloader, optimizer, epoch=None, disable_tqdm=False):  # type: ignore
 
         losses = []
-        for batch, (X, y, _, idx) in enumerate(
+        for batch, (X, y) in enumerate(
             tqdm(dataloader, desc=f"Epoch {epoch}", disable=disable_tqdm),
             0,
         ):
@@ -96,7 +100,7 @@ class Regressor(nn.Module):  # type: ignore
 
         validation_loss = []
         with torch.no_grad():
-            for X, y, _, _ in dataloader:
+            for X, y in dataloader:
                 X = X.to(self.device)
                 y = y.to(self.device)
                 y_hat = self.forward(X.float())
@@ -116,7 +120,7 @@ class Regressor(nn.Module):  # type: ignore
         r2 = []
         popback = []
 
-        for batch, (x, y, _, idx) in enumerate(tqdm(dataloader)):
+        for batch, (x, y) in enumerate(tqdm(dataloader)):
             x = x.to(self.device)
             y = y.to(self.device)
             y_hat = self.forward(x.float())
@@ -163,17 +167,17 @@ class Regressor(nn.Module):  # type: ignore
         self.enable_dropout()
 
         runs = []
-        idx_list = []
+        # idx_list = []
         for i in range(n_runs):
             step_list = []
-            for step, (x, y, _, idx) in enumerate(dataloader):
+            for step, (x, y) in enumerate(dataloader):
                 x = x.to(self.device)
                 y = y.to(self.device)
                 predictions = self(x.float()).detach().cpu().numpy()
 
                 step_list.append(predictions)
-                if i == 0:
-                    idx_list.append(idx.detach().cpu().numpy())
+                # if i == 0:
+                #     idx_list.append(idx.detach().cpu().numpy())
 
             flat_list = [item for sublist in step_list for item in sublist]
             flattened_predictions = np.array(flat_list).flatten()
@@ -181,9 +185,9 @@ class Regressor(nn.Module):  # type: ignore
 
         out_std = np.std(np.array(runs), axis=0)
         out_avg = np.mean(np.array(runs), axis=0)
-        flat_list = [item for sublist in idx_list for item in sublist]
-        idx_array = np.asarray(flat_list, dtype=object).flatten()
-
+        # flat_list = [item for sublist in idx_list for item in sublist]
+        # idx_array = np.asarray(flat_list, dtype=object).flatten()
+        idx_array = []
         return out_avg, out_std, idx_array
 
     def fit(

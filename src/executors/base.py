@@ -7,10 +7,11 @@ import runners
 from common import S
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from typing import Union, Tuple, List
 from nn.models import Regressor
 import numpy as np 
+import copy 
 
 def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     print("Making Run dir")
@@ -28,11 +29,6 @@ def run_train_model(
     valid_data: Tuple[torch.Tensor, torch.Tensor],
     # train_loader: DataLoader,
     # valid_loader: DataLoader,
-    learning_rate: float = 5.0e-4,
-    weight_decay: float = 1.0e-4,
-    epochs: int = 10,
-    patience: Union[None, int] = None,
-    do_validation: bool = True,
 ) -> Tuple[List[float], List[float], nn.Module]:
     """Fits a Multi Layer Perceptron model.
 
@@ -51,26 +47,33 @@ def run_train_model(
         List: The validation loss
         nn.Module: The trained model.
     """
-    model = Regressor(self.sampler.model_kwargs)
-    train = Dataset(*train_data)
-    valid = Dataset(*valid_data)
+    model_kwargs['inputs'] = train_data[0].shape[-1]
+    model = Regressor(**model_kwargs)
+    # x_train, y_train = train_data
+    train = TensorDataset(*train_data)
+    valid = TensorDataset(*valid_data)
 
     train_loader = DataLoader(train, batch_size=256)
-    val_loader   = DataLoader(valid, batch_size=256) 
+    valid_loader = DataLoader(valid, batch_size=256)
+
+    # TODO: take from train_kwargs
+    learning_rate = 5.0E-4
+    weight_decay = 1.0E-4
+    epochs = 10
+    patience: Union[None, int] = None
+    do_validation: bool = True
 
     if not patience:
         patience = epochs
     best_loss = np.inf
-    # instantiate optimiser
-    opt = torch.optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
+    # instantiate optimiser    
+    opt = torch.optim.Adam(params=model.parameters(), lr=0.004, weight_decay=0.0001)
     # create scheduler
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         opt,
         mode="min",
         factor=0.5,
-        patience=0.5 * patience,
+        patience=1000,
         min_lr=(1 / 16) * learning_rate,
     )
     train_loss = []
