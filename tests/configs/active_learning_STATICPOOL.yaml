@@ -6,7 +6,7 @@ sampler:
   parameters: ["m", "n"]
   init_num_samples: 20
   batch_size: 50
-  total_budget: 100
+  total_budget: 120
   kernel_transform:  # TODO: make method to handle kernel transform properly...
     - ['rp', [512]]
   parser_kwargs: 
@@ -20,8 +20,8 @@ sampler:
     target: 
       - 'pSat_Pa'
     data_args: 
-      train_size: 0.2
-      valid_size: 0.3
+      train_size: 0.06452562704
+      valid_size: 0.2
       test_size: 0.1
   model_kwargs:
     target_idx: 0

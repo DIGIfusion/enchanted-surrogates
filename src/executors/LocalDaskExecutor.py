@@ -112,7 +112,8 @@ class LocalDaskExecutor(Executor):
 
                 # NOTE: ------ Do active learning sampling ------
                 param_list = self.sampler.get_next_parameter(trained_model) 
-
+                print('Gathered next parameter')
+                print(param_list)
                 # NOTE: ------ Prepare next simulator runs ------
                 futures = []
                 for params in param_list: 
@@ -120,4 +121,6 @@ class LocalDaskExecutor(Executor):
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     futures.append(new_future)
+
+                
             self.sampler.dump_results()

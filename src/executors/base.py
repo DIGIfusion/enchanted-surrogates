@@ -53,8 +53,9 @@ def run_train_model(
     train = TensorDataset(*train_data)
     valid = TensorDataset(*valid_data)
 
-    train_loader = DataLoader(train, batch_size=256)
-    valid_loader = DataLoader(valid, batch_size=256)
+    train_loader = DataLoader(train, batch_size=25)
+    valid_loader = DataLoader(valid, batch_size=25)
+    
 
     # TODO: take from train_kwargs
     learning_rate = 5.0E-4

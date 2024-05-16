@@ -36,13 +36,20 @@ class ActiveLearner(Sampler):
     def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
         # TODO: fix pseudocode
 
-        y_train = train[:, self.parser.output_col_idxs]
-        train = TensorFeatureData(train[:, self.parser.input_col_idxs])
-        pool = TensorFeatureData(pool[:, self.parser.input_col_idxs])
-        feature_data =  {'train': train, 'pool': pool}
-        new_idxs, al_stats = select_batch(models=[model], data=feature_data, y_train=y_train,
-                                        selection_method='random', sel_with_train=True, batch_size=25,
-                                        base_kernel='grad', kernel_transforms=[('rp', [512])])
+        y_train = train[:, self.parser.output_col_idxs].float()
+        print(type(y_train), type(train), type(pool))
+        print(y_train.shape, train[:, self.parser.input_col_idxs][:, None].shape, pool[:, self.parser.input_col_idxs].shape)
+        print(type(model))
+        print(type(model.model))
+        train_data = TensorFeatureData(train[:, self.parser.input_col_idxs].float()[:, None])
+        pool_data = TensorFeatureData(pool[:, self.parser.input_col_idxs].float()[:, None])
+        # model = model.model.float()
+        feature_data =  {'train': train_data, 'pool': pool_data}
+        
+        new_idxs, _ = select_batch(batch_size=50, models=[model.model], 
+                                          data=feature_data, y_train=y_train,
+                                          selection_method='random', sel_with_train=False,
+                                          base_kernel='predictions', kernel_transforms=[])# [('rp', [512])])
         return new_idxs
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
@@ -77,6 +84,7 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         # iputs coming since we don't care about hte outputs in the static pool 
+        print(results)
         idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
     
@@ -90,8 +98,16 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             params.append(result)
         return params # self.parser.data.sample(self.init_num_samples)
     
-    def get_next_parameter(self, model) -> Dict[str, float]:
+    def get_next_parameter(self, model) -> list[Dict[str, float]]:
         idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)
-        result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
-        return result 
+        # print(len(idxs))
+        # if len(idxs) == 1: 
+        results = []
+        for idx in idxs: 
+            results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 
+        return results 
         
+    def dump_results(self): 
+        train_data = self.parser.train 
+        for n in range(len(train_data)): 
+            print(train_data[n])

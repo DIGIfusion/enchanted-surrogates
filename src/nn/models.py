@@ -46,7 +46,8 @@ class Regressor(nn.Module):  # type: ignore
 
     def forward(self, x):  # type: ignore
         y_hat = self.model(x.float())
-        return y_hat
+        # TODO: WHY THE FUCK IS THIS THREE DIMENSIONAL? 
+        return  y_hat.squeeze(dim=1)
 
     def unscale(self, y) -> np.array:
         # get the index of the scaler that corresponds to the target
