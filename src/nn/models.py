@@ -1,6 +1,9 @@
 import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
-
+import tqdm 
+import numpy as np 
+from torch.utils.data import DataLoader, Dataset
+from typing import Union, Tuple, List
 
 class Regressor(nn.Module):  # type: ignore
     def __init__(
@@ -14,7 +17,7 @@ class Regressor(nn.Module):  # type: ignore
         device=None,
     ) -> None:
         super().__init__()
-        self.scaler = scaler
+        self.scaler = scaler,
         self.dropout = dropout
         self.model_size = model_size
         layers = [nn.Linear(inputs, 512), nn.Dropout(p=dropout), nn.ReLU()]

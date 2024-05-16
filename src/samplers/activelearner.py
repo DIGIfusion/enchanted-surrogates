@@ -22,6 +22,7 @@ class ActiveLearner(Sampler):
         self.parser_kwargs = parser_kwargs
         self.model_kwargs = model_kwargs
         self.train_kwargs = train_kwargs
+        
 
     def get_initial_parameters(self):
         # random samples 
@@ -65,13 +66,13 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     in Active Learning on fixed datasets. Uses Pandas under the hood.
     """
     sampler_interface = S.ACTIVEDB
-    def __init__(self, total_budget: int, init_num_samples: int, AL_kwargs, **kwargs):
+    def __init__(self, total_budget: int, init_num_samples: int, **kwargs):
         """
         Args:
             data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
         super().__init__(self, **kwargs)
-        
+        self.parser = STATICPOOLparser(**self.parser_kwargs)
         #ToDd assert that the parser is an instance of STATICPOOLparser, or an enum
         self.total_budget = total_budget
         self.init_num_samples = init_num_samples
@@ -81,11 +82,10 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         return idxs_as_tensor
     
     def get_initial_parameters(self):
-        return self.data.sample(self.init_num_samples)
+        return self.parser.data.sample(self.init_num_samples)
     
     def get_next_parameter(self, model) -> Dict[str, float]:
         idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)
-        result = {'input': self.parser.pool[idxs,self.parser.input_col_idxs], 'output': self.parser.pool[idxs,self.parser.output_col_idxs], 'pool_idxs':idxs}
+        result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
         return result 
-    
-
+        

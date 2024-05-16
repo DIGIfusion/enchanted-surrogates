@@ -5,17 +5,20 @@ sampler:
     - [1, 3]
   batch_size: 50
   total_budget: 100
-  parameters: ["m", "n"]
+  # parameters: ["m", "n"] # replace with input names
   kernel_transform:  # TODO: make method to handle kernel transform properly...
     - ['rp', [512]]
     #   - 'rp'
     #   - 
     #     - 512
   AL_kwargs: 
-    data_args: 
-      - 'train_size': 10
-      - 'valid_size': 10
-      - 'test_size': 10
+    
+  parser_kwargs: 
+    type: SIMPLEparser
+
+  model_kwargs:
+    type: REGRESSOR 
+
   # kernel_transform: [('rp', [512])]
 
 runner:

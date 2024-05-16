@@ -5,9 +5,12 @@ from abc import ABC, abstractmethod
 import uuid
 import runners
 from common import S
+import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-
+from torch.utils.data import DataLoader, Dataset
+from typing import Union, Tuple, List
+from nn.models import Regressor
+import numpy as np 
 
 def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     print("Making Run dir")
@@ -18,10 +21,13 @@ def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     result = {'input': params_from_sampler, 'output': runner_output} # TODO force all runners to return a dictionary
     return result
 
+
 def run_train_model(
-    model_type: str,
-    train_loader: DataLoader,
-    valid_loader: DataLoader,
+    model_kwargs: dict,
+    train_data: Tuple[torch.Tensor, torch.Tensor],
+    valid_data: Tuple[torch.Tensor, torch.Tensor],
+    # train_loader: DataLoader,
+    # valid_loader: DataLoader,
     learning_rate: float = 5.0e-4,
     weight_decay: float = 1.0e-4,
     epochs: int = 10,
@@ -45,7 +51,13 @@ def run_train_model(
         List: The validation loss
         nn.Module: The trained model.
     """
-    model = getattr(model, model_type)
+    model = Regressor(self.sampler.model_kwargs)
+    train = Dataset(*train_data)
+    valid = Dataset(*valid_data)
+
+    train_loader = DataLoader(train, batch_size=256)
+    val_loader   = DataLoader(valid, batch_size=256) 
+
     if not patience:
         patience = epochs
     best_loss = np.inf
@@ -66,7 +78,7 @@ def run_train_model(
     counter = 0
     for epoch in range(epochs):
 
-        logging.debug(f"Train Step:  {epoch}")
+        # logging.debug(f"Train Step:  {epoch}")
 
         loss = model.train_step(train_loader, opt, epoch=epoch)
         if isinstance(
@@ -86,15 +98,12 @@ def run_train_model(
             else:
                 counter += 1
                 if counter > patience:
-                    logging.debug("Early stopping criterion reached")
+                    # logging.debug("Early stopping criterion reached")
                     break
         else:
             best_model = model
 
     return train_loss, val_loss, best_model
-
-
-    pass
 
 class Executor(ABC):
     def __init__(
