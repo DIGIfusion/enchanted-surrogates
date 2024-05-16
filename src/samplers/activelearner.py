@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.getcwd(), 'bmdal'))
+
 from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
 from bmdal.bmdal_reg.bmdal.algorithms import select_batch
 from bmdal.bmdal_reg.bmdal.feature_data import TensorFeatureData
@@ -6,7 +10,7 @@ from .base import Sampler
 from typing import Dict
 
 
-class ActiveLearner(Sampler): 
+class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
     def __init__(self, total_budget: int, parameters, *args, **kwargs): 
         self.total_budget = total_budget
@@ -14,6 +18,7 @@ class ActiveLearner(Sampler):
         self.parameters = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.batch_size = kwargs.get('batch_size', 1)
         self.init_num_samples = kwargs.get('num_initial_points', self.batch_size)
+        # TODO: below is specific to the dataset, we should have the parser handle this stuff...., or introduce the parser
         self.target_keys = kwargs.get('target')
         self.input_keys = kwargs.get('inputs')
         self.keep_keys = self.target_keys+self.input_keys
