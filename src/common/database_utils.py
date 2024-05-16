@@ -16,6 +16,46 @@ def data_split(df: pd.DataFrame, train_size: float, valid_size: float, test_size
     return train, valid, test, pool
 
 
+class Scaler:
+    """  
+    Implements the sklearn StandardScaler functionality but in torch.
+    """
+    def __init__(self):
+        pass
+
+    def fit(self,data):
+        self.mean_ = data.mean()
+        self.scale_ = data.std()
+        
+    def transform(self,data):
+        return (data-self.mean_)/self.scale_
+    
+    def fit_transform(self,data):
+        self.fit(data)
+        return self.transform(data)
+    
+    def inverse_transform(self,data):
+        return self.scale_*data +self.mean_
+    
+
+def apply_scaler(train, valid, test, pool, scaler=None, op='transform'):
+    """
+    Utility to apply data scaling. It will instantiate a scaler, if this is not passed as an argument. 
+    It can either apply the direct or inverse transform.
+    """
+    if scaler is None and op=='inverse_transform':
+        raise ValueError("`Scaler` is not instantiated. Running `inverse_transform` will have the opposite effect to what you are thinking.")
+    if scaler is None:
+        scaler = Scaler()
+        scaler.fit(train)
+    operation = getattr(scaler, op)
+    train = operation(train)
+    valid = operation(valid)
+    test = operation(test)
+    pool = operation(pool)
+    return train, valid, test, pool, scaler
+
+
 class Loader:
     def __init__(self, data_path: str):
         pass

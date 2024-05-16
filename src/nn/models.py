@@ -1,10 +1,11 @@
 import torch.nn as nn
+from sklearn.preprocessing import StandardScaler
 
 
 class Regressor(nn.Module):  # type: ignore
     def __init__(
         self,
-        flux,
+        target_idx,
         inputs=15,
         outputs=1,
         model_size=8,

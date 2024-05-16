@@ -4,6 +4,7 @@ from dask.distributed import Client, as_completed, wait
 from .base import Executor, run_simulation_task, run_train_model
 from common import S
 from torch.utils.data import Dataset
+from nn.models import Regressor
 
 class LocalDaskExecutor(Executor):
     def __init__(self, **kwargs):
@@ -66,21 +67,24 @@ class LocalDaskExecutor(Executor):
             outputs = []
             for res in seq.done: 
                 outputs.append(res.result())
-            outputs = collect(outputs) 
+            outputs = self.sampler.collect_batch_results(outputs) # TODO: this should probably be in parser
+            # outputs is a tensor of the batch - it's the training data (for the active learning)
+            # for static pool it outputs the idxs that need to be appended/deleted
+            self.sampler.parser.update_pool_and_train(outputs)
 
             # Do the active learning step and model training
-            model = InstantiateModel(**kwargs)
-            train, valid = self.sampler.get_train_valid()
+            model = Regressor(self.sampler.model_kwargs) # 
+            train, valid = self.sampler.parser.get_train_valid()
             # we need to figure out how to handle multiple regressors with one output each
-            train = Dataset(train[:,self.sampler.input_col_idxs], train[:,self.sampler.output_col_idxs])
-            valid = Dataset(valid[:,self.sampler.input_col_idxs], valid[:,self.sampler.output_col_idxs])
+            train = Dataset(train[:,self.sampler.parser.input_col_idxs], train[:,self.sampler.parser.output_col_idxs])
+            valid = Dataset(valid[:,self.sampler.parser.input_col_idxs], valid[:,self.sampler.parser.output_col_idxs])
                 
             new_model_training = self.client.submit(
-                run_train_model, train, valid
+                run_train_model, train, valid, self.sampler.train_kwargs
             )
             trained_model = wait(new_model_training)
 
-            param_list = self.sampler.get_next_parameter(train, valid, None) 
+            param_list = self.sampler.get_next_parameter(model) 
             futures = []
             for params in param_list: 
                 new_future = self.client.submit(
