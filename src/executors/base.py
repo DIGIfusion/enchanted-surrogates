@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from typing import Union, Tuple, List
 from nn.models import Regressor
-import numpy as np 
+import numpy as np
 import copy 
 
 def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
@@ -23,7 +23,7 @@ def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
     return result
 
 
-def run_train_model(
+def _run_train_model(
     model_kwargs: dict,
     train_data: Tuple[torch.Tensor, torch.Tensor],
     valid_data: Tuple[torch.Tensor, torch.Tensor],
@@ -82,30 +82,20 @@ def run_train_model(
     counter = 0
     for epoch in range(epochs):
 
-        # logging.debug(f"Train Step:  {epoch}")
-
         loss = model.train_step(train_loader, opt, epoch=epoch)
-        if isinstance(
-            loss, tuple
-        ):  # classifier also returns accuracy which we are not tracking atm
-            loss = loss[0]
         train_loss.append(loss.item())
 
-        if do_validation:
-            validation_loss = model.validation_step(valid_loader)
-            scheduler.step(validation_loss)
-            val_loss.append(validation_loss)
-            if validation_loss < best_loss:
-                best_model = copy.deepcopy(model)
-                best_loss = validation_loss
-
-            else:
-                counter += 1
-                if counter > patience:
-                    # logging.debug("Early stopping criterion reached")
-                    break
+        validation_loss = model.validation_step(valid_loader)
+        scheduler.step(validation_loss)
+        val_loss.append(validation_loss)
+        if validation_loss < best_loss:
+            best_model = copy.deepcopy(model)
+            best_loss = validation_loss
+            counter = 0 
         else:
-            best_model = model
+            counter += 1
+            if counter > patience:
+                break
 
     return train_loss, val_loss, best_model
 

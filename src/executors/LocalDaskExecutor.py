@@ -1,10 +1,13 @@
 # executors/DaskExecutor.py
 
 from dask.distributed import Client, as_completed, wait
-from .base import Executor, run_simulation_task, run_train_model
+from .base import Executor, run_simulation_task
+
+from nn.networks import run_train_model
 from common import S
 # from torch.utils.data import Dataset
-
+import torch 
+import torch.nn as nn 
 
 class LocalDaskExecutor(Executor):
     def __init__(self, **kwargs):
@@ -84,12 +87,12 @@ class LocalDaskExecutor(Executor):
                 print('Updated Pool', len(self.sampler.parser.pool), len(self.sampler.parser.train), len(self.sampler.parser.test))
 
                 train, valid = self.sampler.parser.get_train_valid()
-                x_train, y_train = train[:, self.sampler.parser.input_col_idxs], train[:, self.sampler.parser.output_col_idxs]
-                x_valid, y_valid = valid[:, self.sampler.parser.input_col_idxs], valid[:, self.sampler.parser.output_col_idxs] 
+                x_train, y_train = train[:, self.sampler.parser.input_col_idxs].float(), train[:, self.sampler.parser.output_col_idxs].float()
+                x_valid, y_valid = valid[:, self.sampler.parser.input_col_idxs].float(), valid[:, self.sampler.parser.output_col_idxs].float()
                 train_data, valid_data = (x_train, y_train), (x_valid, y_valid)
 
                 # NOTE: ------ Submit model training job ------
-
+                print('Going to training with ', x_train.shape, y_train.shape, x_valid.shape, y_valid.shape)
                 # model = Regressor(self.sampler.model_kwargs) # 
                 # we need to figure out how to handle multiple regressors with one output each
                 # train = Dataset(train[:,self.sampler.parser.input_col_idxs], train[:,self.sampler.parser.output_col_idxs])
@@ -104,16 +107,30 @@ class LocalDaskExecutor(Executor):
                 # NOTE: ------ Collect model training job ------
                 trained_model_res = [res.result() for res in train_model_run.done]
 
-                _, _, trained_model = trained_model_res[0]
+                train_losses, val_losses, trained_model = trained_model_res[0]
                 
+                print('\nTRAINING   LOSSES', min(train_losses), train_losses)
+                print('\nVALIDATION LOSSES', min(val_losses), val_losses)
+                # with torch.no_grad(): 
+                #     sample_preds = trained_model.forward(x_train)
+                #     print(sample_preds.shape)
+                # above checking that the output is the right shape
+
                 # NOTE: ------ Check if out of budget ------
                 # TODO: We should break likley much earlier? if completed greator than budget 
                 completed += self.sampler.batch_size
 
+                # trained_state_dict = trained_model.state_dict()
+
                 # NOTE: ------ Do active learning sampling ------
-                param_list = self.sampler.get_next_parameter(trained_model) 
-                print('Gathered next parameter')
-                print(param_list)
+                # NOTE: THIS IS A DIRTY DIRTY TRICK
+                # NOTE: SOMETHING HAPPENS IN DASK passing bullshit (WHAT?)
+                # NOTE: this makes me angry, but we will likely have to load the model here using the state dict
+
+                example_model = nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
+                example_model.load_state_dict(trained_model.state_dict())
+                param_list = self.sampler.get_next_parameter(example_model)
+                
                 # NOTE: ------ Prepare next simulator runs ------
                 futures = []
                 for params in param_list: 

@@ -1,10 +1,10 @@
 import sys
 import os
-sys.path.append(os.path.join(os.getcwd(), 'bmdal'))
 
+print(sys.path)
 from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
-from bmdal.bmdal_reg.bmdal.algorithms import select_batch
-from bmdal.bmdal_reg.bmdal.feature_data import TensorFeatureData
+from bmdal_reg.bmdal.algorithms import select_batch
+from bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
 from .base import Sampler 
 from typing import Dict
@@ -37,19 +37,24 @@ class ActiveLearner(Sampler):
         # TODO: fix pseudocode
 
         y_train = train[:, self.parser.output_col_idxs].float()
-        print(type(y_train), type(train), type(pool))
-        print(y_train.shape, train[:, self.parser.input_col_idxs][:, None].shape, pool[:, self.parser.input_col_idxs].shape)
-        print(type(model))
-        print(type(model.model))
-        train_data = TensorFeatureData(train[:, self.parser.input_col_idxs].float()[:, None])
-        pool_data = TensorFeatureData(pool[:, self.parser.input_col_idxs].float()[:, None])
+        train = train[:, self.parser.input_col_idxs].float()
+        pool = pool[:, self.parser.input_col_idxs].float()
+        print('\nData sizes', y_train.shape, train.shape, pool.shape)
+        # print(y_train.shape, train[:, self.parser.input_col_idxs][:, None].shape, pool[:, self.parser.input_col_idxs].shape)
+        # print(type(model))
+        train_data = TensorFeatureData(train)# [:, None])
+        pool_data = TensorFeatureData(pool)# [:, None])
         # model = model.model.float()
-        feature_data =  {'train': train_data, 'pool': pool_data}
-        
-        new_idxs, _ = select_batch(batch_size=50, models=[model.model], 
-                                          data=feature_data, y_train=y_train,
-                                          selection_method='random', sel_with_train=False,
-                                          base_kernel='predictions', kernel_transforms=[])# [('rp', [512])])
+        # new_idxs, _ = select_batch(batch_size=50, models=[model], 
+        #                                   data=feature_data, y_train=y_train,
+        #                                   selection_method='random', sel_with_train=False,
+        #                                   base_kernel='predictions', kernel_transforms=[])# [('rp', [512])])
+
+        new_idxs, _ = select_batch(batch_size=50, models=[model],
+                           data={'train': train_data, 'pool': pool_data}, y_train=y_train,
+                           selection_method='lcmd', sel_with_train=True,
+                           base_kernel='grad', kernel_transforms=[('rp', [512])])
+
         return new_idxs
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
@@ -109,5 +114,5 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         
     def dump_results(self): 
         train_data = self.parser.train 
-        for n in range(len(train_data)): 
+        for n in range(len(train_data)):
             print(train_data[n])
