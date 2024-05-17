@@ -1,8 +1,6 @@
-import sys
-import os
-
-print(sys.path)
-from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
+# import sys
+# import os
+# from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
 from bmdal_reg.bmdal.algorithms import select_batch
 from bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
@@ -10,6 +8,7 @@ from .base import Sampler
 from typing import Dict
 from parsers import *
 import numpy as np 
+from common import S
 
 class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
@@ -23,7 +22,6 @@ class ActiveLearner(Sampler):
         self.model_kwargs = model_kwargs
         self.train_kwargs = train_kwargs
         
-
     def get_initial_parameters(self):
         # random samples 
         batch_samples = [] 
@@ -105,14 +103,11 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     
     def get_next_parameter(self, model) -> list[Dict[str, float]]:
         idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
-        # print(len(idxs))
-        # if len(idxs) == 1: 
         results = []
         for idx in idxs: 
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 
         return results 
-        
-        
+
     def dump_results(self): 
         train_data = self.parser.train 
         for n in range(len(train_data)):

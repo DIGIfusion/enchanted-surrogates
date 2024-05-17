@@ -101,7 +101,7 @@ class LocalDaskExecutor(Executor):
                 # valid = Dataset(valid[:,self.sampler.parser.input_col_idxs], valid[:,self.sampler.parser.output_col_idxs])
                 
                 new_model_training = self.client.submit(
-                    run_train_model, self.sampler.model_kwargs, train_data, valid_data
+                    run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
                 )
 
                 train_model_run = wait([new_model_training])
@@ -109,23 +109,19 @@ class LocalDaskExecutor(Executor):
                 # NOTE: ------ Collect model training job ------
                 trained_model_res = [res.result() for res in train_model_run.done]
 
-                train_losses, val_losses, r2_losses, trained_model = trained_model_res[0]
+                metrics, trained_model_state_dict = trained_model_res[0]
                 
-                print('\nTRAINING   LOSSES', min(train_losses), train_losses)
-                print('\nVALIDATION LOSSES', min(val_losses), val_losses)
-                print('\nR2 LOSSES', max(r2_losses), r2_losses)
-                
-
-                # trained_state_dict = trained_model.state_dict()
+                for metric_name, metric_vals in metrics.items(): 
+                    print(f'\n{metric_name}: Best {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
+                    
 
                 # NOTE: ------ Do active learning sampling ------
                 # NOTE: THIS IS A DIRTY DIRTY TRICK
                 # NOTE: SOMETHING HAPPENS IN DASK passing bullshit (WHAT?)
                 # NOTE: this makes me angry, but we will likely have to load the model here using the state dict
 
-                
                 example_model = create_model(self.sampler.model_kwargs) # nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
-                example_model.load_state_dict(trained_model.state_dict())
+                example_model.load_state_dict(trained_model_state_dict)
                 param_list = self.sampler.get_next_parameter(example_model)
 
                 # NOTE: ------ Check if out of budget ------
