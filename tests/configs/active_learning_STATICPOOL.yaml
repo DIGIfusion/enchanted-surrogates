@@ -11,18 +11,29 @@ sampler:
     - ['rp', [512]]
   parser_kwargs: 
     type: 'STATICPOOLparser'
-    data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
+    data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
     inputs: 
-      - 'NumOfAtoms'
-      - 'NumOfC'
-      - 'NumOfO'
-      - 'NumOfN'
+      - 'ane'
+      - 'ate'
+      - 'autor'
+      - 'machtor'
+      - 'x'
+      - 'zeff'
+      - 'gammae'
+      - 'q'
+      - 'smag'
+      - 'alpha'
+      - 'ani1'
+      - 'ati0'
+      - 'normni1'
+      - 'ti_te0'
+      - 'lognustar'
     target: 
-      - 'pSat_Pa'
+      - 'efiitg_gb'
     data_args: 
-      train_size: 0.06452562704
-      valid_size: 0.2
-      test_size: 0.1
+      train_size: 0.01
+      valid_size: 0.01
+      test_size: 0.01
   model_kwargs:
     target_idx: 0
 
@@ -38,7 +49,7 @@ runner:
 
 executor:
   type: LocalDaskExecutor
-  base_run_dir: simple_test_runs2/
+  base_run_dir: qlkn_test_run/
   worker_args:
     account: project_2009007
     queue: medium
@@ -50,4 +61,4 @@ executor:
     job_script_prologue:
       - export PYTHONPATH=$PYTHONPATH:/src
 
-  num_workers: 2
+  num_workers: 4

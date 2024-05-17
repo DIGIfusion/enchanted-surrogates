@@ -18,10 +18,12 @@ class STATICPOOLparser(Parser):
         if self.extension == 'h5':
             self.data = HDFLoader(data_path=data_path).load_data() 
 
+        
         self.data_args = kwargs.get('data_args')
         self.target_keys = kwargs.get('target')
         self.input_keys = kwargs.get('inputs')
         self.keep_keys = self.target_keys+self.input_keys
+        self.data = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
         
         self.input_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.input_keys]

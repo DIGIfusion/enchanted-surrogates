@@ -3,7 +3,7 @@
 from dask.distributed import Client, as_completed, wait
 from .base import Executor, run_simulation_task
 
-from nn.networks import run_train_model
+from nn.networks import run_train_model, create_model
 from common import S
 # from torch.utils.data import Dataset
 import torch 
@@ -90,6 +90,8 @@ class LocalDaskExecutor(Executor):
                 x_train, y_train = train[:, self.sampler.parser.input_col_idxs].float(), train[:, self.sampler.parser.output_col_idxs].float()
                 x_valid, y_valid = valid[:, self.sampler.parser.input_col_idxs].float(), valid[:, self.sampler.parser.output_col_idxs].float()
                 train_data, valid_data = (x_train, y_train), (x_valid, y_valid)
+                self.sampler.model_kwargs['input_dim'] = train_data[0].shape[-1]
+                self.sampler.model_kwargs['output_dim'] = train_data[1].shape[-1]
 
                 # NOTE: ------ Submit model training job ------
                 print('Going to training with ', x_train.shape, y_train.shape, x_valid.shape, y_valid.shape)
@@ -107,18 +109,12 @@ class LocalDaskExecutor(Executor):
                 # NOTE: ------ Collect model training job ------
                 trained_model_res = [res.result() for res in train_model_run.done]
 
-                train_losses, val_losses, trained_model = trained_model_res[0]
+                train_losses, val_losses, r2_losses, trained_model = trained_model_res[0]
                 
                 print('\nTRAINING   LOSSES', min(train_losses), train_losses)
                 print('\nVALIDATION LOSSES', min(val_losses), val_losses)
-                # with torch.no_grad(): 
-                #     sample_preds = trained_model.forward(x_train)
-                #     print(sample_preds.shape)
-                # above checking that the output is the right shape
-
-                # NOTE: ------ Check if out of budget ------
-                # TODO: We should break likley much earlier? if completed greator than budget 
-                completed += self.sampler.batch_size
+                print('\nR2 LOSSES', max(r2_losses), r2_losses)
+                
 
                 # trained_state_dict = trained_model.state_dict()
 
@@ -127,9 +123,13 @@ class LocalDaskExecutor(Executor):
                 # NOTE: SOMETHING HAPPENS IN DASK passing bullshit (WHAT?)
                 # NOTE: this makes me angry, but we will likely have to load the model here using the state dict
 
-                example_model = nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
+                
+                example_model = create_model(self.sampler.model_kwargs) # nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
                 example_model.load_state_dict(trained_model.state_dict())
                 param_list = self.sampler.get_next_parameter(example_model)
+
+                # NOTE: ------ Check if out of budget ------
+                completed += len(param_list) # self.sampler.batch_size
                 
                 # NOTE: ------ Prepare next simulator runs ------
                 futures = []
@@ -138,6 +138,5 @@ class LocalDaskExecutor(Executor):
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     futures.append(new_future)
-
                 
             self.sampler.dump_results()

@@ -33,36 +33,36 @@ class ActiveLearner(Sampler):
             batch_samples.append(param_dict)
         return batch_samples
 
-    def get_next_parameter(self, model, train, pool) -> Dict[str, float]:
-        # TODO: fix pseudocode
-
+    def _get_new_idxs_from_pool(self, model, train, pool) -> torch.Tensor:
         y_train = train[:, self.parser.output_col_idxs].float()
         train = train[:, self.parser.input_col_idxs].float()
         pool = pool[:, self.parser.input_col_idxs].float()
         print('\nData sizes', y_train.shape, train.shape, pool.shape)
-        # print(y_train.shape, train[:, self.parser.input_col_idxs][:, None].shape, pool[:, self.parser.input_col_idxs].shape)
-        # print(type(model))
-        train_data = TensorFeatureData(train)# [:, None])
-        pool_data = TensorFeatureData(pool)# [:, None])
-        # model = model.model.float()
-        # new_idxs, _ = select_batch(batch_size=50, models=[model], 
-        #                                   data=feature_data, y_train=y_train,
-        #                                   selection_method='random', sel_with_train=False,
-        #                                   base_kernel='predictions', kernel_transforms=[])# [('rp', [512])])
+        train_data = TensorFeatureData(train)
+        pool_data = TensorFeatureData(pool)
 
-        new_idxs, _ = select_batch(batch_size=50, models=[model],
+        new_idxs, _ = select_batch(batch_size=self.batch_size, models=[model],
                            data={'train': train_data, 'pool': pool_data}, y_train=y_train,
                            selection_method='lcmd', sel_with_train=True,
                            base_kernel='grad', kernel_transforms=[('rp', [512])])
-
+        
         return new_idxs
     
+    def get_next_parameter(self, model, train, pool) -> list[dict[str, float]]:
+        new_idxs = self._get_new_idxs_from_pool(model, train,pool)
+        results = []
+        for idx in new_idxs: 
+            results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': None, 'pool_idxs':idx}) 
+        # TODO: convert indicies to unscaled parameters
+        return results 
+    
+        
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         outputs_as_tensor = torch.empty(len(results), len(self.parser.keep_keys))
         for n, result in enumerate(results): 
             x = result['inputs']
             y = result['output']
-            outputs_as_tensor[n] = torch.concatenate((x, y))
+            outputs_as_tensor[n] = torch.cat((x, y))
         return outputs_as_tensor
     
     def update_pool_and_train(self):
@@ -104,13 +104,14 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         return params # self.parser.data.sample(self.init_num_samples)
     
     def get_next_parameter(self, model) -> list[Dict[str, float]]:
-        idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)
+        idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
         # print(len(idxs))
         # if len(idxs) == 1: 
         results = []
         for idx in idxs: 
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 
         return results 
+        
         
     def dump_results(self): 
         train_data = self.parser.train 
