@@ -18,7 +18,7 @@ class STATICPOOLparser(Parser):
         if self.extension == 'h5':
             self.data = HDFLoader(data_path=data_path).load_data() 
 
-        
+        init_num_samples = kwargs.get('init_num_samples')
         self.data_args = kwargs.get('data_args')
         self.target_keys = kwargs.get('target')
         self.input_keys = kwargs.get('inputs')
@@ -30,11 +30,15 @@ class STATICPOOLparser(Parser):
         self.output_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.target_keys]
 
         self.train, self.valid, self.test, self.pool = data_split(self.data, **self.data_args)
+        self.train = self.train.sample(init_num_samples)
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)    
-
+        print('\n train SIZE', self.train.shape)
+        print('\n valid SIZE', self.valid.shape)
+        print('\n test SIZE', self.test.shape)
+        print('\n pool SIZE', self.pool.shape)
         self.train, self.valid, self.test, self.pool, self.scaler = apply_scaler(self.train, self.valid, self.test, self.pool, scaler=None, op='transform')
     
 

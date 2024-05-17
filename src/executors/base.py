@@ -7,7 +7,7 @@ import runners
 
 
 def run_simulation_task(runner_args, params_from_sampler, base_run_dir):
-    print("Making Run dir")
+    # print("Making Run dir")
     run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
     os.mkdir(run_dir)
     runner = getattr(runners, runner_args["type"])(**runner_args)

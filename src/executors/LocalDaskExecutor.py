@@ -110,8 +110,8 @@ class LocalDaskExecutor(Executor):
                 
                 for metric_name, metric_vals in metrics.items(): 
                     print(f'\n{metric_name}: Best {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
-                    
-
+                
+                self.sampler.update_metrics(metrics)
                 # NOTE: ------ Do active learning sampling ------
                 # NOTE: THIS IS A DIRTY DIRTY TRICK
                 # NOTE: SOMETHING HAPPENS IN DASK passing bullshit (WHAT?)

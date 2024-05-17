@@ -10,9 +10,9 @@ Classes:
 Functions:
 
 """
-
-from .TGLFparser import TGLFparser
-from .SIMPLEparser import SIMPLEparser
-from .HELENAparser import HELENAparser
-from .MISHKAparser import MISHKAparser
+from .base             import Parser
+from .TGLFparser       import TGLFparser
+from .SIMPLEparser     import SIMPLEparser
+from .HELENAparser     import HELENAparser
+from .MISHKAparser     import MISHKAparser
 from .STATICPOOLparser import STATICPOOLparser

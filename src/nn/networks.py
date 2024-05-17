@@ -70,11 +70,11 @@ def run_train_model(model_kwargs: dict,
         val_losses.append(val_loss.item())
         r2_losses.append(r2_loss)
         if val_losses[-1] < best_loss:
-            best_model = model
+            best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
 
     metrics = {'train_losses': train_losses, 'val_losses': val_losses, 'val_r2_losses': r2_losses}
-    return metrics, best_model.state_dict()
+    return metrics, best_model_state_dict
 
 def train_step(model, optimizer, train_loader, epoch, device='cpu') -> float:
     """

@@ -13,7 +13,8 @@ def data_split(df: pd.DataFrame, train_size: float, valid_size: float, test_size
     train, tmp = train_test_split(df, test_size=1-train_size, random_state=42)
     pool, tmp = train_test_split(tmp, test_size=1-poolsizeprime, random_state=42)
     valid, test = train_test_split(tmp, test_size=1-validsizeprime, random_state=42)
-    return train, valid, test, pool
+    sample_size = min(len(pool), 100000)
+    return train, valid, test, pool.sample(sample_size)
 
 
 class Scaler:

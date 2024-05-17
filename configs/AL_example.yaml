@@ -4,11 +4,13 @@ sampler:
     - [1, 3]
     - [1, 3]
   parameters: ["m", "n"]
-  init_num_samples: 20
-  batch_size: 50
-  total_budget: 120
-  kernel_transform:  # TODO: make method to handle kernel transform properly...
-    - ['rp', [512]]
+  init_num_samples: 5000
+  aquisition_batch_size: 512
+  total_budget: 80000
+  selection_method: random
+  base_kernel: linear
+  kernel_transform: 
+    - 
   parser_kwargs: 
     type: 'STATICPOOLparser'
     data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
@@ -54,7 +56,7 @@ executor:
   worker_args:
     account: project_2009007
     queue: medium
-    cores: 2
+    cores: 4
     memory: 1GB
     processes: 1
     walltime: '03:10:00'
