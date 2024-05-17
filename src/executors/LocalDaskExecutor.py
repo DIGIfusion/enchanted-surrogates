@@ -9,6 +9,7 @@ from common import S
 import torch 
 import torch.nn as nn 
 
+
 class LocalDaskExecutor(Executor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -94,11 +95,7 @@ class LocalDaskExecutor(Executor):
                 self.sampler.model_kwargs['output_dim'] = train_data[1].shape[-1]
 
                 # NOTE: ------ Submit model training job ------
-                print('Going to training with ', x_train.shape, y_train.shape, x_valid.shape, y_valid.shape)
-                # model = Regressor(self.sampler.model_kwargs) # 
-                # we need to figure out how to handle multiple regressors with one output each
-                # train = Dataset(train[:,self.sampler.parser.input_col_idxs], train[:,self.sampler.parser.output_col_idxs])
-                # valid = Dataset(valid[:,self.sampler.parser.input_col_idxs], valid[:,self.sampler.parser.output_col_idxs])
+                print('Going to training with ', 'X_tr', x_train.shape, 'Y_tr', y_train.shape, 'X_vl',x_valid.shape,'Y_vl', y_valid.shape)
                 
                 new_model_training = self.client.submit(
                     run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
@@ -124,12 +121,14 @@ class LocalDaskExecutor(Executor):
                 example_model.load_state_dict(trained_model_state_dict)
                 param_list = self.sampler.get_next_parameter(example_model)
 
+                # TODO: Dump Metrics!
+
                 # NOTE: ------ Check if out of budget ------
                 completed += len(param_list) # self.sampler.batch_size
                 
                 # NOTE: ------ Prepare next simulator runs ------
                 futures = []
-                for params in param_list: 
+                for params in param_list:
                     new_future = self.client.submit(
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )

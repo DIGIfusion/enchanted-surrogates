@@ -36,7 +36,7 @@ def run_train_model(model_kwargs: dict,
                     train_kwargs: dict,
                     ) -> tuple[dict[str, list[float]], dict]:
     """ Returns metrics and state dictionary, model is loaded via create_model()"""
- 
+
     # TODO: Move to config file
     batch_size    = train_kwargs.get('batch_size', 512)
     epochs        = train_kwargs.get('epochs', 100)
@@ -110,4 +110,4 @@ def validation_step(model, valid_loader, device='cpu') -> float:
             val_r2  = r2_score(y_hat, y)
             step_loss += loss.item()
             step_r2   += val_r2.item()
-    return step_loss / len(valid_loader), step_r2 / len(valid_loader) 
+    return step_loss / len(valid_loader), step_r2 / len(valid_loader)

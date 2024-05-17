@@ -35,7 +35,7 @@ class ActiveLearner(Sampler):
         y_train = train[:, self.parser.output_col_idxs].float()
         train = train[:, self.parser.input_col_idxs].float()
         pool = pool[:, self.parser.input_col_idxs].float()
-        print('\nData sizes', y_train.shape, train.shape, pool.shape)
+        print('\nData sizes', 'Y_tr', y_train.shape, 'X_tr', train.shape, 'Pool', pool.shape)
         train_data = TensorFeatureData(train)
         pool_data = TensorFeatureData(pool)
 
