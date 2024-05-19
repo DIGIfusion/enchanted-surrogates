@@ -20,7 +20,8 @@ class DaskExecutor(Executor):
         # This launches the cluster (submits the worker SLURM jobs)
         self.cluster.scale(self.num_workers)
         self.client = Client(self.cluster)
-        self.clients.append(self.client)
+        self.cleints = self.clients_tuple_type(simulationrunner=self.client, surrogatetrainer=self.client)
+        # self.clients.append(self.client)
         print('Finished Setup')
 
     def start_runs(self):
@@ -28,15 +29,17 @@ class DaskExecutor(Executor):
         print(100 * "=")
         print("Starting Database generation")
         print("Creating initial runs")
-        futures = []
+        
 
         initial_parameters = self.sampler.get_initial_parameters()
 
-        for params in initial_parameters:
-            new_future = self.client.submit(
-                run_simulation_task, self.runner_args, params, self.base_run_dir
-            )
-            futures.append(new_future)
+        futures = self.submit_batch_of_params(initial_parameters)
+
+        # for params in initial_parameters:
+        #     new_future = self.client.submit(
+        #         run_simulation_task, self.runner_args, params, self.base_run_dir
+        #     )
+        #     futures.append(new_future)
 
         print("Starting search")
         seq = as_completed(futures)
@@ -45,8 +48,6 @@ class DaskExecutor(Executor):
             res = future.result()
             completed += 1
             print(res, completed)
-            # TODO: is this waiting for an open node or are we just
-            # pushing to queue?
             if self.max_samples > completed:
                 # TODO: pass the previous result and parameters.. (Active Learning )
                 if sampler_interface in [S.BATCH]: 
@@ -66,11 +67,4 @@ class DaskExecutor(Executor):
                         )
                         seq.add(new_future)
                 if sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
-                    train, valid = self.sampler.get_train_valid()
-                    # we need to figure out how to handle multiple regressors with one output each
-                    train = Dataset(train)
-                    valid = Dataset(train)
-                    
-                    new_future = self.active_client.submit(
-                        run_train_model, train, valid
-                    )
+                   raise NotImplementedError('Not implemented yet')

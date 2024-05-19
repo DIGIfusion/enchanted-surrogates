@@ -100,19 +100,17 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         # iputs coming since we don't care about hte outputs in the static pool 
-        print(results)
+        # print(results)
         idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
     
     def get_initial_parameters(self) -> list[dict]:
-        # get a set of random initial parameters
         params = []
         for _ in range(self.init_num_samples):
             idxs = np.random.randint(0, len(self.parser.pool))
-            # idxs = super().get_next_parameter(model, self.parser.train, self.parser.pool)
             result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
             params.append(result)
-        return params # self.parser.data.sample(self.init_num_samples)
+        return params 
     
     def get_next_parameter(self, model) -> list[Dict[str, float]]:
         idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
@@ -126,6 +124,9 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         print(f'Final Results for {self.selection_method}')
 
         print(self.metrics)
-        # train_data = self.parser.train 
-        # for n in range(len(train_data)):
-        #     print(train_data[n])
+        print(f'Saving final datasets to disk: {self.base_run_dir}')
+        for name, dset in zip(['train', 'valid', 'test'], [self.parser.train, self.parser.valid, self.parser.test]): 
+            fpath = os.path.join(self.base_run_dir, f'{name}.pt')
+            torch.save(dset, fpath)
+
+        

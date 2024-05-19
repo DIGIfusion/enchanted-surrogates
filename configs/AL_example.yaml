@@ -9,8 +9,6 @@ sampler:
   total_budget: 80000
   selection_method: random
   base_kernel: linear
-  kernel_transform: 
-    - 
   parser_kwargs: 
     type: 'STATICPOOLparser'
     data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
