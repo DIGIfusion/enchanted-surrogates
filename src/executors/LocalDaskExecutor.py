@@ -109,6 +109,6 @@ class LocalDaskExecutor(Executor):
                 
                 # NOTE: ------ Prepare next simulator runs ----
                 futures = self.submit_batch_of_params(param_list)
-                iteration += 1
+                iterations += 1
                 
             self.sampler.dump_results()

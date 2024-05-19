@@ -4,7 +4,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn import functional as F
 
-
 def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
     """ Calculates r2 score and returns float"""
     ss_res = torch.sum((y_true - y_pred)**2)
@@ -36,7 +35,7 @@ def run_train_model(model_kwargs: dict,
                     train_kwargs: dict,
                     ) -> tuple[dict[str, list[float]], dict]:
     """ Returns metrics and state dictionary, model is loaded via create_model()"""
-
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # TODO: Move to config file
     batch_size    = train_kwargs.get('batch_size', 512)
     epochs        = train_kwargs.get('epochs', 100)
@@ -53,6 +52,7 @@ def run_train_model(model_kwargs: dict,
     # NOTE: Create model  & Optimizer
 
     model = create_model(model_kwargs)
+    model.to(device=device)
 
     model.float()
     optimizer = torch.optim.Adam(params=model.parameters(),
@@ -64,11 +64,11 @@ def run_train_model(model_kwargs: dict,
     train_losses, val_losses, r2_losses = [], [], []
     best_loss = torch.inf
     for epoch in range(epochs): 
-        train_loss = train_step(model, optimizer, train_loader, epoch)
-        val_loss, r2_loss  = validation_step(model, valid_loader)
+        train_loss = train_step(model, optimizer, train_loader, epoch, device=device)
+        val_loss, r2_loss  = validation_step(model, valid_loader, device=device)
         train_losses.append(train_loss.item())
         val_losses.append(val_loss.item())
-        r2_losses.append(r2_loss)
+        r2_losses.append(r2_loss.item())
         if val_losses[-1] < best_loss:
             best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
