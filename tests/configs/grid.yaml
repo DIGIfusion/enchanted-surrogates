@@ -12,9 +12,10 @@ runner:
   other_params: {}
 
 executor:
-  type: LocalDaskExecutor
+  type: DaskExecutor
   base_run_dir: simple_test_runs/
   worker_args:
+    local: True
     account: project_2009007
     queue: medium
     cores: 2

@@ -1,21 +1,34 @@
 """
 samplers/activelearner.py
 
+As per the executor, and in addition to the and get_initial_parameters(), 
+active learners samplers need the following methods: 
+- collect_batch_results(outputs) 
 
+If using active learning with your code, your parser must also have:
+- Parameters: 
+    - train, valid, test 
+- Methods: 
+    - update_pool_and_train(outputs) -> None 
+        - Updates the pool and train attributes
+    - get_train_valid_datasplit() -> (x_train, y_train), (x_valid, y_valid)
+    - 
 """
-from bmdal_reg.bmdal.algorithms import select_batch
-from bmdal_reg.bmdal.feature_data import TensorFeatureData
-import torch
-from common import S
-from .base import Sampler
-# from parsers import *
-import parsers 
-import numpy as np
+try: 
+    from bmdal_reg.bmdal.algorithms import select_batch
+    from bmdal_reg.bmdal.feature_data import TensorFeatureData
+except ImportError as e:
+    print('Cannot find bmdal_reg, please point to those in your bash script if you intend to use ActiveLearnerBMDAL')
 import os
+import torch
+import numpy as np
+from common import S
+import parsers 
+from .base import Sampler
 
 
-class ActiveLearner(Sampler):
-    sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
+class ActiveLearnerBMDAL(Sampler):
+    sampler_interface = S.ACTIVE
     def __init__(self, total_budget: int, parser_kwargs, model_kwargs, train_kwargs, *args, **kwargs): 
         self.total_budget          = total_budget
         self.bounds                = kwargs.get('bounds', [None])
@@ -25,7 +38,7 @@ class ActiveLearner(Sampler):
         self.selection_method      = kwargs.get('selection_method', 'random')
         self.kernel_transform      = kwargs.get('kernel_transform', [])
         self.base_kernel           = kwargs.get('base_kernel', 'll')
-        
+
         self.parser_kwargs         = parser_kwargs
         self.model_kwargs          = model_kwargs
         self.train_kwargs          = train_kwargs
@@ -53,14 +66,15 @@ class ActiveLearner(Sampler):
         new_idxs, _ = select_batch(batch_size=self.aquisition_batch_size, models=[model],
                            data={'train': train_data, 'pool': pool_data}, y_train=y_train,
                            selection_method=self.selection_method, sel_with_train=True,
-                           base_kernel='grad', kernel_transforms=self.kernel_transform)
+                           base_kernel=self.base_kernel, kernel_transforms=self.kernel_transform)
 
         return new_idxs
 
-    def get_next_parameter(self, model, train, pool) -> list[dict[str, float]]:
+    def get_next_parameter(self, model: torch.nn.Module, *args, **kwargs) -> list[dict[str, float]]:
+        train, pool = self.parser.train, self.parser.pool
         new_idxs = self._get_new_idxs_from_pool(model, train,pool)
         results = []
-        for idx in new_idxs: 
+        for idx in new_idxs:
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': None, 'pool_idxs':idx}) 
         # TODO: convert indicies to unscaled parameters
         return results
@@ -83,7 +97,7 @@ class ActiveLearner(Sampler):
         self.metrics.append(best_r2_score)
 
 
-class ActiveLearningStaticPoolSampler(ActiveLearner):
+class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
     """
     Loads a database of runs that have already been collected. 
     This is useful for testing various acquisition strategies
@@ -102,10 +116,6 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
     
-    # TODO: this should go in base active learner sampler
-    def get_train_val_datasplit(self) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]: 
-        return self.parser.get_train_valid_datasplit()
-    
     def get_initial_parameters(self) -> list[dict]:
         """ Returns a subset of initial parameters """
         params = []
@@ -115,7 +125,7 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             params.append(result)
         return params
 
-    def get_next_parameter(self, model) -> list[dict[str, float]]:
+    def get_next_parameter(self, model: torch.nn.Module) -> list[dict[str, float]]:
         idxs    = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
         results = []
         for idx in idxs: 

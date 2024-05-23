@@ -12,7 +12,7 @@ from common import S
 from .base import Executor, run_simulation_task
 
 class DaskExecutor(Executor):
-    """ Handles execution of codes on DASK """
+    """ Handles execution of codes on dask """
     def __init__(self, worker_args: dict, **kwargs):
         super().__init__(**kwargs)
         self.num_workers: int = kwargs.get('num_workers', 8)  # kwargs.get('num_workers')
@@ -114,7 +114,7 @@ class DaskExecutor(Executor):
                 outputs = []
                 for res in seq.done:
                     outputs.append(res.result())
-                outputs = self.sampler.collect_batch_results(outputs) # TODO: this should probably be in parser
+                outputs = self.sampler.collect_batch_results(outputs)
                 # outputs is a tensor of the batch - it's the training data (for the active learning)
                 # for static pool it outputs the idxs that need to be appended/deleted
                 
@@ -127,7 +127,7 @@ class DaskExecutor(Executor):
                 self.sampler.parser.update_pool_and_train(outputs)
 
                 # print('Updated Pool size: ', len(self.sampler.parser.pool), 'Train size: ', len(self.sampler.parser.train))
-                print(self.sampler.parser.return_dset_sizes())
+                # print(self.sampler.parser.return_dset_sizes())
 
                 # NOTE: Collect next data for training
                 train_data, valid_data = self.sampler.parser.get_train_valid_datasplit()

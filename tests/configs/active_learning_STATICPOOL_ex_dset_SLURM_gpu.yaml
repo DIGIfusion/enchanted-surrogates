@@ -1,38 +1,26 @@
 sampler:
   type: ActiveLearningBMDALStaticPoolSampler
-  num_initial_points: 5000
-  aquisition_batch_size: 512
-  total_budget: 12000
-  selection_method: random
-  base_kernel: linear
+  num_initial_points: 20
+  aquisition_batch_size: 10
+  total_budget: 120
+  kernel_transform:  # TODO: make method to handle kernel transform properly...
+    - ['rp', [512]]
   parser_kwargs: 
-    type: 'STATICPOOLparser'
-    data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
+    type: STATICPOOLparser
+    data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
     inputs: 
-      - 'ane'
-      - 'ate'
-      - 'autor'
-      - 'machtor'
-      - 'x'
-      - 'zeff'
-      - 'gammae'
-      - 'q'
-      - 'smag'
-      - 'alpha'
-      - 'ani1'
-      - 'ati0'
-      - 'normni1'
-      - 'ti_te0'
-      - 'lognustar'
+      - 'peroxide'
+      - 'MW'
+      - 'NumOfAtoms'
     target: 
-      - 'efiitg_gb'
+      - 'pSat_Pa'
     data_args: 
-      train_size: 0.01
-      valid_size: 0.001
-      test_size: 0.01
+      train_size: 0.2
+      valid_size: 0.3
+      test_size: 0.1
   model_kwargs:
-    model_width: 60
-    model_depth: 2
+    model_width: 512
+    model_depth: 4
     dropout: 0.0
   train_kwargs:
     stuff: stuff 
@@ -46,34 +34,32 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: data_store/qlkn_test_cpu/
+  base_run_dir: data_store/testing
   worker_args:
     simulator_workers: 1
     surrogate_workers: 1
     simulator_args: 
       account: project_2007159
       queue: medium
-      cores: 8
-      memory: 4GB
+      cores: 2
+      memory: 1GB
       processes: 1
-      walltime: '08:00:00'
+      walltime: '00:50:00'
       interface: ib0
-      job_extra_directives: 
-        - '--job-name=SIMULATOR'
       job_script_prologue:
         - module load python-data 
         - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
         - export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src:/scratch/project_2007159/cursed-tglf/src/samplers/bmdal
     surrogate_args: 
       account: project_2007159
-      queue: medium 
-      cores: 4
-      memory: 4GB
+      queue: gpusmall
+      cores: 10
+      memory: 1GB
       processes: 1
-      walltime: '05:00:00'
+      walltime: '00:50:00'
       interface: ib0
       job_extra_directives: 
-        - '--job-name=SURROGATE'
+        - '--gres=gpu:a100:1'
       job_script_prologue:
         - module load python-data 
         - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate

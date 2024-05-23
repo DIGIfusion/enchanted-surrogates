@@ -1,5 +1,5 @@
 sampler:
-  type: ActiveLearningStaticPoolSampler
+  type: ActiveLearningBMDALStaticPoolSampler
   num_initial_points: 20
   aquisition_batch_size: 10
   total_budget: 120
@@ -33,9 +33,10 @@ runner:
   other_params: {}
 
 executor:
-  type: LocalDaskExecutor
+  type: DaskExecutor
   base_run_dir: data_store/testing
   worker_args:
+    local: True
     account: project_2009007
     queue: medium
     cores: 2

@@ -1,12 +1,8 @@
 import pytest
 import os
 import sys
-import argparse
-import yaml
 
 sys.path.append(os.getcwd() + "/src")
-from runners import SIMPLErunner
-from executors import LocalDaskExecutor
 import run
 
 
@@ -17,7 +13,7 @@ import run
 data_path = os.path.join(os.getcwd(), "tests/train.csv")
 test_config_dir = os.path.join(os.getcwd(), "tests/configs")
 configs_to_test = os.listdir(test_config_dir)
-
+configs_to_test = [conf for conf in configs_to_test if 'SLURM' not in conf]
 
 @pytest.mark.parametrize("config_name", configs_to_test)
 def test_example_configs(config_name):

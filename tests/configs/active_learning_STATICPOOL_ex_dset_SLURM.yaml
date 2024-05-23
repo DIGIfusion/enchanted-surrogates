@@ -1,10 +1,12 @@
 sampler:
-  type: ActiveLearningStaticPoolSampler
+  type: ActiveLearningBMDALStaticPoolSampler
   num_initial_points: 20
   aquisition_batch_size: 10
   total_budget: 120
   kernel_transform:  # TODO: make method to handle kernel transform properly...
     - ['rp', [512]]
+  selection_method: lcmd
+  base_kernel: grad
   parser_kwargs: 
     type: STATICPOOLparser
     data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
@@ -16,11 +18,11 @@ sampler:
       - 'pSat_Pa'
     data_args: 
       train_size: 0.2
-      valid_size: 0.3
+      valid_size: 0.5
       test_size: 0.1
   model_kwargs:
-    model_width: 512
-    model_depth: 4
+    model_width: 120
+    model_depth: 1
     dropout: 0.0
   train_kwargs:
     stuff: stuff 

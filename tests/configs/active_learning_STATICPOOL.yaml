@@ -1,11 +1,7 @@
 sampler:
-  type: ActiveLearningStaticPoolSampler
-  bounds: 
-    - [1, 3]
-    - [1, 3]
-  parameters: ["m", "n"]
-  init_num_samples: 20
-  batch_size: 50
+  type: ActiveLearningBMDALStaticPoolSampler
+  num_initial_points: 20
+  aquisition_batch_size: 10
   total_budget: 120
   kernel_transform:  # TODO: make method to handle kernel transform properly...
     - ['rp', [512]]
@@ -31,9 +27,9 @@ sampler:
     target: 
       - 'efiitg_gb'
     data_args: 
-      train_size: 0.01
-      valid_size: 0.01
-      test_size: 0.01
+      train_size: 0.001
+      valid_size: 0.001
+      test_size: 0.001
   model_kwargs:
     model_width: 512
     model_depth: 4
@@ -49,9 +45,10 @@ runner:
   other_params: {}
 
 executor:
-  type: LocalDaskExecutor
+  type: DaskExecutor
   base_run_dir: qlkn_test_run/
   worker_args:
+    local: True
     account: project_2009007
     queue: medium
     cores: 2
