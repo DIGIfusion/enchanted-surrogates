@@ -26,10 +26,6 @@ class STATICPOOLparser(Parser):
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)    
-        # print('\n train SIZE', self.train.shape, )
-        # print('\n valid SIZE', self.valid.shape)
-        # print('\n test SIZE', self.test.shape)
-        # print('\n pool SIZE', self.pool.shape)
         self.train, self.valid, self.test, self.pool, self.scaler = apply_scaler(self.train, self.valid, self.test, self.pool, scaler=None, op='transform')
     
     def gather_data_from_storage(self, data_path) -> pd.DataFrame: 
@@ -73,6 +69,8 @@ class STATICPOOLparser(Parser):
         self.train = train_new
         self.pool = self.pool[pool_idxs]
 
+    def __len__(self, ): 
+        return f"Pool Size: {len(self.pool)}, Train Size: {len(self.train)}, Valid size: {len(self.valid)}, Test size: {len(self.test)}"
 
     def write_input_file(self):
         pass 

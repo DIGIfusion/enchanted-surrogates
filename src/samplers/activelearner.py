@@ -9,7 +9,7 @@ from typing import Dict
 from parsers import *
 import numpy as np 
 from common import S
-
+import os
 
 class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
@@ -96,6 +96,7 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
         self.total_budget = total_budget
         self.init_num_samples = init_num_samples
         self.parser = STATICPOOLparser(init_num_samples=init_num_samples, **self.parser_kwargs)
+        print(self.parser.__len__())
         #ToDd assert that the parser is an instance of STATICPOOLparser, or an enum
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
@@ -110,23 +111,23 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             idxs = np.random.randint(0, len(self.parser.pool))
             result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
             params.append(result)
-        return params 
-    
+        return params
+
     def get_next_parameter(self, model) -> list[Dict[str, float]]:
         idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
         results = []
         for idx in idxs: 
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 
-        return results 
+        return results
 
-    def dump_results(self): 
+    def dump_results(self, base_run_dir):
         print(100*'=')
         print(f'Final Results for {self.selection_method}')
 
         print(self.metrics)
-        print(f'Saving final datasets to disk: {self.base_run_dir}')
+        print(f'Saving final datasets to disk: {base_run_dir}')
         for name, dset in zip(['train', 'valid', 'test'], [self.parser.train, self.parser.valid, self.parser.test]): 
-            fpath = os.path.join(self.base_run_dir, f'{name}.pt')
+            fpath = os.path.join(base_run_dir, f'{name}.pt')
             torch.save(dset, fpath)
 
         

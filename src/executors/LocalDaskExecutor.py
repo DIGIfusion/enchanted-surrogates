@@ -1,14 +1,14 @@
 # executors/LocalDaskExecutor.py
 # Local version (without SLURM)
+import time 
 from dask.distributed import Client, as_completed, wait
+from common import S
+from nn.networks import run_train_model, create_model
 from .base import Executor, run_simulation_task
 
-import time 
-from nn.networks import run_train_model, create_model
-from common import S
 # from torch.utils.data import Dataset
-# import torch 
-# import torch.nn as nn 
+# import torch
+# import torch.nn as nn
 
 
 class LocalDaskExecutor(Executor):
@@ -18,19 +18,19 @@ class LocalDaskExecutor(Executor):
 
         self.client = Client(timeout=60)
         self.clients = self.clients_tuple_type(simulationrunner=self.client, surrogatetrainer=self.client)
-        
+
         print('Finished Setup')
 
     def start_runs(self):
         sampler_interface = self.sampler.sampler_interface
         print(100 * "=")
-        
+
         print("Creating initial runs")
         initial_parameters = self.sampler.get_initial_parameters()
         futures = self.submit_batch_of_params(initial_parameters)
 
         completed = 0
-        
+
         if sampler_interface in [S.SEQUENTIAL]:
             seq = as_completed(futures)
             for future in seq:
@@ -44,17 +44,17 @@ class LocalDaskExecutor(Executor):
                     seq.add(new_future)
 
         elif sampler_interface in [S.BATCH]:
-            while completed < self.max_samples: 
+            while completed < self.max_samples:
                 seq = wait(futures)
                 param_list = self.sampler.get_next_parameter()
                 futures = self.submit_batch_of_params(param_list)
                 completed += len(futures)
                 print('BATCH SAMPLER', 20*'=', completed, 20*'=')
-                
+
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             iterations = 0
-            while True: 
-                print(20*'=', f'Iteration {iterations}; ',  f'samples collected: {completed}', 20*'=')
+            while True:
+                print(20*'=', f'Iteration {iterations};', f'samples collected: {completed}', 20*'=')
                 # NOTE: ------ Run Samples and block until completed ------
                 seq = wait(futures) # outputs should be a list of tuples we ignore in this case
 
@@ -67,9 +67,10 @@ class LocalDaskExecutor(Executor):
                 # for static pool it outputs the idxs that need to be appended/deleted
                 
                 # NOTE: ------ Check if out of budget ------
-                completed += len(outputs) 
-                if completed > self.max_samples: 
-                    break 
+                completed += len(outputs)
+                if completed > self.max_samples:
+                    print(self.max_samples, completed)
+                    break
                 
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
@@ -89,9 +90,9 @@ class LocalDaskExecutor(Executor):
                 new_model_training = self.clients.surrogatetrainer.submit(
                     run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
                 )
-                print(f'Elapsed train task time: {time.time() - time_starttrain}')
 
                 train_model_run = wait([new_model_training])
+                print(f'Elapsed train task time: {time.time() - time_starttrain}')
 
                 # NOTE: ------ Collect model training job ------
                 trained_model_res = [res.result() for res in train_model_run.done]
@@ -111,4 +112,4 @@ class LocalDaskExecutor(Executor):
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
                 
-            self.sampler.dump_results()
+            self.sampler.dump_results(base_run_dir = self.base_run_dir)
