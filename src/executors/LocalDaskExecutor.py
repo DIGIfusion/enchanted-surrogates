@@ -6,10 +6,6 @@ from common import S
 from nn.networks import run_train_model, create_model
 from .base import Executor, run_simulation_task
 
-# from torch.utils.data import Dataset
-# import torch
-# import torch.nn as nn
-
 
 class LocalDaskExecutor(Executor):
     def __init__(self, **kwargs):
@@ -17,9 +13,19 @@ class LocalDaskExecutor(Executor):
         print('Beginning local Cluster Generation')
 
         self.client = Client(timeout=60)
-        self.clients = self.clients_tuple_type(simulationrunner=self.client, surrogatetrainer=self.client)
-
+        self.simulator_client = self.client
+        self.surrogate_client = self.client
+        self.clients = [self.client]
         print('Finished Setup')
+
+    def submit_batch_of_params(self, param_list: list[dict]) -> list:
+        futures = []
+        for params in param_list:
+            new_future = self.simulator_client.submit(
+                run_simulation_task, self.runner_args, params, self.base_run_dir
+            )
+            futures.append(new_future)
+        return futures
 
     def start_runs(self):
         sampler_interface = self.sampler.sampler_interface
@@ -38,7 +44,7 @@ class LocalDaskExecutor(Executor):
                 completed += 1
                 if self.max_samples > completed:
                     params = self.sampler.get_next_parameter()
-                    new_future = self.clients.simulationrunner.submit(
+                    new_future = self.simulator_client.submit(
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     seq.add(new_future)
@@ -77,7 +83,7 @@ class LocalDaskExecutor(Executor):
 
                 print('Updated Pool size: ', len(self.sampler.parser.pool), 'Train size: ', len(self.sampler.parser.train))
 
-                # NOTE: Collect next data for training 
+                # NOTE: Collect next data for training
                 train_data, valid_data = self.sampler.parser.get_train_valid_datasplit()
                 self.sampler.model_kwargs['input_dim'] = train_data[0].shape[-1]
                 self.sampler.model_kwargs['output_dim'] = train_data[1].shape[-1]
@@ -87,7 +93,7 @@ class LocalDaskExecutor(Executor):
                 
                 # TODO: write the data instead! 
                 time_starttrain = time.time()
-                new_model_training = self.clients.surrogatetrainer.submit(
+                new_model_training = self.surrogate_client.submit(
                     run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
                 )
 

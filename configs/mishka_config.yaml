@@ -3,9 +3,93 @@ sampler:
   bounds: [
     [5,7,10,15,20,30,50],
     [
-      "/scratch/project_2009007/data_HELENA/success/88a75109-8c3e-4864-a6df-689cdf869bc4",
-      "/scratch/project_2009007/data_HELENA/success/62990ab5-514f-4dca-9b27-fd10d032302c",
-      "/scratch/project_2009007/data_HELENA/success/08d70aa3-2ef4-4d2b-b960-60c172f802b4"
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/4aeaf91e-918e-46f7-be04-c85fc369d30f',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/29569926-3abf-4086-ae7d-8aaea9c19581',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/422edd5c-86b9-4bbe-9212-0400ddbca64d',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/ff7ba9bd-7571-407a-8f58-8a35369cf42f',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/771b0a0d-0875-4844-bb2c-fa44a9c44e79',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/9173d2e6-007c-4bd1-924a-d3f709a98b09',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/bec04df6-5b0d-4d61-8728-6755d72fd939',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/6100930f-9472-4a45-a8e9-7edf30d1ca38',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/41f73a4a-3171-4186-8215-e54a4a204be6',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/373a721c-b0db-4369-a262-a083ce8849aa',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f91a36f0-8656-4060-81b4-bf7db8829ce4',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/dca0f0d7-3c5a-4c96-9e23-ca74b4d1d0ec',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/e56e0fca-efb7-4114-9ece-aafd017a3a57',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/871cdf01-5bfe-425a-89e1-146cfc2152be',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/a12d81cd-5cbc-449e-8bb0-b99b121d6ec2',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/383ce798-a5a8-4b79-ab01-1bd99225bb23',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/a65d4b75-9e3a-4fd2-98e2-0f884c7b4c69',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/2956b347-241a-4745-891e-01ebe2e35e62',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/7cc075cd-344a-4a03-aa41-6a0d48a1e49c',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/d8d5ff81-f793-4b4b-a8e4-f6fc99c431cb',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/76586559-496b-465e-b263-12f9e8a3232f',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/6256523d-f0da-4580-a434-1abf6d826ba4',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/0c1a6d37-0f35-4827-8665-e13b7de9f972',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/fed3ac87-04e0-4672-8d3d-7cd90f3adbbf',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/87451d09-d74e-4534-b1b1-57676289c009',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/7821502e-62e7-49c8-ab4e-234aab1ccdc3',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/99df3f90-5504-4593-856e-42b927dbc0f0',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/8c6d0237-45b8-4293-8d90-fa24b17e0d01',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/fd07ea6d-c70a-478a-8cdd-52dc2222ae87',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/586f4196-b449-484e-b933-cb6d96956a4e',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/59f9055a-ea87-4868-80bd-d61ffc6e8d09',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/1b50d243-82f3-4485-a013-71c28659efdd',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/b921e727-e017-45dd-b4f5-4663e9380a82',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/8d3f0da2-ef21-4a08-87ee-ee3a5a9c83e2',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/379cc54e-bf0a-47ae-87bc-c2a6f5a0002e',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/55138dc7-07ff-4deb-b334-d1278a96c507',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/fc93af52-7b43-4006-9c92-b9f0679f7014',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/6dffaead-aa27-40f8-9e8c-c059261922f9',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/dd9ce421-5a44-48e1-8a88-98845ee1d9d9',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/b8f823e9-14a8-4662-9532-a190055b5375',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/c8eabd54-8923-4dd9-a557-c8b75d9b57a8',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/deef1e2f-c4b2-468e-a167-1682129a2c24',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/d9cf052c-e87c-497a-9da0-3833deeae902',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/ded914cb-ccdb-40e9-9fd0-a899ed28af10',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/6150d00b-3c09-4c61-a54c-a1c3feca3da6',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/e6ce2631-105d-4370-8f84-85c3e2820e24',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/ed69493b-7095-4422-9f9f-2ff983eb0a26',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/caef2c4a-8d9c-4eeb-bdd6-e7c2d8f4443d',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/dbbfde64-de30-4039-983b-948080e696bb',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/ee74bd63-375d-4a28-82c5-9f5739282aec',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/1d464999-213f-439e-892f-4a403df7ef3e',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/3044aadc-1e21-4416-a43f-60a50127565b',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f43bc17b-6aa6-4a15-ada4-5fc8d7c01ef2',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/8b2a9070-0af3-4a3b-b0d4-3ecb23624a57',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/55c6cfa9-33d1-4320-a7a8-b780740cffb8',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/2bc130e2-8c30-4c1b-97db-6bfffae6390e',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f3d79455-ecc6-4b2f-9090-180623db793d',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/56359088-d787-43bb-a999-e3950d8b900b',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/2ab66fe5-d514-4763-82aa-e886ace4174f',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/bd71fd83-90d3-4bfa-8b3d-ee36f13fa7eb',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/4aae7e57-c147-42c6-87c5-b8921e9f08ee',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/3e1af0fd-5b13-46d9-88de-84463aaa4c7c',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/c5e419f8-2360-45db-a7ac-cb0b486248f2',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/775dd0ca-f637-4a9d-9fc0-aafea3552f4d',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/31ec3248-6545-4883-991b-a621567d73c0',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/9e48619b-c028-451f-a472-63cca694a056',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/fcfb12aa-1e15-4263-a729-d553633f3bbf',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/3564dc54-eb08-4013-a402-5ea2bea2546e',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/896ebe05-0808-4b9e-8163-fe0d66ed0701',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f3d79f77-4133-4116-bc94-5620db053d20',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f27ce1a0-fbe0-4898-ba0c-f9552b0b9577',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/aab33f18-0c96-4ddb-9e61-7fadfc7eb514',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/c34130a0-9c13-4cd0-ba17-a16e8624d03c',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/5534de57-ad22-41c0-818a-fc79f0ee1c27',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/ff21d925-7bfe-40c9-8f92-36a601caf90a',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/79690573-af22-41a8-abab-61b030b282f0',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/c7d114fb-627e-42d4-ae7a-f65a0ca12497',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/b9c593e2-aede-4b63-9e07-ba9859209182',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/218bab87-dbec-409b-9e9f-c0a06f1fa166',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/012666ab-eeca-41eb-aadf-e884d21d12a9',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/5707c717-b8cc-44c5-8e04-5e9ae7be3133',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/db04af26-6d6a-45e3-a765-ca26b66d22f0',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/496b1918-9f16-4474-8949-dc35836a3dd6',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/37e13724-04e6-4eee-8275-a4860f9badad',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/6aa4a0fb-45c8-47a0-b35c-8e9217aafef4',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/4117a1c8-bf17-4570-a3a4-ba4e040f713a',
+      '/scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/helena_runs_square2/success/f04e3268-cad6-4a14-b8b2-575bb599a12e'
     ]]
   num_samples: [7, 3]
   parameters: ['ntor', 'helena_dir']
@@ -19,10 +103,10 @@ runner:
     "input_density": ""}
 
 executor:
-  type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/data_MISHKA/m5
+  type: LocalDaskExecutor
+  base_run_dir: /scratch/project_2007159/cursed-tglf/data_store/uncertain_stability/mishka_runs_square2
   worker_args: # to be specified for the SLURMCluster in DASK
-    account: "project_2009007"
+    account: "project_2007159"
     queue: "medium"
     cores: 1 
     memory: "12GB"

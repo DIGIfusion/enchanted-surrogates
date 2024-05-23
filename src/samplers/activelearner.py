@@ -1,14 +1,10 @@
-# import sys
-# import os
-# from common import S, CSVLoader, PickleLoader, HDFLoader, data_split
 from bmdal_reg.bmdal.algorithms import select_batch
 from bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
-from .base import Sampler 
-from typing import Dict
+from common import S
+from .base import Sampler
 from parsers import *
 import numpy as np 
-from common import S
 import os
 
 class ActiveLearner(Sampler):
@@ -29,11 +25,13 @@ class ActiveLearner(Sampler):
         self.metrics = []
 
     def get_initial_parameters(self):
-        # random samples 
-        batch_samples = [] 
+        # TODO: more than just random samples
+        assert self.parameters[0] != 'NA'
+
+        batch_samples = []
         for _ in range(self.init_num_samples):
             params = [torch.distributions.Uniform(lb, ub).sample().item() for (lb, ub) in self.bounds]
-            param_dict = {key: value for key, value in zip(self.parameters, params)}
+            param_dict = dict(zip(self.parameters, params)) 
             batch_samples.append(param_dict)
         return batch_samples
 
@@ -68,9 +66,10 @@ class ActiveLearner(Sampler):
         return outputs_as_tensor
 
     def update_pool_and_train(self):
+        raise NotImplementedError()
         pass
     
-    def update_metrics(self, metrics: dict):
+    def update_metrics(self, metrics: dict) -> None:
         """ Metrics come from the training run """
         r2_score =  metrics['val_r2_losses']
         best_r2_score = max(r2_score)
@@ -90,15 +89,15 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
         super().__init__(self, **kwargs)
-        # TODO: remove these as they are initialized in super class 
+        # TODO: remove these as they are initialized in super class
         self.total_budget = total_budget
         self.init_num_samples = num_initial_points
         self.parser = STATICPOOLparser(init_num_samples=num_initial_points, **self.parser_kwargs)
         print(self.parser.__len__())
         # TODO: assert that the parser is an instance of STATICPOOLparser, or an enum
-    
+
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
-        # iputs coming since we don't care about hte outputs in the static pool 
+        # iputs coming since we don't care about hte outputs in the static pool
         # print(results)
         idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
@@ -111,14 +110,14 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
             params.append(result)
         return params
 
-    def get_next_parameter(self, model) -> list[Dict[str, float]]:
+    def get_next_parameter(self, model) -> list[dict[str, float]]:
         idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
         results = []
         for idx in idxs: 
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 
         return results
 
-    def dump_results(self, base_run_dir):
+    def dump_results(self, base_run_dir) -> None:
         print(100*'=')
         print(f'Final Results for {self.selection_method}')
 

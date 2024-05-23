@@ -49,7 +49,7 @@ runner:
   other_params: {}
 
 executor:
-  type: DaskCPUGPUExecutor
+  type: LocalDaskExecutor
   base_run_dir: qlkn_test_run/
   local: 1
   worker_args:

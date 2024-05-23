@@ -1,5 +1,15 @@
+""" 
+nn/networks.py
+
+handles neural networks for active learning surrogates
+
+- model initialization: create_model()
+- model training: run_train_model(), train_step(), validation_step() 
+- model loading: load_saved_model()
+"""
+import io
 import torch
-import torch.nn as nn
+from torch import nn
 
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn import functional as F
@@ -10,13 +20,22 @@ def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
     ss_tot = torch.sum((y_true - y_true.mean(dim=0))**2)
     return 1.0 - (ss_res / ss_tot)
 
-def load_saved_model(model_kwargs, model_state_dict): 
+def load_saved_model(model_kwargs: dict, model_state_dict: dict) -> nn.Module:
+    """ 
+    Loads saved model use create_model and a saved state dict 
+    the loading via bytesIo is for GPU to CPU conversion 
+    """
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = create_model(model_kwargs)
-    model.load_state_dict(torch.load(model_state_dict, map_location=device))
-    return model 
-    
+    buffer = io.BytesIO()
+    torch.save(model_state_dict, buffer)
+    buffer.seek(0)
 
+    loaded_state_dict = torch.load(buffer, map_location=device)
+    model.load_state_dict(loaded_state_dict)
+    model.to(device)
+    return model
+ 
 def create_model(model_kwargs: dict) -> nn.Module:
     """given the model kwargs, returns a neural network"""
     model_width   = model_kwargs.get('model_width', 512)
@@ -42,7 +61,6 @@ def run_train_model(model_kwargs: dict,
                     ) -> tuple[dict[str, list[float]], dict]:
     """ Returns metrics and state dictionary, model is loaded via create_model()"""
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # TODO: Move to config file
     batch_size    = train_kwargs.get('batch_size', 512)
     epochs        = train_kwargs.get('epochs', 100)
     learning_rate = train_kwargs.get('learning_rate', 0.0001)
@@ -57,19 +75,19 @@ def run_train_model(model_kwargs: dict,
 
     # NOTE: Create model  & Optimizer
 
-    model = create_model(model_kwargs)
+    model         = create_model(model_kwargs)
     model.to(device=device)
 
     model.float()
-    optimizer = torch.optim.Adam(params=model.parameters(),
-                                 lr=learning_rate,
-                                 weight_decay=weight_decay)
+    optimizer     = torch.optim.Adam(params=model.parameters(),
+                                     lr=learning_rate,
+                                     weight_decay=weight_decay)
 
     # TODO: Scheduler & Early Stopping
 
     train_losses, val_losses, r2_losses = [], [], []
     best_loss = torch.inf
-    for epoch in range(epochs): 
+    for epoch in range(epochs):
         train_loss = train_step(model, optimizer, train_loader, epoch, device=device)
         val_loss, r2_loss  = validation_step(model, valid_loader, device=device)
         train_losses.append(train_loss.item())
@@ -100,7 +118,7 @@ def train_step(model, optimizer, train_loader, epoch, device='cpu') -> float:
     return step_loss / len(train_loader)
 
 
-def validation_step(model, valid_loader, device='cpu') -> float: 
+def validation_step(model, valid_loader, device='cpu') -> float:
     """
     A single epoch validation step, takes model, dataloader, and device (default 'cpu')
     returns loss and r2 score averaged over batch 

@@ -1,6 +1,6 @@
 from .base import Parser
 import torch
-import pandas as pd 
+import pandas as pd
 from common import data_split, CSVLoader, HDFLoader, PickleLoader, apply_scaler
 
 
@@ -69,8 +69,11 @@ class STATICPOOLparser(Parser):
         self.train = train_new
         self.pool = self.pool[pool_idxs]
 
-    def __len__(self, ): 
+    def return_dset_sizes(self, ) -> str:
         return f"Pool Size: {len(self.pool)}, Train Size: {len(self.train)}, Valid size: {len(self.valid)}, Test size: {len(self.test)}"
+    
+    def __len__(self) -> int:
+        return len(self.pool)
 
-    def write_input_file(self):
+    def write_input_file(self, *args, **kwargs):
         pass 

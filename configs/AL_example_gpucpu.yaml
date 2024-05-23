@@ -67,10 +67,10 @@ executor:
     surrogate_args: 
       account: project_2007159
       queue: gpusmall 
-      cores: 10
+      cores: 8
       memory: 4GB
       processes: 1
-      walltime: '02:00:00'
+      walltime: '01:45:00'
       interface: ib0
       job_extra_directives: 
         - '--job-name=SURROGATE'
