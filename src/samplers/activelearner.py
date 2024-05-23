@@ -1,11 +1,18 @@
+"""
+samplers/activelearner.py
+
+
+"""
 from bmdal_reg.bmdal.algorithms import select_batch
 from bmdal_reg.bmdal.feature_data import TensorFeatureData
 import torch
 from common import S
 from .base import Sampler
-from parsers import *
-import numpy as np 
+# from parsers import *
+import parsers 
+import numpy as np
 import os
+
 
 class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
@@ -19,19 +26,20 @@ class ActiveLearner(Sampler):
         self.kernel_transform      = kwargs.get('kernel_transform', [])
         self.base_kernel           = kwargs.get('base_kernel', 'll')
         
-        self.parser_kwargs = parser_kwargs
-        self.model_kwargs = model_kwargs
-        self.train_kwargs = train_kwargs
+        self.parser_kwargs         = parser_kwargs
+        self.model_kwargs          = model_kwargs
+        self.train_kwargs          = train_kwargs
         self.metrics = []
+
+        self.parser                = getattr(parsers, parser_kwargs.pop('type'))(**parser_kwargs)
 
     def get_initial_parameters(self):
         # TODO: more than just random samples
         assert self.parameters[0] != 'NA'
-
         batch_samples = []
         for _ in range(self.init_num_samples):
             params = [torch.distributions.Uniform(lb, ub).sample().item() for (lb, ub) in self.bounds]
-            param_dict = dict(zip(self.parameters, params)) 
+            param_dict = dict(zip(self.parameters, params))
             batch_samples.append(param_dict)
         return batch_samples
 
@@ -59,7 +67,7 @@ class ActiveLearner(Sampler):
 
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         outputs_as_tensor = torch.empty(len(results), len(self.parser.keep_keys))
-        for n, result in enumerate(results): 
+        for n, result in enumerate(results):
             x = result['inputs']
             y = result['output']
             outputs_as_tensor[n] = torch.cat((x, y))
@@ -67,7 +75,6 @@ class ActiveLearner(Sampler):
 
     def update_pool_and_train(self):
         raise NotImplementedError()
-        pass
     
     def update_metrics(self, metrics: dict) -> None:
         """ Metrics come from the training run """
@@ -83,35 +90,33 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     in Active Learning on fixed datasets. Uses Pandas under the hood.
     """
     sampler_interface = S.ACTIVEDB
-    def __init__(self, total_budget: int, num_initial_points: int, **kwargs):
+    def __init__(self, **kwargs):
         """
         Args:
             data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
-        super().__init__(self, **kwargs)
-        # TODO: remove these as they are initialized in super class
-        self.total_budget = total_budget
-        self.init_num_samples = num_initial_points
-        self.parser = STATICPOOLparser(init_num_samples=num_initial_points, **self.parser_kwargs)
-        print(self.parser.__len__())
-        # TODO: assert that the parser is an instance of STATICPOOLparser, or an enum
+        super().__init__(**kwargs)
 
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
-        # iputs coming since we don't care about hte outputs in the static pool
-        # print(results)
+        """ ignores outputs as this is labeled static pool based """
         idxs_as_tensor = torch.tensor([res['input']['pool_idxs'] for res in results])
         return idxs_as_tensor
     
+    # TODO: this should go in base active learner sampler
+    def get_train_val_datasplit(self) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]: 
+        return self.parser.get_train_valid_datasplit()
+    
     def get_initial_parameters(self) -> list[dict]:
+        """ Returns a subset of initial parameters """
         params = []
         for _ in range(self.init_num_samples):
-            idxs = np.random.randint(0, len(self.parser.pool))
+            idxs   = np.random.randint(0, len(self.parser.pool))
             result = {'input': self.parser.pool[idxs, self.parser.input_col_idxs], 'output': self.parser.pool[idxs, self.parser.output_col_idxs], 'pool_idxs':idxs}
             params.append(result)
         return params
 
     def get_next_parameter(self, model) -> list[dict[str, float]]:
-        idxs = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
+        idxs    = self._get_new_idxs_from_pool(model, self.parser.train, self.parser.pool)
         results = []
         for idx in idxs: 
             results.append({'input': self.parser.pool[idx, self.parser.input_col_idxs], 'output': self.parser.pool[idx, self.parser.output_col_idxs], 'pool_idxs':idx}) 

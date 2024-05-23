@@ -14,25 +14,30 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn import functional as F
 
-def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
+def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     """ Calculates r2 score and returns float"""
     ss_res = torch.sum((y_true - y_pred)**2)
     ss_tot = torch.sum((y_true - y_true.mean(dim=0))**2)
     return 1.0 - (ss_res / ss_tot)
 
-def load_saved_model(model_kwargs: dict, model_state_dict: dict) -> nn.Module:
-    """ 
-    Loads saved model use create_model and a saved state dict 
-    the loading via bytesIo is for GPU to CPU conversion 
-    """
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = create_model(model_kwargs)
+
+def cast_state_dict_from_gpu_to_cpu(model_state_dict: dict) -> dict:
     buffer = io.BytesIO()
     torch.save(model_state_dict, buffer)
     buffer.seek(0)
 
-    loaded_state_dict = torch.load(buffer, map_location=device)
-    model.load_state_dict(loaded_state_dict)
+    cpu_state_dict = torch.load(buffer, map_location=torch.device('cpu'))
+    return cpu_state_dict
+
+def load_saved_model(model_kwargs: dict, model_state_dict: dict, device='cpu') -> nn.Module:
+    """ 
+    Loads saved model use create_model and a saved state dict 
+    the loading via bytesIo is for GPU to CPU conversion 
+    """
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = create_model(model_kwargs)
+    cpu_state_dict = cast_state_dict_from_gpu_to_cpu(model_state_dict)
+    model.load_state_dict(cpu_state_dict)
     model.to(device)
     return model
  
@@ -93,14 +98,15 @@ def run_train_model(model_kwargs: dict,
         train_losses.append(train_loss.item())
         val_losses.append(val_loss.item())
         r2_losses.append(r2_loss.item())
-        if val_losses[-1] < best_loss:
+        if val_losses[-1] < best_loss or epoch == 0:
             best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
 
     metrics = {'train_losses': train_losses, 'val_losses': val_losses, 'val_r2_losses': r2_losses}
+    best_model_state_dict = cast_state_dict_from_gpu_to_cpu(best_model_state_dict)
     return metrics, best_model_state_dict
 
-def train_step(model, optimizer, train_loader, epoch, device='cpu') -> float:
+def train_step(model, optimizer, train_loader, epoch, device='cpu') -> torch.Tensor:
     """
     A single epoch training step, takes model, optimizer, dataloader, epoch and device (default 'cpu')
     returns loss averaged over batch
@@ -118,7 +124,7 @@ def train_step(model, optimizer, train_loader, epoch, device='cpu') -> float:
     return step_loss / len(train_loader)
 
 
-def validation_step(model, valid_loader, device='cpu') -> float:
+def validation_step(model, valid_loader, device='cpu') -> tuple[torch.Tensor, torch.Tensor]:
     """
     A single epoch validation step, takes model, dataloader, and device (default 'cpu')
     returns loss and r2 score averaged over batch 
@@ -128,7 +134,7 @@ def validation_step(model, valid_loader, device='cpu') -> float:
     with torch.no_grad():
         for _, batch in enumerate(valid_loader):
             batch_on_device = tuple(item.to(device).float() for item in batch)
-            X, y = batch_on_device 
+            X, y = batch_on_device
             y_hat = model.forward(X)
             loss = F.mse_loss(y, y_hat)
             val_r2  = r2_score(y_hat, y)

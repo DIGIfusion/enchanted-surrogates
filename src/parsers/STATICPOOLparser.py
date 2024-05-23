@@ -1,3 +1,16 @@
+""" 
+parsers/STATICPOOLparser.py 
+
+A parser for a static pool. 
+
+Needs functionality: 
+
+- Given set of observations, update pool and training sets
+    - update_pool_and_train()
+- Gets train and validation datasets 
+    - get_train_val_dataset() 
+
+"""
 from .base import Parser
 import torch
 import pandas as pd
@@ -6,29 +19,28 @@ from common import data_split, CSVLoader, HDFLoader, PickleLoader, apply_scaler
 
 class STATICPOOLparser(Parser):
     """ This is a dummy class as for the moment the sampler handles everything"""
-    def __init__(self, data_path: str , *args, **kwargs): 
-        init_num_samples = kwargs.get('init_num_samples')
-        self.data_args = kwargs.get('data_args')
-        self.target_keys = kwargs.get('target')
-        self.input_keys = kwargs.get('inputs')
-        self.keep_keys = self.target_keys+self.input_keys
+    def __init__(self, data_path: str , *args, **kwargs):
+        self.data_args              = kwargs.get('data_args')
+        self.target_keys            = kwargs.get('target')
+        self.input_keys             = kwargs.get('inputs')
 
-        self.data = self.gather_data_from_storage(data_path)
-        self.data = self.data[self.keep_keys]
+        self.keep_keys              = self.target_keys + self.input_keys
+        self.data                   = self.gather_data_from_storage(data_path)
+        self.data                   = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
         
         self.input_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.input_keys]
         self.output_col_idxs = [self.mapping_column_indices[col_idx] for col_idx in self.target_keys]
 
         self.train, self.valid, self.test, self.pool = data_split(self.data, **self.data_args)
-        self.train = self.train.sample(init_num_samples)
+        self.train = self.train.sample(0)
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
-        self.pool = torch.tensor(self.pool.values)    
+        self.pool = torch.tensor(self.pool.values)
         self.train, self.valid, self.test, self.pool, self.scaler = apply_scaler(self.train, self.valid, self.test, self.pool, scaler=None, op='transform')
     
-    def gather_data_from_storage(self, data_path) -> pd.DataFrame: 
+    def gather_data_from_storage(self, data_path) -> pd.DataFrame:
         extension = data_path.split('.')[-1]
         if extension == 'csv':
             data = CSVLoader(data_path=data_path).load_data()
@@ -36,13 +48,14 @@ class STATICPOOLparser(Parser):
             data = PickleLoader(data_path=data_path).load_data()
         elif extension == 'h5':
             data = HDFLoader(data_path=data_path).load_data()
-        else: 
+        else:
             raise ValueError(f"Extension {extension} not allowed. Please use any of {['csv','h5','pkl']}")
         return data
 
     def get_column_idx_mapping(self) -> dict:
         return {col:idx  for col, idx in zip(self.data.columns, range(len(self.data.columns)))}
         
+    
     def get_train_valid(self) -> tuple[torch.Tensor, torch.Tensor]:
         # TODO this should be a method in the base Parser class
         return self.train, self.valid
