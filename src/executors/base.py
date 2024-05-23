@@ -51,7 +51,6 @@ class Executor(ABC):
             futures.append(new_future)
         return futures 
     
-    # TODO: fix as this is now a named suple...
     def clean(self): 
         for client in self.clients: 
             client.close()

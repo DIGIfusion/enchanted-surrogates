@@ -10,6 +10,12 @@ def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
     ss_tot = torch.sum((y_true - y_true.mean(dim=0))**2)
     return 1.0 - (ss_res / ss_tot)
 
+def load_saved_model(model_kwargs, model_state_dict): 
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = create_model(model_kwargs)
+    model.load_state_dict(torch.load(model_state_dict, map_location=device))
+    return model 
+    
 
 def create_model(model_kwargs: dict) -> nn.Module:
     """given the model kwargs, returns a neural network"""

@@ -3,7 +3,7 @@
 from dask.distributed import Client, as_completed, wait
 from dask_jobqueue import SLURMCluster
 from .base import Executor, run_simulation_task
-from nn.networks import run_train_model, create_model
+from nn.networks import load_saved_model, run_train_model, create_model
 import time 
 from common import S
 from collections import namedtuple 
@@ -20,9 +20,7 @@ class DaskExecutor(Executor):
         # TODO: replace with instaniate cluster based on config file
         # point here is that possibly we want local, cpu, cpu+gpu
 
-        # Create the SLURMCluster and define the resources for each of the
-        # SLURM worker jobs.
-        # Note, that this is the reservation for ONE SLURM worker job.
+        # Create the SLURMCluster and define the resources for each of the SLURM worker jobs
         # self.cluster = SLURMCluster(**self.worker_args)
         # # This launches the cluster (submits the worker SLURM jobs)
         # self.cluster.scale(self.num_workers)
@@ -34,6 +32,10 @@ class DaskExecutor(Executor):
         print('Finished Setup')
 
     def initialize_clients(self): 
+        """ 
+        Initializes the clients based on sampler enum, 
+        general steps are: initialize cluster, scale cluster, initialize client with cluster
+        """
         sampler_type: S = self.sampler.sampler_interface
     
         if sampler_type in [S.SEQUENTIAL, S.BATCH]:
@@ -114,7 +116,8 @@ class DaskExecutor(Executor):
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
 
-                print('Updated Pool size: ', len(self.sampler.parser.pool), 'Train size: ', len(self.sampler.parser.train))
+                # print('Updated Pool size: ', len(self.sampler.parser.pool), 'Train size: ', len(self.sampler.parser.train))
+                print(self.sampler.parser.__len__())
 
                 # NOTE: Collect next data for training 
                 train_data, valid_data = self.sampler.parser.get_train_valid_datasplit()
@@ -123,7 +126,6 @@ class DaskExecutor(Executor):
 
                 # NOTE: ------ Submit model training job ------
                 print('Going to training with ', 'X_tr', train_data[0].shape, 'Y_tr', train_data[1].shape, 'X_vl', valid_data[0].shape,'Y_vl', valid_data[1].shape)
-                print(self.sampler.parser.__len__())
                 # TODO: profile this vs write the data instead
                 time_starttrain = time.time()
                 new_model_training = self.surrogate_client.submit(
@@ -143,13 +145,15 @@ class DaskExecutor(Executor):
                 
                 self.sampler.update_metrics(metrics)
                 # NOTE: ------ Do active learning sampling ------
-                # NOTE: Dask doesn't like returning the model, something with pickling, and we have to use the state dict
+                
+                # example_model = create_model(self.sampler.model_kwargs) 
+                # example_model.load_state_dict(trained_model_state_dict)
 
-                example_model = create_model(self.sampler.model_kwargs) # nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
-                example_model.load_state_dict(trained_model_state_dict)
+                example_model = load_saved_model(self.sampler.model_kwargs, trained_model_state_dict) 
                 param_list = self.sampler.get_next_parameter(example_model)
                 
                 # NOTE: ------ Prepare next simulator runs ----
+                
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
 
