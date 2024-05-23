@@ -14,8 +14,8 @@ import os
 class ActiveLearner(Sampler):
     sampler_interface = S.ACTIVE # NOTE: This could likely also be batch...
     def __init__(self, total_budget: int, parser_kwargs, model_kwargs, train_kwargs, *args, **kwargs): 
-        self.total_budget = total_budget
-        self.bounds = kwargs.get('bounds')
+        self.total_budget          = total_budget
+        self.bounds                = kwargs.get('bounds', [None])
         self.parameters            = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.aquisition_batch_size = kwargs.get('aquisition_batch_size', 512)
         self.init_num_samples      = kwargs.get('num_initial_points', self.aquisition_batch_size)
@@ -28,8 +28,6 @@ class ActiveLearner(Sampler):
         self.train_kwargs = train_kwargs
         self.metrics = []
 
-        # self.parser = Parser()
-        
     def get_initial_parameters(self):
         # random samples 
         batch_samples = [] 
@@ -43,7 +41,6 @@ class ActiveLearner(Sampler):
         y_train = train[:, self.parser.output_col_idxs].float()
         train = train[:, self.parser.input_col_idxs].float()
         pool = pool[:, self.parser.input_col_idxs].float()
-        print('\nData sizes', 'Y_tr', y_train.shape, 'X_tr', train.shape, 'Pool', pool.shape)
         train_data = TensorFeatureData(train)
         pool_data = TensorFeatureData(pool)
 
@@ -87,17 +84,18 @@ class ActiveLearningStaticPoolSampler(ActiveLearner):
     in Active Learning on fixed datasets. Uses Pandas under the hood.
     """
     sampler_interface = S.ACTIVEDB
-    def __init__(self, total_budget: int, init_num_samples: int, **kwargs):
+    def __init__(self, total_budget: int, num_initial_points: int, **kwargs):
         """
         Args:
             data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
         super().__init__(self, **kwargs)
+        # TODO: remove these as they are initialized in super class 
         self.total_budget = total_budget
-        self.init_num_samples = init_num_samples
-        self.parser = STATICPOOLparser(init_num_samples=init_num_samples, **self.parser_kwargs)
+        self.init_num_samples = num_initial_points
+        self.parser = STATICPOOLparser(init_num_samples=num_initial_points, **self.parser_kwargs)
         print(self.parser.__len__())
-        #ToDd assert that the parser is an instance of STATICPOOLparser, or an enum
+        # TODO: assert that the parser is an instance of STATICPOOLparser, or an enum
     
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         # iputs coming since we don't care about hte outputs in the static pool 

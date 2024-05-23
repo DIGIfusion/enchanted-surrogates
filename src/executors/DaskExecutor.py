@@ -1,70 +1,156 @@
 # executors/DaskExecutor.py
 
-from dask.distributed import Client, as_completed
+from dask.distributed import Client, as_completed, wait
 from dask_jobqueue import SLURMCluster
 from .base import Executor, run_simulation_task
+from nn.networks import run_train_model, create_model
+import time 
 from common import S
+from collections import namedtuple 
+
+clients_tuple_type = namedtuple('Clients', ['simulationrunner', 'surrogatetrainer'])
 
 class DaskExecutor(Executor):
-    def __init__(self, num_workers, worker_args, **kwargs):
+    def __init__(self, worker_args: dict, **kwargs):
         super().__init__(**kwargs)
-        self.num_workers = num_workers  # kwargs.get('num_workers')
-        self.worker_args = worker_args  # kwargs.get('worker_args')
+        self.num_workers: int = kwargs.get('num_workers', 8)  # kwargs.get('num_workers')
+        self.worker_args: dict = worker_args  # kwargs.get('worker_args')
         print('Beginning SLURMCluster Generation')
+
+        # TODO: replace with instaniate cluster based on config file
+        # point here is that possibly we want local, cpu, cpu+gpu
 
         # Create the SLURMCluster and define the resources for each of the
         # SLURM worker jobs.
         # Note, that this is the reservation for ONE SLURM worker job.
-        self.cluster = SLURMCluster(**self.worker_args)
-
-        # This launches the cluster (submits the worker SLURM jobs)
-        self.cluster.scale(self.num_workers)
-        self.client = Client(self.cluster)
-        self.cleints = self.clients_tuple_type(simulationrunner=self.client, surrogatetrainer=self.client)
+        # self.cluster = SLURMCluster(**self.worker_args)
+        # # This launches the cluster (submits the worker SLURM jobs)
+        # self.cluster.scale(self.num_workers)
+        # self.client = Client(self.cluster)
+        # self.clients = self.clients_tuple_type(simulationrunner=self.client, surrogatetrainer=self.client)
         # self.clients.append(self.client)
+        self.initialize_clients()
+
         print('Finished Setup')
+
+    def initialize_clients(self): 
+        sampler_type: S = self.sampler.sampler_interface
+    
+        if sampler_type in [S.SEQUENTIAL, S.BATCH]:
+            self.simulator_cluster = SLURMCluster(**self.worker_args)
+            self.simulator_cluster.scale(self.num_workers)
+            self.simulator_client = Client(self.simulator_cluster)
+            self.clients = [self.simulator_client]
+
+        elif sampler_type in [S.ACTIVE, S.ACTIVEDB] and isinstance(self.worker_args.get('simulator_args'), dict) and isinstance(self.worker_args.get('surrogate_args'), dict):
+            simulator_args = self.worker_args['simulator_args'] 
+            surrogate_args = self.worker_args['surrogate_args']
+
+            simulator_workers = self.worker_args['simulator_workers']
+            surrogate_workers = self.worker_args['surrogate_workers']
+
+            self.simulator_cluster = SLURMCluster(**simulator_args)
+            self.surrogate_cluster = SLURMCluster(**surrogate_args)
+
+            self.simulator_cluster.scale(simulator_workers)
+            self.surrogate_cluster.scale(surrogate_workers)
+
+            self.simulator_client = Client(self.simulator_cluster)
+            self.surrogate_client = Client(self.surrogate_cluster)
+
+            self.clients = [self.simulator_client, self.surrogate_client]
+        else: 
+            raise ValueError('Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers')
 
     def start_runs(self):
         sampler_interface = self.sampler.sampler_interface
         print(100 * "=")
-        print("Starting Database generation")
         print("Creating initial runs")
-        
 
         initial_parameters = self.sampler.get_initial_parameters()
-
         futures = self.submit_batch_of_params(initial_parameters)
-
-        # for params in initial_parameters:
-        #     new_future = self.client.submit(
-        #         run_simulation_task, self.runner_args, params, self.base_run_dir
-        #     )
-        #     futures.append(new_future)
-
-        print("Starting search")
-        seq = as_completed(futures)
         completed = 0
-        for future in seq:
-            res = future.result()
-            completed += 1
-            print(res, completed)
-            if self.max_samples > completed:
-                # TODO: pass the previous result and parameters.. (Active Learning )
-                if sampler_interface in [S.BATCH]: 
-                    param_list = self.sampler.get_next_parameter() 
-                    for params in param_list: 
-                        new_future = self.client.submit(
-                            run_simulation_task, self.runner_args, params, self.base_run_dir
-                        )
-                    seq.add(new_future)
-                elif sampler_interface in [S.SEQUENTIAL]: 
+
+        if sampler_interface in [S.SEQUENTIAL]:
+            seq = as_completed(futures)
+            for future in seq:
+                res = future.result()
+                completed += 1
+                if self.max_samples > completed:
                     params = self.sampler.get_next_parameter()
-                    if params is None:  # This is hacky
-                        continue
-                    else:
-                        new_future = self.client.submit(
-                            run_simulation_task, self.runner_args, params, self.base_run_dir
-                        )
-                        seq.add(new_future)
-                if sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
-                   raise NotImplementedError('Not implemented yet')
+                    new_future = self.simulator_client.submit(
+                        run_simulation_task, self.runner_args, params, self.base_run_dir
+                    )
+                    seq.add(new_future)
+
+        elif sampler_interface in [S.BATCH]:
+            while completed < self.max_samples: 
+                seq = wait(futures)
+                param_list = self.sampler.get_next_parameter()
+                futures = self.submit_batch_of_params(param_list)
+                completed += len(futures)
+                print('BATCH SAMPLER', 20*'=', completed, 20*'=')
+                
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
+            iterations = 0
+            while True: 
+                print(20*'=', f'Iteration {iterations}; ',  f'samples collected: {completed}', 20*'=')
+                # NOTE: ------ Run Samples and block until completed ------
+                seq = wait(futures) # outputs should be a list of tuples we ignore in this case
+
+                # NOTE: ------ Collect outputs ------
+                outputs = []
+                for res in seq.done:
+                    outputs.append(res.result())
+                outputs = self.sampler.collect_batch_results(outputs) # TODO: this should probably be in parser
+                # outputs is a tensor of the batch - it's the training data (for the active learning)
+                # for static pool it outputs the idxs that need to be appended/deleted
+                
+                # NOTE: ------ Check if out of budget ------
+                completed += len(outputs) 
+                if completed > self.max_samples: 
+                    break 
+                
+                # NOTE: ------ Update the pool and training data from outputs ------
+                self.sampler.parser.update_pool_and_train(outputs)
+
+                print('Updated Pool size: ', len(self.sampler.parser.pool), 'Train size: ', len(self.sampler.parser.train))
+
+                # NOTE: Collect next data for training 
+                train_data, valid_data = self.sampler.parser.get_train_valid_datasplit()
+                self.sampler.model_kwargs['input_dim'] = train_data[0].shape[-1]
+                self.sampler.model_kwargs['output_dim'] = train_data[1].shape[-1]
+
+                # NOTE: ------ Submit model training job ------
+                print('Going to training with ', 'X_tr', train_data[0].shape, 'Y_tr', train_data[1].shape, 'X_vl', valid_data[0].shape,'Y_vl', valid_data[1].shape)
+                print(self.sampler.parser.__len__())
+                # TODO: profile this vs write the data instead
+                time_starttrain = time.time()
+                new_model_training = self.surrogate_client.submit(
+                    run_train_model, self.sampler.model_kwargs, train_data, valid_data, self.sampler.train_kwargs
+                )
+                
+                train_model_run = wait([new_model_training])
+
+                # NOTE: ------ Collect model training job ------
+                trained_model_res = [res.result() for res in train_model_run.done]
+                metrics, trained_model_state_dict = trained_model_res[0]
+                print(f'Elapsed train task time: {time.time() - time_starttrain}')
+
+                for metric_name, metric_vals in metrics.items(): 
+                    # print(f'\n{metric_name}: min: {min(metric_vals)}, max: {max(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
+                    print(f'\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n')
+                
+                self.sampler.update_metrics(metrics)
+                # NOTE: ------ Do active learning sampling ------
+                # NOTE: Dask doesn't like returning the model, something with pickling, and we have to use the state dict
+
+                example_model = create_model(self.sampler.model_kwargs) # nn.Sequential(nn.Linear(4, 100), nn.ReLU(), nn.Linear(100, 100), nn.ReLU(), nn.Linear(100, 1))
+                example_model.load_state_dict(trained_model_state_dict)
+                param_list = self.sampler.get_next_parameter(example_model)
+                
+                # NOTE: ------ Prepare next simulator runs ----
+                futures = self.submit_batch_of_params(param_list)
+                iterations += 1
+
+            self.sampler.dump_results(base_run_dir=self.base_run_dir)

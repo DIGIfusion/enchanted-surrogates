@@ -28,7 +28,8 @@ class Executor(ABC):
         self.base_run_dir = base_run_dir  # , kwargs.get('base_run_dir')
         self.max_samples = self.sampler.total_budget
         self.config_filepath = config_filepath  # kwargs.get('config_filepath')
-        self.clients_tuple_type = namedtuple('Clients', ['simulationrunner', 'surrogatetrainer'])
+        self.clients = []
+        # self.clients_tuple_type = namedtuple('Clients', ['simulationrunner', 'surrogatetrainer'])
 
         print(config_filepath)
         print(f"Making directory of simulations at: {self.base_run_dir}")
@@ -36,11 +37,7 @@ class Executor(ABC):
 
         print("Base Executor Initialization")
 
-        shutil.copyfile(config_filepath, os.path.join(self.base_run_dir, "CONFIG.yaml"))
-
-        # TODO: self.clients as a named tuple for each executor
-        # i.e., each executor will always have a tuple of clients
-        
+        shutil.copyfile(config_filepath, os.path.join(self.base_run_dir, "CONFIG.yaml"))        
     @abstractmethod
     def start_runs(self):
         raise NotImplementedError()
@@ -48,7 +45,7 @@ class Executor(ABC):
     def submit_batch_of_params(self, param_list: List[dict]) -> list: 
         futures = []
         for params in param_list:
-            new_future = self.clients.simulationrunner.submit(
+            new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
             )
             futures.append(new_future)
