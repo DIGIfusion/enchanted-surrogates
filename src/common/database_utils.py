@@ -29,18 +29,18 @@ class Scaler:
     def __init__(self):
         pass
 
-    def fit(self, data):
-        self.mean_ = data.mean(dim=0)  # torch.mean(data, dim=-1)
-        self.scale_ = data.std(dim=0)  # torch.std(data, dim=-1)
+    def fit(self, data: torch.Tensor):
+        self.mean_ = data.mean(dim=0)
+        self.scale_ = data.std(dim=0)
 
-    def transform(self, data):
+    def transform(self, data: torch.Tensor) -> torch.Tensor:
         return (data - self.mean_) / self.scale_
 
-    def fit_transform(self, data):
+    def fit_transform(self, data: torch.Tensor) -> torch.Tensor:
         self.fit(data)
         return self.transform(data)
 
-    def inverse_transform(self, data):
+    def inverse_transform(self, data: torch.Tensor) -> torch.Tensor:
         return self.scale_ * data + self.mean_
 
 
