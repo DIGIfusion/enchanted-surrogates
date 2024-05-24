@@ -53,8 +53,7 @@ Although we will likely lint with `flake` so don't worry too much about it.
 
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
-    pytest tests/test_hypercube.py -v -s
-    pytest tests/test_simple.py -v -s
+    python -m pytest tests/test_*.py -v -s
 
 and will also be automatically run by Github Actions at certain pushes.
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
