@@ -1,12 +1,8 @@
 sampler:
-  type: ActiveLearningStaticPoolSampler
-  bounds: 
-    - [1, 3]
-    - [1, 3]
-  parameters: ["m", "n"]
-  init_num_samples: 5000
+  type: ActiveLearningBMDALStaticPoolSampler
+  num_initial_points: 512
   aquisition_batch_size: 512
-  total_budget: 80000
+  total_budget: 2000
   selection_method: random
   base_kernel: linear
   parser_kwargs: 
@@ -49,36 +45,7 @@ runner:
   other_params: {}
 
 executor:
-  type: LocalDaskExecutor
-  base_run_dir: qlkn_test_run/
-  local: 1
-  worker_args:
-    num_simulator_workers: 1
-    num_surrogate_workers: 1
-    simulator_args: 
-      account: project_2009007
-      queue: medium
-      cores: 8
-      memory: 4GB
-      processes: 1
-      walltime: '08:00:00'
-      interface: ib0
-      job_script_prologue:
-        - module load python-data 
-        - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
-        - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/enchanted-surrogates/src'
-        - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/enchanted-surrogates/bmdal'
-    surrogate_args: 
-      account: project_2009007
-      queue: gpusmall 
-      cores: 2
-      memory: 4GB
-      processes: 1
-      walltime: '08:00:00'
-      interface: ib0
-      job_extra_directives: 
-        - '--gres=gpu:a100:1'
-      job_script_prologue:
-        - module load pytorch 
-        
-  
+  type: DaskExecutor
+  base_run_dir: data_store/qlkn_test_run_random/
+  worker_args: 
+    local: 1
