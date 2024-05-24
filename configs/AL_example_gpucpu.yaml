@@ -1,9 +1,10 @@
 sampler:
-  type: ActiveLearningStaticPoolSampler
-  num_initial_points: 5000
+  type: ActiveLearningBMDALStaticPoolSampler
+  num_initial_points: 512
   aquisition_batch_size: 512
-  total_budget: 12000
+  total_budget: 2000
   selection_method: random
+  kernel_transform: [['rp', [512]]]
   base_kernel: linear
   parser_kwargs: 
     type: 'STATICPOOLparser'
@@ -28,7 +29,7 @@ sampler:
       - 'efiitg_gb'
     data_args: 
       train_size: 0.01
-      valid_size: 0.01
+      valid_size: 0.001
       test_size: 0.01
   model_kwargs:
     model_width: 512
@@ -36,8 +37,6 @@ sampler:
     dropout: 0.0
   train_kwargs:
     stuff: stuff 
-
-  # kernel_transform: [('rp', [512])]
 
 runner:
   type: STATICPOOLrunner
