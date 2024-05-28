@@ -1,4 +1,4 @@
-# sampler/grid.py
+# sampler/array.py
 
 from .base import Sampler
 import numpy as np
@@ -8,7 +8,17 @@ from itertools import product
 class ArraySampler(Sampler):
     """
     Creates combinations of the given samples.
+
     The samples are directly specified in 'bounds' in the config file.
+
+    Attributes:
+        bounds (list of list of float or int): The bounds of each parameter.
+        num_samples (list of int): The number of samples for each parameter.
+        parameters (list of str): The names of the parameters.
+        total_budget (int): The total number of parameter combinations.
+        num_initial_points (int): The number of initial points in the sample space.
+        samples (list of list of float or int): The generated parameter combinations.
+        current_index (int): The index of the current parameter combination.
 
     For example:
         sampler:
@@ -25,9 +35,21 @@ class ArraySampler(Sampler):
         e.g., 10 parameters  for 10 samples each -> 10 billion
         so hard limit at 100.000
 
+    Methods:
+        generate_parameters: Generates the parameter combinations.
+        get_next_parameter: Gets the next parameter combination.
+
     """
 
     def __init__(self, bounds, num_samples, parameters):
+        """
+        Initializes the ArraySampler.
+
+        Args:
+            bounds (list of list of float or int): The bounds of each parameter.
+            num_samples (list of int): The number of samples for each parameter.
+            parameters (list of str): The names of the parameters.
+        """
         num_samples = [len(b) for b in bounds]
 
         # check for stupidity
@@ -48,6 +70,12 @@ class ArraySampler(Sampler):
         self.current_index = 0
 
     def generate_parameters(self):
+        """
+        Generates the parameter combinations.
+
+        Yields:
+            list of float or int: The next parameter combination.
+        """
         samples = self.bounds
         # Use itertools.product to create a Cartesian product of sample
         # points, representing the hypercube
@@ -56,6 +84,12 @@ class ArraySampler(Sampler):
             yield list(params_tuple)
 
     def get_next_parameter(self):
+        """
+        Gets the next parameter combination.
+
+        Returns:
+            dict or None: The next parameter combination, or None if all combinations have been used.
+        """
         if self.current_index < len(self.samples):
             params = self.samples[self.current_index]
             self.current_index += 1

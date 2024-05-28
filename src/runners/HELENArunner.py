@@ -1,4 +1,9 @@
+"""
 # runners/HELENA.py
+
+Defines the HELENArunner class for running HELENA simulations.
+
+"""
 
 # import numpy as np
 from .base import Runner
@@ -18,13 +23,13 @@ class HELENArunner(Runner):
     Attributes
     ----------
     executable_path : str
-        the path to the pre-compiled executable MISHKA binary (without "_m")
+        the path to the pre-compiled executable HELENA binary
 
 
     Methods
     -------
     single_code_run()
-        Runs MISHKA after copying and writing the input files
+        Runs HELENA after copying and writing the input files
 
     """
 
@@ -36,24 +41,21 @@ class HELENArunner(Runner):
         **kwargs,
     ):
         """
-        Initialie HELENA runner class.
+        Initializes the HELENArunner object.
 
-        Parameters
-        ----------
-        executable_path : str
-            The path to where the executable binary.
+        Args:
+            executable_path (str): The path to the pre-compiled executable HELENA binary.
+            other_params (dict): Dictionary containing other parameters for initialization.
 
-        namelist_path : str
-            The namelist constaining the HELENA values to be kept constant
-            during the run.
+        other_params:
+            namelist_path : str
+                The namelist constaining the HELENA values to be kept constant
+                during the run.
 
-        only_generate_files: bool
-            Flag for either only creating input files or creating the files
-            and running HELENA.
+            only_generate_files: bool
+                Flag for either only creating input files or creating the files
+                and running HELENA.
 
-        Returns
-        -------
-        None
         """
         self.parser = HELENAparser()
         self.executable_path = (
@@ -66,16 +68,15 @@ class HELENArunner(Runner):
 
     def single_code_run(self, params: dict, run_dir: str):
         """
-        Logic to run HELENA.
+        Runs HELENA simulation.
 
-        Parameters
-        ----------
-        run_dir : str
-            The directory in where HELENA is run.
+        Args:
+            params (dict): Dictionary containing parameters for the simulation.
+            run_dir (str): Directory where HELENA is run.
 
-        Returns
-        -------
-        None
+        Returns:
+            bool: True if the simulation is successful, False otherwise.
+
         """
         print(f"single_code_run: {run_dir}", flush=True)
         self.parser.write_input_file(params, run_dir, self.namelist_path)
@@ -93,6 +94,13 @@ class HELENArunner(Runner):
         return True
 
     def pre_run_check(self):
+        """
+        Performs pre-run checks to ensure necessary files exist before running the simulation.
+
+        Raises:
+            FileNotFoundError: If the executable path or the namelist path is not found.
+
+        """
         # Does executable exist?
         if not os.path.isfile(self.executable_path):
             raise FileNotFoundError(
@@ -103,6 +111,6 @@ class HELENArunner(Runner):
             raise FileNotFoundError(
                 f"The namelist path ({self.namelist_path}) provided to the HELENA runner is not found. Exiting."
             )
-        # TODO: Does base namelist contain paramters that this structure can handle or that makes sense?
+        # TODO: Does namelist contain paramters that this structure can handle or that makes sense?
         # TODO: neped > nesep
         return

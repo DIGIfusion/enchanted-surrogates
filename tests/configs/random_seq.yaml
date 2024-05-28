@@ -1,0 +1,28 @@
+sampler:
+  type: RandSampler
+  bounds: 
+    - [1, 3]
+    - [1, 3]
+  num_samples: 3
+  parameters: ["m", "n"]
+
+runner:
+  type: SIMPLErunner
+  executable_path: tests/simple/simple.sh
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: data_store/random_seq
+  worker_args:
+    local: True
+    account: project_2009007
+    queue: medium
+    cores: 2
+    memory: 1GB
+    processes: 1
+    walltime: '00:10:00'
+    interface: ib0
+    job_script_prologue:
+      - export PYTHONPATH=$PYTHONPATH:/src
+  num_workers: 2

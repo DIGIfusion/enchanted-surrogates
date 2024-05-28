@@ -1,0 +1,62 @@
+sampler:
+  type: ActiveLearningBMDALStaticPoolSampler
+  num_initial_points: 20
+  aquisition_batch_size: 10
+  total_budget: 120
+  kernel_transform:  # TODO: make method to handle kernel transform properly...
+    - ['rp', [512]]
+  parser_kwargs: 
+    type: 'STATICPOOLparser'
+    data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
+    inputs: 
+      - 'ane'
+      - 'ate'
+      - 'autor'
+      - 'machtor'
+      - 'x'
+      - 'zeff'
+      - 'gammae'
+      - 'q'
+      - 'smag'
+      - 'alpha'
+      - 'ani1'
+      - 'ati0'
+      - 'normni1'
+      - 'ti_te0'
+      - 'lognustar'
+    target: 
+      - 'efiitg_gb'
+    data_args: 
+      train_size: 0.001
+      valid_size: 0.001
+      test_size: 0.001
+  model_kwargs:
+    model_width: 512
+    model_depth: 4
+    dropout: 0.0
+  train_kwargs:
+    stuff: stuff 
+
+  # kernel_transform: [('rp', [512])]
+
+runner:
+  type: STATICPOOLrunner
+  executable_path: None
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: qlkn_test_run/
+  worker_args:
+    local: True
+    account: project_2009007
+    queue: medium
+    cores: 2
+    memory: 1GB
+    processes: 1
+    walltime: '00:10:00'
+    interface: ib0
+    job_script_prologue:
+      - export PYTHONPATH=$PYTHONPATH:/src
+
+  num_workers: 4

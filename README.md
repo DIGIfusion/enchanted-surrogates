@@ -31,6 +31,12 @@ See `configs/tglf_config.yaml` for example configuration file. That which is com
 
 After modifying `SLURMrun.bash` to point to a specific configuration file, e.g, `tglf_config.yaml`, run with your slurm or local shell, e.g., `sbatch SLURMrun.bash`. This will dump `*.out` files for each worker specified in the config, while also dumping `run.out` for the nanny.  
 
+#### Submodules 
+
+If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
+
+To add submodules: `git submodule update --init --recursive` 
+
 ## What we do not plan to handle
 
 1. Compiling code
@@ -53,8 +59,7 @@ Although we will likely lint with `flake` so don't worry too much about it.
 
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
-    pytest tests/test_hypercube.py -v -s
-    pytest tests/test_simple.py -v -s
+    python -m pytest tests -v -s
 
 and will also be automatically run by Github Actions at certain pushes.
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).

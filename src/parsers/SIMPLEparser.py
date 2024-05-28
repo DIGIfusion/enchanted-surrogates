@@ -1,35 +1,65 @@
 import os
+import ast
 from .base import Parser
+import json
 
 
 class SIMPLEparser(Parser):
-    """An I/O parser for testing"""
+    """
+    An I/O parser for testing.
+
+    Methods:
+        __init__()
+            Initializes the SIMPLEparser object.
+        write_input_file(params: dict, run_dir: str) -> None
+            Writes a sample input file.
+        read_output_file(params: dict, run_dir: str) -> dict
+            Reads the output file containing the input parameters.
+
+    """
 
     def __init__(self):
+        """
+        Initializes the SIMPLEparser object.
+
+        """
         pass
 
     def write_input_file(self, params: dict, run_dir: str):
         """
         Writes a sample input file.
+
+        Args:
+            params (dict): Dictionary containing input parameters.
+            run_dir (str): Directory where the input file is written.
+
+        Returns:
+            None
+
         """
-        print("Writing to", run_dir)
-        file_name = run_dir + "/input.txt"
+        file_name = os.path.join(run_dir, "in.json")
         with open(file_name, "w") as file:
-            file.write("Simple start.")
+            json.dump(params, file)
 
     def read_output_file(self, params: dict, run_dir: str):
         """
-        The output file should contain the imput parameters.
+        Reads the output file containing the input parameters.
+
+        Args:
+            params (dict): Dictionary containing input parameters.
+            run_dir (str): Directory where the output file is located.
+
+        Returns:
+            dict: Dictionary containing the output parameters read from the file.
+
+        Raises:
+            FileNotFoundError: If the output file does not exist.
+
         """
-        file_name = run_dir + "/output.txt"
-        params_out = None
-        if os.path.exists(file_name):
-            with open(file_name, "r") as file:
-                lines = file.readlines()
-                numbers_as_strings = lines[0].strip()[1:-1].split(",")
-                params_out = [float(num.strip()) for num in numbers_as_strings if num.strip() != '']
-                
-            return params == params_out
-        else:
-            print(f"File '{file_name}' does not exist.")
-            return False
+        file_name = os.path.join(run_dir, "out.json")
+        if not os.path.exists(file_name):
+            raise FileNotFoundError(f"{file_name}")
+
+        with open(file_name, "r") as file:
+            params_out = json.load(file)
+        return params_out

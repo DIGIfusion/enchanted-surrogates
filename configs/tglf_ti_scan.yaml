@@ -1,10 +1,8 @@
 sampler:
-  type: ActiveLearner
-  bounds: [[0.5, 2.5], [0.01, 0.45], [0.01, 0.5], [0.001, 0.1], [0.001, 0.1], [0.001, 0.1]]
-  num_samples: 5
-  parameters: [ELON, TRIA, AMETR, drmajdrmin, dtriandrmin, delondrmin]
-  parser_args: 
-    type: 
+  type: RandSampler
+  bounds: [[1.0, 7.0]]
+  num_samples: 100
+  parameters: [TI]
 
 runner:
   type: TGLFrunner
@@ -13,7 +11,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2007159/cursed-tglf/tglf_scan_shape2      # where to store runs 
+  base_run_dir: /scratch/project_2007159/cursed-tglf/tglf_ti_scan      # where to store runs 
   num_workers: 12                                                                 # how many workers to run in parallel
   # below is the setup for an individual worker, each worker spams runs of a code
   worker_args:
@@ -22,11 +20,12 @@ executor:
     cores: 1                                                                     # changes based on CODE needs
     memory: "12GB"                                                               # changes based on CODE needs
     processes: 1                                                                 # changes based on CODE needs
-    walltime: "04:00:00"                                                         # changes based on HPC/CODE (length of nanny)
+    walltime: "02:00:00"                                                         # changes based on HPC/CODE (length of nanny)
     interface: "ib0"                                                             # changes based on HPC (mahti it is needed)
     job_script_prologue:                                                         # changes based on CODE, all workers will execute this in submission
       - 'module load python-data'                                                # changes based on HPC
       - 'cd /scratch/project_2007159/cursed-tglf/'                               # changes based on USER
+      - 'source .venv/bin/activate'
       - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src' # changes based on USER but necessary
       - 'export GACODE_ROOT=/scratch/project_2007159/cursed-tglf/gacode'         # changes based on CODE (here TGLF)
       - 'export GACODE_PLATFORM=MAHTI'                                           # changes based on CODE (here TGLF)

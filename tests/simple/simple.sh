@@ -9,8 +9,4 @@ fi
 # Echo the input argument
 echo "The input argument is: $1"
 
-cp "$2/input.txt" "$2/output.txt"
-
-echo "$1" > "$2/output.txt"
-
-echo "Text has been written to output.txt"
+cp "$2/in.json" "$2/out.json"

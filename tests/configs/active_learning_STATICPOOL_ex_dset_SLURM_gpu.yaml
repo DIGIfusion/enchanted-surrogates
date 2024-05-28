@@ -1,0 +1,66 @@
+sampler:
+  type: ActiveLearningBMDALStaticPoolSampler
+  num_initial_points: 20
+  aquisition_batch_size: 10
+  total_budget: 120
+  kernel_transform:  # TODO: make method to handle kernel transform properly...
+    - ['rp', [512]]
+  parser_kwargs: 
+    type: STATICPOOLparser
+    data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
+    inputs: 
+      - 'peroxide'
+      - 'MW'
+      - 'NumOfAtoms'
+    target: 
+      - 'pSat_Pa'
+    data_args: 
+      train_size: 0.2
+      valid_size: 0.3
+      test_size: 0.1
+  model_kwargs:
+    model_width: 512
+    model_depth: 4
+    dropout: 0.0
+  train_kwargs:
+    stuff: stuff 
+
+  # kernel_transform: [('rp', [512])]
+
+runner:
+  type: STATICPOOLrunner
+  executable_path: None
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: data_store/testing
+  worker_args:
+    simulator_workers: 1
+    surrogate_workers: 1
+    simulator_args: 
+      account: project_2007159
+      queue: medium
+      cores: 2
+      memory: 1GB
+      processes: 1
+      walltime: '00:50:00'
+      interface: ib0
+      job_script_prologue:
+        - module load python-data 
+        - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
+        - export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src:/scratch/project_2007159/cursed-tglf/src/samplers/bmdal
+    surrogate_args: 
+      account: project_2007159
+      queue: gpusmall
+      cores: 10
+      memory: 1GB
+      processes: 1
+      walltime: '00:50:00'
+      interface: ib0
+      job_extra_directives: 
+        - '--gres=gpu:a100:1'
+      job_script_prologue:
+        - module load python-data 
+        - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
+        - export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src:/scratch/project_2007159/cursed-tglf/src/samplers/bmdal
