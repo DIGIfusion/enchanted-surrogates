@@ -76,9 +76,8 @@ class ActiveLearnerBMDAL(Sampler):
         self.aquisition_batch_size = kwargs.get('aquisition_batch_size', 512)
         self.init_num_samples      = kwargs.get('num_initial_points', self.aquisition_batch_size)
         self.selection_method      = kwargs.get('selection_method', 'random')
-        self.kernel_transform      = kwargs.get('kernel_transform', [])
+        self.kernel_transform      = kwargs.get('kernel_transform', [('rp', [512])])
         self.base_kernel           = kwargs.get('base_kernel', 'll')
-
         self.parser_kwargs         = parser_kwargs
         self.model_kwargs          = model_kwargs
         self.train_kwargs          = train_kwargs
@@ -107,25 +106,20 @@ class ActiveLearnerBMDAL(Sampler):
             batch_samples.append(param_dict)
         return batch_samples
 
-    def _get_new_idxs_from_pool(self, model, train, pool) -> torch.Tensor:
+    def _get_new_idxs_from_pool(self, model: torch.nn.Module, train: torch.Tensor, pool: torch.Tensor) -> torch.Tensor:
         """
         Selects new indices from the pool using BMDAL's select_batch function.
-
-        Args:
-            model: PyTorch model.
-            train: Training data.
-            pool: Pool data.
+        The training and pool data are expected to be normalized. 
 
         Returns:
             torch.Tensor: Tensor containing new indices.
-
         """
+        print('Entering get new idx with',  train.shape, pool.shape)
         y_train = train[:, self.parser.output_col_idxs].float()
-        train = train[:, self.parser.input_col_idxs].float()
-        pool = pool[:, self.parser.input_col_idxs].float()
-        train_data = TensorFeatureData(train)
-        pool_data = TensorFeatureData(pool)
-
+        x_train = train[:, self.parser.input_col_idxs].float()
+        x_pool = pool[:, self.parser.input_col_idxs].float()
+        train_data = TensorFeatureData(x_train)
+        pool_data = TensorFeatureData(x_pool)
         new_idxs, _ = select_batch(
             batch_size=self.aquisition_batch_size,
             models=[model],
@@ -148,10 +142,12 @@ class ActiveLearnerBMDAL(Sampler):
         **kwargs,
     ) -> list[dict[str, float]]:
         """
-        Generates the next parameter samples based on the model predictions.
-
+        Generates the next parameter samples based on the model predictions given the train and pool.
+        NB: The train and pool are expected to be normalised. 
         Args:
             model (torch.nn.Module): PyTorch model.
+            train (torch.Tensor): 
+            pool (torch.Tensor):  
 
         Returns:
             list: List of dictionaries containing next parameter samples.
@@ -307,6 +303,21 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
         ):
             fpath = os.path.join(base_run_dir, f"{name}.pt")
             torch.save(dset, fpath)
+
+    def dump_iteration_results(self, base_run_dir, iterations, trained_model_state_dict):
+        iteration_dir = os.path.join(base_run_dir, f'AL_STEP_{iterations}') 
+        os.mkdir(iteration_dir)
+        metric_fname = os.path.join(iteration_dir, "final_metrics.txt")
+        self.write_metrics_to_file(metric_fname, self.metrics)
+        for name, dset in zip(
+            ["train", "valid", "test"],
+            [self.parser.train, self.parser.valid, self.parser.test],
+        ):
+            fpath = os.path.join(iteration_dir, f"{name}.pt")
+            torch.save(dset, fpath)
+
+        model_path = os.path.join(iteration_dir, 'model.pth')
+        torch.save(trained_model_state_dict, model_path)
 
     def write_metrics_to_file(self, filename: str, metrics: list[float]):
         # TODO: establish good metrics

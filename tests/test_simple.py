@@ -28,5 +28,6 @@ def test_example_configs(config_name):
     args.executor["config_filepath"] = config_filepath
     if "ActiveLearning" in args.sampler["type"]:
         args.sampler["parser_kwargs"]["data_path"] = data_path
+        args.executor['base_run_dir'] += '_simple'
     run.main(args)
     assert True

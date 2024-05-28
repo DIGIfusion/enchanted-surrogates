@@ -1,10 +1,12 @@
 sampler:
   type: ActiveLearningBMDALStaticPoolSampler
-  num_initial_points: 512
+  num_initial_points: 5000
   aquisition_batch_size: 512
-  total_budget: 2000
-  selection_method: random
-  base_kernel: linear
+  total_budget: 80000
+  selection_method: lcmd
+  base_kernel: grad
+  # kernel_transform: 
+  #   - ['rp', [512]]
   parser_kwargs: 
     type: 'STATICPOOLparser'
     data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
@@ -28,7 +30,7 @@ sampler:
       - 'efiitg_gb'
     data_args: 
       train_size: 0.01
-      valid_size: 0.01
+      valid_size: 0.015
       test_size: 0.01
   model_kwargs:
     model_width: 512
@@ -37,8 +39,6 @@ sampler:
   train_kwargs:
     stuff: stuff 
 
-  # kernel_transform: [('rp', [512])]
-
 runner:
   type: STATICPOOLrunner
   executable_path: None
@@ -46,6 +46,6 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: data_store/qlkn_test_run_random/
+  base_run_dir: data_store/qlkn_test_run_lcmd_local/
   worker_args: 
     local: 1

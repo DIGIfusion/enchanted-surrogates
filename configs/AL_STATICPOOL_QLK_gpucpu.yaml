@@ -1,11 +1,12 @@
+# python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
 sampler:
   type: ActiveLearningBMDALStaticPoolSampler
-  num_initial_points: 512
+  num_initial_points: 5000
   aquisition_batch_size: 512
-  total_budget: 2000
-  selection_method: random
+  total_budget: 80000
+  selection_method: lcmd
   kernel_transform: [['rp', [512]]]
-  base_kernel: linear
+  base_kernel: grad
   parser_kwargs: 
     type: 'STATICPOOLparser'
     data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
@@ -29,7 +30,7 @@ sampler:
       - 'efiitg_gb'
     data_args: 
       train_size: 0.01
-      valid_size: 0.001
+      valid_size: 0.015
       test_size: 0.01
   model_kwargs:
     model_width: 512
@@ -45,7 +46,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: data_store/qlkn_test_cpugpurun/
+  base_run_dir: data_store/qlkn_test_cpugpurun8/
   worker_args:
     simulator_workers: 1
     surrogate_workers: 1
@@ -62,14 +63,14 @@ executor:
       job_script_prologue:
         - module load python-data 
         - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
-        - export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src:/scratch/project_2007159/cursed-tglf/src/samplers/bmdal
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
     surrogate_args: 
       account: project_2007159
       queue: gpusmall 
       cores: 8
       memory: 4GB
       processes: 1
-      walltime: '01:45:00'
+      walltime: '08:00:00'
       interface: ib0
       job_extra_directives: 
         - '--job-name=SURROGATE'
@@ -77,5 +78,5 @@ executor:
       job_script_prologue:
         - module load python-data 
         - source /scratch/project_2007159/cursed-tglf/.venv/bin/activate
-        - export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src:/scratch/project_2007159/cursed-tglf/src/samplers/bmdal
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
   

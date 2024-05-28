@@ -14,9 +14,9 @@ def data_split(
     poolsizeprime = poolsize / (1 - train_size)
     validsizeprime = (valid_size) / (1 - poolsizeprime) / (1 - train_size)
     # TODO: replace train test split with own thing
-    train, tmp = train_test_split(df, test_size=1 - train_size, random_state=42)
-    pool, tmp = train_test_split(tmp, test_size=1 - poolsizeprime, random_state=42)
-    valid, test = train_test_split(tmp, test_size=1 - validsizeprime, random_state=42)
+    train, tmp = train_test_split(df, test_size=1 - train_size)
+    pool, tmp = train_test_split(tmp, test_size=1 - poolsizeprime)
+    valid, test = train_test_split(tmp, test_size=1 - validsizeprime)
     sample_size = min(len(pool), 100000)
     return train, valid, test, pool.sample(sample_size)
 
