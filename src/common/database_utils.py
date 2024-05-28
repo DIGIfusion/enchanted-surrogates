@@ -4,21 +4,24 @@ import torch
 
 
 def data_split(
-    df: pd.DataFrame, train_size: float, valid_size: float, test_size: float
+    df: pd.DataFrame, 
+    valid_size: float, 
+    test_size: float,
+    *args, **kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    if train_size > 1 or valid_size > 1 or test_size > 1:
+    """ Train should be of length 0 when starting, valid and test should be of size given in argument """
+
+    if  valid_size > 1 or test_size > 1:
         raise ValueError("Allowed data_args must be <1")
-    if train_size + valid_size + test_size >= 1:
+    elif  valid_size + test_size >= 1:
         raise ValueError("Sum of allowed data_args must be <1")
-    poolsize = 1 - train_size - valid_size - test_size
-    poolsizeprime = poolsize / (1 - train_size)
-    validsizeprime = (valid_size) / (1 - poolsizeprime) / (1 - train_size)
-    # TODO: replace train test split with own thing
-    train, tmp = train_test_split(df, test_size=1 - train_size)
-    pool, tmp = train_test_split(tmp, test_size=1 - poolsizeprime)
+    
+    poolsize = 1 - valid_size - test_size
+    validsizeprime = (valid_size) / (1 - poolsize)     
+    pool, tmp = train_test_split(df, test_size=1 - poolsize)
     valid, test = train_test_split(tmp, test_size=1 - validsizeprime)
-    sample_size = min(len(pool), 100000)
-    return train, valid, test, pool.sample(sample_size)
+    train = valid.sample(0)
+    return train, valid, test, pool
 
 
 class Scaler:

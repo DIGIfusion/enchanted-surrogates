@@ -51,7 +51,7 @@ class STATICPOOLparser(Parser):
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
         )
-        self.train = self.train.sample(0)
+        # self.train = self.train.sample(0)
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)

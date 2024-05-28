@@ -14,7 +14,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: simple_test_runs/
+  base_run_dir: data_store/random_batch
   worker_args:
     local: True
     account: project_2009007

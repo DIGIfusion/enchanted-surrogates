@@ -68,6 +68,17 @@ class ActiveLearnerBMDAL(Sampler):
         *args,
         **kwargs,
     ):
+        """ 
+        - needs parser_kwargs, model_kwargs and train_kwargs (model training keyword arguments)
+        Sets the following parameters from passed kwargs: 
+        - set param: keyword argument 
+        - acquisition_batch_size: aquisition_batch_size
+        - bounds: bounds
+        - init_num_samples: num_initial_points
+        - selection_method: selection_method
+        - kernel_transform: kernel_transform
+        - base_kernel: base_kernel
+        """
 
         # fmt: off
         self.total_budget          = total_budget
@@ -218,23 +229,13 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
 
     def __init__(self, **kwargs):
         """
-        Initializes the Active Learning BMDAL Static Pool Sampler.
 
-        Args:
-            data_path (str): The path where the data is stored. Accepted formats: csv, pkl, h5.
         """
         super().__init__(**kwargs)
 
     def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
         """
         Collects results, ignoring outputs as this is labeled static pool-based.
-
-        Args:
-            results (list): List of dictionaries containing batch results.
-
-        Returns:
-            torch.Tensor: Tensor containing batch results.
-
         """
         idxs_as_tensor = torch.tensor([res["input"]["pool_idxs"] for res in results])
         return idxs_as_tensor
@@ -242,10 +243,6 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
     def get_initial_parameters(self) -> list[dict]:
         """
         Returns a subset of initial parameters.
-
-        Returns:
-            list: List of dictionaries containing initial parameter samples.
-
         """
         params = []
         for _ in range(self.init_num_samples):
@@ -263,13 +260,6 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
     ) -> list[dict[str, float]]:
         """
         Generates the next parameter samples based on the model predictions.
-
-        Args:
-            model (torch.nn.Module): PyTorch model.
-
-        Returns:
-            list: List of dictionaries containing next parameter samples.
-
         """
         idxs = self._get_new_idxs_from_pool(model, train, pool)
         results = []
@@ -304,8 +294,10 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
             fpath = os.path.join(base_run_dir, f"{name}.pt")
             torch.save(dset, fpath)
 
-    def dump_iteration_results(self, base_run_dir, iterations, trained_model_state_dict):
+    def dump_iteration_results(self, base_run_dir: str, iterations: int, trained_model_state_dict: dict):
         iteration_dir = os.path.join(base_run_dir, f'AL_STEP_{iterations}') 
+        # TODO: just dump the new points 
+
         os.mkdir(iteration_dir)
         metric_fname = os.path.join(iteration_dir, "final_metrics.txt")
         self.write_metrics_to_file(metric_fname, self.metrics)
