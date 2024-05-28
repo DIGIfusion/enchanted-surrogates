@@ -30,7 +30,7 @@ import numpy as np
 from common import S
 import parsers
 from .base import Sampler
-
+import h5py 
 
 class ActiveLearnerBMDAL(Sampler):
     """
@@ -120,7 +120,7 @@ class ActiveLearnerBMDAL(Sampler):
     def _get_new_idxs_from_pool(self, model: torch.nn.Module, train: torch.Tensor, pool: torch.Tensor) -> torch.Tensor:
         """
         Selects new indices from the pool using BMDAL's select_batch function.
-        The training and pool data are expected to be normalized. 
+        NOTE: The training and pool data are expected to be normalized. 
 
         Returns:
             torch.Tensor: Tensor containing new indices.
@@ -154,7 +154,8 @@ class ActiveLearnerBMDAL(Sampler):
     ) -> list[dict[str, float]]:
         """
         Generates the next parameter samples based on the model predictions given the train and pool.
-        NB: The train and pool are expected to be normalised. 
+        NOTE: The train and pool are expected to be normalised, as model and BMDAL expect data to be normalized. 
+
         Args:
             model (torch.nn.Module): PyTorch model.
             train (torch.Tensor): 
@@ -198,23 +199,38 @@ class ActiveLearnerBMDAL(Sampler):
 
     def update_pool_and_train(self):
         """
-        Updates the pool and train attributes.
-
         """
         raise NotImplementedError()
 
     def update_metrics(self, metrics: dict) -> None:
         """
-        Updates metrics based on training results.
-
-        Args:
-            metrics (dict): Dictionary containing metrics.
-
+        NOTE: this assumes R2 score and regression metric is returned in the metrics dictionary.
+        TODO: possibly update for more metrics
         """
         r2_score = metrics["val_r2_losses"]
         best_r2_score = max(r2_score)
         self.metrics.append(best_r2_score)
 
+
+    def dump_iteration_results(self, base_run_dir: str, iterations: int, trained_model_state_dict: dict):
+        """ 
+        iteration number, size of train set, and metrics get appened to the file 'final_metrics.txt'
+        while the current train set is saved  "train_{iterations}.pth" # TODO: update train set saving
+        model is saved every 5 iterations 
+        """
+
+        
+        train_fname = os.path.join(base_run_dir, f"train_{iterations}.pth")
+        torch.save(self.parser.train, train_fname)
+        
+
+        final_metric_file = os.path.join(base_run_dir, "final_metrics.txt")
+        with open(final_metric_file, "a") as f:
+            f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics[-1]}\n")
+        
+        model_path = os.path.join(base_run_dir, f'model_{iterations}.pth')
+        if iterations % 5 == 0: 
+            torch.save(trained_model_state_dict, model_path)
 
 class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
     """
@@ -273,49 +289,3 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
             )
         return results
 
-    def dump_results(self, base_run_dir: str) -> None:
-        """
-        Prints and saves final datasets to disk.
-
-        Args:
-            base_run_dir: Base directory path for saving.
-
-        """
-        print(100 * "=")
-        print(f"Final Results for {self.selection_method}")
-
-        metric_fname = os.path.join(base_run_dir, "final_metrics.txt")
-        self.write_metrics_to_file(metric_fname, self.metrics)
-        print(f"Saving final datasets to disk: {base_run_dir}")
-        for name, dset in zip(
-            ["train", "valid", "test"],
-            [self.parser.train, self.parser.valid, self.parser.test],
-        ):
-            fpath = os.path.join(base_run_dir, f"{name}.pt")
-            torch.save(dset, fpath)
-
-    def dump_iteration_results(self, base_run_dir: str, iterations: int, trained_model_state_dict: dict):
-        iteration_dir = os.path.join(base_run_dir, f'AL_STEP_{iterations}') 
-        # TODO: just dump the new points 
-
-        os.mkdir(iteration_dir)
-        metric_fname = os.path.join(iteration_dir, "final_metrics.txt")
-        self.write_metrics_to_file(metric_fname, self.metrics)
-        for name, dset in zip(
-            ["train", "valid", "test"],
-            [self.parser.train, self.parser.valid, self.parser.test],
-        ):
-            fpath = os.path.join(iteration_dir, f"{name}.pt")
-            torch.save(dset, fpath)
-
-        model_path = os.path.join(iteration_dir, 'model.pth')
-        torch.save(trained_model_state_dict, model_path)
-
-    def write_metrics_to_file(self, filename: str, metrics: list[float]):
-        # TODO: establish good metrics
-        with open(filename, "w") as file:
-            header = "STEP_NUM, R2\n"
-            file.write(header)
-            for n_al_step in range(len(metrics)):
-                write_string = f"{n_al_step}, {metrics[n_al_step]}\n"
-                file.write(write_string)

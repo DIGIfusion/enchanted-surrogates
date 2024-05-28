@@ -20,18 +20,30 @@ from common import data_split, CSVLoader, HDFLoader, PickleLoader, apply_scaler
 
 class STATICPOOLparser(Parser):
     """
-    A static pool is considered to be data that is labeled and unormalized. 
-    At the moment, this parser handles the scaling of data, but does not hold copies of it in memory. 
+    A static pool is considered to be data that is labeled and unnormalized. 
+    At the moment, this parser handles the scaling of data, but 
+    does not hold copies of the scaled data as attributes. 
     
-    Parameters: 
-        train: torch.Tensor, unormalized current training set 
-        valid: torch.Tensor, unormalized current validation set
-        test: torch.Tensor, unormalized current test set
-        pool: torch.Tensor, unormalized current pool
+    Attributes: 
+        train: torch.Tensor, unnormalized current training set 
+        valid: torch.Tensor, unnormalized current validation set
+        test : torch.Tensor, unnormalized current test set
+        pool : torch.Tensor, unnormalized current pool
+        input_col_idxs: list of indices corresponding to the inputs columns
+        output_col_idxs: list of indices corresponding to the output columns
     
     """
 
     def __init__(self, data_path: str, *args, **kwargs):
+        """ 
+        Sets the above class attributes 
+        
+        needs data_path as positional argument
+        But would like as keyword arguments: 
+        - data_args: dict for the initial valid/test data split
+        - target: list of target column names
+        - inputs: list of input column names
+        """
         self.data_args = kwargs.get("data_args")
         self.target_keys = kwargs.get("target")
         self.input_keys = kwargs.get("inputs")
@@ -51,7 +63,6 @@ class STATICPOOLparser(Parser):
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
         )
-        # self.train = self.train.sample(0)
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
@@ -84,38 +95,26 @@ class STATICPOOLparser(Parser):
         test: torch.Tensor,
         pool: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        train, valid, test, pool, scaler = apply_scaler(
+        train, valid, test, pool, _ = apply_scaler(
             train, valid, test, pool, scaler=None, op="transform"
         )
         return train, valid, test, pool
 
-    def get_train_valid_test_pool_from_self(
+    def get_unscaled_train_valid_test_pool_from_self(
         self,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """ Returns the unormalized train, valid, test, and pool tensors """
+        """ Returns the unnormalized train, valid, test, and pool tensors """
         return self.train, self.valid, self.test, self.pool
-
-    def get_train_valid_datasplit_from_self(
-        self,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        """ Returns the train and validation data split from those stored in self (unormalized)"""
-        x_train, y_train = (
-            self.train[:, self.input_col_idxs].float(),
-            self.train[:, self.output_col_idxs].float(),
-        )
-        x_valid, y_valid = (
-            self.valid[:, self.input_col_idxs].float(),
-            self.valid[:, self.output_col_idxs].float(),
-        )
-
-        return (x_train, y_train), (x_valid, y_valid)
 
     def make_train_valid_datasplit(
         self,
         train: torch.Tensor,
         valid: torch.Tensor,
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        """ takes two tensors and returns the x,y splits"""
+        """ 
+        takes two tensors and returns the x,y splits based on input_col_idxs and output_col_idxs attributes
+        also casts tensors to float 
+        """
         x_train, y_train = (
             train[:, self.input_col_idxs].float(),
             train[:, self.output_col_idxs].float(),
@@ -131,8 +130,8 @@ class STATICPOOLparser(Parser):
         """
         Updates the (self) pool by removing sampled points and places them in train.
         """
-        pool_idxs = torch.arange(0, len(self.pool))  # (self.pool.index.values)
-        train_idxs = torch.arange(0, len(self.train))  # (self.train.index.values)
+        pool_idxs = torch.arange(0, len(self.pool))   # (self.pool.index.values)
+        train_idxs = torch.arange(0, len(self.train)) # (self.train.index.values)
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
         # We now append the new indices to the training set

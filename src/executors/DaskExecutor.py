@@ -168,16 +168,15 @@ class DaskExecutor(Executor):
                 # NOTE: Collect next data for training
 
                 train, valid, test, pool = (
-                    self.sampler.parser.get_train_valid_test_pool_from_self()
+                    self.sampler.parser.get_unscaled_train_valid_test_pool_from_self()
                 )
-                # unscaled and all parameters
-
+                
                 # rescale data and pool
                 train, valid, test, pool = (
                     self.sampler.parser.scale_train_val_test_pool(
                         train, valid, test, pool
                     )
-                ) # scaled but still all parameters
+                ) 
 
                 train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
                     train, valid
@@ -234,4 +233,4 @@ class DaskExecutor(Executor):
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
                 self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)
-            self.sampler.dump_results(base_run_dir=self.base_run_dir)
+            # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
