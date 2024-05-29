@@ -48,9 +48,7 @@ class LabelledPoolParser(Parser):
         self.target_keys = kwargs.get("target")
         self.input_keys = kwargs.get("inputs")
 
-        self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
-        self.data = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
 
         self.input_col_idxs = [
@@ -60,6 +58,9 @@ class LabelledPoolParser(Parser):
             self.mapping_column_indices[col_idx] for col_idx in self.target_keys
         ]
 
+        self.keep_keys = self.target_keys + self.input_keys
+        self.data = self.data[self.keep_keys]        
+
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
         )
@@ -68,6 +69,7 @@ class LabelledPoolParser(Parser):
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)
 
+    def _
     def gather_data_from_storage(self, data_path) -> pd.DataFrame:
         extension = data_path.split(".")[-1]
         if extension == "csv":
@@ -155,31 +157,11 @@ class LabelledPoolParser(Parser):
 
 
 
-class StreamingLabelledPoolParser(LabelledPoolParser):
+
+class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
     def __init__(self,data_path: str, *args, **kwargs):
+        super().__init__(data_path=data_path, *args,**kwargs)
         streaming_kwargs = kwargs.get("streaming") # should contain number of campaigns and sampled shots per campaign
-
-        self.data_args = kwargs.get("data_args")
-        self.target_keys = kwargs.get("target")
-        self.input_keys = kwargs.get("inputs")
-
-        self.keep_keys = self.target_keys + self.input_keys
-        self.data = self.gather_data_from_storage(data_path)
-        self.data = self.data[self.keep_keys]
-        self.mapping_column_indices = self.get_column_idx_mapping()
-
-        self.input_col_idxs = [
-            self.mapping_column_indices[col_idx] for col_idx in self.input_keys
-        ]
-        self.output_col_idxs = [
-            self.mapping_column_indices[col_idx] for col_idx in self.target_keys
-        ]
-
-        self.train, self.valid, self.test, self.pool = data_split(
-            self.data, **self.data_args
-        )
-        self.train = torch.tensor(self.train.values)
-        self.valid = torch.tensor(self.valid.values)
-        self.test = torch.tensor(self.test.values)
-        self.pool = torch.tensor(self.pool.values)
+        # TODO: figure out inheritance to avoid loading the data again
+        campaign_maturity_score = streaming_kwargs.get("binning_var")    #The PCA Y component
     
