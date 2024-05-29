@@ -9,6 +9,7 @@ runner:
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {
     "namelist_path": "/scratch/project_2009007/ench-surr-helper/helena_adam/fort.10",
+    "input_parameter_type": 0,  # 0: EPED/MTANH profiles using direct helena input ADE, BDE, etc. 1: Europed profiles generated using 'pedestal_delta', 'n_eped', 'bvac', 'ip', 'teped_multip' 2: using a scaling law for changing ATE and CTE, requires input parameter "scaling_factor"
     "only_generate_files": False}
 
 executor:

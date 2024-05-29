@@ -12,8 +12,6 @@ import subprocess
 import os
 from dask.distributed import print
 
-# import logging
-
 
 class HELENArunner(Runner):
     """
@@ -58,11 +56,18 @@ class HELENArunner(Runner):
 
         """
         self.parser = HELENAparser()
-        self.executable_path = (
-            executable_path  # "/scratch/project_2009007/HELENA/bin/hel13_64"
-        )
+        self.executable_path = executable_path
         self.namelist_path = other_params["namelist_path"]
-        self.only_generate_files = other_params["only_generate_files"]
+        self.only_generate_files = (
+            False
+            if "only_generate_files" not in other_params
+            else other_params["only_generate_files"]
+        )
+        self.input_parameter_type = (
+            0
+            if "input_parameter_type" not in other_params
+            else other_params["input_parameter_type"]
+        )
 
         self.pre_run_check()
 
@@ -79,7 +84,12 @@ class HELENArunner(Runner):
 
         """
         print(f"single_code_run: {run_dir}", flush=True)
-        self.parser.write_input_file(params, run_dir, self.namelist_path)
+        if self.input_parameter_type == 0:
+            self.parser.write_input_file(params, run_dir, self.namelist_path)
+        elif self.input_parameter_type == 1:
+            self.parser.write_input_file_europed(params, run_dir, self.namelist_path)
+        elif self.input_parameter_type == 2:
+            self.parser.write_input_file_scaling(params, run_dir, self.namelist_path)
 
         os.chdir(run_dir)
         # run code
@@ -101,15 +111,16 @@ class HELENArunner(Runner):
             FileNotFoundError: If the executable path or the namelist path is not found.
 
         """
-        # Does executable exist?
         if not os.path.isfile(self.executable_path):
             raise FileNotFoundError(
-                f"The executable path ({self.executable_path}) provided to the HELENA runner is not found. Exiting."
+                f"The executable path ({self.executable_path}) provided to the HELENA ",
+                "runner is not found. Exiting.",
             )
-        # Does base namelist exist?
+
         if not os.path.isfile(self.namelist_path):
             raise FileNotFoundError(
-                f"The namelist path ({self.namelist_path}) provided to the HELENA runner is not found. Exiting."
+                f"The namelist path ({self.namelist_path}) provided to the HELENA ",
+                "runner is not found. Exiting.",
             )
         # TODO: Does namelist contain paramters that this structure can handle or that makes sense?
         # TODO: neped > nesep

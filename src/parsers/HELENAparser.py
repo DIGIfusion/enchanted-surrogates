@@ -25,10 +25,12 @@ class HELENAparser(Parser):
 
     read_output_file(run_dir: str)
         Reads the main output file fort.20.
-        Returns a tuple indicating success, Mercier criterion presence, and ballooning criterion presence.
+        Returns a tuple indicating success, Mercier criterion presence,
+        and ballooning criterion presence.
 
     make_init_zjz_profile(pedestal_delta, npts)
-        Makes the initial ZJZ profile based on the pressure profile according to Europed implementation.
+        Makes the initial ZJZ profile based on the pressure profile according
+        to Europed implementation.
 
     get_europed_profiles(run_dir: str)
         Retrieves Europed electron density and temperature profiles from the output file fort.10.
@@ -40,7 +42,8 @@ class HELENAparser(Parser):
         Removes unnecessary files except for fort.10, fort.20, and fort.12.
 
     write_summary(run_dir: str, params: dict)
-        Generates a summary file with run directory and parameters, along with success and stability criteria.
+        Generates a summary file with run directory and parameters, along with success and
+        stability criteria.
 
     """
 
@@ -65,8 +68,7 @@ class HELENAparser(Parser):
         FileNotFoundError
             If the specified run directory is not found.
         """
-        print(run_dir, params)
-        print("Writing to", run_dir)
+        print(f"Writing to {run_dir}. Params: {params}")
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
@@ -80,19 +82,73 @@ class HELENAparser(Parser):
             if p in params:
                 namelist["shape"][p] = params[p]
 
+        helena_phys_params = [
+            "eps", "b", "betap", "alfa", "xiab", "q95", "rvac", "bvac", "zn0", "zeff",  # fmt: skip
+            "idete", "iscalejz", "neosig", "xiab", "scalemix", "zjzsmooth",     # fmt: skip
+            "bsmultip", "zimp", "corep", "bkeep", "bsmodel", "efitsig",         # fmt: skip
+            "ifastsca", "safemode", "coreneo", "amain", "zmain", "idete",       # fmt: skip
+            "ade", "bde", "cde", "dde", "ede", "fde", "gde", "hde", "ide",      # fmt: skip
+            "ate", "bte", "cte", "ddte", "ete", "fte", "gte", "hte", "ite",     # fmt: skip
+            "ati", "bti", "cti", "ddti", "eti", "fti", "gti", "hti", "iti"]     # fmt: skip
+        for p in helena_phys_params:
+            if p in params:
+                namelist["phys"][p] = params[p]
+
+        # Make sure that Ti = Te
+        namelist["phys"]["ati"] = namelist["phys"]["ate"]
+        namelist["phys"]["bti"] = namelist["phys"]["bte"]
+        namelist["phys"]["cti"] = namelist["phys"]["cte"]
+        namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
+        namelist["phys"]["eti"] = namelist["phys"]["ete"]
+        namelist["phys"]["fti"] = namelist["phys"]["fte"]
+        namelist["phys"]["gti"] = namelist["phys"]["gte"]
+        namelist["phys"]["hti"] = namelist["phys"]["hte"]
+        namelist["phys"]["iti"] = namelist["phys"]["ite"]
+
+        f90nml.write(namelist, input_fpath)
+        print(f"fort.10 written to: {input_fpath}")
+        return
+
+    def write_input_file_europed(self, params: dict, run_dir: str, namelist_path: str):
+        """
+        Writes input file fort.10.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing input parameters.
+        run_dir : str
+            Path to the run directory.
+        namelist_path : str
+            Path to the namelist file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        print(f"Writing to {run_dir}. Params: {params}")
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, "fort.10")
+        else:
+            raise FileNotFoundError(f"Couldnt find {run_dir}")
+
+        namelist = f90nml.read(namelist_path)
+
+        # Update namelist with input parameters
         if "bvac" in params:
             namelist["phys"]["bvac"] = params["bvac"]
-            if "ip" in params:
-                namelist["phys"]["xiab"] = (
-                    params["ip"]
-                    * 1e6
-                    * mu_0
-                    / (
-                        params["bvac"]
-                        * namelist["phys"]["eps"]
-                        * namelist["phys"]["rvac"]
-                    )
+        if "ip" in params and "bvac" in params:
+            namelist["phys"]["xiab"] = (
+                params["ip"]
+                * 1e6
+                * mu_0
+                / (
+                    params["bvac"]
+                    * namelist["phys"]["eps"]
+                    * namelist["phys"]["rvac"]
                 )
+            )
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -181,6 +237,53 @@ class HELENAparser(Parser):
 
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
+        return
+
+    def write_input_file_scaling(self, params: dict, run_dir: str, namelist_path: str):
+        """
+        Writes input file fort.10.
+        2: using a scaling law for changing ATE and CTE, requires input parameter "scaling_factor"
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing input parameters.
+        run_dir : str
+            Path to the run directory.
+        namelist_path : str
+            Path to the namelist file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        print(f"Writing to {run_dir}. Params: {params}")
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, "fort.10")
+        else:
+            raise FileNotFoundError(f"Couldnt find {run_dir}")
+
+        namelist = f90nml.read(namelist_path)
+
+        # Update namelist with input parameters
+        sf = params["scaling_factor"]
+        namelist["phys"]["ate"] = namelist["phys"]["ate"] * sf**(-6)
+        namelist["phys"]["cte"] = namelist["phys"]["ate"] * sf**(8)
+
+        # Make sure that Ti = Te
+        namelist["phys"]["ati"] = namelist["phys"]["ate"]
+        namelist["phys"]["bti"] = namelist["phys"]["bte"]
+        namelist["phys"]["cti"] = namelist["phys"]["cte"]
+        namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
+        namelist["phys"]["eti"] = namelist["phys"]["ete"]
+        namelist["phys"]["fti"] = namelist["phys"]["fte"]
+        namelist["phys"]["gti"] = namelist["phys"]["gte"]
+        namelist["phys"]["hti"] = namelist["phys"]["hte"]
+        namelist["phys"]["iti"] = namelist["phys"]["ite"]
+
+        f90nml.write(namelist, input_fpath)
+        return
 
     def read_output_file(self, run_dir: str):
         """
@@ -199,14 +302,15 @@ class HELENAparser(Parser):
         Returns
         -------
         tuple
-            A tuple indicating success (bool), Mercier criterion presence (bool), and ballooning criterion presence (bool).
+            A tuple indicating success (bool), Mercier criterion presence (bool),
+            and ballooning criterion presence (bool).
         """
         success = False
         ballooning_stable = True
         mercier_stable = True
 
         try:
-            file = open(run_dir + "/fort.20", "r")
+            file = open(os.path.join(run_dir, "fort.20"), "r")
         except FileNotFoundError as e:
             print(str(e))
             return success, mercier_stable, ballooning_stable
@@ -227,7 +331,8 @@ class HELENAparser(Parser):
         self, pedestal_delta, npts, pzjzmultip=0.5, max_pres_grad_loc=0.97
     ):
         """
-        Makes the initial ZJZ profile based on the pressure profile according to Europed implementation.
+        Makes the initial ZJZ profile based on the pressure profile according
+        to Europed implementation.
 
         Parameters
         ----------
@@ -337,11 +442,11 @@ class HELENAparser(Parser):
             2 / delta * (psi - psi_mid)
         )
         if 1 - psi / psi_ped >= 0:
-            term2 = a_1 * (1 - (psi / psi_ped) ** alpha_1) ** alpha_2
+            term2 = (1 - (psi / psi_ped) ** alpha_1) ** alpha_2
         else:
             term2 = 0.0
 
-        return sep + a_0 * term1 + term2
+        return sep + a_0 * term1 + a_1 * term2
 
     def clean_output_files(self, run_dir: str):
         """
@@ -366,9 +471,8 @@ class HELENAparser(Parser):
             "PCUBEQ",
         ]
         for file_name in files_to_remove:
-            if os.path.exists(run_dir + "/" + file_name):
-                os.remove(run_dir + "/" + file_name)
-
+            if os.path.exists(os.path.join(run_dir, file_name)):
+                os.remove(os.path.join(run_dir, file_name))
         return
 
     def write_summary(self, run_dir: str, params: dict):
@@ -390,13 +494,12 @@ class HELENAparser(Parser):
             success status, Mercier criterion presence, and ballooning
             criterion presence.
         """
-        file_name = run_dir + "/summary.yml"
         summary = {"run_dir": run_dir, "params": params}
         success, mercier_stable, ballooning_stable = self.read_output_file(run_dir)
         summary["success"] = success
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
-        with open(file_name, "w") as outfile:
+        with open(os.path.join(run_dir, "summary.yml"), "w") as outfile:
             json.dump(summary, outfile)
         try:
             CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
@@ -417,9 +520,7 @@ class HELENAparser(Parser):
         zjz(   2)=     1.01337,
         zjz(   3)=     0.83545,
         """
-
-        filename = output_dir + "/final_zjz"
-        file = open(filename, "r")
+        file = open(os.path.join(output_dir, "final_zjz"), "r")
         lines = file.readlines()
         zjz = []
         for line in lines:
@@ -442,6 +543,27 @@ class HELENAparser(Parser):
     def read_output_fort12(self, output_dir):
         """
         Read the output file fort.12 which is used as input by MISHKA.
+
+        JS0: NRMAP - 1
+        CS: sqrt(psi)
+        QS:
+        DQS_1, DQEC
+        DQS: derivative of QS
+        CURJ
+        DJ0, DJE
+        NCHI: number of poloidal grid points written to output file
+        CHI
+        GEM11
+        GEM12
+        CPSURF, RADIUS
+        GEM33
+        RAXIS
+        P0
+        DP0, DPE
+        RBPHI
+        DRBPHI0, DRBPHIE
+        VX, VY
+        EPS
         """
         filename = output_dir + "/" + "fort.12"
         file = open(filename, "r")
@@ -512,3 +634,249 @@ class HELENAparser(Parser):
         #     n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
         # )
         return CS, QS, DQS, CURJ, CHI, GEM11, GEM12, GEM33, P0, RBPHI, VX, VY
+
+    def read_fort20_NUM(self, output_dir):
+        """
+        Find the numerical parameters
+
+        Returns
+
+        NR: number of radial grid points
+        NP: number of poloidal grid points
+        NRMAP: number of radial grid points in mapping to flux surface grid (should be 2*NR)
+        NPMAP: number of poloidal grid points in mapping (should be 2*NP)
+        NCHI: number of poloidal grid points written to output file
+        (should be 2*NMAP, NCHI must be 2^n + 1)
+        NRCUR: number of radial grid points for iteration current profile (should be NR)
+        NPCUR: number of poloidal grid points (should be NP)
+        NITER: (ICUR≠0) or 1 (ICUR=0) maximum number of iterations over current profile
+        """
+        filename = os.path.join(output_dir, "fort.20")
+        file = open(filename).readlines()
+
+        start_line = file.index(
+            "*  HELENA : GRAD-SHAFRANOV EQUILIBRIUM  *\n"
+        )
+
+        for line in file[start_line:start_line+30]:
+            index = line.find("NR =")
+            if index != -1:
+                NR = int(line[index + 4:index + 7])
+            index = line.find("NP =")
+            if index != -1:
+                NP = int(line[index + 4:index + 7])
+            index = line.find("NRMAP =")
+            if index != -1:
+                NRMAP = int(line[index + 7:index + 10])
+            index = line.find("NPMAP =")
+            if index != -1:
+                NPMAP = int(line[index + 7:index + 10])
+            index = line.find("NCHI =")
+            if index != -1:
+                NCHI = int(line[index + 6:index + 10])
+            index = line.find("NITER =")
+            if index != -1:
+                NITER = int(line[index + 7:index + 11])
+
+        return NR, NP, NRMAP, NPMAP, NCHI, NITER
+
+    def read_fort20_beta_section(self, output_dir):
+        """
+         ***************************************
+        MAGNETIC AXIS :   0.01908  0.00000
+        POLOIDAL BETA :   0.1198E+00
+        TOROIDAL BETA :   0.3802E-02
+        BETA STAR     :   0.4250E-02
+        NORM. BETA    :   0.00335
+        TOTAL CURRENT :   0.1428E+01
+        TOTAL AREA    :   0.5115E+01
+        TOTAL VOLUME  :   0.3110E+02
+        INT. INDUCTANCE :  0.685990E+00
+        POL. FLUX     :   0.2130E+01
+        A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
+        ***************************************
+        """
+
+        file = open(os.path.join(output_dir, "fort.20"), "r")
+        while True:
+            line = file.readline()
+            if line.find("NORM. BETA") > -1:
+                spl = line.split(":")
+                betan = float(spl[1]) * 100
+            if line.find("POLOIDAL BETA") > -1:
+                spl = line.split(":")
+                betap = float(spl[1])
+            if line.find("TOTAL CURRENT") > -1:
+                spl = line.split(":")
+                total_current = float(spl[1])
+            if line.find("TOTAL AREA") > -1:
+                spl = line.split(":")
+                total_area = float(spl[1])
+            if line.find("TOTAL VOLUME") > -1:
+                spl = line.split(":")
+                total_volume = float(spl[1])
+            if line.find("TOROIDAL BETA") > -1:
+                spl = line.split(":")
+                beta_tor = float(spl[1])
+            if line.find("BETA STAR") > -1:
+                spl = line.split(":")
+                beta_star = float(spl[1])
+            if line.find("PED. BETAPOL") > -1:
+                spl = line.split(":")
+                helenaBetap = float(spl[1])
+            if line.find("A,B,C") > -1:
+                spl = line.split(":")
+                sp2 = spl[1].split()
+                b_last_round = float(sp2[1])
+            if line.find("RADIUS") > -1:
+                spl = line.split(":")
+                radius = float(spl[1])
+            if line.find("B0") > -1:
+                spl = line.split(":")
+                B0 = float(spl[1])
+                break
+        file.close()
+        return (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        )
+
+    def read_fort20_inputprofiles(self, output_dir, NRMAP):
+        """
+        ***********************************************
+        *        INPUT PROFILES :                     *
+        ***********************************************
+        *  PSI,       dP/dPSI,    FdF/dPSI,     J_phi *
+        ***********************************************
+        0.0000E+00  0.0000E+00  0.1000E+01  0.1000E+01
+        0.1000E-01  0.1940E+01  0.1000E+01  0.9789E+00
+        0.2000E-01  0.2193E+01  0.1000E+01  0.9573E+00
+        ...
+
+        """
+        filename = os.path.join(output_dir, "fort.20")
+        file = open(filename).readlines()
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if (
+                " *        INPUT PROFILES :                     *\n"
+                in line
+            ):
+                i_table_start = i
+                break
+            i += 1
+        if i_table_start == -1:
+            print("Input profiles not found.")
+            return
+
+        columns = np.loadtxt(
+            filename,
+            dtype=str,
+            comments=None,
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 2,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=1,
+        )
+        columns = columns[1:-1]
+        columns = [c.replace(",", "") for c in columns]
+        print(columns)
+
+        inputprofiles = np.loadtxt(
+            filename,
+            # dtype=<class 'float'>,
+            comments="*",
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 3,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=NRMAP,
+        )
+
+        i_col = 0
+        for c in columns:
+            if c == "PSI":
+                psi = inputprofiles[:, i_col]
+            elif c == "dP/dPSI":
+                dP_dPSI = inputprofiles[:, i_col]
+            elif c == "FdF/dPSI":
+                FdF_dPSI = inputprofiles[:, i_col]
+            elif c == "J_phi":
+                J_phi = inputprofiles[:, i_col]
+            i_col += 1
+
+        return psi, dP_dPSI, FdF_dPSI, J_phi
+
+    def read_fort20_s_j_vol_area(self, output_dir, NRMAP):
+        """
+        
+        *********************************************************************
+        * I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *
+        *********************************************************************
+        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232    0.0005
+        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961    0.0020
+
+        """
+        npts = NRMAP - 1
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if (
+                "* I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *"
+                in line
+            ):
+                i_table_start = i
+                break
+            i += 1
+        numerical_lines = lines[i_table_start + 2:i_table_start + 1 + npts]
+
+        # Convert the data to numpy arrays
+        data_array = np.array(
+            [list(map(float, line.split())) for line in numerical_lines]
+        )
+
+        # Split into columns
+        psi = data_array[:, 1]
+        S = data_array[:, 2]
+        J = data_array[:, 3]
+        vol = data_array[:, 7]
+        volp = data_array[:, 8]
+        area = data_array[:, 9]
+        return psi, S, J, vol, volp, area
+
+    def read_fort20_realworld(self, output_dir, NRMAP):
+        """
+        **************************************************
+            S,   P [Pa], Ne [10^19m^-3], Te [eV],  Ti [eV],
+        **************************************************
+        """
+        npts = NRMAP - 1
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if "S,   P [Pa], Ne [10^19m^-3], Te [eV],  Ti [eV]" in line:
+                i_table_start = i
+                break
+            i += 1
+        numerical_lines = lines[i_table_start + 2:i_table_start + 1 + npts]
+
+        # Convert the data to numpy arrays
+        data_array = np.array(
+            [list(map(float, line.split())) for line in numerical_lines]
+        )
+
+        # Split into columns
+        S = data_array[:, 0]
+        P = data_array[:, 1]
+        Ne = data_array[:, 2]
+        Te = data_array[:, 3]
+        Ti = data_array[:, 4]
+        return S, P, Ne, Te, Ti
