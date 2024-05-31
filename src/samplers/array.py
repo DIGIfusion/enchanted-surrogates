@@ -3,6 +3,7 @@
 from .base import Sampler
 import numpy as np
 from itertools import product
+from common import S
 
 
 class ArraySampler(Sampler):
@@ -40,6 +41,8 @@ class ArraySampler(Sampler):
         get_next_parameter: Gets the next parameter combination.
 
     """
+
+    sampler_interface = S.SEQUENTIAL
 
     def __init__(self, bounds, num_samples, parameters):
         """
@@ -82,6 +85,18 @@ class ArraySampler(Sampler):
         for params_tuple in product(*samples):
             # Convert tuples to list to ensure serializability
             yield list(params_tuple)
+
+    def get_initial_parameters(
+        self,
+    ):
+        """
+        Gets the initial parameters.
+
+        Returns:
+            list[dict[str, float]]: The initial parameters.
+        """
+        # self.samples[:self.num_initial_points]
+        return [self.get_next_parameter() for _ in range(self.num_initial_points)]
 
     def get_next_parameter(self):
         """
