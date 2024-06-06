@@ -277,9 +277,9 @@ class DaskExecutor(Executor):
                         self.sampler.parser.get_unscaled_train_valid_test_pool_from_self(campaign_id=campaign)
                     )
 
-                    # NOTE: if campaign has no more shots, onto the next. This may be still broken.
+                    # NOTE: if campaign has no more shots, onto the next. 
                     if train is None:
-                        continue
+                        break
                     
                     # rescale data and pool
                     train, valid, test, pool = (

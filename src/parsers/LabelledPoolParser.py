@@ -191,6 +191,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
                 return None, None, None, None
             data_path = np.random.choice(files_this_campaign)
             if data_path not in self.shots_seen:
+                self.shots_seen.append(data_path)
                 break
             else:
                 count +=1
