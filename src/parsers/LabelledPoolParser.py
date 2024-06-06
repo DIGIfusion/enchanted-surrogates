@@ -14,7 +14,9 @@ Needs functionality:
 
 from .base import Parser
 import torch
+import numpy as np
 import pandas as pd
+import os
 from common import data_split, CSVLoader, HDFLoader, PickleLoader, apply_scaler
 
 
@@ -69,7 +71,6 @@ class LabelledPoolParser(Parser):
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)
 
-    def _
     def gather_data_from_storage(self, data_path) -> pd.DataFrame:
         extension = data_path.split(".")[-1]
         if extension == "csv":
@@ -160,8 +161,55 @@ class LabelledPoolParser(Parser):
 
 class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
     def __init__(self,data_path: str, *args, **kwargs):
+
+        #NOTE TO SELF: Remember to enact these cuts on the data prior to using it
+        # data_master = data_master.query("cluster=='left' & is_hmode==False")
+        # and also to remove NaNs
+        # nonzeros = data_master.query('machtor!=0').index
+
         super().__init__(data_path=data_path, *args,**kwargs)
+        self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
         streaming_kwargs = kwargs.get("streaming") # should contain number of campaigns and sampled shots per campaign
-        # TODO: figure out inheritance to avoid loading the data again
-        campaign_maturity_score = streaming_kwargs.get("binning_var")    #The PCA Y component
+        self.num_shots_per_campaign = streaming_kwargs['num_shots_per_campaign']
+        self.num_campaigns =  streaming_kwargs['num_campaigns']
+        self.use_only_new = streaming_kwargs['use_only_new'] # should tell whether only the new data is used for valid pool and test 
+        self.shots_seen = []
+
+    def get_unscaled_train_valid_test_pool_from_self(
+        self,
+        campaign_id,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data."""
+        # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
+        # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
+        campaign_folder = os.path.join(self.data_basepath,str(campaign_id))
+        files_this_campaign = os.listdir(campaign_folder)
+        count = 0
+        while True:
+            if count==len(files_this_campaign):
+                print('Campaign has no more shots')
+                return None, None, None, None
+            data_path = np.random.choice(files_this_campaign)
+            if data_path not in self.shots_seen:
+                break
+            else:
+                count +=1
+            
+        data = self.gather_data_from_storage(data_path=data_path)
+        data = data[self.keep_keys]        
+
+        train, valid, test, pool = data_split(
+            data, **self.data_args
+        )
+        train = torch.tensor(train.values)
+        valid = torch.tensor(valid.values)
+        test = torch.tensor(test.values)
+        pool = torch.tensor(pool.values)    
+
+        self.train = torch.cat((self.train, train))
+        if not self.use_only_new:
+            self.valid = torch.cat((self.valid, valid))
+            self.test = torch.cat((self.test, test))
+            self.pool = torch.cat((self.pool, pool))        
+        return self.train, self.valid, self.test, self.pool
     

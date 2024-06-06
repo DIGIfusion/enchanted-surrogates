@@ -28,7 +28,6 @@ sampler:
       - 'lognustar'
     target: 
       - 'efiitg_gb'
-      - 'campaign_maturity_idx'
     data_args: 
       train_size: 0.01
       valid_size: 0.015
@@ -36,6 +35,7 @@ sampler:
   streaming:
     num_campaigns: 10
     num_shots_per_campaign: 3
+    use_only_new: True
   model_kwargs:
     model_width: 512
     model_depth: 4
