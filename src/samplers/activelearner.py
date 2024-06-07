@@ -231,7 +231,7 @@ class ActiveLearnerBMDAL(Sampler):
         if iterations % 5 == 0: 
             torch.save(trained_model_state_dict, model_path)
 
-class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
+class ActiveLearningBMDALLabelledPoolSampler(ActiveLearnerBMDAL):
     """
     Active Learning BMDAL Static Pool Sampler.
 
@@ -288,3 +288,19 @@ class ActiveLearningBMDALStaticPoolSampler(ActiveLearnerBMDAL):
             )
         return results
 
+
+class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelledPoolSampler):
+    """
+    Implements streaming active learning based on BMDAL. 
+    Loads a database of runs that have already been collected. 
+    Use case supported is a mock of maturation of operations.
+    This is useful for testing various acquisition strategies
+    in Active Learning on fixed datasets. Uses Pandas under the hood.
+    """
+
+    sampler_interface = S.ACTIVESTREAM    
+    def __init__(self, **kwargs):
+        """
+
+        """
+        super().__init__(**kwargs)    

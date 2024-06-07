@@ -161,6 +161,22 @@ class LabelledPoolParser(Parser):
 
 
 class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
+    """
+    Parses data from a mock batched data stream, that has already 
+    been labelled and that is unnormalised.
+    At the moment, this parser handles the scaling of data, but 
+    does not hold copies of the scaled data as attributes. 
+    The unscaled  data is stored as attributes and it gets modified
+    as data from the batched stream is processed.
+    
+    Attributes: 
+        train: torch.Tensor, unnormalized current training set 
+        valid: torch.Tensor, unnormalized current validation set
+        test : torch.Tensor, unnormalized current test set
+        pool : torch.Tensor, unnormalized current pool
+        input_col_idxs: list of indices corresponding to the inputs columns
+        output_col_idxs: list of indices corresponding to the output columns    
+    """
     def __init__(self,data_path: str, *args, **kwargs):
 
         super().__init__(data_path=data_path, *args,**kwargs)
@@ -207,6 +223,10 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         if not self.use_only_new:
             self.valid = torch.cat((self.valid, valid))
             self.test = torch.cat((self.test, test))
-            self.pool = torch.cat((self.pool, pool))        
+            self.pool = torch.cat((self.pool, pool))       
+        else:
+            self.valid = valid 
+            self.test = test
+            self.pool = pool
         return self.train, self.valid, self.test, self.pool
     

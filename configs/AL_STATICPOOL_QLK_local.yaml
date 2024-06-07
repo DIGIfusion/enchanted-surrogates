@@ -29,7 +29,6 @@ sampler:
     target: 
       - 'efiitg_gb'
     data_args: 
-      train_size: 0.01
       valid_size: 0.015
       test_size: 0.01
   model_kwargs:
