@@ -50,7 +50,9 @@ class LabelledPoolParser(Parser):
         self.target_keys = kwargs.get("target")
         self.input_keys = kwargs.get("inputs")
 
+        self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
+        self.data = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
 
         self.input_col_idxs = [
@@ -60,9 +62,6 @@ class LabelledPoolParser(Parser):
             self.mapping_column_indices[col_idx] for col_idx in self.target_keys
         ]
 
-        self.keep_keys = self.target_keys + self.input_keys
-        self.data = self.data[self.keep_keys]        
-
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
         )
@@ -70,6 +69,8 @@ class LabelledPoolParser(Parser):
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)
+
+
 
     def gather_data_from_storage(self, data_path) -> pd.DataFrame:
         extension = data_path.split(".")[-1]
@@ -162,18 +163,13 @@ class LabelledPoolParser(Parser):
 class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
     def __init__(self,data_path: str, *args, **kwargs):
 
-        #NOTE TO SELF: Remember to enact these cuts on the data prior to using it
-        # data_master = data_master.query("cluster=='left' & is_hmode==False")
-        # and also to remove NaNs
-        # nonzeros = data_master.query('machtor!=0').index
-
         super().__init__(data_path=data_path, *args,**kwargs)
         self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
         streaming_kwargs = kwargs.get("streaming") # should contain number of campaigns and sampled shots per campaign
         self.num_shots_per_campaign = streaming_kwargs['num_shots_per_campaign']
         self.num_campaigns =  streaming_kwargs['num_campaigns']
         self.use_only_new = streaming_kwargs['use_only_new'] # should tell whether only the new data is used for valid pool and test 
-        self.shots_seen = []
+        self.shots_seen = [self.data_basepath]
 
     def get_unscaled_train_valid_test_pool_from_self(
         self,

@@ -6,7 +6,7 @@ sampler:
   kernel_transform:  # TODO: make method to handle kernel transform properly...
     - ['rp', [512]]
   parser_kwargs: 
-    type: STATICPOOLparser
+    type: LabelledPoolParser
     data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
     inputs: 
       - 'peroxide'

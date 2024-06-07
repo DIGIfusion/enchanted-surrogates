@@ -8,8 +8,8 @@ sampler:
   kernel_transform: [['rp', [512]]]
   base_kernel: grad
   parser_kwargs: 
-    type: 'STATICPOOLparser'
-    data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
+    type: 'LabelledPoolParser'
+    data_path: '/scratch/project_2007159/lzanisi/enchanted-surrogates/data/database_slices/campaign_0/69436.csv'
     inputs: 
       - 'ane'
       - 'ate'

@@ -30,7 +30,6 @@ import numpy as np
 from common import S
 import parsers
 from .base import Sampler
-import h5py 
 
 class ActiveLearnerBMDAL(Sampler):
     """
