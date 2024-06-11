@@ -4,6 +4,7 @@ import f90nml
 import numpy as np
 import json
 from .base import Parser
+from dask.distributed import print
 
 # import subprocess
 
@@ -94,17 +95,6 @@ class HELENAparser(Parser):
             if p in params:
                 namelist["phys"][p] = params[p]
 
-        # Make sure that Ti = Te
-        namelist["phys"]["ati"] = namelist["phys"]["ate"]
-        namelist["phys"]["bti"] = namelist["phys"]["bte"]
-        namelist["phys"]["cti"] = namelist["phys"]["cte"]
-        namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
-        namelist["phys"]["eti"] = namelist["phys"]["ete"]
-        namelist["phys"]["fti"] = namelist["phys"]["fte"]
-        namelist["phys"]["gti"] = namelist["phys"]["gte"]
-        namelist["phys"]["hti"] = namelist["phys"]["hte"]
-        namelist["phys"]["iti"] = namelist["phys"]["ite"]
-
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
         return
@@ -127,7 +117,7 @@ class HELENAparser(Parser):
         FileNotFoundError
             If the specified run directory is not found.
         """
-        print(f"Writing to {run_dir}. Params: {params}")
+        print(f"Writing to {run_dir}. Params (europed): {params}")
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
@@ -149,6 +139,8 @@ class HELENAparser(Parser):
                     * namelist["phys"]["rvac"]
                 )
             )
+        if "tria" in params:
+            namelist["shape"]["tria"] = params["tria"]
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -202,16 +194,6 @@ class HELENAparser(Parser):
                 1.4 if "alpha_T2" not in params else params["alpha_T2"]
             )
 
-            # Update ion temperature profile = electron temperature profile
-            namelist["phys"]["ati"] = namelist["phys"]["ate"]
-            namelist["phys"]["bti"] = namelist["phys"]["bte"]
-            namelist["phys"]["cti"] = namelist["phys"]["cte"]
-            namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
-            namelist["phys"]["eti"] = namelist["phys"]["ete"]
-            namelist["phys"]["fti"] = namelist["phys"]["fte"]
-            namelist["phys"]["gti"] = namelist["phys"]["gte"]
-            namelist["phys"]["hti"] = namelist["phys"]["hte"]
-
             if namelist["profile"]["ipai"] != 18:
                 coret = (teped * 2 + at1 + tesep) * 1000
                 coren = an0 * 2 + nesep + an1
@@ -258,7 +240,7 @@ class HELENAparser(Parser):
         FileNotFoundError
             If the specified run directory is not found.
         """
-        print(f"Writing to {run_dir}. Params: {params}")
+        print(f"Writing to {run_dir}. Params (scaling): {params}")
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
@@ -270,17 +252,6 @@ class HELENAparser(Parser):
         sf = params["scaling_factor"]
         namelist["phys"]["ate"] = namelist["phys"]["ate"] * sf**(-6)
         namelist["phys"]["cte"] = namelist["phys"]["ate"] * sf**(8)
-
-        # Make sure that Ti = Te
-        namelist["phys"]["ati"] = namelist["phys"]["ate"]
-        namelist["phys"]["bti"] = namelist["phys"]["bte"]
-        namelist["phys"]["cti"] = namelist["phys"]["cte"]
-        namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
-        namelist["phys"]["eti"] = namelist["phys"]["ete"]
-        namelist["phys"]["fti"] = namelist["phys"]["fte"]
-        namelist["phys"]["gti"] = namelist["phys"]["gte"]
-        namelist["phys"]["hti"] = namelist["phys"]["hte"]
-        namelist["phys"]["iti"] = namelist["phys"]["ite"]
 
         f90nml.write(namelist, input_fpath)
         return
@@ -512,7 +483,7 @@ class HELENAparser(Parser):
             np.save(run_dir + "/vxvy.npy", (VX, VY))
         except Exception:
             print(f"error reading and summarizing fort.12 in dir {run_dir}")
-        return summary
+        return success
 
     def read_final_zjz(self, output_dir):
         """

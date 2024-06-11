@@ -7,6 +7,7 @@ Defines the HELENArunner class for running HELENA simulations.
 
 # import numpy as np
 from .base import Runner
+from runners.MISHKArunner import MISHKArunner
 from parsers import HELENAparser
 import subprocess
 import os
@@ -54,6 +55,20 @@ class HELENArunner(Runner):
                 Flag for either only creating input files or creating the files
                 and running HELENA.
 
+            input_parameter_type: int
+                0: EPED/MTANH profiles using direct helena input ADE, BDE, etc.
+                1: Europed profiles generated using 'pedestal_delta', 'n_eped', 'bvac', 'ip',
+                'teped_multip'
+                2: using a scaling law for changing ATE and CTE, requires input parameter
+                "scaling_factor"
+
+            run_mishka: bool
+                Flag for running MISHKA after the HELENA run. If run_mishka is True
+                the following other parameters need to be defined in other_params:
+                - mishka_executable_path
+                - mishka_namelist_path
+                - ntor
+
         """
         self.parser = HELENAparser()
         self.executable_path = executable_path
@@ -68,6 +83,33 @@ class HELENArunner(Runner):
             if "input_parameter_type" not in other_params
             else other_params["input_parameter_type"]
         )
+        self.run_mishka = False
+        self.mishka_runner = None
+
+        if "mishka" in other_params:
+            mishka_params = other_params["mishka"]
+            self.run_mishka = (
+                False
+                if "run_mishka" not in mishka_params
+                else mishka_params["run_mishka"]
+            )
+            if self.run_mishka:
+                if (
+                    "executable_path" not in mishka_params
+                    or "ntor" not in mishka_params
+                ):
+                    print(
+                        'Parameters "executable_path" or "ntor" missing in mishka section ',
+                        "in the config file. Cannot initiate MISHKA runner. ",
+                        "Only the HELENA part will run.",
+                    )
+                    self.run_mishka = False
+                else:
+                    self.mishka_runner = MISHKArunner(
+                        executable_path=mishka_params["executable_path"],
+                        other_params=mishka_params["other_params"],
+                    )
+                    self.mishka_ntor_samples = mishka_params["ntor"]
 
         self.pre_run_check()
 
@@ -97,9 +139,23 @@ class HELENArunner(Runner):
             subprocess.call([self.executable_path])
 
         # process output
-        # self.parser.read_output_file(run_dir)
-        self.parser.write_summary(run_dir, params)
+        run_successful = self.parser.write_summary(run_dir, params)
         self.parser.clean_output_files(run_dir)
+
+        # run MISHKA
+        if run_successful:
+            if self.run_mishka:
+                mishka_dir = os.path.join(run_dir, "mishka")
+                os.mkdir(mishka_dir)
+                for ntor_sample in self.mishka_ntor_samples:
+                    mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
+                    os.mkdir(mishka_run_dir)
+                    self.mishka_runner.single_code_run(
+                        params={"ntor": ntor_sample, "helena_dir": run_dir},
+                        run_dir=mishka_run_dir,
+                    )
+        else:
+            print("HELENA run not success. MISHKA is not being run.")
 
         return True
 
@@ -124,4 +180,5 @@ class HELENArunner(Runner):
             )
         # TODO: Does namelist contain paramters that this structure can handle or that makes sense?
         # TODO: neped > nesep
+
         return
