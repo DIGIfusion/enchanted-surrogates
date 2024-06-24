@@ -139,6 +139,7 @@ class DaskExecutor(Executor):
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB, S. ACTIVESTREAM]:
             iterations = 0
             while True:
+                print("Before running simulations", self.sampler.parser.print_dset_sizes())
                 print(
                     20 * "=",
                     f"Iteration {iterations}; ",
@@ -163,7 +164,7 @@ class DaskExecutor(Executor):
 
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
-                print(self.sampler.parser.print_dset_sizes())
+                print("Before adding to training data and obtaining validation data",self.sampler.parser.print_dset_sizes())
 
                 # NOTE: Collect next data for training
 
@@ -185,6 +186,7 @@ class DaskExecutor(Executor):
                 self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
                 self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
 
+                print("After adding to training data and obtaining validation data", self.sampler.parser.print_dset_sizes())
                 # NOTE: ------ Submit model training job ------
                 print(
                     "Going to training with ",
@@ -197,9 +199,6 @@ class DaskExecutor(Executor):
                     "Y_vl",
                     valid_data[1].shape,
                 )
-
-                print(f'Training labels: {train_data[1]}')
-
 
                 # TODO: profile this vs write the data instead
                 time_starttrain = time.time()

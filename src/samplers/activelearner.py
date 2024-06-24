@@ -260,16 +260,14 @@ class ActiveLearningBMDALLabelledPoolSampler(ActiveLearnerBMDAL):
         Returns a subset of initial parameters.
         """
         params = []
-        for _ in range(self.init_num_samples):
-            idxs = np.random.randint(0, len(self.parser.pool))
+        idxs_list = np.random.choice(range(len(self.parser.pool)), size=self.init_num_samples, replace=False) 
+        for idxs in idxs_list:    
             result = {
                 "input": self.parser.pool[idxs, self.parser.input_col_idxs],
                 "output": self.parser.pool[idxs, self.parser.output_col_idxs],
                 "pool_idxs": idxs,
             }
             params.append(result)
-            if len(params)>=len(self.parser.pool):
-                break
         return params
 
     def get_next_parameter(

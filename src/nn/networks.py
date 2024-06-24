@@ -14,6 +14,7 @@ from torch import nn
 
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn import functional as F
+from dask.distributed import print
 
 
 def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
@@ -125,12 +126,13 @@ def train_step(model, optimizer, train_loader, epoch, device="cpu") -> torch.Ten
     returns loss averaged over batch
     """
     step_loss = torch.tensor([0.0], dtype=torch.float, device=device)
-    for _, batch in enumerate(train_loader):
+    for step, batch in enumerate(train_loader):
         optimizer.zero_grad()
         batch_on_device = tuple(item.to(device).float() for item in batch)
         x, y = batch_on_device
         y_hat = model.forward(x)
         loss = F.mse_loss(y, y_hat)
+        print(f"Step: {step}, Loss: {loss}, y: {y}, yhat: {y_hat}")
         loss.backward()
         optimizer.step()
         step_loss += loss.detach().item()

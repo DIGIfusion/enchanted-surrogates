@@ -1,5 +1,5 @@
 sampler:
-  type: ActiveLearningBMDALStaticPoolSampler
+  type: ActiveLearningBMDALLabelledPoolSampler
   num_initial_points: 20
   aquisition_batch_size: 10
   total_budget: 120

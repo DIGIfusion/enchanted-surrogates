@@ -134,17 +134,23 @@ class LabelledPoolParser(Parser):
         """
         Updates the (self) pool by removing sampled points and places them in train.
         """
+
+        print('In function update')
+        print(self.print_dset_sizes(), f'number of new points: {len(new_idxs)}, unique new points: {len(np.unique(new_idxs))}')
+        check_sum = len(self.train) + len(self.pool)
         pool_idxs = torch.arange(0, len(self.pool))   # (self.pool.index.values)
-        train_idxs = torch.arange(0, len(self.train)) # (self.train.index.values)
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
         # We now append the new indices to the training set
-        train_idxs = torch.cat([train_idxs, pool_idxs[logical_new_idxs]], dim=-1)
-        train_new = torch.cat([self.train, self.pool[new_idxs]])
+        #train_idxs = torch.cat([train_idxs, pool_idxs[logical_new_idxs]], dim=-1)
         # and remove them from the pool set
-        pool_idxs = pool_idxs[~logical_new_idxs]
-        self.train = train_new
-        self.pool = self.pool[pool_idxs]
+        print(f'logincal new idx shape {len(logical_new_idxs[new_idxs])}, ')
+        train_new = self.pool[logical_new_idxs]
+        self.train = torch.cat([self.train,train_new])
+        self.pool = self.pool[~logical_new_idxs]
+        print(self.print_dset_sizes())
+        print("exiting function update")
+        assert len(self.train) + len(self.pool) == check_sum
 
     def print_dset_sizes(
         self,
@@ -190,12 +196,13 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         self.campaign_id = 0
 
     def get_unscaled_train_valid_test_pool_from_self(
-        self,
-        campaign_id,
+        self
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data."""
         # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
         # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
+
+        print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
 
         if len(self.shots_seen)>=self.num_shots_per_campaign:
             self.campaign_id+=1
@@ -217,6 +224,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
             else:
                 count +=1
             
+        print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
         data = self.gather_data_from_storage(data_path=data_path)
         data = data[self.keep_keys]        
 
