@@ -187,6 +187,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
         self.use_only_new = streaming_kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
         self.shots_seen = [self.data_basepath]
+        self.campaign_id = 0
 
     def get_unscaled_train_valid_test_pool_from_self(
         self,
@@ -195,12 +196,18 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data."""
         # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
         # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
-        campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(campaign_id))
+
+        if len(self.shots_seen)>=self.num_shots_per_campaign:
+            self.campaign_id+=1
+
+        campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
         files_this_campaign = os.listdir(campaign_folder)
         count = 0
         while True:
             if count==len(files_this_campaign):
                 print('Campaign has no more shots')
+                self.campaign_id+=1
+                self.shots_seen = []
                 return None, None, None, None
             this_file = np.random.choice(files_this_campaign)
             data_path = os.path.join(campaign_folder,this_file)
@@ -216,12 +223,11 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         train, valid, test, pool = data_split(
             data, **self.data_args
         )
-        train = torch.tensor(train.values)
+        train = torch.tensor(train.values) # NOTE: this is empty
         valid = torch.tensor(valid.values)
         test = torch.tensor(test.values)
         pool = torch.tensor(pool.values)    
 
-        self.train = torch.cat((self.train, train))
         if not self.use_only_new:
             self.valid = torch.cat((self.valid, valid))
             self.test = torch.cat((self.test, test))

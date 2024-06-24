@@ -136,7 +136,7 @@ class DaskExecutor(Executor):
                 completed += len(futures)
                 print("BATCH SAMPLER", 20 * "=", completed, 20 * "=")
 
-        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB, S. ACTIVESTREAM]:
             iterations = 0
             while True:
                 print(
@@ -198,6 +198,9 @@ class DaskExecutor(Executor):
                     valid_data[1].shape,
                 )
 
+                print(f'Training labels: {train_data[1]}')
+
+
                 # TODO: profile this vs write the data instead
                 time_starttrain = time.time()
                 new_model_training = self.surrogate_client.submit(
@@ -234,115 +237,114 @@ class DaskExecutor(Executor):
                 iterations += 1
                 self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)
             # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
-        elif sampler_interface in [S.ACTIVESTREAM]:
-            iterations = 0
-            # TODO: the code below is pretty much identical to above, except for sampling from the campaign in get_unscaled_train_valid_test_pool_from_self.
-            # Having this is important as in reality you would have a stream of data coming and you would need to read the incoming data as it comes.
-            # If we are serious about streaming for the future of the library, we will have to make sure code isn't copied, but perhaps moved to utility functions, 
-            # or maybe we should consider defining a DaskActiveLearningExecutor that implements the logic in bitesized methods.
+        # elif sampler_interface in [S.ACTIVESTREAM]:
+        #     iterations = 0
+        #     # TODO: the code below is pretty much identical to above, except for sampling from the campaign in get_unscaled_train_valid_test_pool_from_self.
+        #     # Having this is important as in reality you would have a stream of data coming and you would need to read the incoming data as it comes.
+        #     # If we are serious about streaming for the future of the library, we will have to make sure code isn't copied, but perhaps moved to utility functions, 
+        #     # or maybe we should consider defining a DaskActiveLearningExecutor that implements the logic in bitesized methods.
 
-            # TODO: The double for loop is just a quick and dirty way of doing it for the JET mock, but it should be made more general. 
-            # Generalising requires some data engineering to set up the streaming independently of these fictitious "campaigns".
-            for campaign in range(self.sampler.parser.num_campaigns):
-                for shot in range(self.sampler.parser.num_shots_per_campaign):
-                    print(
-                        20 * "=",
-                        f"Campaign: {campaign}; Shot seen: {shot} ",
-                        20 * "=",
-                    )
+        #     # TODO: The double for loop is just a quick and dirty way of doing it for the JET mock, but it should be made more general. 
+        #     # Generalising requires some data engineering to set up the streaming independently of these fictitious "campaigns".
+        #     for campaign in range(self.sampler.parser.num_campaigns):
+        #         for shot in range(self.sampler.parser.num_shots_per_campaign):
+        #             print(
+        #                 20 * "=",
+        #                 f"Campaign: {campaign}; Shot seen: {shot} ",
+        #                 20 * "=",
+        #             )
                     
-                    # NOTE: ------ Run Samples and block until completed ------
-                    seq = wait(
-                        futures
-                    )  # outputs should be a list of tuples we ignore in this case
+        #             # NOTE: ------ Run Samples and block until completed ------
+        #             seq = wait(
+        #                 futures
+        #             )  # outputs should be a list of tuples we ignore in this case
 
-                    # NOTE: ------ Collect outputs ------
-                    outputs = []
-                    for res in seq.done:
-                        outputs.append(res.result())
-                    outputs = self.sampler.collect_batch_results(outputs)
+        #             # NOTE: ------ Collect outputs ------
+        #             outputs = []
+        #             for res in seq.done:
+        #                 outputs.append(res.result())
+        #             outputs = self.sampler.collect_batch_results(outputs)
 
-                    # NOTE: ------ Check if out of budget ------
-                    completed += len(outputs)
-                    if completed > self.sampler.total_budget:
-                        break
+        #             # NOTE: ------ Check if out of budget ------
+        #             completed += len(outputs)
+        #             if completed > self.sampler.total_budget:
+        #                 break
 
-                    # NOTE: ------ Update the pool and training data from outputs ------
-                    self.sampler.parser.update_pool_and_train(outputs)
-                    print(self.sampler.parser.print_dset_sizes())
+        #             # NOTE: ------ Update the pool and training data from outputs ------
+        #             self.sampler.parser.update_pool_and_train(outputs)
+        #             print(self.sampler.parser.print_dset_sizes())
 
-                    # NOTE: Collect next data for training
+        #             # NOTE: Collect next data for training
 
-                    train, valid, test, pool = (
-                        self.sampler.parser.get_unscaled_train_valid_test_pool_from_self(campaign_id=campaign)
-                    )
+        #             train, valid, test, pool = (
+        #                 self.sampler.parser.get_unscaled_train_valid_test_pool_from_self(campaign_id=campaign)
+        #             )
 
-                    # NOTE: if campaign has no more shots, onto the next. 
-                    if train is None:
-                        break
+        #             # NOTE: if campaign has no more shots, onto the next. 
+        #             if train is None:
+        #                 break
                     
-                    # rescale data and pool
-                    train, valid, test, pool = (
-                        self.sampler.parser.scale_train_val_test_pool(
-                            train, valid, test, pool
-                        )
-                    ) 
+        #             # rescale data and pool
+        #             train, valid, test, pool = (
+        #                 self.sampler.parser.scale_train_val_test_pool(
+        #                     train, valid, test, pool
+        #                 )
+        #             ) 
 
-                    train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
-                        train, valid
-                    )
+        #             train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
+        #                 train, valid
+        #             )
 
-                    self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
-                    self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
+        #             self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
+        #             self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
 
-                    # NOTE: ------ Submit model training job ------
-                    print(
-                        "Going to training with ",
-                        "X_tr",
-                        train_data[0].shape,
-                        "Y_tr",
-                        train_data[1].shape,
-                        "X_vl",
-                        valid_data[0].shape,
-                        "Y_vl",
-                        valid_data[1].shape,
-                    )
+        #             # NOTE: ------ Submit model training job ------
+        #             print(
+        #                 "Going to training with ",
+        #                 "X_tr",
+        #                 train_data[0].shape,
+        #                 "Y_tr",
+        #                 train_data[1].shape,
+        #                 "X_vl",
+        #                 valid_data[0].shape,
+        #                 "Y_vl",
+        #                 valid_data[1].shape,
+        #             )
 
-                    print(f'Training labels: {train_data[1]}, number of NaNs: ')
 
-                    # TODO: profile this vs write the data instead
-                    time_starttrain = time.time()
-                    new_model_training = self.surrogate_client.submit(
-                        run_train_model,
-                        self.sampler.model_kwargs,
-                        train_data,
-                        valid_data,
-                        self.sampler.train_kwargs,
-                    )
+        #             # TODO: profile this vs write the data instead
+        #             time_starttrain = time.time()
+        #             new_model_training = self.surrogate_client.submit(
+        #                 run_train_model,
+        #                 self.sampler.model_kwargs,
+        #                 train_data,
+        #                 valid_data,
+        #                 self.sampler.train_kwargs,
+        #             )
 
-                    train_model_run = wait([new_model_training])
+        #             train_model_run = wait([new_model_training])
 
-                    # NOTE: ------ Collect model training job ------
-                    trained_model_res = [res.result() for res in train_model_run.done]
-                    metrics, trained_model_state_dict = trained_model_res[0]
-                    print(f"Elapsed train task time: {time.time() - time_starttrain}")
+        #             # NOTE: ------ Collect model training job ------
+        #             trained_model_res = [res.result() for res in train_model_run.done]
+        #             metrics, trained_model_state_dict = trained_model_res[0]
+        #             print(f"Elapsed train task time: {time.time() - time_starttrain}")
 
-                    for metric_name, metric_vals in metrics.items():
-                        # print(f'\n{metric_name}: min: {min(metric_vals)}, max: {max(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
-                        print(
-                            f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
-                        )
+        #             for metric_name, metric_vals in metrics.items():
+        #                 # print(f'\n{metric_name}: min: {min(metric_vals)}, max: {max(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
+        #                 print(
+        #                     f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
+        #                 )
 
-                    self.sampler.update_metrics(metrics)
-                    # NOTE: ------ Do active learning sampling ------
+        #             self.sampler.update_metrics(metrics)
+        #             # NOTE: ------ Do active learning sampling ------
 
-                    example_model = load_saved_model(
-                        self.sampler.model_kwargs, trained_model_state_dict
-                    )
-                    param_list = self.sampler.get_next_parameter(example_model, train, pool)
+        #             example_model = load_saved_model(
+        #                 self.sampler.model_kwargs, trained_model_state_dict
+        #             )
+        #             param_list = self.sampler.get_next_parameter(example_model, train, pool)
 
-                    # NOTE: ------ Prepare next simulator runs ----
-                    futures = self.submit_batch_of_params(param_list)
-                    iterations += 1
-                    self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)            
+        #             # NOTE: ------ Prepare next simulator runs ----
+        #             futures = self.submit_batch_of_params(param_list)
+        #             iterations += 1
+        #             self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)            
 

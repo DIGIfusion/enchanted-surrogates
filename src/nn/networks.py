@@ -108,6 +108,7 @@ def run_train_model(
         if val_losses[-1] < best_loss or epoch == 0:
             best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
+        print(f'Epoch: {epoch}, Loss: {best_loss}')
 
     metrics = {
         "train_losses": train_losses,
