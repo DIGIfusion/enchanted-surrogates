@@ -1,6 +1,6 @@
 # python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
 sampler:
-  type: ActiveLearningBMDALStaticPoolSampler
+  type: ActiveLearningBMDALLabelledPoolStreamingSampler
   num_initial_points: 5000
   aquisition_batch_size: 512
   total_budget: 80000
@@ -8,7 +8,7 @@ sampler:
   kernel_transform: [['rp', [512]]]
   base_kernel: grad
   parser_kwargs: 
-    type: 'LabelledPoolParser'
+    type: 'StreamingLabelledPoolParserJETMock'
     data_path: '/scratch/project_2007159/lzanisi/enchanted-surrogates/data/database_slices/campaign_0/69436.csv'
     inputs: 
       - 'ane'
@@ -26,12 +26,12 @@ sampler:
     target: 
       - 'efiitg_gb'
     data_args: 
-      valid_size: 0.015
-      test_size: 0.01
-  streaming:
-    num_campaigns: 10
-    num_shots_per_campaign: 3
-    use_only_new: False
+      valid_size: 0.1
+      test_size: 0.1
+    streaming_kwargs:
+      num_campaigns: 10
+      num_shots_per_campaign: 3
+      use_only_new: False
   model_kwargs:
     model_width: 512
     model_depth: 4

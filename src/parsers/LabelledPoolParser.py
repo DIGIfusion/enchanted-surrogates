@@ -180,11 +180,12 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
     def __init__(self,data_path: str, *args, **kwargs):
 
         super().__init__(data_path=data_path, *args,**kwargs)
+        
         self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
-        streaming_kwargs = kwargs.get("streaming") # should contain number of campaigns and sampled shots per campaign
-        self.num_shots_per_campaign = streaming_kwargs['num_shots_per_campaign']
-        self.num_campaigns =  streaming_kwargs['num_campaigns']
-        self.use_only_new = streaming_kwargs['use_only_new'] # should tell whether only the new data is used for valid pool and test 
+        streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
+        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',5)
+        self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
+        self.use_only_new = streaming_kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
         self.shots_seen = [self.data_basepath]
 
     def get_unscaled_train_valid_test_pool_from_self(
@@ -194,14 +195,15 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data."""
         # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
         # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
-        campaign_folder = os.path.join(self.data_basepath,str(campaign_id))
+        campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(campaign_id))
         files_this_campaign = os.listdir(campaign_folder)
         count = 0
         while True:
             if count==len(files_this_campaign):
                 print('Campaign has no more shots')
                 return None, None, None, None
-            data_path = np.random.choice(files_this_campaign)
+            this_file = np.random.choice(files_this_campaign)
+            data_path = os.path.join(campaign_folder,this_file)
             if data_path not in self.shots_seen:
                 self.shots_seen.append(data_path)
                 break

@@ -268,6 +268,8 @@ class ActiveLearningBMDALLabelledPoolSampler(ActiveLearnerBMDAL):
                 "pool_idxs": idxs,
             }
             params.append(result)
+            if len(params)>=len(self.parser.pool):
+                break
         return params
 
     def get_next_parameter(

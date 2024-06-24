@@ -68,7 +68,7 @@ class DaskExecutor(Executor):
             self.clients = [self.simulator_client]
 
         elif (
-            sampler_type in [S.ACTIVE, S.ACTIVEDB]
+            sampler_type in [S.ACTIVE, S.ACTIVEDB, S.ACTIVESTREAM]
             and isinstance(self.worker_args.get("simulator_args"), dict)
             and isinstance(self.worker_args.get("surrogate_args"), dict)
         ):
@@ -243,8 +243,8 @@ class DaskExecutor(Executor):
 
             # TODO: The double for loop is just a quick and dirty way of doing it for the JET mock, but it should be made more general. 
             # Generalising requires some data engineering to set up the streaming independently of these fictitious "campaigns".
-            for campaign in self.sampler.parser.num_campaigns:
-                for shot in self.sampler.num_shots_per_campaign:
+            for campaign in range(self.sampler.parser.num_campaigns):
+                for shot in range(self.sampler.parser.num_shots_per_campaign):
                     print(
                         20 * "=",
                         f"Campaign: {campaign}; Shot seen: {shot} ",
@@ -307,6 +307,8 @@ class DaskExecutor(Executor):
                         "Y_vl",
                         valid_data[1].shape,
                     )
+
+                    print(f'Training labels: {train_data[1]}, number of NaNs: ')
 
                     # TODO: profile this vs write the data instead
                     time_starttrain = time.time()
