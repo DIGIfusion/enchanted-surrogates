@@ -7,7 +7,6 @@ class S(Enum):
     BATCH = 1
     ACTIVE = 2
     ACTIVEDB = 3
-    ACTIVESTREAM = 4
 
 
 """

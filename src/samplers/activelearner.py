@@ -88,6 +88,14 @@ class ActiveLearnerBMDAL(Sampler):
         self.selection_method      = kwargs.get('selection_method', 'random')
         self.kernel_transform      = kwargs.get('kernel_transform', [('rp', [512])])
         self.base_kernel           = kwargs.get('base_kernel', 'll')
+        self.sel_with_train        = kwargs.get('sel_with_train', False)
+        self.overselection_factor  = kwargs.get('overselection_factor', 1)
+        self.save_dir              = kwargs.get('save_dir','results')
+        self.save_dir              = os.path.join(os.getcwd(), self.save_dir)
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        default_filename           = f"{self.selection_method}_{self.base_kernel}_transform_{self.kernel_transform}.txt"
+        self.filenam_save          = kwargs.get('filename_save', default_filename)
         self.parser_kwargs         = parser_kwargs
         self.model_kwargs          = model_kwargs
         self.train_kwargs          = train_kwargs
@@ -136,7 +144,8 @@ class ActiveLearnerBMDAL(Sampler):
             data={"train": train_data, "pool": pool_data},
             y_train=y_train,
             selection_method=self.selection_method,
-            sel_with_train=True,
+            sel_with_train=self.sel_with_train,
+            overselection_factor=self.overselection_factor,
             base_kernel=self.base_kernel,
             kernel_transforms=self.kernel_transform,
         )
@@ -211,7 +220,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.metrics.append(best_r2_score)
 
 
-    def dump_iteration_results(self, base_run_dir: str, iterations: int, trained_model_state_dict: dict):
+    def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
         """ 
         iteration number, size of train set, and metrics get appened to the file 'final_metrics.txt'
         while the current train set is saved  "train_{iterations}.pth" # TODO: update train set saving
@@ -219,15 +228,14 @@ class ActiveLearnerBMDAL(Sampler):
         """
 
         
-        train_fname = os.path.join(base_run_dir, f"train_{iterations}.pth")
+        train_fname = os.path.join(self.save_dir, f"train_{iterations}.pth")
         torch.save(self.parser.train, train_fname)
-        
 
-        final_metric_file = os.path.join(base_run_dir, "final_metrics.txt")
+        final_metric_file = os.path.join(self.save_dir, self.filenam_save)
         with open(final_metric_file, "a") as f:
             f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics[-1]}\n")
         
-        model_path = os.path.join(base_run_dir, f'model_{iterations}.pth')
+        model_path = os.path.join(self.save_dir, f'model_{iterations}.pth')
         if iterations % 5 == 0: 
             torch.save(trained_model_state_dict, model_path)
 
@@ -298,7 +306,7 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
     in Active Learning on fixed datasets. Uses Pandas under the hood.
     """
 
-    sampler_interface = S.ACTIVESTREAM    
+    sampler_interface = S.ACTIVEDB
     def __init__(self, **kwargs):
         """
 

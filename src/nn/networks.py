@@ -109,8 +109,6 @@ def run_train_model(
         if val_losses[-1] < best_loss or epoch == 0:
             best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
-        print(f'Epoch: {epoch}, Loss: {best_loss}')
-
     metrics = {
         "train_losses": train_losses,
         "val_losses": val_losses,
@@ -132,7 +130,7 @@ def train_step(model, optimizer, train_loader, epoch, device="cpu") -> torch.Ten
         x, y = batch_on_device
         y_hat = model.forward(x)
         loss = F.mse_loss(y, y_hat)
-        print(f"Step: {step}, Loss: {loss}, y: {y}, yhat: {y_hat}")
+        #print(f"Step: {step}, Loss: {loss},x: {x}, y: {y}, yhat: {y_hat}")
         loss.backward()
         optimizer.step()
         step_loss += loss.detach().item()

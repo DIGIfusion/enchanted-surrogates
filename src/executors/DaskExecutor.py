@@ -6,7 +6,7 @@ Contains logic for executing surrogate workflow on Dask.
 """
 
 import time
-from dask.distributed import Client, as_completed, wait
+from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
@@ -136,10 +136,9 @@ class DaskExecutor(Executor):
                 completed += len(futures)
                 print("BATCH SAMPLER", 20 * "=", completed, 20 * "=")
 
-        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB, S. ACTIVESTREAM]:
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             iterations = 0
             while True:
-                print("Before running simulations", self.sampler.parser.print_dset_sizes())
                 print(
                     20 * "=",
                     f"Iteration {iterations}; ",
@@ -171,6 +170,10 @@ class DaskExecutor(Executor):
                 train, valid, test, pool = (
                     self.sampler.parser.get_unscaled_train_valid_test_pool_from_self()
                 )
+
+                if isinstance(train, str):
+                    print('Data has exhausted. Finishing up...')
+                    break
                 
                 # rescale data and pool
                 train, valid, test, pool = (
@@ -186,7 +189,6 @@ class DaskExecutor(Executor):
                 self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
                 self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
 
-                print("After adding to training data and obtaining validation data", self.sampler.parser.print_dset_sizes())
                 # NOTE: ------ Submit model training job ------
                 print(
                     "Going to training with ",
@@ -234,7 +236,7 @@ class DaskExecutor(Executor):
                 # NOTE: ------ Prepare next simulator runs ----
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
-                self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)
+                self.sampler.dump_iteration_results(iterations, trained_model_state_dict)
             # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
         # elif sampler_interface in [S.ACTIVESTREAM]:
         #     iterations = 0

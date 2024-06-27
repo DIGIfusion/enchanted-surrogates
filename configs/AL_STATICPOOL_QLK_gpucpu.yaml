@@ -1,6 +1,6 @@
 # python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
 sampler:
-  type: ActiveLearningBMDALStaticPoolSampler
+  type: ActiveLearningBMDALLabelledPoolSampler
   num_initial_points: 5000
   aquisition_batch_size: 512
   total_budget: 80000
@@ -8,7 +8,7 @@ sampler:
   kernel_transform: [['rp', [512]]]
   base_kernel: grad
   parser_kwargs: 
-    type: 'STATICPOOLparser'
+    type: 'LabelledPoolParser'
     data_path: '/scratch/project_2007159/cursed-tglf/qualikiz/train_data_raw.pkl'
     inputs: 
       - 'ane'

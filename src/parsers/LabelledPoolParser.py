@@ -70,6 +70,10 @@ class LabelledPoolParser(Parser):
         self.test = torch.tensor(self.test.values)
         self.pool = torch.tensor(self.pool.values)
 
+        assert not torch.isnan(self.train).any()
+        assert not torch.isnan(self.valid).any()
+        assert not torch.isnan(self.test).any()
+        assert not torch.isnan(self.pool).any()
 
 
     def gather_data_from_storage(self, data_path) -> pd.DataFrame:
@@ -99,9 +103,11 @@ class LabelledPoolParser(Parser):
         test: torch.Tensor,
         pool: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        assert not torch.isnan(train).any()
         train, valid, test, pool, _ = apply_scaler(
             train, valid, test, pool, scaler=None, op="transform"
         )
+        assert not torch.isnan(train).any()
         return train, valid, test, pool
 
     def get_unscaled_train_valid_test_pool_from_self(
@@ -128,28 +134,22 @@ class LabelledPoolParser(Parser):
             valid[:, self.output_col_idxs].float(),
         )
 
+        assert not torch.isnan(x_train).any()
         return (x_train, y_train), (x_valid, y_valid)
 
     def update_pool_and_train(self, new_idxs):
         """
         Updates the (self) pool by removing sampled points and places them in train.
         """
-
-        print('In function update')
-        print(self.print_dset_sizes(), f'number of new points: {len(new_idxs)}, unique new points: {len(np.unique(new_idxs))}')
         check_sum = len(self.train) + len(self.pool)
         pool_idxs = torch.arange(0, len(self.pool))   # (self.pool.index.values)
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
-        # We now append the new indices to the training set
-        #train_idxs = torch.cat([train_idxs, pool_idxs[logical_new_idxs]], dim=-1)
-        # and remove them from the pool set
-        print(f'logincal new idx shape {len(logical_new_idxs[new_idxs])}, ')
         train_new = self.pool[logical_new_idxs]
         self.train = torch.cat([self.train,train_new])
         self.pool = self.pool[~logical_new_idxs]
-        print(self.print_dset_sizes())
-        print("exiting function update")
+
+        assert not torch.isnan(self.train).any()
         assert len(self.train) + len(self.pool) == check_sum
 
     def print_dset_sizes(
@@ -202,10 +202,12 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
         # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
 
-        print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
-
         if len(self.shots_seen)>=self.num_shots_per_campaign:
             self.campaign_id+=1
+            self.shots_seen = []
+            if self.campaign_id==self.num_campaigns:
+                return 'break',-1,-1,-1
+
 
         campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
         files_this_campaign = os.listdir(campaign_folder)
