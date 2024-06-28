@@ -4,8 +4,10 @@ import f90nml
 import numpy as np
 import json
 from .base import Parser
-from dask.distributed import print
-
+try:
+    from dask.distributed import print
+except:
+    pass
 # import subprocess
 
 mu_0 = 4e-7 * np.pi
@@ -467,10 +469,11 @@ class HELENAparser(Parser):
         """
         summary = {"run_dir": run_dir, "params": params}
         success, mercier_stable, ballooning_stable = self.read_output_file(run_dir)
+        summary["h_id"] = run_dir.split("/")[-1]
         summary["success"] = success
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
-        with open(os.path.join(run_dir, "summary.yml"), "w") as outfile:
+        with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
             json.dump(summary, outfile)
         try:
             CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
@@ -483,6 +486,26 @@ class HELENAparser(Parser):
             np.save(run_dir + "/vxvy.npy", (VX, VY))
         except Exception:
             print(f"error reading and summarizing fort.12 in dir {run_dir}")
+        try:
+            psi, S, J, vol, _, area = self.read_fort20_s_j_vol_area(run_dir)
+            np.save(run_dir + "/psi.npy", psi)
+            np.save(run_dir + "/s.npy", S)
+            np.save(run_dir + "/j.npy", J)
+            np.save(run_dir + "/volume.npy", vol)
+            np.save(run_dir + "/area.npy", area)
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
+        
+        try:
+            realworld_S, realworld_P, realworld_Ne, realworld_Te, realworld_Ti = self.read_fort20_realworld(run_dir)
+            np.save(run_dir + "/realworld_S.npy", realworld_S)
+            np.save(run_dir + "/realworld_P.npy", realworld_P)
+            np.save(run_dir + "/realworld_Ne.npy", realworld_Ne)
+            np.save(run_dir + "/realworld_Te.npy", realworld_Te)
+            np.save(run_dir + "/realworld_Ti.npy", realworld_Ti)
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_realworld, {e}")
+        
         return success
 
     def read_final_zjz(self, output_dir):
@@ -732,10 +755,7 @@ class HELENAparser(Parser):
         with open(os.path.join(output_dir, "fort.20"), "r") as file:
             lines = file.readlines()
         for line in lines:
-            if (
-                " *        INPUT PROFILES :                     *\n"
-                in line
-            ):
+            if ("INPUT PROFILES" in line):
                 i_table_start = i
                 break
             i += 1
@@ -782,7 +802,7 @@ class HELENAparser(Parser):
 
         return psi, dP_dPSI, FdF_dPSI, J_phi
 
-    def read_fort20_s_j_vol_area(self, output_dir, NRMAP):
+    def read_fort20_s_j_vol_area(self, output_dir):
         """
         
         *********************************************************************
@@ -792,16 +812,14 @@ class HELENAparser(Parser):
         299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961    0.0020
 
         """
+        NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
         npts = NRMAP - 1
         i = 0
         i_table_start = -1
         with open(os.path.join(output_dir, "fort.20"), "r") as file:
             lines = file.readlines()
         for line in lines:
-            if (
-                "* I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *"
-                in line
-            ):
+            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line ):
                 i_table_start = i
                 break
             i += 1
@@ -821,12 +839,17 @@ class HELENAparser(Parser):
         area = data_array[:, 9]
         return psi, S, J, vol, volp, area
 
-    def read_fort20_realworld(self, output_dir, NRMAP):
+    def get_namelist(self, output_dir):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        return f90nml.read(namelist_path)
+
+    def read_fort20_realworld(self, output_dir):
         """
         **************************************************
             S,   P [Pa], Ne [10^19m^-3], Te [eV],  Ti [eV],
         **************************************************
         """
+        NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
         npts = NRMAP - 1
         i = 0
         i_table_start = -1
@@ -851,3 +874,34 @@ class HELENAparser(Parser):
         Te = data_array[:, 3]
         Ti = data_array[:, 4]
         return S, P, Ne, Te, Ti
+
+    def get_te_params(self, output_dir: str):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        namelist = f90nml.read(namelist_path)
+        return {
+            "ate": namelist["phys"]["ate"],
+            "bte": namelist["phys"]["bte"],
+            "cte": namelist["phys"]["cte"],
+            "ddte": namelist["phys"]["ddte"],
+            "ete": namelist["phys"]["ete"],
+            "fte": namelist["phys"]["fte"],
+            "gte": namelist["phys"]["gte"],
+            "hte": namelist["phys"]["hte"],
+            # "ite": namelist["phys"]["ite"],
+        }
+
+    def get_ne_params(self, output_dir: str):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        namelist = f90nml.read(namelist_path)
+        return {
+            "ade": namelist["phys"]["ade"],
+            "bde": namelist["phys"]["bde"],
+            "cde": namelist["phys"]["cde"],
+            "dde": namelist["phys"]["dde"],
+            "ede": namelist["phys"]["ede"],
+            "fde": namelist["phys"]["fde"],
+            "gde": namelist["phys"]["gde"],
+            "hde": namelist["phys"]["hde"],
+            # "ide": namelist["phys"]["ite"],
+        }
+    

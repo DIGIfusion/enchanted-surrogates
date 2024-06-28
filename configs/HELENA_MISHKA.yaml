@@ -25,7 +25,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/data_HELENA/random_samples_2024-06-10
+  base_run_dir: /scratch/project_2009007/data_HELENA/random_samples_2024-06-27
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"

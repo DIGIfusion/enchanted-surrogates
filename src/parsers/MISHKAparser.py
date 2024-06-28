@@ -312,6 +312,7 @@ class MISHKAparser(Parser):
 
         if "helena_dir" in params:
             summary["helena_dir"] = params["helena_dir"]
+            summary["h_id"] = params["helena_dir"].split("/")[-1]
 
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
