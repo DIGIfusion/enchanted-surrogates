@@ -42,7 +42,7 @@ class DaskExecutor(Executor):
             client.close()
 
     def _get_cluster(self, args):
-        if self.sampler.sampler_interface in [S.ACTIVESTREAM]:
+        if self.sampler.sampler_interface in [S.ACTIVEDB]:
             return LocalCluster(**args)
         else:
             return SLURMCluster(**args)
@@ -67,7 +67,7 @@ class DaskExecutor(Executor):
             self.clients = [self.client]
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
-            self.simulator_cluster = self.SLURMCluster(**self.worker_args) #SLURMCluster(**self.worker_args)
+            self.simulator_cluster = self._get_cluster(self.worker_args) #SLURMCluster(**self.worker_args)
             self.simulator_cluster.scale()  # TODO: check num workers
 
             self.simulator_client = Client(self.simulator_cluster)
@@ -84,8 +84,8 @@ class DaskExecutor(Executor):
             simulator_workers = self.worker_args["simulator_workers"]
             surrogate_workers = self.worker_args["surrogate_workers"]
 
-            self.simulator_cluster = self.SLURMCluster(**simulator_args)
-            self.surrogate_cluster = self.SLURMCluster(**surrogate_args)
+            self.simulator_cluster = self._get_cluster(simulator_args)
+            self.surrogate_cluster = self._get_cluster(surrogate_args)
 
             self.simulator_cluster.scale(simulator_workers)
             self.surrogate_cluster.scale(surrogate_workers)
