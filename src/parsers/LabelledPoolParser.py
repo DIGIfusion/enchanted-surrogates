@@ -193,6 +193,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
         self.use_only_new = streaming_kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
         self.shots_seen = [self.data_basepath]
+        self.all_shots_seen = [self.data_basepath]
         self.campaign_id = 0
 
     def get_unscaled_train_valid_test_pool_from_self(
@@ -222,6 +223,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
             data_path = os.path.join(campaign_folder,this_file)
             if data_path not in self.shots_seen:
                 self.shots_seen.append(data_path)
+                self.all_shots_seen.append(data_path)
                 break
             else:
                 count +=1

@@ -1,0 +1,85 @@
+# python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
+sampler:
+  type: ActiveLearningBMDALLabelledPoolStreamingSampler
+  num_initial_points: 500
+  aquisition_batch_size: 128
+  total_budget: 80000
+  selection_method: 'maxdiag'
+  kernel_transform: [['train', [0.1]]]
+  base_kernel: 'll'
+  save_dir: results/bald/  
+  filename_save: 'bald.txt'
+  sel_with_train: False
+  parser_kwargs: 
+    type: 'StreamingLabelledPoolParserJETMock'
+    data_path: '/scratch/project_2007159/lzanisi/enchanted-surrogates/data/database_slices/campaign_0/69437.csv'
+    inputs: 
+      - 'ane'
+      - 'ate'
+      - 'x'
+      - 'q'
+      - 'smag'
+      - 'alpha'
+      - 'ani1'
+      - 'ati0'
+      - 'lognustar'
+    target: 
+      - 'efiitg_gb'
+    data_args: 
+      valid_size: 0.1
+      test_size: 0.1
+    streaming_kwargs:
+      num_campaigns: 10
+      num_shots_per_campaign: 3
+      use_only_new: False
+  model_kwargs:
+    model_width: 128
+    model_depth: 4
+    dropout: 0.0
+  train_kwargs:
+    batch_size: 64 
+    epochs: 100
+    learning_rate: 1.e-4
+    weight_decay: 1.e-4
+
+runner:
+  type: STATICPOOLrunner
+  executable_path: None
+  other_params: {}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: data_store/streaming/
+  worker_args:
+    simulator_workers: 1
+    surrogate_workers: 1
+    simulator_args: 
+      account: project_2007159
+      queue: medium
+      cores: 8
+      memory: 4GB
+      processes: 1
+      walltime: '00:15:00'
+      interface: ib0
+      job_extra_directives: 
+        - '--job-name=SIMULATOR'
+      job_script_prologue:
+        - module load python-data 
+        - source /scratch/project_2007159/lzanisi/enchanted-surrogates/enchsurr/bin/activate 
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
+    surrogate_args: 
+      account: project_2007159
+      queue: gpusmall 
+      cores: 8
+      memory: 4GB
+      processes: 1
+      walltime: '01:00:00'
+      interface: ib0
+      job_extra_directives: 
+        - '--job-name=SURROGATE'
+        - '--gres=gpu:a100:1'
+      job_script_prologue:
+        - module load python-data 
+        - source /scratch/project_2007159/lzanisi/enchanted-surrogates/enchsurr/bin/activate 
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
+  

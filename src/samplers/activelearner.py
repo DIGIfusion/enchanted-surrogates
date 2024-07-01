@@ -239,6 +239,11 @@ class ActiveLearnerBMDAL(Sampler):
         if iterations % 5 == 0: 
             torch.save(trained_model_state_dict, model_path)
 
+        # NOTE: save files seen 
+        files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
+        np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')
+
+
 class ActiveLearningBMDALLabelledPoolSampler(ActiveLearnerBMDAL):
     """
     Active Learning BMDAL Static Pool Sampler.

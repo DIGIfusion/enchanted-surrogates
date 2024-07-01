@@ -41,6 +41,12 @@ class DaskExecutor(Executor):
         for client in self.clients:
             client.close()
 
+    def _get_cluster(self, args):
+        if self.sampler.sampler_interface in [S.ACTIVESTREAM]:
+            return LocalCluster(**args)
+        else:
+            return SLURMCluster(**args)
+        
     def initialize_clients(self):
         """
         Initializes the clients based on sampler enum,
@@ -61,14 +67,14 @@ class DaskExecutor(Executor):
             self.clients = [self.client]
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
-            self.simulator_cluster = SLURMCluster(**self.worker_args)
+            self.simulator_cluster = self.SLURMCluster(**self.worker_args) #SLURMCluster(**self.worker_args)
             self.simulator_cluster.scale()  # TODO: check num workers
 
             self.simulator_client = Client(self.simulator_cluster)
             self.clients = [self.simulator_client]
 
         elif (
-            sampler_type in [S.ACTIVE, S.ACTIVEDB, S.ACTIVESTREAM]
+            sampler_type in [S.ACTIVE, S.ACTIVEDB]
             and isinstance(self.worker_args.get("simulator_args"), dict)
             and isinstance(self.worker_args.get("surrogate_args"), dict)
         ):
@@ -78,8 +84,8 @@ class DaskExecutor(Executor):
             simulator_workers = self.worker_args["simulator_workers"]
             surrogate_workers = self.worker_args["surrogate_workers"]
 
-            self.simulator_cluster = SLURMCluster(**simulator_args)
-            self.surrogate_cluster = SLURMCluster(**surrogate_args)
+            self.simulator_cluster = self.SLURMCluster(**simulator_args)
+            self.surrogate_cluster = self.SLURMCluster(**surrogate_args)
 
             self.simulator_cluster.scale(simulator_workers)
             self.surrogate_cluster.scale(surrogate_workers)
@@ -87,7 +93,8 @@ class DaskExecutor(Executor):
             self.simulator_client = Client(self.simulator_cluster)
             self.surrogate_client = Client(self.surrogate_cluster)
 
-            self.clients = [self.simulator_client, self.surrogate_client]
+            self.clients = [self.simulator_client, self.surrogate_client]       
+
         else:
             raise ValueError(
                 "Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers"
