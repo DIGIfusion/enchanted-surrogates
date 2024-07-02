@@ -7,14 +7,18 @@ sys.path.append(os.getcwd() + "/src")
 import run
 
 
+config_filepath = os.path.join(
+    os.getcwd(), "tests/configs/active_learning_LabelledPool_local.yaml"
+)
 config_filepath2 = os.path.join(
     os.getcwd(), "tests/configs/active_learning_STATICPOOL_ex_dset.yaml"
 )
 
+
 data_path = os.path.join(os.getcwd(), "tests/train.csv")
 
 
-configs_to_test = [config_filepath2]
+configs_to_test = [config_filepath, config_filepath2]
 
 
 @pytest.mark.parametrize("config_name", configs_to_test)

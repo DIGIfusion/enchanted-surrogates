@@ -26,21 +26,31 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     return config
 
 
-def main(cfg: str):
+def main(cfg: str, n_repeats: int=1):
     """
     Main function for running the simulation workflow.
 
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
-    args = load_configuration(cfg)
-    sampler = getattr(samplers, args.sampler.pop("type"))(**args.sampler)
-    executor = getattr(executors, args.executor.pop("type"))(
-        sampler=sampler, runner_args=args.runner, **args.executor
-    )
 
-    executor.start_runs()
-    executor.clean()
+            
+    args = load_configuration(cfg)
+    print(args)
+    base_filename = args.sampler["filename_save"]
+    for i in range(n_repeats):
+        print(20*"=", f"\n \t Running with {config}, repeat number {i}\n", 20*"=")
+        
+        np.random.seed(99)
+        save_fname =  base_filename+str(i)
+        args.sampler["filename_save"] = save_fname
+        sampler = getattr(samplers, args.sampler["type"])(**args.sampler)
+        executor = getattr(executors, args.executor["type"])(
+            sampler=sampler, runner_args=args.runner, **args.executor
+        )
+
+        executor.start_runs()
+        executor.clean()
 
 
 if __name__ == "__main__":
@@ -56,6 +66,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "-n",
+        "--n_repeats",
+        type=int,
+        default=1,
+        help="Number of NN runs",
+    )
+
+    parser.add_argument(
         "-cfs",
         "--configs",
         nargs='+',
@@ -68,12 +86,10 @@ if __name__ == "__main__":
     path = parser_args.path
     configs = parser_args.configs
     configs = [os.path.join(path,current_config) for current_config in configs]
-    
+    n_repeats = parser_args.n_repeats
     for config in configs:
-        # NOTE: ensuring same shots used
-        print(20*"=", f"\n \t Running with {config} \n", 20*"=")
-        np.random.seed(42)
-        torch.manual_seed(42)        
-        main(config)
+    # NOTE: ensuring same shots used
+        print(20*"=", f"\n \t Running with {config}\n", 20*"=")
+        main(config, n_repeats)
     #Parallel(n_jobs=len(configs))(delayed(main)(current_config) for current_config in configs)
 

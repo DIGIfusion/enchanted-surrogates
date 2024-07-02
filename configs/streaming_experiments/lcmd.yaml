@@ -7,8 +7,8 @@ sampler:
   selection_method: 'lcmd'
   kernel_transform: [['rp', [512]]]
   base_kernel: 'grad'
-  save_dir: results/lcmd/  
-  filename_save: 'lcmd.txt'
+  save_dir: results/seed_99_acq_128/lcmd/  
+  filename_save: 'lcmd'
   sel_with_train: True
   parser_kwargs: 
     type: 'StreamingLabelledPoolParserJETMock'
@@ -46,40 +46,8 @@ runner:
   type: STATICPOOLrunner
   executable_path: None
   other_params: {}
-
 executor:
   type: DaskExecutor
   base_run_dir: data_store/streaming/
-  worker_args:
-    simulator_workers: 1
-    surrogate_workers: 1
-    simulator_args: 
-      account: project_2007159
-      queue: medium
-      cores: 8
-      memory: 4GB
-      processes: 1
-      walltime: '00:15:00'
-      interface: ib0
-      job_extra_directives: 
-        - '--job-name=SIMULATOR'
-      job_script_prologue:
-        - module load python-data 
-        - source /scratch/project_2007159/lzanisi/enchanted-surrogates/enchsurr/bin/activate 
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
-    surrogate_args: 
-      account: project_2007159
-      queue: gpusmall 
-      cores: 8
-      memory: 4GB
-      processes: 1
-      walltime: '01:00:00'
-      interface: ib0
-      job_extra_directives: 
-        - '--job-name=SURROGATE'
-        - '--gres=gpu:a100:1'
-      job_script_prologue:
-        - module load python-data 
-        - source /scratch/project_2007159/lzanisi/enchanted-surrogates/enchsurr/bin/activate 
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)/src:$(pwd)/src/samplers/bmdal
-  
+  worker_args: 
+    local: 1

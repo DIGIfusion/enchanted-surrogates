@@ -92,16 +92,18 @@ class ActiveLearnerBMDAL(Sampler):
         self.overselection_factor  = kwargs.get('overselection_factor', 1)
         self.save_dir              = kwargs.get('save_dir','results')
         self.save_dir              = os.path.join(os.getcwd(), self.save_dir)
+        self.save_train_data       = kwargs.get("save_train_data", False)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
-        default_filename           = f"{self.selection_method}_{self.base_kernel}_transform_{self.kernel_transform}.txt"
-        self.filenam_save          = kwargs.get('filename_save', default_filename)
+        default_filename           = f"{self.selection_method}_{self.base_kernel}_transform_{self.kernel_transform}"
+        self.filename_save          = kwargs.get('filename_save', default_filename)
+
         self.parser_kwargs         = parser_kwargs
         self.model_kwargs          = model_kwargs
         self.train_kwargs          = train_kwargs
-        self.metrics = []
+        self.metrics               = {'val_losses': [], 'val_r2_losses': [] }
 
-        self.parser                = getattr(parsers, parser_kwargs.pop('type'))(**parser_kwargs)
+        self.parser                = getattr(parsers, parser_kwargs["type"])(**parser_kwargs)
         # fmt: on
 
     def get_initial_parameters(self):
@@ -217,7 +219,12 @@ class ActiveLearnerBMDAL(Sampler):
         """
         r2_score = metrics["val_r2_losses"]
         best_r2_score = max(r2_score)
-        self.metrics.append(best_r2_score)
+
+        L2_score = metrics["val_losses"]
+        best_L2_score = min(L2_score)
+
+        self.metrics["val_r2_losses"].append(best_r2_score)
+        self.metrics["val_losses"].append(best_L2_score)
 
 
     def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
@@ -227,13 +234,14 @@ class ActiveLearnerBMDAL(Sampler):
         model is saved every 5 iterations 
         """
 
-        
-        train_fname = os.path.join(self.save_dir, f"train_{iterations}.pth")
-        torch.save(self.parser.train, train_fname)
+        if self.save_train_data:
+            train_fname = os.path.join(self.save_dir, f"train_{iterations}.pth")
+            torch.save(self.parser.train, train_fname)
 
-        final_metric_file = os.path.join(self.save_dir, self.filenam_save)
+
+        final_metric_file = os.path.join(self.save_dir, self.filename_save+'.txt')
         with open(final_metric_file, "a") as f:
-            f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics[-1]}\n")
+            f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics['val_r2_losses'][-1]}, {self.metrics['val_losses'][-1]}\n")
         
         model_path = os.path.join(self.save_dir, f'model_{iterations}.pth')
         if iterations % 5 == 0: 

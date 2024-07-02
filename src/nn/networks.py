@@ -21,6 +21,7 @@ def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     """Calculates r2 score and returns float"""
     ss_res = torch.sum((y_true - y_pred) ** 2)
     ss_tot = torch.sum((y_true - y_true.mean(dim=0)) ** 2)
+    print(f"ss_tot: {ss_tot}, ss_res: {ss_res}")
     return 1.0 - (ss_res / ss_tot)
 
 
@@ -153,6 +154,8 @@ def validation_step(
             y_hat = model.forward(X)
             loss = F.mse_loss(y, y_hat)
             val_r2 = r2_score(y_hat, y)
+            # NOTE: if val_r2 is inifinite, it means that there is no diversity in the batch, we exclude it
             step_loss += loss.item()
-            step_r2 += val_r2.item()
-    return step_loss / len(valid_loader), step_r2 / len(valid_loader)
+            if not torch.isinf(val_r2):
+                step_r2 += val_r2.item()
+    return step_loss / len(step_loss), step_r2 / len(step_r2)
