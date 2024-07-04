@@ -49,6 +49,8 @@ class LabelledPoolParser(Parser):
         self.data_args = kwargs.get("data_args")
         self.target_keys = kwargs.get("target")
         self.input_keys = kwargs.get("inputs")
+        self.use_only_new = kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
+
 
         self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
@@ -146,7 +148,10 @@ class LabelledPoolParser(Parser):
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
         train_new = self.pool[logical_new_idxs]
-        self.train = torch.cat([self.train,train_new])
+        if self.use_only_new:
+            self.train = train_new
+        else:        
+            self.train = torch.cat([self.train,train_new])
         self.pool = self.pool[~logical_new_idxs]
 
         assert not torch.isnan(self.train).any()

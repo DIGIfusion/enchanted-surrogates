@@ -11,6 +11,7 @@ handles neural networks for active learning surrogates
 import io
 import torch
 from torch import nn
+import numpy as np
 
 from torch.utils.data import DataLoader, TensorDataset
 from torch.nn import functional as F
@@ -21,7 +22,6 @@ def r2_score(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     """Calculates r2 score and returns float"""
     ss_res = torch.sum((y_true - y_pred) ** 2)
     ss_tot = torch.sum((y_true - y_true.mean(dim=0)) ** 2)
-    print(f"ss_tot: {ss_tot}, ss_res: {ss_res}")
     return 1.0 - (ss_res / ss_tot)
 
 
@@ -145,8 +145,8 @@ def validation_step(
     A single epoch validation step, takes model, dataloader, and device (default 'cpu')
     returns loss and r2 score averaged over batch
     """
-    step_loss = torch.tensor([0.0], dtype=torch.float, device=device)
-    step_r2 = torch.tensor([0.0], dtype=torch.float, device=device)
+    step_loss = [] #torch.tensor([0.0], dtype=torch.float, device=device)
+    step_r2 =  []  #torch.tensor([0.0], dtype=torch.float, device=device)
     with torch.no_grad():
         for _, batch in enumerate(valid_loader):
             batch_on_device = tuple(item.to(device).float() for item in batch)
@@ -154,8 +154,8 @@ def validation_step(
             y_hat = model.forward(X)
             loss = F.mse_loss(y, y_hat)
             val_r2 = r2_score(y_hat, y)
-            # NOTE: if val_r2 is inifinite, it means that there is no diversity in the batch, we exclude it
-            step_loss += loss.item()
-            if not torch.isinf(val_r2):
-                step_r2 += val_r2.item()
-    return step_loss / len(step_loss), step_r2 / len(step_r2)
+            step_loss.append(loss.item())
+            # NOTE: if val_r2 is inifinite, it means that there is no diversity in the batch, we exclude it            
+            if (not torch.isinf(val_r2)) and val_r2>-10: # -10 is arbitrary, sometimes the batch diversity is tiny and therefore val_r2 can be very negative although not inf
+                step_r2.append(val_r2.item())
+    return np.mean(step_loss), np.mean(step_r2)

@@ -45,7 +45,7 @@ class ActiveLearnerBMDAL(Sampler):
         total_budget (int): Total budget for the active learning process.
         bounds (list): Bounds for the parameter space.
         parameters (list): Names of the parameters.
-        aquisition_batch_size (int): Batch size for acquisition.
+        acquisition_batch_size (int): Batch size for acquisition.
         init_num_samples (int): Number of initial samples.
         selection_method (str): Method for selecting samples.
         kernel_transform (list): Kernel transformation methods.
@@ -71,7 +71,7 @@ class ActiveLearnerBMDAL(Sampler):
         - needs parser_kwargs, model_kwargs and train_kwargs (model training keyword arguments)
         Sets the following parameters from passed kwargs: 
         - set param: keyword argument 
-        - acquisition_batch_size: aquisition_batch_size
+        - acquisition_batch_size: acquisition_batch_size
         - bounds: bounds
         - init_num_samples: num_initial_points
         - selection_method: selection_method
@@ -83,8 +83,8 @@ class ActiveLearnerBMDAL(Sampler):
         self.total_budget          = total_budget
         self.bounds                = kwargs.get('bounds', [None])
         self.parameters            = kwargs.get('parameters', ['NA']*len(self.bounds))
-        self.aquisition_batch_size = kwargs.get('aquisition_batch_size', 512)
-        self.init_num_samples      = kwargs.get('num_initial_points', self.aquisition_batch_size)
+        self.acquisition_batch_size = kwargs.get('acquisition_batch_size', 512)
+        self.init_num_samples      = kwargs.get('num_initial_points', self.acquisition_batch_size)
         self.selection_method      = kwargs.get('selection_method', 'random')
         self.kernel_transform      = kwargs.get('kernel_transform', [('rp', [512])])
         self.base_kernel           = kwargs.get('base_kernel', 'll')
@@ -140,17 +140,35 @@ class ActiveLearnerBMDAL(Sampler):
         x_pool = pool[:, self.parser.input_col_idxs].float()
         train_data = TensorFeatureData(x_train)
         pool_data = TensorFeatureData(x_pool)
-        new_idxs, _ = select_batch(
-            batch_size=self.aquisition_batch_size,
-            models=[model],
-            data={"train": train_data, "pool": pool_data},
-            y_train=y_train,
-            selection_method=self.selection_method,
-            sel_with_train=self.sel_with_train,
-            overselection_factor=self.overselection_factor,
-            base_kernel=self.base_kernel,
-            kernel_transforms=self.kernel_transform,
-        )
+        if not isinstance(self.selection_method,list):
+            new_idxs, _ = select_batch(
+                batch_size=self.acquisition_batch_size,
+                models=[model],
+                data={"train": train_data, "pool": pool_data},
+                y_train=y_train,
+                selection_method=self.selection_method,
+                sel_with_train=self.sel_with_train,
+                overselection_factor=self.overselection_factor,
+                base_kernel=self.base_kernel,
+                kernel_transforms=self.kernel_transform,
+            )
+        else:
+            bs = int(self.acquisition_batch_size/len(self.selection_method))
+            new_idxs = []
+            for sm, swt, of, bk, kt in zip(self.selection_method, self.sel_with_train, self.overselection_factor, self.base_kernel, self.kernel_transform):
+                new_idxs_tmp, _ = select_batch(
+                    batch_size=bs,
+                    models=[model],
+                    data={"train": train_data, "pool": pool_data},
+                    y_train=y_train,
+                    selection_method=sm,
+                    sel_with_train=swt,
+                    overselection_factor=of,
+                    base_kernel=bk,
+                    kernel_transforms=kt,
+                )
+                new_idxs.append(new_idxs_tmp)
+            new_idxs = np.hstack(new_idxs)
 
         return new_idxs
 
