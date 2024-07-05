@@ -93,6 +93,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.save_dir              = kwargs.get('save_dir','results')
         self.save_dir              = os.path.join(os.getcwd(), self.save_dir)
         self.save_train_data       = kwargs.get("save_train_data", False)
+        self.sample_from_pool      = kwargs.get("sample_from_pool",False)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         default_filename           = f"{self.selection_method}_{self.base_kernel}_transform_{self.kernel_transform}"
@@ -138,8 +139,14 @@ class ActiveLearnerBMDAL(Sampler):
         y_train = train[:, self.parser.output_col_idxs].float()
         x_train = train[:, self.parser.input_col_idxs].float()
         x_pool = pool[:, self.parser.input_col_idxs].float()
+        if self.sample_from_pool:
+            perm = torch.randperm(x_pool.size(0))
+            idx = perm[:self.sample_from_pool]
+            x_pool = x_pool[idx]
+            
         train_data = TensorFeatureData(x_train)
         pool_data = TensorFeatureData(x_pool)
+        
         if not isinstance(self.selection_method,list):
             new_idxs, _ = select_batch(
                 batch_size=self.acquisition_batch_size,
@@ -265,9 +272,7 @@ class ActiveLearnerBMDAL(Sampler):
         if iterations % 5 == 0: 
             torch.save(trained_model_state_dict, model_path)
 
-        # NOTE: save files seen 
-        files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
-        np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')
+ 
 
 
 class ActiveLearningBMDALLabelledPoolSampler(ActiveLearnerBMDAL):
@@ -343,3 +348,9 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
 
         """
         super().__init__(**kwargs)    
+
+    def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
+        super().dump_iteration_results(iterations, trained_model_state_dict):
+        # NOTE: save files seen 
+        files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
+        np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')

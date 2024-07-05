@@ -51,7 +51,6 @@ class LabelledPoolParser(Parser):
         self.input_keys = kwargs.get("inputs")
         self.use_only_new = kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
 
-
         self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
         self.data = self.data[self.keep_keys]
@@ -245,13 +244,11 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         test = torch.tensor(test.values)
         pool = torch.tensor(pool.values)    
 
+        self.valid = torch.cat((self.valid, valid))
+        self.test = torch.cat((self.test, test))
         if not self.use_only_new:
-            self.valid = torch.cat((self.valid, valid))
-            self.test = torch.cat((self.test, test))
             self.pool = torch.cat((self.pool, pool))       
         else:
-            self.valid = valid 
-            self.test = test
             self.pool = pool
         return self.train, self.valid, self.test, self.pool
     
