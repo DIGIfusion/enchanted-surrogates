@@ -8,7 +8,7 @@ Contains logic for executing surrogate workflow on Dask.
 import time
 from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
-from nn.networks import load_saved_model, run_train_model
+from nn.networks import load_saved_model, run_train_model, test_model_continual_learning
 from common import S
 from .base import Executor, run_simulation_task
 
@@ -74,7 +74,7 @@ class DaskExecutor(Executor):
             self.clients = [self.simulator_client]
 
         elif (
-            sampler_type in [S.ACTIVE, S.ACTIVEDB]
+            sampler_type in [S.ACTIVE, S.ACTIVEDB, S.ACTIVESTREAMDB]
             and isinstance(self.worker_args.get("simulator_args"), dict)
             and isinstance(self.worker_args.get("surrogate_args"), dict)
         ):
@@ -143,7 +143,7 @@ class DaskExecutor(Executor):
                 completed += len(futures)
                 print("BATCH SAMPLER", 20 * "=", completed, 20 * "=")
 
-        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
+        elif sampler_interface in [S.ACTIVE, S.ACTIVEDB, S.ACTIVESTREAMDB]:
             iterations = 0
             while True:
                 print(
@@ -191,7 +191,7 @@ class DaskExecutor(Executor):
 
                 train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
                     train, valid
-                )
+                ) #TODO: add test to this
 
                 self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
                 self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
@@ -232,6 +232,20 @@ class DaskExecutor(Executor):
                         f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
                     )
 
+                if sampler_interface in [S.ACTIVESTREAMDB]:
+                    testing_run = self.client.surrogate_client.submit(
+                        test_model_continual_learning,
+                        self.sampler.model_kwargs,
+                        trained_model_state_dict,
+                        test_data, #TODO: retrieve from make_train_valid_datasplit
+                        self.sampler.acquisition_batch_size,
+                        iterations,
+                        self.sampler.train_kwargs
+                    )
+                    testing_run_res = wait(testing_run)
+                    metrics_continual_learning = testing_run_res[0]
+                    metrics.update({'continual_learning':metrics_continual_learning})
+                    
                 self.sampler.update_metrics(metrics)
                 # NOTE: ------ Do active learning sampling ------
 

@@ -342,7 +342,7 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
     in Active Learning on fixed datasets. Uses Pandas under the hood.
     """
 
-    sampler_interface = S.ACTIVEDB
+    sampler_interface = S.ACTIVESTREAMDB
     def __init__(self, **kwargs):
         """
 
@@ -350,7 +350,7 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
         super().__init__(**kwargs)    
 
     def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
-        super().dump_iteration_results(iterations, trained_model_state_dict):
+        super().dump_iteration_results(iterations, trained_model_state_dict)
         # NOTE: save files seen 
         files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
         np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')

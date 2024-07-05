@@ -41,7 +41,7 @@ def load_saved_model(
     Loads saved model use create_model and a saved state dict
     the loading via bytesIo is for GPU to CPU conversion
     """
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    #device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = create_model(model_kwargs)
     cpu_state_dict = cast_state_dict_from_gpu_to_cpu(model_state_dict)
     model.load_state_dict(cpu_state_dict)
@@ -84,8 +84,8 @@ def run_train_model(
     traindataset = TensorDataset(*train_data)
     valdataset = TensorDataset(*valid_data)
 
-    train_loader = DataLoader(traindataset, batch_size=batch_size)
-    valid_loader = DataLoader(valdataset, batch_size=batch_size)
+    train_loader = DataLoader(traindataset, batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(valdataset, batch_size=batch_size, shuffle=False)
 
     # NOTE: Create model  & Optimizer
 
@@ -159,3 +159,33 @@ def validation_step(
             if (not torch.isinf(val_r2)) and val_r2>-10: # -10 is arbitrary, sometimes the batch diversity is tiny and therefore val_r2 can be very negative although not inf
                 step_r2.append(val_r2.item())
     return np.mean(step_loss), np.mean(step_r2)
+
+
+def test_model_continual_learning(
+    trained_model_kwargs: dict,
+    trained_model_state_dict: dict,
+    test_data: tuple[torch.Tensor, torch.Tensor],
+    acquisition_batch: int,
+    current_iteration: int,   
+    train_kwargs: dict
+) -> dict[str, list[float]]:
+    """
+    Test on previous tasks in a continual learning scenario where only the latest training data is used but performance on previous tasks must be retained
+    """
+    batch_size = train_kwargs.get("batch_size",512)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = load_saved_model(trained_model_kwargs, trained_model_state_dict, device)
+    metrics = []
+    #NOTE: iterations are 1-based and not 0-based in Executor loop, but torch.Tensor is 0-based.    
+    for i in range(current_iteration-1      ): 
+        chunk = test_data[i*acquisition_batch, (i+1)*acquisition_batch, :]
+        test = TensorDataset(*chunk)
+        test_loader = DataLoader(test, batch_size=batch_size, shuffle=False)
+        mse, r2 = validation_step(model, test_loader, device)
+        metrics.append(
+            {'test_losses': mse,
+            'test_r2_losses': r2}
+            )
+    return metrics
+
+
