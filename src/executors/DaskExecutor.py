@@ -189,9 +189,9 @@ class DaskExecutor(Executor):
                     )
                 ) 
 
-                train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
-                    train, valid
-                ) #TODO: add test to this
+                train_data, valid_data, test_data = self.sampler.parser.make_train_valid_test_datasplit(
+                    train, valid, test
+                ) 
 
                 self.sampler.model_kwargs["input_dim"] = train_data[0].shape[-1]
                 self.sampler.model_kwargs["output_dim"] = train_data[1].shape[-1]
@@ -233,20 +233,23 @@ class DaskExecutor(Executor):
                     )
 
                 if sampler_interface in [S.ACTIVESTREAMDB]:
-                    testing_run = self.client.surrogate_client.submit(
+                    testing_run = self.surrogate_client.submit(
                         test_model_continual_learning,
                         self.sampler.model_kwargs,
                         trained_model_state_dict,
-                        test_data, #TODO: retrieve from make_train_valid_datasplit
+                        test_data, 
                         self.sampler.acquisition_batch_size,
                         iterations,
                         self.sampler.train_kwargs
                     )
                     testing_run_res = wait(testing_run)
-                    metrics_continual_learning = testing_run_res[0]
+                    testing_run_res_unwrap = [res.result() for res in testing_run_res.done]
+                    print(f"iteration {iterations}", testing_run_res_unwrap)
+                    metrics_continual_learning = testing_run_res_unwrap[0][0]
                     metrics.update({'continual_learning':metrics_continual_learning})
-                    
+
                 self.sampler.update_metrics(metrics)
+                
                 # NOTE: ------ Do active learning sampling ------
 
                 example_model = load_saved_model(
@@ -258,6 +261,7 @@ class DaskExecutor(Executor):
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
                 self.sampler.dump_iteration_results(iterations, trained_model_state_dict)
+
             # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
         # elif sampler_interface in [S.ACTIVESTREAM]:
         #     iterations = 0

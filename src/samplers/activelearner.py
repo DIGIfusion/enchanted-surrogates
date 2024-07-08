@@ -161,6 +161,7 @@ class ActiveLearnerBMDAL(Sampler):
             )
         else:
             bs = int(self.acquisition_batch_size/len(self.selection_method))
+            print(f"Mixed acquisition! Batch size reduced to {bs}")
             new_idxs = []
             for sm, swt, of, bk, kt in zip(self.selection_method, self.sel_with_train, self.overselection_factor, self.base_kernel, self.kernel_transform):
                 new_idxs_tmp, _ = select_batch(
@@ -174,8 +175,10 @@ class ActiveLearnerBMDAL(Sampler):
                     base_kernel=bk,
                     kernel_transforms=kt,
                 )
+                print(f"Selection: {sm}, Selected {len(new_idxs_tmp)} indices")
                 new_idxs.append(new_idxs_tmp)
             new_idxs = np.hstack(new_idxs)
+        print(f'Added {len(new_idxs)} points to the training dataset!')
 
         return new_idxs
 
@@ -348,9 +351,42 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
 
         """
         super().__init__(**kwargs)    
+        self.metrics.update({"continual_learning": []})
 
     def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
         super().dump_iteration_results(iterations, trained_model_state_dict)
         # NOTE: save files seen 
         files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
         np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')
+
+        if self.parser.use_only_new:
+            print("saving now!")
+            metrics = self.metrics["continual_learning"]
+            for it in range(iterations):
+                r2_losses = metrics[it]["test_r2_losses"]
+                mse_losses = metrics[it]["test_losses"]
+
+                save_dir = os.path.join(self.save_dir,f"test_iteration_{it}")
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                final_metric_file = os.path.join(save_dir, self.filename_save+'_CL.txt')
+                with open(final_metric_file, "a") as f:
+                    f.write(f"{iterations}, {len(self.parser.train)}, {r2_losses}, {mse_losses} \n")
+            
+
+
+    def update_metrics(self, metrics: dict) -> None:
+        """
+        NOTE: this assumes R2 score and regression metric is returned in the metrics dictionary.
+        TODO: possibly update for more metrics
+        """
+        r2_score = metrics["val_r2_losses"]
+        best_r2_score = max(r2_score)
+
+        L2_score = metrics["val_losses"]
+        best_L2_score = min(L2_score)
+
+        self.metrics["val_r2_losses"].append(best_r2_score)
+        self.metrics["val_losses"].append(best_L2_score)
+        self.metrics["continual_learning"].append(metrics["continual_learning"])
+

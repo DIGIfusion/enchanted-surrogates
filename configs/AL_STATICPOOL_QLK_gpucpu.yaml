@@ -2,7 +2,7 @@
 sampler:
   type: ActiveLearningBMDALLabelledPoolSampler
   num_initial_points: 5000
-  aquisition_batch_size: 512
+  acquisition_batch_size: 512
   total_budget: 80000
   selection_method: lcmd
   kernel_transform: [['rp', [512]]]

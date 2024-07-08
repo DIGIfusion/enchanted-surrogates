@@ -117,11 +117,12 @@ class LabelledPoolParser(Parser):
         """ Returns the unnormalized train, valid, test, and pool tensors """
         return self.train, self.valid, self.test, self.pool
 
-    def make_train_valid_datasplit(
+    def make_train_valid_test_datasplit(
         self,
         train: torch.Tensor,
         valid: torch.Tensor,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        test: torch.Tensor,
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """ 
         takes two tensors and returns the x,y splits based on input_col_idxs and output_col_idxs attributes
         also casts tensors to float 
@@ -134,9 +135,12 @@ class LabelledPoolParser(Parser):
             valid[:, self.input_col_idxs].float(),
             valid[:, self.output_col_idxs].float(),
         )
-
+        x_test, y_test = (
+            test[:, self.input_col_idxs].float(),
+            test[:, self.output_col_idxs].float(),
+        )
         assert not torch.isnan(x_train).any()
-        return (x_train, y_train), (x_valid, y_valid)
+        return (x_train, y_train), (x_valid, y_valid), (x_test, y_test)
 
     def update_pool_and_train(self, new_idxs):
         """
@@ -195,7 +199,6 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
         self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',5)
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
-        self.use_only_new = streaming_kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
         self.shots_seen = [self.data_basepath]
         self.all_shots_seen = [self.data_basepath]
         self.campaign_id = 0

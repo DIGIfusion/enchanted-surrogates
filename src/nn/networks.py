@@ -176,16 +176,26 @@ def test_model_continual_learning(
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = load_saved_model(trained_model_kwargs, trained_model_state_dict, device)
     metrics = []
-    #NOTE: iterations are 1-based and not 0-based in Executor loop, but torch.Tensor is 0-based.    
-    for i in range(current_iteration-1      ): 
-        chunk = test_data[i*acquisition_batch, (i+1)*acquisition_batch, :]
-        test = TensorDataset(*chunk)
-        test_loader = DataLoader(test, batch_size=batch_size, shuffle=False)
-        mse, r2 = validation_step(model, test_loader, device)
+
+    if current_iteration==0:
         metrics.append(
-            {'test_losses': mse,
-            'test_r2_losses': r2}
-            )
+            {'test_losses': np.nan,
+            'test_r2_losses': np.nan}
+            )    
+    else:
+        for i in range(1,current_iteration+1): 
+            print("unwrapping iterations ", i)
+            x_test, y_test = test_data
+            x_test = x_test[(i-1)*acquisition_batch:i*acquisition_batch, :] 
+            y_test = y_test[(i-1)*acquisition_batch:i*acquisition_batch, :] 
+            test = TensorDataset(x_test, y_test)
+            test_loader = DataLoader(test, batch_size=batch_size, shuffle=False)
+            mse, r2 = validation_step(model, test_loader, device)
+            print(f'testing', mse, r2)
+            metrics.append(
+                {'test_losses': mse,
+                'test_r2_losses': r2}
+                )
     return metrics
 
 
