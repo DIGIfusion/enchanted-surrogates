@@ -35,6 +35,7 @@ class Scaler:
     def fit(self, data: torch.Tensor):
         self.mean_ = data.mean(dim=0)
         self.scale_ = data.std(dim=0)
+        print('scales: ',self.scale_, "means: ", self.mean_)
 
     def transform(self, data: torch.Tensor) -> torch.Tensor:
         return (data - self.mean_) / self.scale_
@@ -45,6 +46,9 @@ class Scaler:
 
     def inverse_transform(self, data: torch.Tensor) -> torch.Tensor:
         return self.scale_ * data + self.mean_
+
+    def find_zeros(self):
+        return torch.any(self.scale<1.e-10).item()
 
 
 def apply_scaler(train, valid, test, pool, scaler=None, op="transform"):

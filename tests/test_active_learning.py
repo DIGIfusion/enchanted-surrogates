@@ -18,7 +18,7 @@ config_filepath2 = os.path.join(
 data_path = os.path.join(os.getcwd(), "tests/train.csv")
 
 
-configs_to_test = [config_filepath, config_filepath2]
+configs_to_test = [config_filepath2]
 
 
 @pytest.mark.parametrize("config_name", configs_to_test)

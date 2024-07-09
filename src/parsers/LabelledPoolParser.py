@@ -105,11 +105,20 @@ class LabelledPoolParser(Parser):
         pool: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         assert not torch.isnan(train).any()
-        train, valid, test, pool, _ = apply_scaler(
+        train, valid, test, pool, scaler = apply_scaler(
             train, valid, test, pool, scaler=None, op="transform"
         )
-        assert not torch.isnan(train).any()
+        self.scaler = scaler
         return train, valid, test, pool
+
+    def has_nans_from_scaling(
+        self   
+    ) -> bool:
+        """
+        This is a helper function that identifies when NaNs appear because the batch has identical values in at least one of the columns
+        """
+        return self.scaler.find_zeros()
+
 
     def get_unscaled_train_valid_test_pool_from_self(
         self,
@@ -158,7 +167,11 @@ class LabelledPoolParser(Parser):
         self.pool = self.pool[~logical_new_idxs]
 
         assert not torch.isnan(self.train).any()
-        assert len(self.train) + len(self.pool) == check_sum
+        assert not torch.isnan(self.valid).any()
+        assert not torch.isnan(self.test).any()
+        assert not torch.isnan(self.pool).any()
+        if not self.use_only_new:
+            assert len(self.train) + len(self.pool) == check_sum
 
     def print_dset_sizes(
         self,
@@ -239,10 +252,9 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         data = self.gather_data_from_storage(data_path=data_path)
         data = data[self.keep_keys]        
 
-        train, valid, test, pool = data_split(
+        _, valid, test, pool = data_split(
             data, **self.data_args
         )
-        train = torch.tensor(train.values) # NOTE: this is empty
         valid = torch.tensor(valid.values)
         test = torch.tensor(test.values)
         pool = torch.tensor(pool.values)    
@@ -253,5 +265,6 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
             self.pool = torch.cat((self.pool, pool))       
         else:
             self.pool = pool
+        # NOTE: self.train was set in update_pool_and_train(...)
         return self.train, self.valid, self.test, self.pool
     

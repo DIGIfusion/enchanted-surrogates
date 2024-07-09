@@ -182,7 +182,7 @@ class DaskExecutor(Executor):
                     print('Data has exhausted. Finishing up...')
                     break
                 
-                # rescale data and pool
+                # NOTE: rescale data and pool
                 train, valid, test, pool = (
                     self.sampler.parser.scale_train_val_test_pool(
                         train, valid, test, pool
@@ -232,7 +232,7 @@ class DaskExecutor(Executor):
                         f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
                     )
 
-                if sampler_interface in [S.ACTIVESTREAMDB]:
+                if sampler_interface in [S.ACTIVESTREAMDB] and self.sampler.parser.use_only_new:
                     testing_run = self.surrogate_client.submit(
                         test_model_continual_learning,
                         self.sampler.model_kwargs,

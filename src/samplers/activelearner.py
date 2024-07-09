@@ -351,13 +351,16 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
 
         """
         super().__init__(**kwargs)    
-        self.metrics.update({"continual_learning": []})
+        if self.parser.use_only_new:
+            self.metrics.update({"continual_learning": []})
+        
 
     def dump_iteration_results(self, iterations: int, trained_model_state_dict: dict):
         super().dump_iteration_results(iterations, trained_model_state_dict)
         # NOTE: save files seen 
         files_seen_path = os.path.join(self.save_dir, f'files_seen.txt')
         np.savetxt(files_seen_path, self.parser.all_shots_seen, fmt='%s')
+
 
         if self.parser.use_only_new:
             print("saving now!")
@@ -388,5 +391,6 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
 
         self.metrics["val_r2_losses"].append(best_r2_score)
         self.metrics["val_losses"].append(best_L2_score)
-        self.metrics["continual_learning"].append(metrics["continual_learning"])
+        if self.parser.use_only_new:
+            self.metrics["continual_learning"].append(metrics["continual_learning"])
 
