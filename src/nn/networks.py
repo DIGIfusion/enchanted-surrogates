@@ -85,7 +85,7 @@ def run_train_model(
     valdataset = TensorDataset(*valid_data)
 
     train_loader = DataLoader(traindataset, batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(valdataset, batch_size=batch_size, shuffle=False)
+    valid_loader = DataLoader(valdataset, batch_size=len(valdataset), shuffle=False)
 
     # NOTE: Create model  & Optimizer
 
