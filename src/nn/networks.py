@@ -72,8 +72,11 @@ def run_train_model(
     train_data: tuple[torch.Tensor, torch.Tensor],
     valid_data: tuple[torch.Tensor, torch.Tensor],
     train_kwargs: dict,
+    model_state_dict: dict=None,
 ) -> tuple[dict[str, list[float]], dict]:
-    """Returns metrics and state dictionary, model is loaded via create_model()"""
+    """Returns metrics and state dictionary, model is loaded via create_model()
+       If model_state_dict is passed, a model will be initialised based on it. Useful for continual learning.
+    """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     batch_size = train_kwargs.get("batch_size", 512)
     epochs = train_kwargs.get("epochs", 100)
@@ -88,9 +91,11 @@ def run_train_model(
     valid_loader = DataLoader(valdataset, batch_size=len(valdataset), shuffle=False)
 
     # NOTE: Create model  & Optimizer
-
-    model = create_model(model_kwargs)
-    model.to(device=device)
+    if isinstance(model_state_dict,dict):
+        model = load_saved_model(model_kwargs, model_state_dict, device)
+    else:
+        model = create_model(model_kwargs)
+        model.to(device=device)
 
     model.float()
     optimizer = torch.optim.Adam(
@@ -156,8 +161,8 @@ def validation_step(
             val_r2 = r2_score(y_hat, y)
             step_loss.append(loss.item())
             # NOTE: if val_r2 is inifinite, it means that there is no diversity in the batch, we exclude it            
-            if (not torch.isinf(val_r2)) and val_r2>-10: # -10 is arbitrary, sometimes the batch diversity is tiny and therefore val_r2 can be very negative although not inf
-                step_r2.append(val_r2.item())
+           # if (not torch.isinf(val_r2)) and val_r2>-10: # -10 is arbitrary, sometimes the batch diversity is tiny and therefore val_r2 can be very negative although not inf
+            step_r2.append(val_r2.item())
     return np.mean(step_loss), np.mean(step_r2)
 
 

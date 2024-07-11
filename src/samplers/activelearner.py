@@ -96,7 +96,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.sample_from_pool      = kwargs.get("sample_from_pool",False)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
-        default_filename           = f"{self.selection_method}_{self.base_kernel}_transform_{self.kernel_transform}"
+        default_filename           = "results"
         self.filename_save          = kwargs.get('filename_save', default_filename)
 
         self.parser_kwargs         = parser_kwargs
@@ -365,7 +365,9 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
         if self.parser.use_only_new:
             print("saving now!")
             metrics = self.metrics["continual_learning"]
+            print("total numer of iterations to process:", iterations)
             for it in range(iterations):
+                print(metrics, it)
                 r2_losses = metrics[it]["test_r2_losses"]
                 mse_losses = metrics[it]["test_losses"]
 
@@ -392,5 +394,5 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
         self.metrics["val_r2_losses"].append(best_r2_score)
         self.metrics["val_losses"].append(best_L2_score)
         if self.parser.use_only_new:
-            self.metrics["continual_learning"].append(metrics["continual_learning"])
+            self.metrics["continual_learning"] = metrics["continual_learning"]
 

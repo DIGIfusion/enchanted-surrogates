@@ -116,6 +116,7 @@ class DaskExecutor(Executor):
 
     def start_runs(self):
         sampler_interface: S = self.sampler.sampler_interface
+        continual_learning = sampler_interface in [S.ACTIVESTREAMDB] and self.sampler.parser.use_only_new
         print(100 * "=")
         print("Creating initial runs")
 
@@ -209,6 +210,14 @@ class DaskExecutor(Executor):
                     valid_data[1].shape,
                 )
 
+
+                # NOTE: overwrites or reuses model from previous iteration
+                if iterations>0 and continual_learning:
+                    # reuses
+                    pass
+                else:
+                    # overwrites
+                    model_state_dict = None
                 # TODO: profile this vs write the data instead
                 time_starttrain = time.time()
                 new_model_training = self.surrogate_client.submit(
@@ -217,6 +226,7 @@ class DaskExecutor(Executor):
                     train_data,
                     valid_data,
                     self.sampler.train_kwargs,
+                    model_state_dict
                 )
 
                 train_model_run = wait([new_model_training])
@@ -232,7 +242,8 @@ class DaskExecutor(Executor):
                         f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
                     )
 
-                if sampler_interface in [S.ACTIVESTREAMDB] and self.sampler.parser.use_only_new:
+                # NOTE: continual learning: testing on previous datasets
+                if continual_learning:
                     testing_run = self.surrogate_client.submit(
                         test_model_continual_learning,
                         self.sampler.model_kwargs,
@@ -244,11 +255,12 @@ class DaskExecutor(Executor):
                     )
                     testing_run_res = wait(testing_run)
                     testing_run_res_unwrap = [res.result() for res in testing_run_res.done]
-                    print(f"iteration {iterations}", testing_run_res_unwrap)
-                    metrics_continual_learning = testing_run_res_unwrap[0][0]
+                    metrics_continual_learning = testing_run_res_unwrap[0]
                     metrics.update({'continual_learning':metrics_continual_learning})
 
+                # NOTE: save metrics
                 self.sampler.update_metrics(metrics)
+                self.sampler.dump_iteration_results(iterations, trained_model_state_dict)
                 
                 # NOTE: ------ Do active learning sampling ------
 
@@ -260,7 +272,7 @@ class DaskExecutor(Executor):
                 # NOTE: ------ Prepare next simulator runs ----
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
-                self.sampler.dump_iteration_results(iterations, trained_model_state_dict)
+                
 
             # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
         # elif sampler_interface in [S.ACTIVESTREAM]:
