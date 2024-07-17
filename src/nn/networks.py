@@ -91,7 +91,8 @@ def run_train_model(
     valid_loader = DataLoader(valdataset, batch_size=len(valdataset), shuffle=False)
 
     # NOTE: Create model  & Optimizer
-    if isinstance(model_state_dict,dict):
+    if model_state_dict is not None:
+        print("obtaining previous model in run function")
         model = load_saved_model(model_kwargs, model_state_dict, device)
     else:
         model = create_model(model_kwargs)

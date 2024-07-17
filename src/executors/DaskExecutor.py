@@ -116,7 +116,7 @@ class DaskExecutor(Executor):
 
     def start_runs(self):
         sampler_interface: S = self.sampler.sampler_interface
-        continual_learning = sampler_interface in [S.ACTIVESTREAMDB] and self.sampler.parser.use_only_new
+        continual_learning = self.sampler.continual_learning
         print(100 * "=")
         print("Creating initial runs")
 
@@ -217,7 +217,7 @@ class DaskExecutor(Executor):
                     pass
                 else:
                     # overwrites
-                    model_state_dict = None
+                    trained_model_state_dict = None
                 # TODO: profile this vs write the data instead
                 time_starttrain = time.time()
                 new_model_training = self.surrogate_client.submit(
@@ -226,7 +226,7 @@ class DaskExecutor(Executor):
                     train_data,
                     valid_data,
                     self.sampler.train_kwargs,
-                    model_state_dict
+                    trained_model_state_dict
                 )
 
                 train_model_run = wait([new_model_training])

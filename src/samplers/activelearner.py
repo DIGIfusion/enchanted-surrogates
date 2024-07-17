@@ -103,6 +103,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.model_kwargs          = model_kwargs
         self.train_kwargs          = train_kwargs
         self.metrics               = {'val_losses': [], 'val_r2_losses': [] }
+        self.continual_learning    = kwargs.get("continual_learning", False)
 
         self.parser                = getattr(parsers, parser_kwargs["type"])(**parser_kwargs)
         # fmt: on
