@@ -261,10 +261,10 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
 
         self.valid = torch.cat((self.valid, valid))
         self.test = torch.cat((self.test, test))
-        if not self.use_only_new:
-            self.pool = torch.cat((self.pool, pool))       
-        else:
+        if self.use_only_new:
             self.pool = pool
+        else:
+            self.pool = torch.cat((self.pool, pool))       
         # NOTE: self.train was set in update_pool_and_train(...)
         return self.train, self.valid, self.test, self.pool
     

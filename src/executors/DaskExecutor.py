@@ -119,6 +119,7 @@ class DaskExecutor(Executor):
         continual_learning = self.sampler.continual_learning
         print(100 * "=")
         print("Creating initial runs")
+        print("continual learning", self.sampler.continual_learning)
 
         initial_parameters = self.sampler.get_initial_parameters()
         futures = self.submit_batch_of_params(initial_parameters)
@@ -214,6 +215,7 @@ class DaskExecutor(Executor):
                 # NOTE: overwrites or reuses model from previous iteration
                 if iterations>0 and continual_learning:
                     # reuses
+                    print("Re-using the model warm-started from previous iteration...")
                     pass
                 else:
                     # overwrites
