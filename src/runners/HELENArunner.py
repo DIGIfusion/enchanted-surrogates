@@ -79,6 +79,7 @@ class HELENArunner(Runner):
 
         """
         print(f"single_code_run: {run_dir}", flush=True)
+        os.mkdir(run_dir)
         self.parser.write_input_file(params, run_dir, self.namelist_path)
 
         os.chdir(run_dir)

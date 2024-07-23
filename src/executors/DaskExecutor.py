@@ -213,7 +213,7 @@ class DaskExecutor(Executor):
 
 
                 # NOTE: overwrites or reuses model from previous iteration
-                if iterations>0 and continual_learning:
+                if iterations>0 and not self.sampler.from_scratch:# continual_learning:
                     # reuses
                     print("Re-using the model warm-started from previous iteration...")
                     pass

@@ -82,6 +82,7 @@ def run_train_model(
     epochs = train_kwargs.get("epochs", 100)
     learning_rate = train_kwargs.get("learning_rate", 0.0001)
     weight_decay = train_kwargs.get("weight_decay", 0.0)
+    patience = train_kwargs.get("patience",5)
 
     # NOTE:  Create data loaders
     traindataset = TensorDataset(*train_data)
@@ -107,6 +108,7 @@ def run_train_model(
     best_model_state_dict = model.state_dict()
     train_losses, val_losses, r2_losses = [], [], []
     best_loss = torch.inf
+    counter = 0 
     for epoch in range(epochs):
         train_loss = train_step(model, optimizer, train_loader, epoch, device=device)
         val_loss, r2_loss = validation_step(model, valid_loader, device=device)
@@ -116,6 +118,12 @@ def run_train_model(
         if val_losses[-1] < best_loss or epoch == 0:
             best_model_state_dict = model.state_dict()
             best_loss = val_losses[-1]
+            counter = 0
+        else:
+            counter+=1
+            if counter==patience:
+                print(f"Early stopping reached at epoch: {epoch}")
+                break
     metrics = {
         "train_losses": train_losses,
         "val_losses": val_losses,

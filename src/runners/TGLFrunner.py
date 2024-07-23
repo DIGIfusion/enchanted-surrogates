@@ -48,6 +48,8 @@ class TGLFrunner(Runner):
         """
 
         # write input file
+        os.mkdir(run_dir)
+
         self.parser.write_input_file(params, run_dir)
 
         # process input file

@@ -77,6 +77,8 @@ class MISHKArunner(Runner):
         """
         print(params)
         # check if equilibrium files exist and copy them to run_dir
+        os.mkdir(run_dir)
+
         self.get_equilibrium_files(run_dir, params)
 
         # write input file

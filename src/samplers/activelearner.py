@@ -104,6 +104,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.train_kwargs          = train_kwargs
         self.metrics               = {'val_losses': [], 'val_r2_losses': [] }
         self.continual_learning    = kwargs.get("continual_learning", False)
+        self.from_scratch          = kwargs.get("from_scratch",False) # allows to decouple saving CL results and retraining model from scratch vs warm-starting
 
         self.parser                = getattr(parsers, parser_kwargs["type"])(**parser_kwargs)
         # fmt: on

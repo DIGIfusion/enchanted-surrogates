@@ -58,6 +58,7 @@ class SIMPLErunner(Runner):
 
         """
         # os.chdir(run_dir)
+        os.mkdir(run_dir)
         self.parser.write_input_file(params, run_dir)
         subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
         res = self.parser.read_output_file(params, run_dir)
