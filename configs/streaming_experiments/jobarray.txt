@@ -1,8 +1,0 @@
-1 acsfw.yaml
-2 badge.yaml
-3 bait.yaml
-4 batchbald.yaml
-5 coresets.yaml
-6 lcmd.yaml
-7 bald.yaml
-8 random.yaml
