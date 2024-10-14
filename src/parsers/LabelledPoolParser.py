@@ -49,8 +49,8 @@ class LabelledPoolParser(Parser):
         self.data_args = kwargs.get("data_args")
         self.target_keys = kwargs.get("target")
         self.input_keys = kwargs.get("inputs")
-        self.use_only_new = kwargs.get('use_only_new',False) # should tell whether only the new data is used for valid pool and test 
-
+        self.use_only_new_for_train = kwargs.get('use_only_new_for_train',False) # should tell whether only the new data is used for valid pool and test 
+        self.use_only_new_for_pool = kwargs.get('use_only_new_for_pool',False)
         self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
         self.data = self.data[self.keep_keys]
@@ -160,7 +160,7 @@ class LabelledPoolParser(Parser):
         logical_new_idxs = torch.zeros(pool_idxs.shape[-1], dtype=torch.bool)
         logical_new_idxs[new_idxs] = True
         train_new = self.pool[logical_new_idxs]
-        if self.use_only_new:
+        if self.use_only_new_for_train:
             self.train = train_new
         else:        
             self.train = torch.cat([self.train,train_new])
@@ -170,7 +170,7 @@ class LabelledPoolParser(Parser):
         assert not torch.isnan(self.valid).any()
         assert not torch.isnan(self.test).any()
         assert not torch.isnan(self.pool).any()
-        if not self.use_only_new:
+        if not self.use_only_new_for_train:
             assert len(self.train) + len(self.pool) == check_sum
 
     def print_dset_sizes(
@@ -210,7 +210,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         
         self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
         streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
-        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',5)
+        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',3)
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
         self.shots_seen = [self.data_basepath]
         self.all_shots_seen = [self.data_basepath]
@@ -219,9 +219,8 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
     def get_unscaled_train_valid_test_pool_from_self(
         self
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data."""
-        # NOTE: it is better to save the new shot inputs in different files. Appending to existing data is costly and not typical for the streaming case. 
-        # Each folder will contain data from a different campaign. Each file is numbered using the shot number.
+        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
+        The c"""
 
         if len(self.shots_seen)>=self.num_shots_per_campaign:
             self.campaign_id+=1
@@ -232,6 +231,8 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
 
         campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
         files_this_campaign = os.listdir(campaign_folder)
+
+        # NOTE: iteratively appends
         count = 0
         while True:
             if count==len(files_this_campaign):
@@ -261,7 +262,7 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
 
         self.valid = torch.cat((self.valid, valid))
         self.test = torch.cat((self.test, test))
-        if self.use_only_new:
+        if self.use_only_new_for_pool:
             self.pool = pool
         else:
             self.pool = torch.cat((self.pool, pool))       

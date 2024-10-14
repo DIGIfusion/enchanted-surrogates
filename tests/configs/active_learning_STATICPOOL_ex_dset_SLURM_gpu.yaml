@@ -1,12 +1,13 @@
 sampler:
-  type: ActiveLearningBMDALStaticPoolSampler
+  type: ActiveLearningBMDALLabelledPoolSampler
   num_initial_points: 20
   aquisition_batch_size: 10
-  total_budget: 120
-  kernel_transform:  # TODO: make method to handle kernel transform properly...
-    - ['rp', [512]]
+  total_budget: 40
+  selection_method: 'random'
+  kernel_transform: []
+  base_kernel: 'linear'
   parser_kwargs: 
-    type: STATICPOOLparser
+    type: LabelledPoolParser
     data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
     inputs: 
       - 'peroxide'
@@ -15,22 +16,28 @@ sampler:
     target: 
       - 'pSat_Pa'
     data_args: 
-      train_size: 0.2
       valid_size: 0.3
       test_size: 0.1
+    streaming_kwargs:
+      num_campaigns: 10
+      num_shots_per_campaign: 3
+      use_only_new: False
   model_kwargs:
     model_width: 512
     model_depth: 4
     dropout: 0.0
   train_kwargs:
-    stuff: stuff 
-
-  # kernel_transform: [('rp', [512])]
+    batch_size: 64
+    epochs: 100
+    learning_rate: 1.e-4
+    weight_decay: 1.e-4
+    patience: 5
 
 runner:
   type: STATICPOOLrunner
   executable_path: None
   other_params: {}
+
 
 executor:
   type: DaskExecutor

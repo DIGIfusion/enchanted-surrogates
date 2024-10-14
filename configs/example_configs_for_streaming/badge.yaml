@@ -1,0 +1,48 @@
+# python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
+sampler:
+  type: ActiveLearningBMDALLabelledPoolStreamingSampler
+  num_initial_points: 500
+  acquisition_batch_size: 128
+  total_budget: 80000
+  selection_method: 'kmeanspp'
+  kernel_transform: [['train', [0.1]]]
+  base_kernel: 'll'
+  save_dir: results/badge/
+  sel_with_train: False
+  parser_kwargs: 
+    type: 'StreamingLabelledPoolParserJETMock'
+    data_path: '/path/to/data/lowpow_cluster/campaign_0/69437.csv'
+    inputs: 
+      - 'ane'
+      - 'ate'
+      - 'x'
+      - 'q'
+      - 'smag'
+      - 'alpha'
+      - 'ani1'
+      - 'ati0'
+      - 'lognustar'
+    target: 
+      - 'efi'
+    data_args: 
+      valid_size: 0.1
+      test_size: 0.1
+    streaming_kwargs:
+      num_campaigns: 10
+      num_shots_per_campaign: 3
+  model_kwargs:
+    model_width: 512
+    model_depth: 4
+    dropout: 0.0
+  train_kwargs:
+    stuff: stuff
+
+runner:
+  type: STATICPOOLrunner
+  executable_path: None
+  other_params: {}
+executor:
+  type: DaskExecutor
+  base_run_dir: data_store/streaming/
+  worker_args: 
+    local: 1
