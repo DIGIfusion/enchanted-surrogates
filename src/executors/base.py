@@ -94,7 +94,7 @@ class Executor(ABC):
         )
 
         os.makedirs(base_run_dir, exist_ok=True)
-        shutil.copyfile(config_filepath, os.path.join(base_run_dir, "CONFIG.yaml"))
+        shutil.copyfile(config_filepath, os.path.join(self.sampler.save_dir, "CONFIG.yaml"))
 
     @abstractmethod
     def start_runs(self):

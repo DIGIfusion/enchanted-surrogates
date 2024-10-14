@@ -30,6 +30,7 @@ import numpy as np
 from common import S
 import parsers
 from .base import Sampler
+import pandas as pd
 
 class ActiveLearnerBMDAL(Sampler):
     """
@@ -265,9 +266,19 @@ class ActiveLearnerBMDAL(Sampler):
         """
 
         if self.save_train_data:
-            train_fname = os.path.join(self.save_dir, f"train_{iterations}.pth")
-            torch.save(self.parser.train, train_fname)
+            data_save_dir = os.path.join(self.save_dir, "data", f"iteration_{iterations}")
+            if not os.path.exists(data_save_dir):
+                os.makedirs(data_save_dir)
+            train_fname = os.path.join(data_save_dir, f"train.parquet")
+            val_fname = os.path.join(data_save_dir, f"val.parquet")
+            test_fname = os.path.join(data_save_dir, f"test.parquet")
 
+            df = pd.DataFrame(data=self.parser.train.numpy(), columns=self.parser.keep_keys)
+            df.to_parquet(train_fname)
+            df = pd.DataFrame(data=self.parser.valid.numpy(), columns=self.parser.keep_keys)
+            df.to_parquet(val_fname)
+            df = pd.DataFrame(data=self.parser.test.numpy(), columns=self.parser.keep_keys)
+            df.to_parquet(test_fname)
 
         final_metric_file = os.path.join(self.save_dir, self.filename_save+'.txt')
         with open(final_metric_file, "a") as f:
@@ -276,6 +287,8 @@ class ActiveLearnerBMDAL(Sampler):
         model_path = os.path.join(self.save_dir, f'model_{iterations}.pth')
         if iterations % 5 == 0: 
             torch.save(trained_model_state_dict, model_path)
+
+
 
  
 
