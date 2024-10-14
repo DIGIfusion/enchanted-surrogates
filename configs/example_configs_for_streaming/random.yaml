@@ -34,7 +34,12 @@ sampler:
     model_depth: 4
     dropout: 0.0
   train_kwargs:
-    stuff: stuff
+    batch_size: 64
+    epochs: 100
+    learning_rate: 1.e-4
+    weight_decay: 1.e-4
+    patience: 5
+
 
 runner:
   type: STATICPOOLrunner
