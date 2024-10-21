@@ -16,6 +16,7 @@ from .base import Parser
 import torch
 import numpy as np
 import pandas as pd
+from glob import glob
 import os
 from common import data_split, CSVLoader, HDFLoader, PickleLoader, apply_scaler
 
@@ -53,6 +54,7 @@ class LabelledPoolParser(Parser):
         self.use_only_new_for_pool = kwargs.get('use_only_new_for_pool',False)
         self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
+        print(self.data)
         self.data = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
 
@@ -208,31 +210,73 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
 
         super().__init__(data_path=data_path, *args,**kwargs)
         
-        self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
         streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
-        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',3)
+        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',None)
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
+        self.num_acquisitions = streaming_kwargs.get('num_acquisitions', 5)
+        self.acquisition_number = 0 
+        if (self.num_shots_per_campaign is not None):
+            self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
+
         self.shots_seen = [self.data_basepath]
         self.all_shots_seen = [self.data_basepath]
         self.campaign_id = 0
+        
+
+
+    def _set_data(
+            self,
+            data_path: str
+    )-> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        data = self.gather_data_from_storage(data_path=data_path)
+        data = data[self.keep_keys]        
+
+        _, valid, test, pool = data_split(
+            data, **self.data_args
+        )
+        valid = torch.tensor(valid.values)
+        test = torch.tensor(test.values)
+        pool = torch.tensor(pool.values)            
+        self.valid = torch.cat((self.valid, valid))
+        self.test = torch.cat((self.test, test))
+        if self.use_only_new_for_pool:
+            self.pool = pool
+        else:
+            self.pool = torch.cat((self.pool, pool))       
+        # NOTE: self.train was set in update_pool_and_train(...)        
+        return self.valid, self.test, self.pool
+        
+    def _get_unscaled_train_valid_test_pool_from_self_campaigns_lumped(
+            self
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
+        """
+        if (self.acquisition_number>=self.num_acquisitions) or (self.campaign_id>=self.num_campaigns):
+            self.acquisition_number = 0 
+            return 'break',-1,-1,-1        
+        data_path = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
+        self.campaign_id +=1
+        self.acquisition_number +=1
+        return self._set_data(data_path)
 
     def get_unscaled_train_valid_test_pool_from_self(
         self
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
-        The c"""
+        """
 
+        if self.num_shots_per_campaign is None:
+            return self._get_unscaled_train_valid_test_pool_from_self_campaigns_lumped()
+        
         if len(self.shots_seen)>=self.num_shots_per_campaign:
             self.campaign_id+=1
             self.shots_seen = []
             if self.campaign_id==self.num_campaigns:
                 return 'break',-1,-1,-1
 
-
         campaign_folder = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
         files_this_campaign = os.listdir(campaign_folder)
 
-        # NOTE: iteratively appends
         count = 0
         while True:
             if count==len(files_this_campaign):
@@ -250,22 +294,4 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
                 count +=1
             
         print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
-        data = self.gather_data_from_storage(data_path=data_path)
-        data = data[self.keep_keys]        
-
-        _, valid, test, pool = data_split(
-            data, **self.data_args
-        )
-        valid = torch.tensor(valid.values)
-        test = torch.tensor(test.values)
-        pool = torch.tensor(pool.values)    
-
-        self.valid = torch.cat((self.valid, valid))
-        self.test = torch.cat((self.test, test))
-        if self.use_only_new_for_pool:
-            self.pool = pool
-        else:
-            self.pool = torch.cat((self.pool, pool))       
-        # NOTE: self.train was set in update_pool_and_train(...)
-        return self.train, self.valid, self.test, self.pool
-    
+        return self._set_data(data_path)

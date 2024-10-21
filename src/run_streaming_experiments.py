@@ -36,12 +36,13 @@ def main(cfg: str, n_repeats: int=1):
 
             
     args = load_configuration(cfg)
+    seed = args.seed
     print(args)
     for i in range(n_repeats):
         print(20*"=", f"\n \t Running with {config}, repeat number {i}\n", 20*"=")
         filename_save = f"results_{i}"
         args.sampler["filename_save"] = filename_save
-        np.random.seed(1000)
+        np.random.seed(seed)
         sampler = getattr(samplers, args.sampler["type"])(**args.sampler)
         executor = getattr(executors, args.executor["type"])(
             sampler=sampler, runner_args=args.runner, **args.executor
