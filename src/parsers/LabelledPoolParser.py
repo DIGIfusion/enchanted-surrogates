@@ -54,7 +54,6 @@ class LabelledPoolParser(Parser):
         self.use_only_new_for_pool = kwargs.get('use_only_new_for_pool',False)
         self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
-        print(self.data)
         self.data = self.data[self.keep_keys]
         self.mapping_column_indices = self.get_column_idx_mapping()
 
@@ -226,11 +225,8 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
 
     def _set_data(
             self,
-            data_path: str
+            data: pd.DataFrame
     )-> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        data = self.gather_data_from_storage(data_path=data_path)
-        data = data[self.keep_keys]        
-
         _, valid, test, pool = data_split(
             data, **self.data_args
         )
@@ -244,20 +240,25 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         else:
             self.pool = torch.cat((self.pool, pool))       
         # NOTE: self.train was set in update_pool_and_train(...)        
-        return self.valid, self.test, self.pool
+        return self.train, self.valid, self.test, self.pool
         
     def _get_unscaled_train_valid_test_pool_from_self_campaigns_lumped(
             self
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
         """
-        if (self.acquisition_number>=self.num_acquisitions) or (self.campaign_id>=self.num_campaigns):
+        if (self.acquisition_number>=self.num_acquisitions):
             self.acquisition_number = 0 
+            self.campaign_id +=1
             return 'break',-1,-1,-1        
-        data_path = os.path.join(self.data_basepath,"campaign_"+str(self.campaign_id))
-        self.campaign_id +=1
+        if (self.campaign_id>=self.num_campaigns):
+            return 'break',-1,-1,-1        
+        train = self.train.query(f"campaign=={self.campaign_id}")
+        valid = self.valid.query(f"campaign=={self.campaign_id}")
+        test = self.test.query(f"campaign=={self.campaign_id}")
+        pool = self.pool.query(f"campaign=={self.campaign_id}")
         self.acquisition_number +=1
-        return self._set_data(data_path)
+        return train, valid, test, pool
 
     def get_unscaled_train_valid_test_pool_from_self(
         self
@@ -294,4 +295,6 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
                 count +=1
             
         print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
-        return self._set_data(data_path)
+        data = self.gather_data_from_storage(data_path=data_path)
+        data = data[self.keep_keys]                
+        return self._set_data(data)
