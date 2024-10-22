@@ -1,0 +1,55 @@
+# python3 src/run.py -cf=$(pwd)/tests/configs/AL_STATICPOOL_QLK_gpucpu.yaml
+sampler:
+  type: ActiveLearningBMDALLabelledPoolStreamingSampler
+  num_initial_points: 20
+  acquisition_batch_size: 10
+  total_budget: 40
+  selection_method: 'random'
+  kernel_transform: []
+  base_kernel: 'linear'
+  save_dir: /scratch/project_2007159/lzanisi/enchanted-surrogates/results/tests
+  parser_kwargs: 
+    type: 'StreamingLabelledPoolParserJETMock'
+    data_path: '/scratch/project_2007159/lzanisi/enchanted-surrogates/data/lowpow_cluster/campaign_0/69437.csv'
+    inputs: 
+      - 'ane'
+      - 'ate'
+      - 'x'
+      - 'q'
+      - 'smag'
+      - 'alpha'
+      - 'ani1'
+      - 'ati0'
+      - 'lognustar'
+    target: 
+      - 'efi'
+    data_args: 
+      valid_size: 0.1
+      test_size: 0.1
+    streaming_kwargs:
+      num_campaigns: 2
+      num_acquisitions: 1
+  model_kwargs:
+    model_width: 64
+    model_depth: 2
+    dropout: 0.0
+  train_kwargs:
+    batch_size: 64
+    epochs: 1
+    learning_rate: 1.e-4
+    weight_decay: 1.e-4
+    patience: 5
+
+runner:
+  type: STATICPOOLrunner
+  executable_path: None
+  other_params: {}
+
+seed:
+  42
+
+executor:
+  type: DaskExecutor
+  base_run_dir: data_store/streaming/
+  worker_args: 
+    local: 1
