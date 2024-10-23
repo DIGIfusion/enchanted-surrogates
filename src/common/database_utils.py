@@ -48,7 +48,7 @@ class Scaler:
         return self.scale_ * data + self.mean_
 
     def find_zeros(self):
-        return torch.any(self.scale<1.e-10).item()
+        return torch.any(self.scale_<1.e-10).item()
 
 
 def apply_scaler(train, valid, test, pool, scaler=None, op="transform"):

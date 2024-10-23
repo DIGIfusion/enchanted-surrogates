@@ -39,7 +39,7 @@ def main(cfg: str, n_repeats: int=1):
     seed = args.seed
     print(args)
     for i in range(n_repeats):
-        print(20*"=", f"\n \t Running with {config}, repeat number {i}\n", 20*"=")
+        print(20*"=", f"\n \t Running with {args}, repeat number {i}\n", 20*"=")
         filename_save = f"results_{i}"
         args.sampler["filename_save"] = filename_save
         np.random.seed(seed)

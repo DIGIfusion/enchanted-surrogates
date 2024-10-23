@@ -12,6 +12,7 @@ Needs functionality:
 
 """
 
+from curses import meta
 from .base import Parser
 import torch
 import numpy as np
@@ -52,9 +53,10 @@ class LabelledPoolParser(Parser):
         self.input_keys = kwargs.get("inputs")
         self.use_only_new_for_train = kwargs.get('use_only_new_for_train',False) # should tell whether only the new data is used for valid pool and test 
         self.use_only_new_for_pool = kwargs.get('use_only_new_for_pool',False)
-        self.keep_keys = self.target_keys + self.input_keys
         self.data = self.gather_data_from_storage(data_path)
+        self.keep_keys = self.target_keys + self.input_keys 
         self.data = self.data[self.keep_keys]
+
         self.mapping_column_indices = self.get_column_idx_mapping()
 
         self.input_col_idxs = [
@@ -63,6 +65,7 @@ class LabelledPoolParser(Parser):
         self.output_col_idxs = [
             self.mapping_column_indices[col_idx] for col_idx in self.target_keys
         ]
+
 
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
@@ -77,6 +80,7 @@ class LabelledPoolParser(Parser):
         assert not torch.isnan(self.test).any()
         assert not torch.isnan(self.pool).any()
 
+        return 
 
     def gather_data_from_storage(self, data_path) -> pd.DataFrame:
         extension = data_path.split(".")[-1]
@@ -210,64 +214,19 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         super().__init__(data_path=data_path, *args,**kwargs)
         
         streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
-        self.num_shots_per_campaign = streaming_kwargs.get('num_shots_per_campaign',None)
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
-        self.num_acquisitions = streaming_kwargs.get('num_acquisitions', 5)
-        self.acquisition_number = 0 
-        if (self.num_shots_per_campaign is not None):
-            self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
-
+        self.num_shots_per_campaign = streaming_kwargs.get('num_acquisitions',3)
+        self.data_basepath = os.path.join(os.path.dirname(data_path),'../')
         self.shots_seen = [self.data_basepath]
         self.all_shots_seen = [self.data_basepath]
         self.campaign_id = 0
-        
-
-
-    def _set_data(
-            self,
-            data: pd.DataFrame
-    )-> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        _, valid, test, pool = data_split(
-            data, **self.data_args
-        )
-        valid = torch.tensor(valid.values)
-        test = torch.tensor(test.values)
-        pool = torch.tensor(pool.values)            
-        self.valid = torch.cat((self.valid, valid))
-        self.test = torch.cat((self.test, test))
-        if self.use_only_new_for_pool:
-            self.pool = pool
-        else:
-            self.pool = torch.cat((self.pool, pool))       
-        # NOTE: self.train was set in update_pool_and_train(...)        
-        return self.train, self.valid, self.test, self.pool
-        
-    def _get_unscaled_train_valid_test_pool_from_self_campaigns_lumped(
-            self
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
-        """
-        if (self.acquisition_number>=self.num_acquisitions):
-            self.acquisition_number = 0 
-            self.campaign_id +=1
-            return 'break',-1,-1,-1        
-        if (self.campaign_id>=self.num_campaigns):
-            return 'break',-1,-1,-1        
-        train = self.train.query(f"campaign=={self.campaign_id}")
-        valid = self.valid.query(f"campaign=={self.campaign_id}")
-        test = self.test.query(f"campaign=={self.campaign_id}")
-        pool = self.pool.query(f"campaign=={self.campaign_id}")
-        self.acquisition_number +=1
-        return train, valid, test, pool
+            
 
     def get_unscaled_train_valid_test_pool_from_self(
         self
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
         """
-
-        if self.num_shots_per_campaign is None:
-            return self._get_unscaled_train_valid_test_pool_from_self_campaigns_lumped()
         
         if len(self.shots_seen)>=self.num_shots_per_campaign:
             self.campaign_id+=1
@@ -297,4 +256,108 @@ class StreamingLabelledPoolParserJETMock(LabelledPoolParser):
         print(f'Campaign number: {self.campaign_id}, shot number: {len(self.shots_seen)} ')
         data = self.gather_data_from_storage(data_path=data_path)
         data = data[self.keep_keys]                
-        return self._set_data(data)
+        _, valid, test, pool = data_split(
+            data, **self.data_args
+        )
+        valid = torch.tensor(valid.values)
+        test = torch.tensor(test.values)
+        pool = torch.tensor(pool.values)            
+        self.valid = torch.cat((self.valid, valid))
+        self.test = torch.cat((self.test, test))
+        if self.use_only_new_for_pool:
+            self.pool = pool
+        else:
+            self.pool = torch.cat((self.pool, pool))       
+        # NOTE: self.train was set in update_pool_and_train(...)        
+        return self.train, self.valid, self.test, self.pool        
+
+
+
+class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMock):
+    """
+    Parses data from a mock batched data stream, that has already 
+    been labelled and that is unnormalised.
+    At the moment, this parser handles the scaling of data, but 
+    does not hold copies of the scaled data as attributes. 
+    The unscaled  data is stored as attributes and it gets modified
+    as data from the batched stream is processed.
+    
+    Attributes: 
+        train: torch.Tensor, unnormalized current training set 
+        valid: torch.Tensor, unnormalized current validation set
+        test : torch.Tensor, unnormalized current test set
+        pool : torch.Tensor, unnormalized current pool
+        input_col_idxs: list of indices corresponding to the inputs columns
+        output_col_idxs: list of indices corresponding to the output columns    
+    """
+    def __init__(self,data_path: str, *args, **kwargs):
+
+        super().__init__(data_path=data_path, *args,**kwargs)
+        
+        streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
+        self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
+        self.num_acquisitions = streaming_kwargs.get('num_acquisitions', 5)
+        self.acquisition_number = 0 
+        self.campaign_id = 0
+        self.meta_keys = kwargs.get("meta", None)
+        if self.meta_keys is None:
+            raise ValueError("`meta_keys` must be defined in the config file for object `StreamingLabelledLumpedPoolParserJETMock`")
+        self.keep_keys = self.target_keys + self.input_keys + self.meta_keys
+
+        # Setup data
+        self.data = self.gather_data_from_storage(data_path)
+        print('cols',self.mapping_column_indices)
+        self.data = self.data[self.keep_keys]
+        self.mapping_column_indices = self.get_column_idx_mapping()
+        self.meta_col_idxs = [
+            self.mapping_column_indices[col_idx] for col_idx in self.meta_keys
+        ]                        
+        print('idxs',self.meta_col_idxs)
+
+        self.train, self.valid, self.test, self.pool = data_split(
+            self.data, **self.data_args
+        )
+        self.train = torch.tensor(self.train.values)
+        self.valid = torch.tensor(self.valid.values)
+        self.test = torch.tensor(self.test.values)
+        self.pool = torch.tensor(self.pool.values)
+        
+        assert not torch.isnan(self.train).any()
+        assert not torch.isnan(self.valid).any()
+        assert not torch.isnan(self.test).any()
+        assert not torch.isnan(self.pool).any()
+
+    def filter_campaigns(self, data, campaign_id):
+        meta = data[:,self.meta_col_idxs]
+        idxs = torch.arange((len(meta)))
+        idxs = torch.where(meta==campaign_id, idxs, -1)
+        idxs = idxs[idxs>=0]
+        data = data[idxs]                
+        return data[idxs]
+    
+    def get_unscaled_train_valid_test_pool_from_self(
+            self
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """ Returns the unnormalized train, valid, test, and pool tensors, concatenated with the new data.
+        """
+        if (self.acquisition_number>=self.num_acquisitions):
+            self.acquisition_number = 0 
+            self.campaign_id +=1
+            return 'break',-1,-1,-1        
+        if (self.campaign_id>=self.num_campaigns):
+            return 'break',-1,-1,-1   
+        
+        valid = self._filter_campaigns(self.valid, campaign_id=self.campaign_id)
+        test = self._filter_campaigns(self.test, campaign_id=self.campaign_id)
+        pool = self._filter_campaigns(self.pool, campaign_id=self.campaign_id)
+        self.acquisition_number +=1
+
+        self.valid = torch.cat((self.valid, valid))
+        self.test = torch.cat((self.test, test))
+        if self.use_only_new_for_pool:
+            self.pool = pool
+        else:
+            self.pool = torch.cat((self.pool, pool))       
+        # NOTE: self.train was set in update_pool_and_train(...)        
+        return self.train, self.valid, self.test, self.pool               
+        return train, valid, test, pool        

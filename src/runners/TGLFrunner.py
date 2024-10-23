@@ -9,6 +9,7 @@ Defines the TGLFrunner class for running TGLF codes.
 from .base import Runner
 from parsers import TGLFparser as tglfparser
 import subprocess
+import os
 
 
 class TGLFrunner(Runner):

@@ -410,3 +410,38 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
         if self.continual_learning:
             self.metrics["continual_learning"] = metrics["continual_learning"]
 
+
+class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelledPoolSampler):
+    """
+    Implements streaming active learning based on BMDAL. 
+    Loads a database of runs that have already been collected. 
+    Use case supported is a mock of maturation of operations.
+    This is useful for testing various acquisition strategies
+    in Active Learning on fixed datasets. Uses Pandas under the hood.
+    """
+
+    sampler_interface = S.ACTIVESTREAMDB
+    def __init__(self, **kwargs):
+        """
+
+        """
+        super().__init__(**kwargs)    
+        self.metrics.update({"continual_learning": []})
+
+    
+    def get_initial_parameters(self) -> list[dict]:
+        """
+        Returns a subset of initial parameters.
+        """
+        params = []
+        pool = self.parser.pool
+        pool = self.parser.filter_campaigns(pool, campaign_id=0)
+        idxs_list = np.random.choice(range(len(pool)), size=self.init_num_samples, replace=False) 
+        for idxs in idxs_list:    
+            result = {
+                "input": pool[idxs, self.parser.input_col_idxs],
+                "output": pool[idxs, self.parser.output_col_idxs],
+                "pool_idxs": idxs,
+            }
+            params.append(result)
+        return params    
