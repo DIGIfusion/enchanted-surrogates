@@ -435,7 +435,7 @@ class ActiveLearningBMDALLabelledPoolStreamingSampler(ActiveLearningBMDALLabelle
         """
         params = []
         pool = self.parser.pool
-        pool = self.parser.filter_campaigns(pool, campaign_id=0)
+        #pool = self.parser.filter_campaigns(pool, campaign_id=0)
         idxs_list = np.random.choice(range(len(pool)), size=self.init_num_samples, replace=False) 
         for idxs in idxs_list:    
             result = {

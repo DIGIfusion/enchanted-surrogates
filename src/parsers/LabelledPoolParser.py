@@ -291,49 +291,85 @@ class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMoc
         output_col_idxs: list of indices corresponding to the output columns    
     """
     def __init__(self,data_path: str, *args, **kwargs):
-
-        super().__init__(data_path=data_path, *args,**kwargs)
+        """
+        MAX_POOL_SIZE_PER_CAMPAIGN is needed as acquisition time increases greatly with pool size. 
+        """
         
+        self.data_args = kwargs.get("data_args")
+        self.target_keys = kwargs.get("target")
+        self.input_keys = kwargs.get("inputs")
+        self.meta_keys = kwargs.get("meta", None)        
+        self.use_only_new_for_train = kwargs.get('use_only_new_for_train',False) # should tell whether only the new data is used for valid pool and test 
+        self.use_only_new_for_pool = kwargs.get('use_only_new_for_pool',False)
         streaming_kwargs = kwargs.get("streaming_kwargs") # should contain number of campaigns and sampled shots per campaign
         self.num_campaigns =  streaming_kwargs.get('num_campaigns', 10)
         self.num_acquisitions = streaming_kwargs.get('num_acquisitions', 5)
+        self.MAX_POOL_SIZE_PER_CAMPAIGN = streaming_kwargs.get('MAX_POOL_SIZE_PER_CAMPAIGN', 5000)
+
+        self.basepath = data_path
         self.acquisition_number = 0 
         self.campaign_id = 0
-        self.meta_keys = kwargs.get("meta", None)
+        self.batches = 0
+
+        #TODO: obsolete lines below, remove    
         if self.meta_keys is None:
             raise ValueError("`meta_keys` must be defined in the config file for object `StreamingLabelledLumpedPoolParserJETMock`")
-        self.keep_keys = self.target_keys + self.input_keys + self.meta_keys
+        self.keep_keys = self.target_keys + self.input_keys #+ self.meta_keys
 
         # Setup data
-        self.data = self.gather_data_from_storage(data_path)
-        print('cols',self.mapping_column_indices)
-        self.data = self.data[self.keep_keys]
-        self.mapping_column_indices = self.get_column_idx_mapping()
-        self.meta_col_idxs = [
-            self.mapping_column_indices[col_idx] for col_idx in self.meta_keys
-        ]                        
-        print('idxs',self.meta_col_idxs)
+        train, valid, test, pool = self.gather_data_from_storage()
+        self.mapping_column_indices = self.get_column_idx_mapping(train)
+        self.input_col_idxs = [
+            self.mapping_column_indices[col_idx] for col_idx in self.input_keys
+        ]
+        self.output_col_idxs = [
+            self.mapping_column_indices[col_idx] for col_idx in self.target_keys
+        ]
+        # self.meta_col_idxs = [
+        #     self.mapping_column_indices[col_idx] for col_idx in self.meta_keys
+        # ]                        
+        self.train, self.valid, self.test, self.pool = self._get_tensors(train,valid,test,pool)
+        print('INSIDE INIT', self.print_dset_sizes())
+        self.campaign_id +=1
+        self.init_pool_size = len(self.pool)
 
-        self.train, self.valid, self.test, self.pool = data_split(
-            self.data, **self.data_args
-        )
-        self.train = torch.tensor(self.train.values)
-        self.valid = torch.tensor(self.valid.values)
-        self.test = torch.tensor(self.test.values)
-        self.pool = torch.tensor(self.pool.values)
+    def _get_tensors(self, train, valid, test, pool):
+        train = torch.tensor(train.values)
+        valid = torch.tensor(valid.values)
+        test = torch.tensor(test.values)
+        pool = torch.tensor(pool.values)
+
+        assert not torch.isnan(train).any()
+        assert not torch.isnan(valid).any()
+        assert not torch.isnan(test).any()
+        assert not torch.isnan(pool).any()
+        return train, valid, test, pool
+    
+    def get_column_idx_mapping(self, data) -> dict:
+        return {
+            col: idx
+            for col, idx in zip(data.columns, range(len(data.columns)))
+        }
+
+    def gather_data_from_storage(self):
+        data = super().gather_data_from_storage( os.path.join(self.basepath,f'campaign_{self.campaign_id}.csv'))
+        data = data[self.keep_keys]
+       # assert np.all(data[self.meta_keys]==self.campaign_id)
+        train, valid, test, pool = data_split(
+            data, **self.data_args
+        )        
+        if len(pool)>self.MAX_POOL_SIZE_PER_CAMPAIGN:
+            pool = pool.sample(self.MAX_POOL_SIZE_PER_CAMPAIGN)
         
-        assert not torch.isnan(self.train).any()
-        assert not torch.isnan(self.valid).any()
-        assert not torch.isnan(self.test).any()
-        assert not torch.isnan(self.pool).any()
+        return train, valid, test, pool
 
-    def filter_campaigns(self, data, campaign_id):
-        meta = data[:,self.meta_col_idxs]
-        idxs = torch.arange((len(meta)))
-        idxs = torch.where(meta==campaign_id, idxs, -1)
-        idxs = idxs[idxs>=0]
-        data = data[idxs]                
-        return data[idxs]
+    # def filter_campaigns(self, data, campaign_id):
+    #     meta = data[:,self.meta_col_idxs]
+    #     idxs = torch.arange((len(meta)))
+    #     idxs = torch.where(meta==campaign_id, idxs, -1)
+    #     idxs = idxs[idxs>=0]
+    #     data = data[idxs]                
+    #     return data[idxs]
     
     def get_unscaled_train_valid_test_pool_from_self(
             self
@@ -343,21 +379,29 @@ class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMoc
         if (self.acquisition_number>=self.num_acquisitions):
             self.acquisition_number = 0 
             self.campaign_id +=1
-            return 'break',-1,-1,-1        
-        if (self.campaign_id>=self.num_campaigns):
+        elif (self.campaign_id>=self.num_campaigns):
             return 'break',-1,-1,-1   
         
-        valid = self._filter_campaigns(self.valid, campaign_id=self.campaign_id)
-        test = self._filter_campaigns(self.test, campaign_id=self.campaign_id)
-        pool = self._filter_campaigns(self.pool, campaign_id=self.campaign_id)
-        self.acquisition_number +=1
+        if self.acquisition_number==0:
+            # NOTE: prevents data from the same campaign to be loaded again when performing multiple aquisitions in a given campaign
+            train, valid, test, pool = self.gather_data_from_storage()
+            train, valid, test, pool = self._get_tensors(train, valid, test, pool)
+            # valid = self._filter_campaigns(self.valid, campaign_id=self.campaign_id)
+            # test = self._filter_campaigns(self.test, campaign_id=self.campaign_id)
+            # pool = self._filter_campaigns(self.pool, campaign_id=self.campaign_id)
 
-        self.valid = torch.cat((self.valid, valid))
-        self.test = torch.cat((self.test, test))
-        if self.use_only_new_for_pool:
-            self.pool = pool
-        else:
-            self.pool = torch.cat((self.pool, pool))       
-        # NOTE: self.train was set in update_pool_and_train(...)        
-        return self.train, self.valid, self.test, self.pool               
-        return train, valid, test, pool        
+            self.valid = torch.cat((self.valid, valid))
+            self.test = torch.cat((self.test, test))
+            if self.use_only_new_for_pool:
+                self.pool = pool
+            else:
+                self.pool = torch.cat((self.pool, pool))       
+            # NOTE: self.train was set in update_pool_and_train(...)     
+            self.pool_size = len(self.pool)   
+
+        # self.batches += 128*(self.acquisition_number+1)
+        # print('DEBUG ================ ',self.acquisition_number, self.campaign_id, self.pool_size, self.batches)
+        # assert len(self.pool) == self.pool_size - self.batches
+
+        self.acquisition_number +=1
+        return self.train, self.valid, self.test, self.pool       
