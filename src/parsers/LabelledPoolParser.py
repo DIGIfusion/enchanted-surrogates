@@ -379,7 +379,7 @@ class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMoc
         if (self.acquisition_number>=self.num_acquisitions):
             self.acquisition_number = 0 
             self.campaign_id +=1
-        elif (self.campaign_id>=self.num_campaigns):
+        elif (self.campaign_id>=self.num_campaigns-1):
             return 'break',-1,-1,-1   
         
         if self.acquisition_number==0:

@@ -281,6 +281,7 @@ class ActiveLearnerBMDAL(Sampler):
             df.to_parquet(test_fname)
 
         final_metric_file = os.path.join(self.save_dir, self.filename_save+'.txt')
+        print('Dumping results on file: ', final_metric_file)
         with open(final_metric_file, "a") as f:
             f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics['val_r2_losses'][-1]}, {self.metrics['val_losses'][-1]}\n")
         
