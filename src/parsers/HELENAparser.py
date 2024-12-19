@@ -6,7 +6,7 @@ import json
 from .base import Parser
 try:
     from dask.distributed import print
-except:
+except Exception:
     pass
 # import subprocess
 
@@ -143,6 +143,13 @@ class HELENAparser(Parser):
             )
         if "tria" in params:
             namelist["shape"]["tria"] = params["tria"]
+        if "ellip" in params:
+            namelist["shape"]["ellip"] = params["ellip"]
+        if "apf" in params:
+            namelist["profile"]["apf"] = params["apf"]
+            namelist["profile"]["bpf"] = 0.5
+            namelist["profile"]["cpf"] = 3.0
+        
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -437,7 +444,7 @@ class HELENAparser(Parser):
             "fort.27",
             "fort.41",
             "fort.51",
-            "eliteinp",
+            # "eliteinp",
             "density",
             "helena_bnd",
             "EQDSK",
@@ -447,6 +454,43 @@ class HELENAparser(Parser):
             if os.path.exists(os.path.join(run_dir, file_name)):
                 os.remove(os.path.join(run_dir, file_name))
         return
+
+    def get_profile_fit_from_fort10(self, run_dir):
+        profile_fit = {}
+        try:
+            fort10 = f90nml.read(os.path.join(run_dir, "fort.10"))
+            profile_fit["ipai"] = fort10["profile"]["ipai"]
+            profile_fit["idete"] = fort10["phys"]["idete"]
+            # Electron temperature
+            profile_fit["te"] = {}
+            profile_fit["te"]["ate"] = fort10["phys"]["ate"]
+            profile_fit["te"]["bte"] = fort10["phys"]["bte"]
+            profile_fit["te"]["cte"] = fort10["phys"]["cte"]
+            profile_fit["te"]["ddte"] = fort10["phys"]["ddte"]
+            profile_fit["te"]["ete"] = fort10["phys"]["ete"]
+            profile_fit["te"]["fte"] = fort10["phys"]["fte"]
+            profile_fit["te"]["gte"] = fort10["phys"]["gte"]
+            profile_fit["te"]["hte"] = fort10["phys"]["hte"]
+            profile_fit["te"]["ite"] = fort10["phys"]["ite"]
+            # Electron density
+            profile_fit["de"] = {}
+            profile_fit["de"]["ade"] = fort10["phys"]["ade"]
+            profile_fit["de"]["bde"] = fort10["phys"]["bde"]
+            profile_fit["de"]["cde"] = fort10["phys"]["cde"]
+            profile_fit["de"]["dde"] = fort10["phys"]["dde"]
+            profile_fit["de"]["ede"] = fort10["phys"]["ede"]
+            profile_fit["de"]["fde"] = fort10["phys"]["fde"]
+            profile_fit["de"]["gde"] = fort10["phys"]["gde"]
+            profile_fit["de"]["hde"] = fort10["phys"]["hde"]
+            profile_fit["de"]["ide"] = fort10["phys"]["ide"]
+            # Pressure profile core term
+            profile_fit["pe"] = {}
+            profile_fit["pe"]["apf"] = fort10["profile"]["apf"]
+            profile_fit["pe"]["bpf"] = fort10["profile"]["bpf"]
+            profile_fit["pe"]["cpf"] = fort10["profile"]["cpf"]
+        except Exception as exc:
+            print("get_profile_fit_from_fort10", str(exc))
+        return profile_fit
 
     def write_summary(self, run_dir: str, params: dict):
         """
@@ -473,8 +517,11 @@ class HELENAparser(Parser):
         summary["success"] = success
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
+        
+        summary["profile_fit"] = self.get_profile_fit_from_fort10(run_dir)
         with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
             json.dump(summary, outfile)
+        
         try:
             CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
                 run_dir
@@ -577,7 +624,7 @@ class HELENAparser(Parser):
         DJ0, DJE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
         NCHI = int(lines[endline + 1].split()[0])
         CHI, endline = self.read_multiline_list(
-            lines, startline=endline + 2, n_listitems=NCHI + 1
+            lines, startline=endline + 2, n_listitems=NCHI
         )
         GEM11, endline = self.read_multiline_list(
             lines,
