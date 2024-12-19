@@ -210,7 +210,7 @@ class HELENAparser(Parser):
             namelist["phys"]["eti"] = 0.0
             namelist["phys"]["fti"] = 0.0
             namelist["phys"]["gti"] = 0.0
-            namelist["phys"]["hte"] = 0.0
+            namelist["phys"]["hti"] = 0.0
 
             if namelist["profile"]["ipai"] != 18:
                 coret = (teped * 2 + at1 + tesep) * 1000
@@ -273,6 +273,12 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         print(f"Writing to {run_dir}. Params (europed): {params}")
+        
+        mu0 = 4e-7 * np.pi
+        Electron_Charge = 1.6022E-19
+        tanh_normaliser = np.tanh(1) - np.tanh(-1)
+        tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
+
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
@@ -290,15 +296,11 @@ class HELENAparser(Parser):
         nesep = 0.725 if "n_esep" not in params else params["n_esep"]
         neped = 3.0 if "n_eped" not in params else params["n_eped"]
 
-        an0 = (neped - nesep) / (np.tanh(1) * 2)
+        an0 = (neped - nesep) / tanh_normaliser
         an1 = 1.0 if "an1" not in params else params["an1"]
         tesep = 0.1 if "T_esep" not in params else params["T_esep"]
 
         # FROM EUROPED
-        mu0 = 4e-7 * np.pi
-        Electron_Charge = 1.6022E-19
-        tanh_normaliser = np.tanh(1) - np.tanh(-1)
-        tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
         theta = np.linspace(0, 2 * np.pi, 1000)
         
         (r, z) = self.shape_function(theta, ellip=ellip, tria=tria, quad=0.0)
@@ -309,9 +311,10 @@ class HELENAparser(Parser):
         dz = z[0:-1] - z[1:]
         ds = np.power(np.real(np.power(dr, 2)) + np.real(np.power(dz, 2)), .5)
         circumference = np.sum(ds)
-        print(circumference)
+        
+        print(f"circumference: {circumference}")
 
-        bp2 = (params["ip"]*1e6 * mu0 / circumference) ** 2
+        bp2 = (params["ip"] * 1e6 * mu0 / circumference) ** 2
         width_const = 0.076
         beta_exponent = 0.5
         betaped = (d_ped / width_const) ** (1.0 / beta_exponent)
@@ -322,10 +325,12 @@ class HELENAparser(Parser):
         tiped_multip = 1.0
         tisep_multip = 1.0
         pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
+        
         print(f"betaped: {betaped}")
         print(f"pped: {pped}")
         print(f"bp2: {bp2}")
         print(f"pedestal_dilution: {pedestal_dilution}")
+
         teped = (
             pped / neped /
             (1 + tiped_multip * pedestal_dilution *
@@ -334,7 +339,7 @@ class HELENAparser(Parser):
         )
         print(neped, nesep, teped, tesep)
 
-        at0 = (teped - tesep) / (np.tanh(1) * 2)
+        at0 = (teped - tesep) / tanh_normaliser
         if "core_to_ped_te" in params:
             at1 = params["core_to_ped_te"] * teped
         else:
@@ -404,7 +409,7 @@ class HELENAparser(Parser):
         namelist["phys"]["eti"] = 0.0
         namelist["phys"]["fti"] = 0.0
         namelist["phys"]["gti"] = 0.0
-        namelist["phys"]["hte"] = 0.0
+        namelist["phys"]["hti"] = 0.0
 
         if namelist["profile"]["ipai"] != 18:
             coret = (teped * 2 + at1 + tesep) * 1000
@@ -426,7 +431,6 @@ class HELENAparser(Parser):
         namelist["profile"]["zjz"] = self.make_init_zjz_profile(
             pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
         )
-
 
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
