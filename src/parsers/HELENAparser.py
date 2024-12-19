@@ -945,6 +945,8 @@ class HELENAparser(Parser):
         A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
         ***************************************
         """
+        (betan, betap, total_current, total_area, total_volume, beta_tor,
+         beta_star, helenaBetap, b_last_round, radius, B0) = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
         file = open(os.path.join(output_dir, "fort.20"), "r")
         while True:
