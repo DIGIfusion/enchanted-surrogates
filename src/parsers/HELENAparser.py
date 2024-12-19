@@ -750,7 +750,8 @@ class HELENAparser(Parser):
             print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
         
         try:
-            realworld_S, realworld_P, realworld_Ne, realworld_Te, realworld_Ti = self.read_fort20_realworld(run_dir)
+            (realworld_S, realworld_P,
+             realworld_Ne, realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
             np.save(run_dir + "/realworld_S.npy", realworld_S)
             np.save(run_dir + "/realworld_P.npy", realworld_P)
             np.save(run_dir + "/realworld_Ne.npy", realworld_Ne)
@@ -904,8 +905,9 @@ class HELENAparser(Parser):
         start_line = file.index(
             "*  HELENA : GRAD-SHAFRANOV EQUILIBRIUM  *\n"
         )
+        NR, NP, NRMAP, NPMAP, NCHI, NITER = 0, 0, 0, 0, 0, 0
 
-        for line in file[start_line:start_line+30]:
+        for line in file[start_line:start_line + 30]:
             index = line.find("NR =")
             if index != -1:
                 NR = int(line[index + 4:index + 7])
