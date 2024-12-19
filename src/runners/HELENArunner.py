@@ -132,28 +132,30 @@ class HELENArunner(Runner):
             self.parser.write_input_file_europed(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 2:
             self.parser.write_input_file_scaling(params, run_dir, self.namelist_path)
+        elif self.input_parameter_type == 3:
+            self.parser.write_input_file_europed2(params, run_dir, self.namelist_path)
 
         os.chdir(run_dir)
         # run code
         if not self.only_generate_files:
             subprocess.call([self.executable_path])
 
-        # process output
-        run_successful = self.parser.write_summary(run_dir, params)
-        self.parser.clean_output_files(run_dir)
+            # process output
+            run_successful = self.parser.write_summary(run_dir, params)
+            self.parser.clean_output_files(run_dir)
 
-        # run MISHKA
-        if run_successful:
-            if self.run_mishka:
-                mishka_dir = os.path.join(run_dir, "mishka")
-                os.mkdir(mishka_dir)
-                for ntor_sample in self.mishka_ntor_samples:
-                    mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
-                    os.mkdir(mishka_run_dir)
-                    self.mishka_runner.single_code_run(
-                        params={"ntor": ntor_sample, "helena_dir": run_dir},
-                        run_dir=mishka_run_dir,
-                    )
+            # run MISHKA
+            if run_successful:
+                if self.run_mishka:
+                    mishka_dir = os.path.join(run_dir, "mishka")
+                    os.mkdir(mishka_dir)
+                    for ntor_sample in self.mishka_ntor_samples:
+                        mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
+                        os.mkdir(mishka_run_dir)
+                        self.mishka_runner.single_code_run(
+                            params={"ntor": ntor_sample, "helena_dir": run_dir},
+                            run_dir=mishka_run_dir,
+                        )
         else:
             print("HELENA run not success. MISHKA is not being run.")
 
