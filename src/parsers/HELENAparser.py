@@ -677,7 +677,8 @@ class HELENAparser(Parser):
             profile_fit["te"]["fte"] = fort10["phys"]["fte"]
             profile_fit["te"]["gte"] = fort10["phys"]["gte"]
             profile_fit["te"]["hte"] = fort10["phys"]["hte"]
-            profile_fit["te"]["ite"] = fort10["phys"]["ite"]
+            profile_fit["te"]["ite"] = (
+                0.0 if "ite" not in fort10["phys"].keys() else fort10["phys"]["ite"])
             # Electron density
             profile_fit["de"] = {}
             profile_fit["de"]["ade"] = fort10["phys"]["ade"]
@@ -688,7 +689,8 @@ class HELENAparser(Parser):
             profile_fit["de"]["fde"] = fort10["phys"]["fde"]
             profile_fit["de"]["gde"] = fort10["phys"]["gde"]
             profile_fit["de"]["hde"] = fort10["phys"]["hde"]
-            profile_fit["de"]["ide"] = fort10["phys"]["ide"]
+            profile_fit["de"]["ide"] = (
+                0.0 if "ide" not in fort10["phys"] else fort10["phys"]["ide"])
             # Pressure profile core term
             profile_fit["pe"] = {}
             profile_fit["pe"]["apf"] = fort10["profile"]["apf"]
@@ -720,14 +722,10 @@ class HELENAparser(Parser):
         summary = {"run_dir": run_dir, "params": params}
         success, mercier_stable, ballooning_stable = self.read_output_file(run_dir)
         summary["h_id"] = run_dir.split("/")[-1]
-        summary["success"] = success
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
-        
         summary["profile_fit"] = self.get_profile_fit_from_fort10(run_dir)
-        with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
-            json.dump(summary, outfile)
-        
+
         try:
             CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
                 run_dir
@@ -748,7 +746,22 @@ class HELENAparser(Parser):
             np.save(run_dir + "/area.npy", area)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
+            success = False
+
         
+        try:
+            (betan, betap, total_current, total_area, total_volume, _,
+            _, _, _, _, _) = self.read_fort20_beta_section(output_dir=run_dir)
+            summary["betan"] = betan
+            summary["betap"] = betap
+            summary["total_current"] = total_current
+            summary["total_area"] = total_area
+            summary["total_volume"] = total_volume
+
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_beta_section, {e}")
+            success = False
+
         try:
             (realworld_S, realworld_P,
              realworld_Ne, realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
@@ -759,7 +772,12 @@ class HELENAparser(Parser):
             np.save(run_dir + "/realworld_Ti.npy", realworld_Ti)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_realworld, {e}")
-        
+            success = False
+
+        summary["success"] = success
+        with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
+            json.dump(summary, outfile)
+
         return success
 
     def read_final_zjz(self, output_dir):
