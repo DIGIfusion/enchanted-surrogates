@@ -5,11 +5,12 @@ sampler:
   parameters: ['beta_N', 'pedestal_delta']
 
 runner:
-  type: HELENArunner_beta
+  type: HELENArunner
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {
     "namelist_path": "/scratch/project_2009007/aarojarvinen/fort.10",
-    "only_generate_files": False}
+    "only_generate_files": False,
+    "beta_iteration": True}
 
 executor:
   type: DaskExecutor
