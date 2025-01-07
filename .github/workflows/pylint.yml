@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'feature/**'
+      - HELENA_BETA
   pull_request:
     types: [opened, reopened]
 jobs:
