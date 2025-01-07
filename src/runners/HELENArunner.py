@@ -59,6 +59,14 @@ class HELENArunner(Runner):
                 Flag for iterating HELENA to find target beta normalized. Requires that 'beta_N'
                 exists in the sampler parameters.
 
+            beta_tolerance: float
+                (Only relevant when beta_iteration is True.)
+                Tolerance criteria for calculated betan vs target betan.
+
+            max_beta_iterations: float
+                (Only relevant when beta_iteration is True.)
+                The maximum number of beta iterations.
+
             input_parameter_type: int
                 0: EPED/MTANH profiles using direct helena input ADE, BDE, etc.
                 1: Europed profiles generated using 'pedestal_delta', 'n_eped', 'bvac', 'ip',
@@ -69,9 +77,9 @@ class HELENArunner(Runner):
             run_mishka: bool
                 Flag for running MISHKA after the HELENA run. If run_mishka is True
                 the following other parameters need to be defined in other_params:
-                - mishka_executable_path
-                - mishka_namelist_path
-                - ntor
+                - mishka_executable_path: str
+                - mishka_namelist_path: str
+                - ntor: list of int
 
         """
         self.parser = HELENAparser()
@@ -81,6 +89,8 @@ class HELENArunner(Runner):
             False
             if "only_generate_files" not in other_params
             else other_params["only_generate_files"]
+        )
+
         self.beta_iteration = (
             False
             if "beta_iteration" not in other_params
@@ -96,12 +106,13 @@ class HELENArunner(Runner):
             if "max_beta_iterations" not in other_params
             else other_params["max_beta_iterations"]
         )
-        )
+
         self.input_parameter_type = (
             0
             if "input_parameter_type" not in other_params
             else other_params["input_parameter_type"]
         )
+
         self.run_mishka = False
         self.mishka_runner = None
 
@@ -146,7 +157,7 @@ class HELENArunner(Runner):
 
         """
         print(f"single_code_run: {run_dir}", flush=True)
-    
+
         # Check input parameters
         if self.beta_iteration:
             if "beta_N" not in params:

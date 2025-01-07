@@ -154,7 +154,7 @@ class HELENAparser(Parser):
             namelist["profile"]["apf"] = params["apf"]
             namelist["profile"]["bpf"] = 0.5
             namelist["profile"]["cpf"] = 3.0
-        
+
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -530,15 +530,24 @@ class HELENAparser(Parser):
         summary["success"] = success
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
-        
+
         summary["profile_fit"] = self.get_profile_fit_from_fort10(run_dir)
         with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
             json.dump(summary, outfile)
-        
+
         try:
-            CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
-                run_dir
-            )
+            # CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
+            #     run_dir
+            # )
+            (
+                JS0,
+                CS,
+                QS,
+                P0,
+                RBPHI,
+                VX,
+                VY,
+            ) = self.read_helena_output_fort12(run_dir)
             np.save(run_dir + "/qs.npy", QS)
             np.save(run_dir + "/cs.npy", CS)
             np.save(run_dir + "/p0.npy", P0)
@@ -555,9 +564,10 @@ class HELENAparser(Parser):
             np.save(run_dir + "/area.npy", area)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
-        
+
         try:
-            realworld_S, realworld_P, realworld_Ne, realworld_Te, realworld_Ti = self.read_fort20_realworld(run_dir)
+            (realworld_S, realworld_P, realworld_Ne,
+             realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
             np.save(run_dir + "/realworld_S.npy", realworld_S)
             np.save(run_dir + "/realworld_P.npy", realworld_P)
             np.save(run_dir + "/realworld_Ne.npy", realworld_Ne)
@@ -565,7 +575,7 @@ class HELENAparser(Parser):
             np.save(run_dir + "/realworld_Ti.npy", realworld_Ti)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_realworld, {e}")
-        
+
         return success
 
     def read_final_zjz(self, output_dir):
@@ -593,101 +603,124 @@ class HELENAparser(Parser):
             res = res + line.split()
         res = [float(x) for x in res]
         return res, endline
+    
+    def read_lines(self, lines, startline, endline, dtype=float):
+        lines = lines[startline:endline]
+        res = []
+        for line in lines:
+            res = res + line.split()
+        res = np.array([float(x) for x in res])
+        return res
 
-    def read_output_fort12(self, output_dir):
+    def read_helena_output_fort12(self, run_dir):
         """
-        Read the output file fort.12 which is used as input by MISHKA.
+        USE THIS ONE FOR FORT.12
+        Read the HELENA output file fort.12 which is used as input by MISHKA.
+        """
+        filename = os.path.join(run_dir, "fort.12")
+        if not os.path.exists(filename):
+            print("Cannot find", filename)
+            return
 
-        JS0: NRMAP - 1
-        CS: sqrt(psi)
-        QS:
-        DQS_1, DQEC
-        DQS: derivative of QS
-        CURJ
-        DJ0, DJE
-        NCHI: number of poloidal grid points written to output file
-        CHI
-        GEM11
-        GEM12
-        CPSURF, RADIUS
-        GEM33
-        RAXIS
-        P0
-        DP0, DPE
-        RBPHI
-        DRBPHI0, DRBPHIE
-        VX, VY
-        EPS
-        """
-        filename = output_dir + "/" + "fort.12"
-        file = open(filename, "r")
-        lines = file.readlines()
+        lines = open(filename, "r").readlines()
         JS0 = int(lines[0].split()[0])
-        CS, endline = self.read_multiline_list(lines, startline=1, n_listitems=JS0 + 1)
-        QS, endline = self.read_multiline_list(
-            lines, startline=endline, n_listitems=JS0 + 1
-        )
-        DQS_1, DQEC = float(lines[endline].split()[0]), float(lines[endline].split()[1])
-        DQS, endline = self.read_multiline_list(
-            lines, startline=endline + 1, n_listitems=JS0
-        )
-        CURJ, endline = self.read_multiline_list(
-            lines, startline=endline, n_listitems=JS0 + 1
-        )
-        DJ0, DJE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
-        NCHI = int(lines[endline + 1].split()[0])
-        CHI, endline = self.read_multiline_list(
-            lines, startline=endline + 2, n_listitems=NCHI
-        )
-        GEM11, endline = self.read_multiline_list(
-            lines,
-            startline=endline,
-            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
-        )
-        GEM12, endline = self.read_multiline_list(
-            lines,
-            startline=endline,
-            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
-        )
-        CPSURF, RADIUS = float(lines[endline].split()[0]), float(
-            lines[endline].split()[1]
-        )
-        GEM33, endline = self.read_multiline_list(
-            lines,
-            startline=endline + 1,
-            n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
-        )
-        RAXIS = float(lines[endline].split()[0])
-        P0, endline = self.read_multiline_list(
-            lines, startline=endline + 1, n_listitems=JS0 + 1
-        )
-        DP0, DPE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
-        RBPHI, endline = self.read_multiline_list(
-            lines, startline=endline + 1, n_listitems=JS0 + 1
-        )
-        DRBPHI0, DRBPHIE = float(lines[endline].split()[0]), float(
-            lines[endline].split()[1]
-        )
+        JS0_lines = math.ceil(JS0 / 4)
+        JS0_1_lines = math.ceil((JS0 + 1) / 4)
+
+        startline = 1
+        endline = JS0_1_lines + 1
+        CS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        QS = self.read_lines(lines, startline, endline)
+
+        # DQS_1, DQEC = (
+        #     float(lines[endline].split()[0]), 
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_lines
+        # DQS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        # CURJ = self.read_lines(lines, startline, endline)
+
+        # DJ0, DJE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        endline += 1
+        NCHI = int(lines[endline].split()[0])
+        # NCHI_lines = math.ceil((NCHI - 1) / 4)
+        NCHI_1_lines = math.ceil((NCHI) / 4)
+        NCHI_JS0_lines = math.ceil((NCHI * (JS0 + 1) - (NCHI + 1)) / 4)
+
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        # CHI = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM11 = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM12 = self.read_lines(lines, startline, endline)
+
+        # CPSURF, RADIUS = float(lines[endline].split()[0]), float(
+        #     lines[endline].split()[1]
+        # )
+
+        startline = endline + 1
+        endline = startline + NCHI_JS0_lines
+        # GEM33 = self.read_lines(lines, startline, endline)
+        # RAXIS = float(lines[endline].split()[0])
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        P0 = self.read_lines(lines, startline, endline)
+
+        # DP0, DPE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        RBPHI = self.read_lines(lines, startline, endline)
+
+        # DRBPHI0, DRBPHIE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
 
         # Vacuum data
-        VX, endline = self.read_multiline_list(
-            lines, startline=endline + 1, n_listitems=NCHI
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        VX = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_1_lines
+        VY = self.read_lines(lines, startline, endline)
+
+        # EPS = float(lines[endline].split()[0])
+        # startline = endline + 1
+        # endline = startline + NCHI_JS0_lines
+        # XOUT = self.read_lines(lines, startline, endline)
+
+        # startline = endline
+        # endline = startline + NCHI_JS0_lines
+        # YOUT = self.read_lines(lines, startline, endline)
+
+        return (
+            JS0,
+            CS,
+            QS,
+            P0,
+            RBPHI,
+            VX,
+            VY,
         )
-        VY, endline = self.read_multiline_list(
-            lines, startline=endline, n_listitems=NCHI
-        )
-        EPS = float(lines[endline].split()[0])
-        # XOUT, endline = self.read_multiline_list(
-        #     lines,
-        #     startline=endline + 1,
-        #     n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
-        # )
-        # YOUT, endline = self.read_multiline_list(
-        #     lines,
-        #     startline=endline,
-        #     n_listitems=NCHI * (JS0 + 1) - (NCHI + 1),
-        # )
-        return CS, QS, DQS, CURJ, CHI, GEM11, GEM12, GEM33, P0, RBPHI, VX, VY
 
     def modify_fast_ion_pressure(self, namelist_path: str, apf: float):
         """
@@ -744,7 +777,7 @@ class HELENAparser(Parser):
         with open(f20_fort, "r") as f:
             lines = f.readlines()
 
-            """ 
+            """
             Looking for
             $PHYS     EPS  =  0.320, ALFA =  2.438, B =  0.006, C =  1.000,
                     XIAB =  1.350, BETAP =  -1.0000,COREP =   43259.3989
@@ -942,7 +975,8 @@ class HELENAparser(Parser):
             # (2022) nbbbs,limitr
             file.write(format_2022.write([NBBBS, limitr]) + "\n")
             # (2020) (rbbbs(i),zbbbs(i),i=1,nbbbs)
-            # See: https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
+            # See:
+            # https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
             towrite = np.array([RBBBS, ZBBBS]).flatten(order="F")
             file.write(format_2020.write(towrite) + "\n")
             # (2020) (rlim(i),zlim(i),i=1,limitr)
@@ -1414,7 +1448,7 @@ class HELENAparser(Parser):
         def write_quantity(vector):
             number = math.ceil(len(vector) / 6)
             for i in range(number):
-                f_out.write(" " + format_iterdb.write(vector[6 * i : 6 * i + 6]) + "\n")
+                f_out.write(" " + format_iterdb.write(vector[6 * i:6 * i + 6]) + "\n")
             f_out.write(" " + format_iterdb.write([0.0]) + "\n")
 
         psi = elite_data["Psi"]
@@ -1478,7 +1512,7 @@ class HELENAparser(Parser):
             "*  HELENA : GRAD-SHAFRANOV EQUILIBRIUM  *\n"
         )
 
-        for line in file[start_line:start_line+30]:
+        for line in file[start_line:start_line + 30]:
             index = line.find("NR =")
             if index != -1:
                 NR = int(line[index + 4:index + 7])
@@ -1634,8 +1668,10 @@ class HELENAparser(Parser):
         *********************************************************************
         * I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *
         *********************************************************************
-        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232    0.0005
-        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961    0.0020
+        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232
+                0.0005
+        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961
+                0.0020
 
         """
         NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
