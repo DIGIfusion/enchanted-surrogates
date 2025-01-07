@@ -70,10 +70,20 @@ class HELENArunner(Runner):
             if "beta_iteration" not in other_params
             else other_params["beta_iteration"]
         )
+        self.beta_tolerance = (
+            1e-4
+            if "beta_tolerance" not in other_params
+            else other_params["beta_tolerance"]
+        )
+        self.max_beta_iterations = (
+            10
+            if "max_beta_iterations" not in other_params
+            else other_params["max_beta_iterations"]
+        )
 
         self.pre_run_check()
 
-    def single_code_run(self, params: dict, run_dir: str, tolerance: float = 1e-4):
+    def single_code_run(self, params: dict, run_dir: str):
         """
         Runs HELENA simulation.
 
@@ -123,7 +133,11 @@ class HELENArunner(Runner):
                     "fort.20"
                 )
                 beta_n = 1e2 * output_vars["BETAN"]
-                while np.abs(beta_target - beta_n) > tolerance * beta_target:
+                n_beta_iteration = 0
+                while (
+                    np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
+                    and n_beta_iteration < self.max_beta_iterations
+                ):
                     apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
                     self.parser.modify_fast_ion_pressure("fort.10", apftarg)
                     subprocess.call([self.executable_path])
@@ -131,6 +145,12 @@ class HELENArunner(Runner):
                         "fort.20"
                     )
                     beta_n = 1e2 * output_vars["BETAN"]
+                    n_beta_iteration += 1
+                print(
+                    f"Target betaN: {beta_target}\n",
+                    f"Final betaN: {beta_n}\n",
+                    f"Number of beta iterations: {n_beta_iteration}",
+                )
             else:
                 subprocess.call([self.executable_path])
 
