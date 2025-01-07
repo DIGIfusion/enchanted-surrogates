@@ -1,0 +1,34 @@
+sampler:
+  type: Grid
+  bounds: [[1.8, 1.9], [0.05, 0.051]]
+  num_samples: [2, 1]
+  parameters: ['beta_N', 'pedestal_delta']
+
+runner:
+  type: HELENArunner
+  executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
+  other_params: {
+    "namelist_path": "/scratch/project_2009007/aarojarvinen/fort.10",
+    "only_generate_files": False,
+    "beta_iteration": True}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /scratch/project_2009007/aarojarvinen/helena_beta_run
+  worker_args: # to be specified for the SLURMCluster in DASK
+    local: 'True'
+    account: "project_2009007"
+    queue: "medium"
+    cores: 1 
+    memory: "12GB"
+    processes: 1
+    walltime: "00:20:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    interface: "ib0"
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'module load python-data'
+      # - 'cd /scratch/project_2009007/enchanted-surrogates'
+      - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2009007/aarojarvinen/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+      - 'cd /scratch/project_2009007/aarojarvinen/enchanted-surrogates'
+      # - 'cd /scratch/project_2007159/cursed-tglf/'
+      # - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2007159/cursed-tglf/src' # NB: to use the enchanted-surrogate library
+  num_workers: 1
