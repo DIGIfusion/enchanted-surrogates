@@ -6,7 +6,6 @@ import json
 from .base import Parser
 import fortranformat as ff
 import scipy
-import math
 
 # import subprocess
 
@@ -46,7 +45,7 @@ class HELENAparser(Parser):
         Generates a summary file with run directory and parameters, along with success and stability criteria.
 
     modify_fast_ion_pressure(namelistpath: str, apf: float)
-        Changes the apf value in the HELENA input file to the given value. 
+        Changes the apf value in the HELENA input file to the given value.
 
     """
 
@@ -108,7 +107,7 @@ class HELENAparser(Parser):
             # Update density profile parameters
             density_shift = 0.0
             psi_mid = 1.0 - 0.5 * d_ped + density_shift
-            # In anticipation of actually using the density_shift eventually, 
+            # In anticipation of actually using the density_shift eventually,
             # the temperature delta is separated below. (AEJ) 2.1.2025.
             psi_mid_T = 1.0 - 0.5 * d_ped
 
@@ -184,7 +183,8 @@ class HELENAparser(Parser):
         # Update current profile guess
         if "pedestal_delta" in params:
             namelist["profile"]["zjz"] = self.make_init_zjz_profile(
-                pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
+                pedestal_delta=params["pedestal_delta"],
+                npts=namelist["profile"]["npts"],
             )
         else:
             namelist["profile"]["zjz"] = self.make_init_zjz_profile(
@@ -543,19 +543,19 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         namelist = f90nml.read(namelist_path)
-        namelist['profile']['apf'] = apf
+        namelist["profile"]["apf"] = apf
         f90nml.write(namelist, namelist_path, force=True)
 
-    def get_real_world_geometry_factors_from_f20(self, f20_fort: str): 
-        """ 
+    def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
+        """
         Function copy paste from tokamak_sampler by A. Kit
-        Get Geometry factors from fort.20 
+        Get Geometry factors from fort.20
 
         Parameters
         ----------
         f20_fort : str
             Path to the fort.20 file
-        
+
         Returns
         ----------
         Dictionary with parameter names below:
@@ -574,20 +574,20 @@ class HELENAparser(Parser):
             $PHYS     EPS  =  0.320, ALFA =  2.438, B =  0.006, C =  1.000,
                     XIAB =  1.350, BETAP =  -1.0000,COREP =   43259.3989
             """
-            for i, line in enumerate(lines): 
-                if "$PHYS" in line: 
-                    break 
-            vars_line1 = lines[i].split('PHYS')[1].strip().split(',')
-            vars_line2 = lines[i+1].strip().split(',')
-            for _vars in vars_line1: 
-                if "EPS" in _vars: 
-                    EPS = float(_vars.split('=')[1])
+            for i, line in enumerate(lines):
+                if "$PHYS" in line:
+                    break
+            vars_line1 = lines[i].split("PHYS")[1].strip().split(",")
+            vars_line2 = lines[i + 1].strip().split(",")
+            for _vars in vars_line1:
+                if "EPS" in _vars:
+                    EPS = float(_vars.split("=")[1])
                     # print(f'EPS={EPS}')
             for _vars in vars_line2:
-                if "XIAB" in _vars: 
-                    XIAB = float(_vars.split('=')[1])
+                if "XIAB" in _vars:
+                    XIAB = float(_vars.split("=")[1])
                     # print(f'XIAB={XIAB}')
-        
+
             """ Looking for
             MAJOR RADIUS    :    2.9031 [m]
             MAGNETIC FIELD  :    1.9891 [T]
@@ -598,188 +598,222 @@ class HELENAparser(Parser):
             ZEFF            :    1.1372
             TE/(TE+TI)      :    0.5000
             """
-            for i, line in enumerate(lines): 
+            for i, line in enumerate(lines):
 
-                if "MAJOR RADIUS" in line: 
-                    RVAC = float(line.split(':')[1].split('[')[0].strip())
+                if "MAJOR RADIUS" in line:
+                    RVAC = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'RVAC={RVAC}')
-                if "MAGNETIC FIELD" in line: 
-                    BVAC = float(line.split(':')[1].split('[')[0].strip())
+                if "MAGNETIC FIELD" in line:
+                    BVAC = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'BVAC={BVAC}')
-                if "PSI ON BOUNDARY" in line: 
-                    CPSURF = float(line.split(':')[1].split('[')[0].strip())
+                if "PSI ON BOUNDARY" in line:
+                    CPSURF = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'CPSURF={CPSURF}')
-                if 'POL. FLUX' in line: 
+                if "POL. FLUX" in line:
                     # ALFA     = RADIUS**2 * BVAC / CPSURF
-                    ALFA = float(line.split(':')[1].split('[')[0].strip())
+                    ALFA = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'ALFA={ALFA}')
-                if "MAGNETIC AXIS" in line: 
-                    data = line.split(':')[1]
+                if "MAGNETIC AXIS" in line:
+                    data = line.split(":")[1]
                     XAXIS, YAXIS = [float(x) for x in data.split()]
-  
-                if "POLOIDAL BETA" in line: 
-                    BETAP = float(line.split(':')[1].split('[')[0].strip())
+
+                if "POLOIDAL BETA" in line:
+                    BETAP = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'BETAP={BETAP}')
-                if "TOROIDAL BETA" in line: 
-                    BETAT = float(line.split(':')[1].split('[')[0].strip())
+                if "TOROIDAL BETA" in line:
+                    BETAT = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'BETAT={BETAT}')
                 if "NORM. BETA" in line:
-                    BETAN = float(line.split(':')[1].split('[')[0].strip())
+                    BETAN = float(line.split(":")[1].split("[")[0].strip())
                     # print(f'BETAN={BETAN}')
-        
-        RMAGAXIS = RVAC * (1+EPS*XAXIS)
-        RADIUS   = RVAC*EPS # Minor radius 
-        CURRENT  = (XIAB / mu_0) * (RADIUS*BVAC)
+
+        RMAGAXIS = RVAC * (1 + EPS * XAXIS)
+        RADIUS = RVAC * EPS  # Minor radius
+        CURRENT = (XIAB / mu_0) * (RADIUS * BVAC)
 
         # print(f'RMAGAXIS={RMAGAXIS}')
         # print(f'RADIUS={RADIUS}')
-    
-        output_vars['BVAC'] = BVAC
-        output_vars['RVAC'] = RVAC
-        output_vars['EPS'] = EPS
-        output_vars['XAXIS'] = XAXIS
-        output_vars['CPSURF'] = CPSURF
-        output_vars['ALFA'] = ALFA
-        output_vars['BETAP'] = BETAP
-        output_vars['BETAT'] = BETAT
-        output_vars['BETAN'] = BETAN
-        output_vars['XIAB'] = XIAB
-        output_vars['RMAGAXIS'] = RMAGAXIS # NOTE: magnetic axis, different than RVAC
-        output_vars['RADIUS'] = RADIUS     # NOTE: this is small a in TGLF inputs
-        output_vars['CURRENT'] = CURRENT 
+
+        output_vars["BVAC"] = BVAC
+        output_vars["RVAC"] = RVAC
+        output_vars["EPS"] = EPS
+        output_vars["XAXIS"] = XAXIS
+        output_vars["CPSURF"] = CPSURF
+        output_vars["ALFA"] = ALFA
+        output_vars["BETAP"] = BETAP
+        output_vars["BETAT"] = BETAT
+        output_vars["BETAN"] = BETAN
+        output_vars["XIAB"] = XIAB
+        output_vars["RMAGAXIS"] = RMAGAXIS  # NOTE: magnetic axis, different than RVAC
+        output_vars["RADIUS"] = RADIUS  # NOTE: this is small a in TGLF inputs
+        output_vars["CURRENT"] = CURRENT
         return output_vars
 
-    def hel2eqdsk(self, helena_output_dir: str, eqdsk_output_path: str, NR: int, NZ: int) -> None:
+    def hel2eqdsk(
+        self, helena_output_dir: str, eqdsk_output_path: str, NR: int, NZ: int
+    ) -> None:
         fpath_elite = os.path.join(helena_output_dir, "eliteinp")
-        fpath_f12   = os.path.join(helena_output_dir, "fort.12")
-        fpath_f20   = os.path.join(helena_output_dir, "fort.20")
+        fpath_f12 = os.path.join(helena_output_dir, "fort.12")
+        fpath_f20 = os.path.join(helena_output_dir, "fort.20")
 
         elite_data = self.read_eliteinput(fpath_elite)
         geometry_vars = self.get_real_world_geometry_factors_from_f20(fpath_f20)
-        helena_fort12_outputs = self.read_helena_fort12(fpath_f12, B0=geometry_vars['BVAC'], RVAC=geometry_vars['RVAC'],
-CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
+        helena_fort12_outputs = self.read_helena_fort12(
+            fpath_f12,
+            B0=geometry_vars["BVAC"],
+            RVAC=geometry_vars["RVAC"],
+            CPSURF=geometry_vars["CPSURF"],
+            RADIUS=geometry_vars["RADIUS"],
+        )
 
-        psi_arr_og    = elite_data['Psi']
-        fpol_arr_og   = elite_data['fpol']
-        pres_arr_og   = helena_fort12_outputs['P0_SCALED']
-        ffprim_arr_og = elite_data['ffp']
-        qpsi_arr_og   = elite_data['q']
-        r_arr_og      = elite_data['R']
-        z_arr_og      = elite_data['z']
+        psi_arr_og = elite_data["Psi"]
+        fpol_arr_og = elite_data["fpol"]
+        pres_arr_og = helena_fort12_outputs["P0_SCALED"]
+        ffprim_arr_og = elite_data["ffp"]
+        qpsi_arr_og = elite_data["q"]
+        r_arr_og = elite_data["R"]
+        z_arr_og = elite_data["z"]
 
+        RDIM = r_arr_og.max() - r_arr_og.min()
+        ZDIM = z_arr_og.max() - z_arr_og.min()
+        ZMID = 0.0  # ZDIM / 2.0
+        RLEFT = r_arr_og.min()
 
-        RDIM  = r_arr_og.max() - r_arr_og.min()
-        ZDIM  = z_arr_og.max() - z_arr_og.min()
-        ZMID = 0.0 # ZDIM / 2.0
-        RLEFT = r_arr_og.min() 
+        SIMAG = psi_arr_og.min()
+        SIBRY = psi_arr_og.max()
+        RMAXIS = geometry_vars["RMAGAXIS"]
+        RCENTR = geometry_vars["RVAC"]
+        ZMAXIS = 0.0  # NOTE: Assumption
+        BCENTR = geometry_vars["BVAC"]
+        CURRENT = geometry_vars["CURRENT"]
 
-        SIMAG = psi_arr_og.min() 
-        SIBRY = psi_arr_og.max() 
-        RMAXIS = geometry_vars['RMAGAXIS']
-        RCENTR = geometry_vars['RVAC']
-        ZMAXIS = 0.0                         # NOTE: Assumption
-        BCENTR = geometry_vars['BVAC']
-        CURRENT = geometry_vars['CURRENT']
-
-        RBBBS = r_arr_og[:, -1] 
-        ZBBBS = z_arr_og[:, -1] 
+        RBBBS = r_arr_og[:, -1]
+        ZBBBS = z_arr_og[:, -1]
         NBBBS = RBBBS.shape[0]
         limitr = NBBBS
-        RLIM  = np.zeros_like(RBBBS)
-        ZLIM  = np.zeros_like(ZBBBS)
+        RLIM = np.zeros_like(RBBBS)
+        ZLIM = np.zeros_like(ZBBBS)
 
-    
         """ Remap to uniform psin grid """
         psi_arr = np.linspace(SIMAG, SIBRY, NR)
 
-        def remap_func_to_new_domain(x_old, y_old, x_new) -> tuple[np.ndarray, np.ndarray]:
+        def remap_func_to_new_domain(
+            x_old, y_old, x_new
+        ) -> tuple[np.ndarray, np.ndarray]:
             spl_f = scipy.interpolate.CubicSpline(x_old, y_old)
             return spl_f(x_new), spl_f(x_new, 1)
 
         fpol_new, _ = remap_func_to_new_domain(psi_arr_og, fpol_arr_og, psi_arr)
-        pres_new, pprime_new = remap_func_to_new_domain(psi_arr_og, pres_arr_og, psi_arr)
+        pres_new, pprime_new = remap_func_to_new_domain(
+            psi_arr_og, pres_arr_og, psi_arr
+        )
         ffpr_new, _ = remap_func_to_new_domain(psi_arr_og, ffprim_arr_og, psi_arr)
         qpsi_new, _ = remap_func_to_new_domain(psi_arr_og, qpsi_arr_og, psi_arr)
 
-    
         """ Remap psi to R, Z on uniform R, Z grid"""
 
         r_1d = np.linspace(RLEFT, RLEFT + RDIM, NR)
-        z_1d = np.linspace(ZMID - ZDIM / 2.0, ZMID + ZDIM/2.0, NZ)
-  
+        z_1d = np.linspace(ZMID - ZDIM / 2.0, ZMID + ZDIM / 2.0, NZ)
+
         R_new, Z_new = np.meshgrid(r_1d, z_1d)
         psi_old_2d = np.repeat(psi_arr_og[:, np.newaxis], z_arr_og.shape[0], axis=1).T
-        fill_value = psi_old_2d.max() + 0.2 # NOTE The plus value is to ensure that the boundary contour is found, or that there is a "boundary" value. 
+        fill_value = (
+            psi_old_2d.max() + 0.2
+        )  # NOTE The plus value is to ensure that the boundary contour is found, or that there is a "boundary" value.
 
-        grid_lin = scipy.interpolate.griddata(np.array([r_arr_og.flatten(), z_arr_og.flatten()]).T, psi_old_2d.flatten(), (R_new, Z_new), method='linear', fill_value=fill_value)
+        grid_lin = scipy.interpolate.griddata(
+            np.array([r_arr_og.flatten(), z_arr_og.flatten()]).T,
+            psi_old_2d.flatten(),
+            (R_new, Z_new),
+            method="linear",
+            fill_value=fill_value,
+        )
         grid_lin = grid_lin.T
 
-        format_2000 = ff.FortranRecordWriter('(6a8, 3i4)')
-        format_2020 = ff.FortranRecordWriter('(5e16.9)')
-        format_2022 = ff.FortranRecordWriter('2i5')
-    
+        format_2000 = ff.FortranRecordWriter("(6a8, 3i4)")
+        format_2020 = ff.FortranRecordWriter("(5e16.9)")
+        format_2022 = ff.FortranRecordWriter("2i5")
+
         XDUM = -1.0
         idnum = 3
-        case_strings = ['HELENA', 'PRODUCED', 'EQDSK', 'ARBT', 'FILE', idnum, NR, NZ]
+        case_strings = ["HELENA", "PRODUCED", "EQDSK", "ARBT", "FILE", idnum, NR, NZ]
 
         header_str = format_2000.write(case_strings)
 
-        with open(eqdsk_output_path, 'w') as file:
-            file.write(header_str + '\n')
+        with open(eqdsk_output_path, "w") as file:
+            file.write(header_str + "\n")
             # (2020) rdim,zdim,rcentr,rleft,zmid
-            file.write(format_2020.write([RDIM, ZDIM, RCENTR, RLEFT, ZMID]) + '\n')
+            file.write(format_2020.write([RDIM, ZDIM, RCENTR, RLEFT, ZMID]) + "\n")
             # (2020) rmaxis,zmaxis,simag,sibry,bcentr
-            file.write(format_2020.write([RMAXIS, ZMAXIS, SIMAG, SIBRY, BCENTR]) + '\n')
+            file.write(format_2020.write([RMAXIS, ZMAXIS, SIMAG, SIBRY, BCENTR]) + "\n")
             # (2020) current,simag,xdum,rmaxis,xdum
-            file.write(format_2020.write([CURRENT, SIMAG, XDUM, RMAXIS, XDUM]) + '\n')
+            file.write(format_2020.write([CURRENT, SIMAG, XDUM, RMAXIS, XDUM]) + "\n")
             # (2020) zmaxis,xdum,sibry,xdum,xdum
-            file.write(format_2020.write([ZMAXIS, XDUM, SIBRY, XDUM, XDUM]) + '\n')
+            file.write(format_2020.write([ZMAXIS, XDUM, SIBRY, XDUM, XDUM]) + "\n")
             # (2020) (fpol(i),i=1,nw)
-            file.write(format_2020.write(fpol_new) + '\n')
+            file.write(format_2020.write(fpol_new) + "\n")
             # (2020) (pres(i),i=1,nw)
-            file.write(format_2020.write(pres_new) + '\n')
+            file.write(format_2020.write(pres_new) + "\n")
             # (2020) (ffprim(i),i=1,nw)
-            file.write(format_2020.write(ffpr_new) + '\n')
+            file.write(format_2020.write(ffpr_new) + "\n")
             # (2020) (pprime(i),i=1,nw)
-            file.write(format_2020.write(pprime_new) + '\n')
+            file.write(format_2020.write(pprime_new) + "\n")
             # (2020) ((psirz(i,j),i=1,nw),j=1,nh)
             towrite = np.array(grid_lin, dtype=float).flatten(order="F")
-            file.write(format_2020.write(towrite) + '\n')
+            file.write(format_2020.write(towrite) + "\n")
             # (2020) (qpsi(i),i=1,nw)
-            file.write(format_2020.write(qpsi_new) + '\n')
+            file.write(format_2020.write(qpsi_new) + "\n")
             # (2022) nbbbs,limitr
-            file.write(format_2022.write([NBBBS, limitr]) + '\n')
+            file.write(format_2022.write([NBBBS, limitr]) + "\n")
             # (2020) (rbbbs(i),zbbbs(i),i=1,nbbbs)
             # See: https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
             towrite = np.array([RBBBS, ZBBBS]).flatten(order="F")
-            file.write(format_2020.write(towrite) + '\n')
+            file.write(format_2020.write(towrite) + "\n")
             # (2020) (rlim(i),zlim(i),i=1,limitr)
             towrite = np.array([RLIM, ZLIM]).flatten(order="F")
-            file.write(format_2020.write(towrite) + '\n')
+            file.write(format_2020.write(towrite) + "\n")
 
-    def read_eliteinput(self, filepath) -> dict[str, np.ndarray]: 
-        """ 
-        Reads the following parameters: 
+    def read_eliteinput(self, filepath) -> dict[str, np.ndarray]:
+        """
+        Reads the following parameters:
         1D: Psi, dp/dpsi, d2p/dpsi, fpol, ffp, dffp, q, ne, dne/dpsi, Te, dTe/dpsi, Ti, dTi/dpsi, nMainIon, nZ
         2D: R, z, Bp
         Calculates PsiN from Psi
         returns dictionary with above keys
         """
-        with open(filepath, 'r') as file: 
+        with open(filepath, "r") as file:
             file.readline()
             N, M = file.readline().split()
         N, M = int(N), int(M)
 
-        keywords_Nshape = ['Psi', 'dp/dpsi', 'd2p/dpsi', 'fpol', 'ffp', 'dffp', 'q', 'ne','dne/dpsi', 'Te', 'dTe/dpsi', 'Ti', 'dTi/dpsi', 'nMainIon', 'nZ' ]
-        keywords_Mshape = ['R', 'z', 'Bp']
+        keywords_Nshape = [
+            "Psi",
+            "dp/dpsi",
+            "d2p/dpsi",
+            "fpol",
+            "ffp",
+            "dffp",
+            "q",
+            "ne",
+            "dne/dpsi",
+            "Te",
+            "dTe/dpsi",
+            "Ti",
+            "dTi/dpsi",
+            "nMainIon",
+            "nZ",
+        ]
+        keywords_Mshape = ["R", "z", "Bp"]
 
         data_N = self.read_fortran_ascii(filepath, keywords_Nshape, N)
         data_M = self.read_fortran_repeated_arrays(filepath, keywords_Mshape, N, M)
 
-        data_N['PsiN'] = (data_N['Psi'] - data_N['Psi'].min()) / (data_N['Psi'].max() - data_N['Psi'].min())
+        data_N["PsiN"] = (data_N["Psi"] - data_N["Psi"].min()) / (
+            data_N["Psi"].max() - data_N["Psi"].min()
+        )
         return {**data_M, **data_N}
 
-    def read_fortran_ascii(self, file_path, keywords, N)-> dict[str, np.ndarray]:
+    def read_fortran_ascii(self, file_path, keywords, N) -> dict[str, np.ndarray]:
         """
         Reads data from a Fortran ASCII file and extracts arrays following specified keywords.
 
@@ -793,9 +827,9 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
         """
         extracted_data = {key: None for key in keywords}
 
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             lines = file.readlines()
-        
+
         for keyword in keywords:
             # Find the keyword in the lines
             for i, line in enumerate(lines):
@@ -809,16 +843,19 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
                     # Truncate or reshape if more/less than expected N values are found
                     extracted_data[keyword] = np.array(floats[:N])
                     break  # Stop looking for this keyword
-    
+
         return extracted_data
 
-    def read_helena_fort12(self, fort_12_file, 
-                           B0=1.0, 
-                           RVAC=2.9043,
-                           CPSURF=0.7022, 
-                           RADIUS=0.9269,): 
+    def read_helena_fort12(
+        self,
+        fort_12_file,
+        B0=1.0,
+        RVAC=2.9043,
+        CPSURF=0.7022,
+        RADIUS=0.9269,
+    ):
         """
-        Reads the mapping file for MISHKA produced by HELENA. 
+        Reads the mapping file for MISHKA produced by HELENA.
 
         - B0 is the on axis toroidal field strength (B_m below)
         - Rvac is vaccum geometric radius [Rvac below]
@@ -833,13 +870,13 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
         !!  toroidal field at the geometric axis \c B_vac.
         !!  - <tt> R[m] = R_vac[m] (1 + eps X[]) </tt>,
         !!  - <tt> Z[m] = R_vac[m] eps Y[] </tt>.
-        !! 
+        !!
         !! The covariant  toroidal field  \c F_H,  \c pres_H  and poloidal  flux are
         !! normalized  w.r.t  magnetic axis  \c  R_m  and  total toroidal  field  at
         !! magnetic axis \c B_m:
         !!  - <tt> RBphi[Tm]     = F_H[] R_m[m] B_m[T] </tt>,
         !!  - <tt> pres[N/m^2]   = pres_H[] (B_m[T])^2/mu_0[N/A^2] </tt>,
-        !!  - <tt> flux_p[Tm^2]  = 2pi (s[])^2 cpsurf[] B_m[T] (R_m[m])^2 </tt>. 
+        !!  - <tt> flux_p[Tm^2]  = 2pi (s[])^2 cpsurf[] B_m[T] (R_m[m])^2 </tt>.
 
         The result of the mapping is a dictionary with the following
         keys:
@@ -875,16 +912,17 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
             -> NB: If the file contains B0, then the pressure scaled with that instead of what is passed above
 
         """
-        def remap_2d_f12_output(_data, _NCHI, _JS0) -> np.ndarray: 
-            OUT = np.zeros((_NCHI, _JS0+1))
-            for _id in range(_NCHI + 1, (_JS0+1)*_NCHI + 1): 
-                row = (_id-1)  % _NCHI 
-                col = (_id -1) // _NCHI
+
+        def remap_2d_f12_output(_data, _NCHI, _JS0) -> np.ndarray:
+            OUT = np.zeros((_NCHI, _JS0 + 1))
+            for _id in range(_NCHI + 1, (_JS0 + 1) * _NCHI + 1):
+                row = (_id - 1) % _NCHI
+                col = (_id - 1) // _NCHI
                 OUT[row, col] = _data[_id - (_NCHI + 1)]
             return OUT
 
         helena_fort12_outputs = {}
-        with open(fort_12_file, 'r') as file:
+        with open(fort_12_file, "r") as file:
             lines = file.readlines()
             JS0 = int(lines[0])
             # JS0 += 1
@@ -892,19 +930,19 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
             curr_indx = 1
             # Read CS
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0+1: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0 + 1:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['CS'] = np.array(floats) **2
+            helena_fort12_outputs["CS"] = np.array(floats) ** 2
             curr_indx += i
             # Read QS
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0+1: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0 + 1:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['QS'] = np.array(floats)
+            helena_fort12_outputs["QS"] = np.array(floats)
             curr_indx += i
 
             # Read DQS, DQEC
@@ -912,21 +950,21 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
             curr_indx += 1
             # Read DQS
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0:
                     break
                 floats.extend([float(i) for i in line.split()])
             floats[0] = DQS
-            helena_fort12_outputs['DQS'] = np.array(floats)
+            helena_fort12_outputs["DQS"] = np.array(floats)
             curr_indx += i
 
             # Read CURJ (CURJ(JS), JS=1, JS0+1)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0+1: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0 + 1:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['CURJ'] = np.array(floats)
+            helena_fort12_outputs["CURJ"] = np.array(floats)
             curr_indx += i
             # Read DJ0, DJE
             DJ0, DJE = [float(i) for i in lines[curr_indx].split()]
@@ -936,30 +974,34 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
             curr_indx += 1
             # Read CHI, (CHI(JS), JS=1, NCHI)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['CHI'] = np.array(floats)
+            helena_fort12_outputs["CHI"] = np.array(floats)
             curr_indx += i
             # Read GEM11 (GEM11(JS), JS=NCHI+1, (JS0+1)*NCHI)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == (JS0+1)*NCHI - NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == (JS0 + 1) * NCHI - NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
 
-            helena_fort12_outputs['GEM11'] = remap_2d_f12_output(np.array(floats), NCHI, JS0)
-            helena_fort12_outputs['GEM11'][:, 0] = 1E-8
+            helena_fort12_outputs["GEM11"] = remap_2d_f12_output(
+                np.array(floats), NCHI, JS0
+            )
+            helena_fort12_outputs["GEM11"][:, 0] = 1e-8
             curr_indx += i
             # should be of length (JS0+1)*NCHI - NCHI
             # Read GEM12 (GEM12(JS), JS=NCHI+1, (JS0+1)*NCHI)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == (JS0+1)*NCHI - NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == (JS0 + 1) * NCHI - NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['GEM12'] = remap_2d_f12_output(np.array(floats), NCHI, JS0)
+            helena_fort12_outputs["GEM12"] = remap_2d_f12_output(
+                np.array(floats), NCHI, JS0
+            )
 
             curr_indx += i
             # Read CPSURF, RADIUS, poloidal flux on the surface of the plasma and minor radius
@@ -969,45 +1011,47 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
             curr_indx += 1
             # Read GEM33 (GEM33(JS), JS=NCHI+1, (JS0+1)*NCHI)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == (JS0+1)*NCHI - NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == (JS0 + 1) * NCHI - NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['GEM33'] = remap_2d_f12_output(np.array(floats), NCHI, JS0)
-            helena_fort12_outputs['GEM33'][:, 0] = RADIUS**2
-            helena_fort12_outputs['GEM33'] = 1.0 / helena_fort12_outputs['GEM33']
+            helena_fort12_outputs["GEM33"] = remap_2d_f12_output(
+                np.array(floats), NCHI, JS0
+            )
+            helena_fort12_outputs["GEM33"][:, 0] = RADIUS**2
+            helena_fort12_outputs["GEM33"] = 1.0 / helena_fort12_outputs["GEM33"]
             # helena_fort12_outputs['GEM33'] = np.array(floats).reshape(NCHI, JS0)
             curr_indx += i
 
             # Read RAXIS, Major radius of the plasma
-            if len(lines[curr_indx].split()) == 2: 
+            if len(lines[curr_indx].split()) == 2:
                 # Some versions of HELENA output RAXIS and B0
                 RAXIS, _B0 = [float(i) for i in lines[curr_indx].split()]
-            else: 
+            else:
                 RAXIS = float(lines[curr_indx])
             curr_indx += 1
-            helena_fort12_outputs['RAXIS'] = RAXIS
-            helena_fort12_outputs['B0'] = B0
-            helena_fort12_outputs['RVAC'] = RVAC
+            helena_fort12_outputs["RAXIS"] = RAXIS
+            helena_fort12_outputs["B0"] = B0
+            helena_fort12_outputs["RVAC"] = RVAC
 
             # Read P0 (P0(JS), JS=1, JS0+1)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0+1: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0 + 1:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['P0'] = np.array(floats)
+            helena_fort12_outputs["P0"] = np.array(floats)
             curr_indx += i
             # Read DP0, DPE
             DP0, DPE = [float(i) for i in lines[curr_indx].split()]
             curr_indx += 1
             # Read RBPHI (RBPHI(JS), JS=1, JS0+1)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == JS0+1: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == JS0 + 1:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['RBPHI'] = np.array(floats)
+            helena_fort12_outputs["RBPHI"] = np.array(floats)
             curr_indx += i
             # Read DRBPHI0, DRBPHIE, (derivatives of RBPHI on axis and surface)
             DRBPHI0, DRBPHIE = [float(i) for i in lines[curr_indx].split()]
@@ -1015,75 +1059,87 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
 
             # Read VX (VX(JS), JS=1, NCHI) (r on surface)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['VX'] = np.array(floats)
+            helena_fort12_outputs["VX"] = np.array(floats)
             curr_indx += i
             # Read VY (VY(JS), JS=1, NCHI) (z on surface)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
-            helena_fort12_outputs['VY'] = np.array(floats)
+            helena_fort12_outputs["VY"] = np.array(floats)
             curr_indx += i
-            # Read EPS (epsilon, inverse aspect ratio) 
+            # Read EPS (epsilon, inverse aspect ratio)
             EPS = float(lines[curr_indx])
-            helena_fort12_outputs['EPS'] = EPS
+            helena_fort12_outputs["EPS"] = EPS
             curr_indx += 1
             # Read XOUT (XOUT(JS), JS=NCHI+1, (JS0+1)*NCHI) (r)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == (JS0+1)*(NCHI) - (NCHI): 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == (JS0 + 1) * (NCHI) - (NCHI):
                     break
                 floats.extend([float(i) for i in line.split()])
 
             data = np.array(floats)
-            XOUT = np.zeros((NCHI, JS0+1))
-            for _id in range(NCHI + 1, (JS0+1)*NCHI + 1): 
-                row = (_id-1)  % NCHI 
-                col = (_id -1) // NCHI
+            XOUT = np.zeros((NCHI, JS0 + 1))
+            for _id in range(NCHI + 1, (JS0 + 1) * NCHI + 1):
+                row = (_id - 1) % NCHI
+                col = (_id - 1) // NCHI
                 XOUT[row, col] = data[_id - (NCHI + 1)]
-            helena_fort12_outputs['XOUT'] = XOUT
+            helena_fort12_outputs["XOUT"] = XOUT
 
             # helena_fort12_outputs['XOUT'] = np.array(floats).reshape(NCHI, JS0)
             curr_indx += i
-        
+
             # Read YOUT (YOUT(JS), JS=NCHI+1, (JS0+1)*NCHI) (z)
             floats = []
-            for i, line in enumerate(lines[curr_indx:]): 
-                if len(floats) == (JS0+1)*NCHI - NCHI: 
+            for i, line in enumerate(lines[curr_indx:]):
+                if len(floats) == (JS0 + 1) * NCHI - NCHI:
                     break
                 floats.extend([float(i) for i in line.split()])
- 
+
             data = np.array(floats)
-            YOUT = np.zeros((NCHI, JS0+1))
-            for _id in range(NCHI + 1, (JS0+1)*NCHI + 1): 
-                row = (_id-1)  % NCHI 
-                col = (_id -1) // NCHI
+            YOUT = np.zeros((NCHI, JS0 + 1))
+            for _id in range(NCHI + 1, (JS0 + 1) * NCHI + 1):
+                row = (_id - 1) % NCHI
+                col = (_id - 1) // NCHI
                 YOUT[row, col] = data[_id - (NCHI + 1)]
-            helena_fort12_outputs['YOUT'] = YOUT
+            helena_fort12_outputs["YOUT"] = YOUT
             curr_indx += i
 
             # Scale XOUT, YOUT with RADIUS*RAXIS
-            helena_fort12_outputs['XOUT_SCALED'] = (RVAC)*(1.0 + EPS * helena_fort12_outputs['XOUT'])
-            helena_fort12_outputs['YOUT_SCALED'] = (RVAC*EPS)*helena_fort12_outputs['YOUT']
-            helena_fort12_outputs['XOUT_SCALED'][:, 0] = RAXIS
-            helena_fort12_outputs['YOUT_SCALED'][:, 0] = 0.0
-        
-            # SCALE Flux coordinate flux_p[Tm^2 / rad]  = (s[])^2 cpsurf[] B_m[T] (R_m[m])^2 
-            helena_fort12_outputs['CS_SCALED'] = (helena_fort12_outputs['CS']**2)*_CPSURF * B0 * (RVAC**2)
-            helena_fort12_outputs['CS_SCALED'] = (helena_fort12_outputs['CS']**2)*CPSURF # * B0 * (RVAC**2)
-            # NOTE: I am not sure the above is correct or wrong, below gives better results? 
+            helena_fort12_outputs["XOUT_SCALED"] = (RVAC) * (
+                1.0 + EPS * helena_fort12_outputs["XOUT"]
+            )
+            helena_fort12_outputs["YOUT_SCALED"] = (RVAC * EPS) * helena_fort12_outputs[
+                "YOUT"
+            ]
+            helena_fort12_outputs["XOUT_SCALED"][:, 0] = RAXIS
+            helena_fort12_outputs["YOUT_SCALED"][:, 0] = 0.0
+
+            # SCALE Flux coordinate flux_p[Tm^2 / rad]  = (s[])^2 cpsurf[] B_m[T] (R_m[m])^2
+            helena_fort12_outputs["CS_SCALED"] = (
+                (helena_fort12_outputs["CS"] ** 2) * _CPSURF * B0 * (RVAC**2)
+            )
+            helena_fort12_outputs["CS_SCALED"] = (
+                helena_fort12_outputs["CS"] ** 2
+            ) * CPSURF  # * B0 * (RVAC**2)
+            # NOTE: I am not sure the above is correct or wrong, below gives better results?
 
             # SCALE pressure, p*(B_m[T])^2/mu_0[N/A^2] </tt>,
-            helena_fort12_outputs['P0_SCALED'] = (helena_fort12_outputs['P0'])*(B0**2 / (mu_0))
+            helena_fort12_outputs["P0_SCALED"] = (helena_fort12_outputs["P0"]) * (
+                B0**2 / (mu_0)
+            )
 
         return helena_fort12_outputs
-    
-    def read_fortran_repeated_arrays(self, file_path, keywords, N, M) -> dict[str, np.ndarray]:
+
+    def read_fortran_repeated_arrays(
+        self, file_path, keywords, N, M
+    ) -> dict[str, np.ndarray]:
         """
         Reads data from a Fortran ASCII file and extracts repeated arrays of length N following a keyword.
 
@@ -1096,12 +1152,12 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
         Returns:
             np.ndarray: A 2D NumPy array of shape (M, N) containing the extracted data.
         """
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             lines = file.readlines()
-    
+
         extracted_data = {key: None for key in keywords}
-    
-        for keyword in keywords: 
+
+        for keyword in keywords:
             data = []
             reading = False  # Flag to start reading after the keyword
             floats_collected = 0  # Track the number of floats collected
@@ -1120,70 +1176,102 @@ CPSURF=geometry_vars["CPSURF"], RADIUS=geometry_vars["RADIUS"])
                         break
 
             # Reshape the collected data into a 2D array of shape (M, N)
-            data = np.array(data[:M * N]).reshape(M, N)
+            data = np.array(data[: M * N]).reshape(M, N)
             extracted_data[keyword] = data
         return extracted_data
 
-    def write_iterbd_profiles(self, helena_output_dir: str, iterdb_output_path: str) -> None:
+    def write_iterbd_profiles(
+        self, helena_output_dir: str, iterdb_output_path: str
+    ) -> None:
         fpath_elite = os.path.join(helena_output_dir, "eliteinp")
         elite_data = self.read_eliteinput(fpath_elite)
-        f_out = open(iterdb_output_path,'w')
-        format_iterdb = ff.FortranRecordWriter('(6e13.6)')
+        f_out = open(iterdb_output_path, "w")
+        format_iterdb = ff.FortranRecordWriter("(6e13.6)")
+
         def write_header(label, unit, nx, ny=1):
-            f_out.write('  00000DUM '+str(ny+1)+' 0 6              ;-SHOT #- F(X,Y) DATA -UFILELIB- 00Jan0000\n')
-            f_out.write('                               ;-SHOT DATE- UFILES ASCII FILE SYSTEM\n')
-            f_out.write('   0                           ;-NUMBER of ASSOCIATED SCALAR QUANTITIES-\n')
-            f_out.write(' RHOTOR              -         ;-INDEPENDENT VARIABLE LABEL: X-\n')
-            f_out.write(' TIME                SECONDS   ;-INDEPENDENT VARIABLE LABEL: Y-\n')
-            f_out.write(' '+str(label)+'               '+str(unit)+'     ;-DEPENDENT VARIABLE LABEL-\n')
-            f_out.write(' 0                             ;-PROC CODE- 0:RAW 1:AVG 2:SM.  3:AVG+SM\n')
-            f_out.write('        '+str(nx)+'                    ;-# OF X PTS-\n')
-            f_out.write('          '+str(ny)+'                    ;-# OF Y PTS-   X,Y,F(X,Y) DATA FOLLOW:\n')
+            f_out.write(
+                "  00000DUM "
+                + str(ny + 1)
+                + " 0 6              ;-SHOT #- F(X,Y) DATA -UFILELIB- 00Jan0000\n"
+            )
+            f_out.write(
+                "                               ;-SHOT DATE- UFILES ASCII FILE SYSTEM\n"
+            )
+            f_out.write(
+                "   0                           ;-NUMBER of ASSOCIATED SCALAR QUANTITIES-\n"
+            )
+            f_out.write(
+                " RHOTOR              -         ;-INDEPENDENT VARIABLE LABEL: X-\n"
+            )
+            f_out.write(
+                " TIME                SECONDS   ;-INDEPENDENT VARIABLE LABEL: Y-\n"
+            )
+            f_out.write(
+                " "
+                + str(label)
+                + "               "
+                + str(unit)
+                + "     ;-DEPENDENT VARIABLE LABEL-\n"
+            )
+            f_out.write(
+                " 0                             ;-PROC CODE- 0:RAW 1:AVG 2:SM.  3:AVG+SM\n"
+            )
+            f_out.write("        " + str(nx) + "                    ;-# OF X PTS-\n")
+            f_out.write(
+                "          "
+                + str(ny)
+                + "                    ;-# OF Y PTS-   X,Y,F(X,Y) DATA FOLLOW:\n"
+            )
+
         def write_closure():
-            f_out.write(';----END-OF-DATA-----------------------COMMENTS:----------\n')
-            f_out.write('*******************************************************************************\n')
-            f_out.write('*******************************************************************************\n')
+            f_out.write(";----END-OF-DATA-----------------------COMMENTS:----------\n")
+            f_out.write(
+                "*******************************************************************************\n"
+            )
+            f_out.write(
+                "*******************************************************************************\n"
+            )
+
         def write_quantity(vector):
-            number = math.ceil(len(vector)/6)
+            number = math.ceil(len(vector) / 6)
             for i in range(number):
-                f_out.write(' '+format_iterdb.write(vector[6*i:6*i+6])+'\n')
-            f_out.write(' '+format_iterdb.write([0.0])+'\n')
-        psi = elite_data['Psi']
+                f_out.write(" " + format_iterdb.write(vector[6 * i : 6 * i + 6]) + "\n")
+            f_out.write(" " + format_iterdb.write([0.0]) + "\n")
+
+        psi = elite_data["Psi"]
         nx = len(psi)
-        te = elite_data['Te']
-        ti = elite_data['Ti']
-        ne = elite_data['ne']
-        q = elite_data['q']
-        q_cd = 0.5*(q[:-1]+q[1:])
+        te = elite_data["Te"]
+        ti = elite_data["Ti"]
+        ne = elite_data["ne"]
+        q = elite_data["q"]
+        q_cd = 0.5 * (q[:-1] + q[1:])
         dpsi = np.diff(psi)
-        dphit = q_cd*dpsi
+        dphit = q_cd * dpsi
         phit = np.cumsum(dphit)
-        phitt = np.concatenate(([0],phit))
-        rhot = np.sqrt(phitt/np.max(phitt))
-        write_header('TE   ','eV   ',nx)
+        phitt = np.concatenate(([0], phit))
+        rhot = np.sqrt(phitt / np.max(phitt))
+        write_header("TE   ", "eV   ", nx)
         write_quantity(rhot)
         write_quantity(te)
         write_closure()
-        write_header('TI   ','eV   ',nx)
+        write_header("TI   ", "eV   ", nx)
         write_quantity(rhot)
         write_quantity(ti)
         write_closure()
-        write_header('NE   ','m^-3 ',nx)
+        write_header("NE   ", "m^-3 ", nx)
         write_quantity(rhot)
         write_quantity(ne)
         write_closure()
-        write_header('NM1  ','m^-3 ',nx)
+        write_header("NM1  ", "m^-3 ", nx)
         write_quantity(rhot)
         write_quantity(ne)
         write_closure()
-        write_header('VROT ','rad/s',nx)
+        write_header("VROT ", "rad/s", nx)
         write_quantity(rhot)
-        write_quantity(ne*0)
+        write_quantity(ne * 0)
         write_closure()
-        write_header('ZEFFR','     ',nx)
+        write_header("ZEFFR", "     ", nx)
         write_quantity(rhot)
         write_quantity(np.ones(len(ne)))
         write_closure()
-        f_out.close() 
-           
-       
+        f_out.close()

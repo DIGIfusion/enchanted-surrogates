@@ -84,26 +84,34 @@ class HELENArunner_beta(Runner):
         os.chdir(run_dir)
         # run code
         if not self.only_generate_files:
-            beta_target = params['beta_N']
-            self.parser.modify_fast_ion_pressure('fort.10', 0.0)
+            beta_target = params["beta_N"]
+            self.parser.modify_fast_ion_pressure("fort.10", 0.0)
             subprocess.call([self.executable_path])
-            output_vars = self.parser.get_real_world_geometry_factors_from_f20('fort.20')
-            beta_n0 = 1e2*output_vars['BETAN']
-            self.parser.modify_fast_ion_pressure('fort.10', 0.1)
+            output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+                "fort.20"
+            )
+            beta_n0 = 1e2 * output_vars["BETAN"]
+            self.parser.modify_fast_ion_pressure("fort.10", 0.1)
             subprocess.call([self.executable_path])
-            output_vars = self.parser.get_real_world_geometry_factors_from_f20('fort.20')
-            beta_n01 = 1e2*output_vars['BETAN']
-            apftarg = (beta_target - beta_n0)*0.1/(beta_n01 - beta_n0)
-            self.parser.modify_fast_ion_pressure('fort.10', apftarg)
+            output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+                "fort.20"
+            )
+            beta_n01 = 1e2 * output_vars["BETAN"]
+            apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
+            self.parser.modify_fast_ion_pressure("fort.10", apftarg)
             subprocess.call([self.executable_path])
-            output_vars = self.parser.get_real_world_geometry_factors_from_f20('fort.20')
-            beta_n = 1e2*output_vars['BETAN']
-            while np.abs(beta_target - beta_n) > tolerance*beta_target:
-                apftarg = (beta_target - beta_n0)*apftarg/(beta_n - beta_n0)
-                self.parser.modify_fast_ion_pressure('fort.10', apftarg)
+            output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+                "fort.20"
+            )
+            beta_n = 1e2 * output_vars["BETAN"]
+            while np.abs(beta_target - beta_n) > tolerance * beta_target:
+                apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
+                self.parser.modify_fast_ion_pressure("fort.10", apftarg)
                 subprocess.call([self.executable_path])
-                output_vars = self.parser.get_real_world_geometry_factors_from_f20('fort.20')
-                beta_n = 1e2*output_vars['BETAN']
+                output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+                    "fort.20"
+                )
+                beta_n = 1e2 * output_vars["BETAN"]
 
         # process output
         # self.parser.read_output_file(run_dir)
