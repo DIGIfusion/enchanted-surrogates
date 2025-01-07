@@ -27,10 +27,12 @@ class HELENAparser(Parser):
 
     read_output_file(run_dir: str)
         Reads the main output file fort.20.
-        Returns a tuple indicating success, Mercier criterion presence, and ballooning criterion presence.
+        Returns a tuple indicating success, Mercier criterion presence,
+        and ballooning criterion presence.
 
     make_init_zjz_profile(pedestal_delta, npts)
-        Makes the initial ZJZ profile based on the pressure profile according to Europed implementation.
+        Makes the initial ZJZ profile based on the pressure profile according
+        to Europed implementation.
 
     get_europed_profiles(run_dir: str)
         Retrieves Europed electron density and temperature profiles from the output file fort.10.
@@ -42,7 +44,8 @@ class HELENAparser(Parser):
         Removes unnecessary files except for fort.10, fort.20, and fort.12.
 
     write_summary(run_dir: str, params: dict)
-        Generates a summary file with run directory and parameters, along with success and stability criteria.
+        Generates a summary file with run directory and parameters, along with success
+        and stability criteria.
 
     modify_fast_ion_pressure(namelistpath: str, apf: float)
         Changes the apf value in the HELENA input file to the given value.
@@ -212,7 +215,8 @@ class HELENAparser(Parser):
         Returns
         -------
         tuple
-            A tuple indicating success (bool), Mercier criterion presence (bool), and ballooning criterion presence (bool).
+            A tuple indicating success (bool), Mercier criterion presence (bool),
+            and ballooning criterion presence (bool).
         """
         success = False
         ballooning_stable = True
@@ -240,7 +244,8 @@ class HELENAparser(Parser):
         self, pedestal_delta, npts, pzjzmultip=0.5, max_pres_grad_loc=0.97
     ):
         """
-        Makes the initial ZJZ profile based on the pressure profile according to Europed implementation.
+        Makes the initial ZJZ profile based on the pressure profile according
+        to Europed implementation.
 
         Parameters
         ----------
@@ -565,6 +570,17 @@ class HELENAparser(Parser):
             - XIAB: normalized total current: XIAB = mu_0 I / (a*B0))
                 -> CURRENT = (XIAB / MU_0) * (a*B0)
         """
+        BVAC, RVAC, EPS, XAXIS, CPSURF, ALFA, BETAP, BETAT, BETAN, XIAB = (
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
         output_vars = {}
         with open(f20_fort, "r") as f:
             lines = f.readlines()
@@ -719,7 +735,8 @@ class HELENAparser(Parser):
         psi_old_2d = np.repeat(psi_arr_og[:, np.newaxis], z_arr_og.shape[0], axis=1).T
         fill_value = (
             psi_old_2d.max() + 0.2
-        )  # NOTE The plus value is to ensure that the boundary contour is found, or that there is a "boundary" value.
+        )  # NOTE The plus value is to ensure that the boundary contour is found,
+        # or that there is a "boundary" value.
 
         grid_lin = scipy.interpolate.griddata(
             np.array([r_arr_og.flatten(), z_arr_og.flatten()]).T,
@@ -776,7 +793,8 @@ class HELENAparser(Parser):
     def read_eliteinput(self, filepath) -> dict[str, np.ndarray]:
         """
         Reads the following parameters:
-        1D: Psi, dp/dpsi, d2p/dpsi, fpol, ffp, dffp, q, ne, dne/dpsi, Te, dTe/dpsi, Ti, dTi/dpsi, nMainIon, nZ
+        1D: Psi, dp/dpsi, d2p/dpsi, fpol, ffp, dffp, q, ne, dne/dpsi, Te, dTe/dpsi, Ti, dTi/dpsi,
+            nMainIon, nZ
         2D: R, z, Bp
         Calculates PsiN from Psi
         returns dictionary with above keys
@@ -909,7 +927,8 @@ class HELENAparser(Parser):
         - YOUT_SCALED: 2D array of floats, the scaled z mapping
         - CS_SCALED: 1D array of floats, the scaled flux coordinate
         - P0_SCALED: 1D array of floats, the scaled pressure
-            -> NB: If the file contains B0, then the pressure scaled with that instead of what is passed above
+            -> NB: If the file contains B0, then the pressure scaled with that instead of
+                    what is passed above
 
         """
 
@@ -1141,7 +1160,8 @@ class HELENAparser(Parser):
         self, file_path, keywords, N, M
     ) -> dict[str, np.ndarray]:
         """
-        Reads data from a Fortran ASCII file and extracts repeated arrays of length N following a keyword.
+        Reads data from a Fortran ASCII file and extracts repeated arrays of length N following
+        a keyword.
 
         Parameters:
             file_path (str): Path to the ASCII file.
