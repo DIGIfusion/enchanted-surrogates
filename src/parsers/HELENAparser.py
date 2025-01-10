@@ -605,7 +605,7 @@ class HELENAparser(Parser):
             res = res + line.split()
         res = [float(x) for x in res]
         return res, endline
-    
+
     def read_lines(self, lines, startline, endline, dtype=float):
         lines = lines[startline:endline]
         res = []
@@ -1513,6 +1513,7 @@ class HELENAparser(Parser):
         start_line = file.index(
             "*  HELENA : GRAD-SHAFRANOV EQUILIBRIUM  *\n"
         )
+        NR, NP, NRMAP, NPMAP, NCHI, NITER = 0, 0, 0, 0, 0, 0
 
         for line in file[start_line:start_line + 30]:
             index = line.find("NR =")
@@ -1552,6 +1553,10 @@ class HELENAparser(Parser):
         A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
         ***************************************
         """
+        (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        ) = None, None, None, None, None, None, None, None, None, None, None
 
         file = open(os.path.join(output_dir, "fort.20"), "r")
         while True:
@@ -1651,6 +1656,7 @@ class HELENAparser(Parser):
         )
 
         i_col = 0
+        psi, dP_dPSI, FdF_dPSI, J_phi = None, None, None, None
         for c in columns:
             if c == "PSI":
                 psi = inputprofiles[:, i_col]
@@ -1666,7 +1672,7 @@ class HELENAparser(Parser):
 
     def read_fort20_s_j_vol_area(self, output_dir):
         """
-        
+
         *********************************************************************
         * I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *
         *********************************************************************
@@ -1683,7 +1689,7 @@ class HELENAparser(Parser):
         with open(os.path.join(output_dir, "fort.20"), "r") as file:
             lines = file.readlines()
         for line in lines:
-            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line ):
+            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line):
                 i_table_start = i
                 break
             i += 1
@@ -1768,4 +1774,4 @@ class HELENAparser(Parser):
             "hde": namelist["phys"]["hde"],
             # "ide": namelist["phys"]["ite"],
         }
-    
+
