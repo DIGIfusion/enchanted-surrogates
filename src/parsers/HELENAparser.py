@@ -131,6 +131,7 @@ class HELENAparser(Parser):
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
         namelist = f90nml.read(namelist_path)
+        namelist["phys"]["idete"] = 7
 
         # Update namelist with input parameters
         if "bvac" in params:
@@ -171,6 +172,7 @@ class HELENAparser(Parser):
             nesep = 0.725 if "n_esep" not in params else params["n_esep"]
             neped = 3.0 if "n_eped" not in params else params["n_eped"]
             an0 = (neped - nesep) / (np.tanh(1) * 2)
+
             an1 = 0.1 if "an1" not in params else params["an1"]
 
             namelist["phys"]["ade"] = an0
@@ -484,7 +486,7 @@ class HELENAparser(Parser):
             profile_fit["te"]["fte"] = fort10["phys"]["fte"]
             profile_fit["te"]["gte"] = fort10["phys"]["gte"]
             profile_fit["te"]["hte"] = fort10["phys"]["hte"]
-            profile_fit["te"]["ite"] = fort10["phys"]["ite"]
+            profile_fit["te"]["ite"] = 0.0 if "ite" not in fort10["phys"] else fort10["phys"]["ite"]
             # Electron density
             profile_fit["de"] = {}
             profile_fit["de"]["ade"] = fort10["phys"]["ade"]
@@ -495,7 +497,7 @@ class HELENAparser(Parser):
             profile_fit["de"]["fde"] = fort10["phys"]["fde"]
             profile_fit["de"]["gde"] = fort10["phys"]["gde"]
             profile_fit["de"]["hde"] = fort10["phys"]["hde"]
-            profile_fit["de"]["ide"] = fort10["phys"]["ide"]
+            profile_fit["de"]["ide"] = 0.0 if "ide" not in fort10["phys"] else fort10["phys"]["ide"]
             # Pressure profile core term
             profile_fit["pe"] = {}
             profile_fit["pe"]["apf"] = fort10["profile"]["apf"]

@@ -218,24 +218,24 @@ class HELENArunner(Runner):
             else:
                 subprocess.call([self.executable_path])
 
-        # process output
-        run_successful = self.parser.write_summary(run_dir, params)
-        self.parser.clean_output_files(run_dir)
+            # process output
+            run_successful = self.parser.write_summary(run_dir, params)
+            self.parser.clean_output_files(run_dir)
 
-        # run MISHKA
-        if run_successful:
-            if self.run_mishka:
-                mishka_dir = os.path.join(run_dir, "mishka")
-                os.mkdir(mishka_dir)
-                for ntor_sample in self.mishka_ntor_samples:
-                    mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
-                    os.mkdir(mishka_run_dir)
-                    self.mishka_runner.single_code_run(
-                        params={"ntor": ntor_sample, "helena_dir": run_dir},
-                        run_dir=mishka_run_dir,
-                    )
-        else:
-            print("HELENA run not success. MISHKA is not being run.")
+            # run MISHKA
+            if run_successful:
+                if self.run_mishka:
+                    mishka_dir = os.path.join(run_dir, "mishka")
+                    os.mkdir(mishka_dir)
+                    for ntor_sample in self.mishka_ntor_samples:
+                        mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
+                        os.mkdir(mishka_run_dir)
+                        self.mishka_runner.single_code_run(
+                            params={"ntor": ntor_sample, "helena_dir": run_dir},
+                            run_dir=mishka_run_dir,
+                        )
+            else:
+                print("HELENA run not success. MISHKA is not being run.")
 
         return True
 
@@ -258,7 +258,5 @@ class HELENArunner(Runner):
                 f"The namelist path ({self.namelist_path}) provided to the HELENA runner ",
                 "is not found. Exiting.",
             )
-        # TODO: Does namelist contain paramters that this structure can handle or that makes sense?
-        # TODO: neped > nesep
 
         return
