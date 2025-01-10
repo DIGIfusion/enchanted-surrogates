@@ -7,6 +7,7 @@ Classes:
 - HELENAparser
 - MISHKAparser
 - DATABASEparser
+- DREAMparser
 Functions:
 
 """
@@ -16,3 +17,4 @@ from .SIMPLEparser     import SIMPLEparser
 from .HELENAparser     import HELENAparser
 from .MISHKAparser     import MISHKAparser
 from .STATICPOOLparser import STATICPOOLparser
+from .DREAMparser      import DREAMparser
