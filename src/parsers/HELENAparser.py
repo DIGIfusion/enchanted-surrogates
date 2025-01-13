@@ -274,6 +274,16 @@ class HELENAparser(Parser):
     def write_input_file_europed2(self, params: dict, run_dir: str, namelist_path: str):
         """
         Writes input file fort.10.
+        In config:
+            "input_parameter_type": 3
+        
+        Parameters needed:
+            - pedestal_delta
+            - ip
+            - bvac
+        Optional
+            - n_eped
+            - n_esep
 
         Parameters
         ----------
@@ -309,9 +319,13 @@ class HELENAparser(Parser):
 
         ellip = 1.67 if 'ellip' not in params else params["ellip"]
         tria = 0.4 if 'tria' not in params else params["tria"]
+        quad = 0.0
 
-        nesep = 0.725 if "n_esep" not in params else params["n_esep"]
         neped = 3.0 if "n_eped" not in params else params["n_eped"]
+        if "n_eped" not in params:
+            nesep = 0.725 if "n_esep" not in params else params["n_esep"]
+        else:
+            nesep = params["n_eped"]/4.0 if "n_esep" not in params else params["n_esep"]
 
         an0 = (neped - nesep) / tanh_normaliser
         an1 = 1.0 if "an1" not in params else params["an1"]
@@ -339,6 +353,7 @@ class HELENAparser(Parser):
         zimp = 4.0
         zeff = 1.2
         z_main_ion = 1.0
+
         tiped_multip = 1.0
         tisep_multip = 1.0
         pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
@@ -348,6 +363,7 @@ class HELENAparser(Parser):
         print(f"bp2: {bp2}")
         print(f"pedestal_dilution: {pedestal_dilution}")
 
+        # Caluclate the pedestal temperature based on the KBM constraint
         teped = (
             pped / neped /
             (1 + tiped_multip * pedestal_dilution *
@@ -389,6 +405,12 @@ class HELENAparser(Parser):
         namelist["shape"]["sig2"] = d_ped
         namelist["shape"]["tria"] = tria
         namelist["shape"]["ellip"] = ellip
+        namelist["shape"]["quad"] = quad
+
+        # PHYS
+        namelist["phys"]["zeff"] = zeff
+        namelist["phys"]["zmain"] = z_main_ion
+        namelist["phys"]["zimp"] = zimp
 
         # DENSITY PROFILE
         namelist["phys"]["ade"] = an0

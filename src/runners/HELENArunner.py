@@ -77,12 +77,6 @@ class HELENArunner(Runner):
             run_mishka: bool
                 Flag for running MISHKA after the HELENA run. If run_mishka is True
                 the following other parameters need to be defined in other_params:
-                - mishka_executable_path
-                - mishka_namelist_path
-                - ntor
-            beta_iteration: bool
-                Flag for iterating HELENA to find target beta normalized. Requires that 'beta_N'
-                exists in the sampler parameters.
                 - mishka_executable_path: str
                 - mishka_namelist_path: str
                 - ntor: list of int
@@ -96,7 +90,6 @@ class HELENArunner(Runner):
             if "only_generate_files" not in other_params
             else other_params["only_generate_files"]
         )
-
         self.beta_iteration = (
             False
             if "beta_iteration" not in other_params
@@ -112,7 +105,6 @@ class HELENArunner(Runner):
             if "max_beta_iterations" not in other_params
             else other_params["max_beta_iterations"]
         )
-
         self.input_parameter_type = (
             0
             if "input_parameter_type" not in other_params
@@ -146,22 +138,6 @@ class HELENArunner(Runner):
                         other_params=mishka_params["other_params"],
                     )
                     self.mishka_ntor_samples = mishka_params["ntor"]
-        self.only_generate_files = other_params["only_generate_files"]
-        self.beta_iteration = (
-            False
-            if "beta_iteration" not in other_params
-            else other_params["beta_iteration"]
-        )
-        self.beta_tolerance = (
-            1e-4
-            if "beta_tolerance" not in other_params
-            else other_params["beta_tolerance"]
-        )
-        self.max_beta_iterations = (
-            10
-            if "max_beta_iterations" not in other_params
-            else other_params["max_beta_iterations"]
-        )
 
         self.pre_run_check()
 
