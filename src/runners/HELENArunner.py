@@ -55,6 +55,18 @@ class HELENArunner(Runner):
                 Flag for either only creating input files or creating the files
                 and running HELENA.
 
+            beta_iteration: bool
+                Flag for iterating HELENA to find target beta normalized. Requires that 'beta_N'
+                exists in the sampler parameters.
+
+            beta_tolerance: float
+                (Only relevant when beta_iteration is True.)
+                Tolerance criteria for calculated betan vs target betan.
+
+            max_beta_iterations: float
+                (Only relevant when beta_iteration is True.)
+                The maximum number of beta iterations.
+
             input_parameter_type: int
                 0: EPED/MTANH profiles using direct helena input ADE, BDE, etc.
                 1: Europed profiles generated using 'pedestal_delta', 'n_eped', 'bvac', 'ip',
@@ -71,6 +83,9 @@ class HELENArunner(Runner):
             beta_iteration: bool
                 Flag for iterating HELENA to find target beta normalized. Requires that 'beta_N'
                 exists in the sampler parameters.
+                - mishka_executable_path: str
+                - mishka_namelist_path: str
+                - ntor: list of int
 
         """
         self.parser = HELENAparser()
@@ -81,11 +96,29 @@ class HELENArunner(Runner):
             if "only_generate_files" not in other_params
             else other_params["only_generate_files"]
         )
+
+        self.beta_iteration = (
+            False
+            if "beta_iteration" not in other_params
+            else other_params["beta_iteration"]
+        )
+        self.beta_tolerance = (
+            1e-4
+            if "beta_tolerance" not in other_params
+            else other_params["beta_tolerance"]
+        )
+        self.max_beta_iterations = (
+            10
+            if "max_beta_iterations" not in other_params
+            else other_params["max_beta_iterations"]
+        )
+
         self.input_parameter_type = (
             0
             if "input_parameter_type" not in other_params
             else other_params["input_parameter_type"]
         )
+
         self.run_mishka = False
         self.mishka_runner = None
 
@@ -154,6 +187,8 @@ class HELENArunner(Runner):
             self.parser.write_input_file_scaling(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 3:
             self.parser.write_input_file_europed2(params, run_dir, self.namelist_path)
+        else:
+            self.parser.write_input_file(params, run_dir, self.namelist_path)
 
         # Check input parameters
         if self.beta_iteration:
@@ -163,8 +198,6 @@ class HELENArunner(Runner):
                     "This it needed for beta iteration. EXITING.",
                 )
                 return False
-
-        self.parser.write_input_file(params, run_dir, self.namelist_path)
 
         os.chdir(run_dir)
         # run code
@@ -227,8 +260,8 @@ class HELENArunner(Runner):
                             params={"ntor": ntor_sample, "helena_dir": run_dir},
                             run_dir=mishka_run_dir,
                         )
-        else:
-            print("HELENA run not success. MISHKA is not being run.")
+            else:
+                print("HELENA run not success. MISHKA is not being run.")
 
         return True
 
@@ -251,7 +284,5 @@ class HELENArunner(Runner):
                 f"The namelist path ({self.namelist_path}) provided to the HELENA ",
                 "runner is not found. Exiting.",
             )
-        # TODO: Does namelist contain paramters that this structure can handle or that makes sense?
-        # TODO: neped > nesep
 
         return

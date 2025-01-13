@@ -132,6 +132,7 @@ class HELENAparser(Parser):
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
         namelist = f90nml.read(namelist_path)
+        namelist["phys"]["idete"] = 7
 
         # Update namelist with input parameters
         if "bvac" in params:
@@ -153,9 +154,10 @@ class HELENAparser(Parser):
             namelist["shape"]["ellip"] = params["ellip"]
         if "apf" in params:
             namelist["profile"]["apf"] = params["apf"]
-            namelist["profile"]["bpf"] = 0.5
             namelist["profile"]["cpf"] = 3.0
-        
+        if 'bpf' in params:
+            namelist["profile"]["bpf"] = params['bpf']
+
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -172,6 +174,7 @@ class HELENAparser(Parser):
             nesep = 0.725 if "n_esep" not in params else params["n_esep"]
             neped = 3.0 if "n_eped" not in params else params["n_eped"]
             an0 = (neped - nesep) / (np.tanh(1) * 2)
+
             an1 = 0.1 if "an1" not in params else params["an1"]
 
             namelist["phys"]["ade"] = an0
@@ -252,7 +255,7 @@ class HELENAparser(Parser):
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
         return
-    
+
     def shape_function(self, theta, ellip, tria, quad):
         # EUROPED
         # returns the R and Z values given the boundary parameters (HELENA equation 11)
@@ -316,7 +319,7 @@ class HELENAparser(Parser):
 
         # FROM EUROPED
         theta = np.linspace(0, 2 * np.pi, 1000)
-        
+
         (r, z) = self.shape_function(theta, ellip=ellip, tria=tria, quad=0.0)
         # r0 = (max(r) + min(r)) / 2
         # z0 = (max(z) + min(z)) / 2
@@ -325,7 +328,7 @@ class HELENAparser(Parser):
         dz = z[0:-1] - z[1:]
         ds = np.power(np.real(np.power(dr, 2)) + np.real(np.power(dz, 2)), .5)
         circumference = np.sum(ds)
-        
+
         print(f"circumference: {circumference}")
 
         bp2 = (params["ip"] * 1e6 * mu0 / circumference) ** 2
@@ -339,7 +342,7 @@ class HELENAparser(Parser):
         tiped_multip = 1.0
         tisep_multip = 1.0
         pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
-        
+
         print(f"betaped: {betaped}")
         print(f"pped: {pped}")
         print(f"bp2: {bp2}")
@@ -362,7 +365,7 @@ class HELENAparser(Parser):
         # Update namelist with input parameters
         if "bvac" in params:
             namelist["phys"]["bvac"] = params["bvac"]
-        
+
         if "ip" in params and "bvac" in params:
             namelist["phys"]["xiab"] = (
                 params["ip"]
@@ -739,33 +742,9 @@ class HELENAparser(Parser):
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
         summary["profile_fit"] = self.get_profile_fit_from_fort10(run_dir)
-
-        try:
-            CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
-                run_dir
-            )
-            np.save(run_dir + "/qs.npy", QS)
-            np.save(run_dir + "/cs.npy", CS)
-            np.save(run_dir + "/p0.npy", P0)
-            np.save(run_dir + "/rbphi.npy", RBPHI)
-            np.save(run_dir + "/vxvy.npy", (VX, VY))
-        except Exception:
-            print(f"error reading and summarizing fort.12 in dir {run_dir}")
-        try:
-            psi, S, J, vol, _, area = self.read_fort20_s_j_vol_area(run_dir)
-            np.save(run_dir + "/psi.npy", psi)
-            np.save(run_dir + "/s.npy", S)
-            np.save(run_dir + "/j.npy", J)
-            np.save(run_dir + "/volume.npy", vol)
-            np.save(run_dir + "/area.npy", area)
-        except Exception as e:
-            print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
-            success = False
-
-        
         try:
             (betan, betap, total_current, total_area, total_volume, _,
-            _, _, _, _, _) = self.read_fort20_beta_section(output_dir=run_dir)
+                _, _, _, _, _) = self.read_fort20_beta_section(output_dir=run_dir)
             summary["betan"] = betan
             summary["betap"] = betap
             summary["total_current"] = total_current
@@ -777,8 +756,41 @@ class HELENAparser(Parser):
             success = False
 
         try:
-            (realworld_S, realworld_P,
-             realworld_Ne, realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
+            # CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
+            #     run_dir
+            # )
+            (
+                JS0,
+                CS,
+                QS,
+                P0,
+                RBPHI,
+                VX,
+                VY,
+            ) = self.read_helena_output_fort12(run_dir)
+            np.save(run_dir + "/qs.npy", QS)
+            np.save(run_dir + "/cs.npy", CS)
+            np.save(run_dir + "/p0.npy", P0)
+            np.save(run_dir + "/rbphi.npy", RBPHI)
+            np.save(run_dir + "/vxvy.npy", (VX, VY))
+        except Exception:
+            print(f"error reading and summarizing fort.12 in dir {run_dir}")
+            success = False
+
+        try:
+            psi, S, J, vol, _, area = self.read_fort20_s_j_vol_area(run_dir)
+            np.save(run_dir + "/psi.npy", psi)
+            np.save(run_dir + "/s.npy", S)
+            np.save(run_dir + "/j.npy", J)
+            np.save(run_dir + "/volume.npy", vol)
+            np.save(run_dir + "/area.npy", area)
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
+            success = False
+
+        try:
+            (realworld_S, realworld_P, realworld_Ne,
+             realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
             np.save(run_dir + "/realworld_S.npy", realworld_S)
             np.save(run_dir + "/realworld_P.npy", realworld_P)
             np.save(run_dir + "/realworld_Ne.npy", realworld_Ne)
@@ -961,144 +973,134 @@ class HELENAparser(Parser):
 
         return NR, NP, NRMAP, NPMAP, NCHI, NITER
 
-    def read_fort20_beta_section(self, output_dir):
-        """
-         ***************************************
-        MAGNETIC AXIS :   0.01908  0.00000
-        POLOIDAL BETA :   0.1198E+00
-        TOROIDAL BETA :   0.3802E-02
-        BETA STAR     :   0.4250E-02
-        NORM. BETA    :   0.00335
-        TOTAL CURRENT :   0.1428E+01
-        TOTAL AREA    :   0.5115E+01
-        TOTAL VOLUME  :   0.3110E+02
-        INT. INDUCTANCE :  0.685990E+00
-        POL. FLUX     :   0.2130E+01
-        A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
-        ***************************************
-        """
-        (betan, betap, total_current, total_area, total_volume, beta_tor,
-         beta_star, helenaBetap, b_last_round, radius, B0) = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-
-        file = open(os.path.join(output_dir, "fort.20"), "r")
-        while True:
-            line = file.readline()
-            if line.find("NORM. BETA") > -1:
-                spl = line.split(":")
-                betan = float(spl[1]) * 100
-            if line.find("POLOIDAL BETA") > -1:
-                spl = line.split(":")
-                betap = float(spl[1])
-            if line.find("TOTAL CURRENT") > -1:
-                spl = line.split(":")
-                total_current = float(spl[1])
-            if line.find("TOTAL AREA") > -1:
-                spl = line.split(":")
-                total_area = float(spl[1])
-            if line.find("TOTAL VOLUME") > -1:
-                spl = line.split(":")
-                total_volume = float(spl[1])
-            if line.find("TOROIDAL BETA") > -1:
-                spl = line.split(":")
-                beta_tor = float(spl[1])
-            if line.find("BETA STAR") > -1:
-                spl = line.split(":")
-                beta_star = float(spl[1])
-            if line.find("PED. BETAPOL") > -1:
-                spl = line.split(":")
-                helenaBetap = float(spl[1])
-            if line.find("A,B,C") > -1:
-                spl = line.split(":")
-                sp2 = spl[1].split()
-                b_last_round = float(sp2[1])
-            if line.find("RADIUS") > -1:
-                spl = line.split(":")
-                radius = float(spl[1])
-            if line.find("B0") > -1:
-                spl = line.split(":")
-                B0 = float(spl[1])
-                break
-        file.close()
-        return (
-            betan, betap, total_current, total_area, total_volume, beta_tor,
-            beta_star, helenaBetap, b_last_round, radius, B0
-        )
-
-    def read_fort20_inputprofiles(self, output_dir, NRMAP):
-        """
-        ***********************************************
-        *        INPUT PROFILES :                     *
-        ***********************************************
-        *  PSI,       dP/dPSI,    FdF/dPSI,     J_phi *
-        ***********************************************
-        0.0000E+00  0.0000E+00  0.1000E+01  0.1000E+01
-        0.1000E-01  0.1940E+01  0.1000E+01  0.9789E+00
-        0.2000E-01  0.2193E+01  0.1000E+01  0.9573E+00
-        ...
-
-        """
-        filename = os.path.join(output_dir, "fort.20")
-        file = open(filename).readlines()
-        i = 0
-        i_table_start = -1
-        with open(os.path.join(output_dir, "fort.20"), "r") as file:
-            lines = file.readlines()
+    def read_lines(self, lines, startline, endline, dtype=float):
+        lines = lines[startline:endline]
+        res = []
         for line in lines:
-            if ("INPUT PROFILES" in line):
-                i_table_start = i
-                break
-            i += 1
-        if i_table_start == -1:
-            print("Input profiles not found.")
+            res = res + line.split()
+        res = np.array([float(x) for x in res])
+        return res
+
+    def read_helena_output_fort12(self, run_dir):
+        """
+        USE THIS ONE FOR FORT.12
+        Read the HELENA output file fort.12 which is used as input by MISHKA.
+        """
+        filename = os.path.join(run_dir, "fort.12")
+        if not os.path.exists(filename):
+            print("Cannot find", filename)
             return
 
-        columns = np.loadtxt(
-            filename,
-            dtype=str,
-            comments=None,
-            # delimiter=' ',
-            converters=None,
-            skiprows=i_table_start + 2,
-            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
-            max_rows=1,
+        lines = open(filename, "r").readlines()
+        JS0 = int(lines[0].split()[0])
+        JS0_lines = math.ceil(JS0 / 4)
+        JS0_1_lines = math.ceil((JS0 + 1) / 4)
+
+        startline = 1
+        endline = JS0_1_lines + 1
+        CS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        QS = self.read_lines(lines, startline, endline)
+
+        # DQS_1, DQEC = (
+        #     float(lines[endline].split()[0]), 
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_lines
+        # DQS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        # CURJ = self.read_lines(lines, startline, endline)
+
+        # DJ0, DJE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        endline += 1
+        NCHI = int(lines[endline].split()[0])
+        # NCHI_lines = math.ceil((NCHI - 1) / 4)
+        NCHI_1_lines = math.ceil((NCHI) / 4)
+        NCHI_JS0_lines = math.ceil((NCHI * (JS0 + 1) - (NCHI + 1)) / 4)
+
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        # CHI = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM11 = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM12 = self.read_lines(lines, startline, endline)
+
+        # CPSURF, RADIUS = float(lines[endline].split()[0]), float(
+        #     lines[endline].split()[1]
+        # )
+
+        startline = endline + 1
+        endline = startline + NCHI_JS0_lines
+        # GEM33 = self.read_lines(lines, startline, endline)
+        # RAXIS = float(lines[endline].split()[0])
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        P0 = self.read_lines(lines, startline, endline)
+
+        # DP0, DPE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        RBPHI = self.read_lines(lines, startline, endline)
+
+        # DRBPHI0, DRBPHIE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        # Vacuum data
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        VX = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_1_lines
+        VY = self.read_lines(lines, startline, endline)
+
+        # EPS = float(lines[endline].split()[0])
+        # startline = endline + 1
+        # endline = startline + NCHI_JS0_lines
+        # XOUT = self.read_lines(lines, startline, endline)
+
+        # startline = endline
+        # endline = startline + NCHI_JS0_lines
+        # YOUT = self.read_lines(lines, startline, endline)
+
+        return (
+            JS0,
+            CS,
+            QS,
+            P0,
+            RBPHI,
+            VX,
+            VY,
         )
-        columns = columns[1:-1]
-        columns = [c.replace(",", "") for c in columns]
-        print(columns)
-
-        inputprofiles = np.loadtxt(
-            filename,
-            # dtype=<class 'float'>,
-            comments="*",
-            # delimiter=' ',
-            converters=None,
-            skiprows=i_table_start + 3,
-            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
-            max_rows=NRMAP,
-        )
-
-        i_col = 0
-        for c in columns:
-            if c == "PSI":
-                psi = inputprofiles[:, i_col]
-            elif c == "dP/dPSI":
-                dP_dPSI = inputprofiles[:, i_col]
-            elif c == "FdF/dPSI":
-                FdF_dPSI = inputprofiles[:, i_col]
-            elif c == "J_phi":
-                J_phi = inputprofiles[:, i_col]
-            i_col += 1
-
-        return psi, dP_dPSI, FdF_dPSI, J_phi
 
     def read_fort20_s_j_vol_area(self, output_dir):
         """
-        
+
         *********************************************************************
         * I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *
         *********************************************************************
-        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232    0.0005
-        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961    0.0020
+        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232
+                0.0005
+        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961
+                0.0020
 
         """
         NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
@@ -1108,7 +1110,7 @@ class HELENAparser(Parser):
         with open(os.path.join(output_dir, "fort.20"), "r") as file:
             lines = file.readlines()
         for line in lines:
-            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line ):
+            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line):
                 i_table_start = i
                 break
             i += 1
@@ -1249,7 +1251,7 @@ class HELENAparser(Parser):
         with open(f20_fort, "r") as f:
             lines = f.readlines()
 
-            """ 
+            """
             Looking for
             $PHYS     EPS  =  0.320, ALFA =  2.438, B =  0.006, C =  1.000,
                     XIAB =  1.350, BETAP =  -1.0000,COREP =   43259.3989
@@ -1447,7 +1449,8 @@ class HELENAparser(Parser):
             # (2022) nbbbs,limitr
             file.write(format_2022.write([NBBBS, limitr]) + "\n")
             # (2020) (rbbbs(i),zbbbs(i),i=1,nbbbs)
-            # See: https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
+            # See:
+            # https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
             towrite = np.array([RBBBS, ZBBBS]).flatten(order="F")
             file.write(format_2020.write(towrite) + "\n")
             # (2020) (rlim(i),zlim(i),i=1,limitr)
@@ -1919,7 +1922,7 @@ class HELENAparser(Parser):
         def write_quantity(vector):
             number = math.ceil(len(vector) / 6)
             for i in range(number):
-                f_out.write(" " + format_iterdb.write(vector[6 * i : 6 * i + 6]) + "\n")
+                f_out.write(" " + format_iterdb.write(vector[6 * i:6 * i + 6]) + "\n")
             f_out.write(" " + format_iterdb.write([0.0]) + "\n")
 
         psi = elite_data["Psi"]
@@ -1959,3 +1962,136 @@ class HELENAparser(Parser):
         write_quantity(np.ones(len(ne)))
         write_closure()
         f_out.close()
+
+    def read_fort20_beta_section(self, output_dir):
+        """
+         ***************************************
+        MAGNETIC AXIS :   0.01908  0.00000
+        POLOIDAL BETA :   0.1198E+00
+        TOROIDAL BETA :   0.3802E-02
+        BETA STAR     :   0.4250E-02
+        NORM. BETA    :   0.00335
+        TOTAL CURRENT :   0.1428E+01
+        TOTAL AREA    :   0.5115E+01
+        TOTAL VOLUME  :   0.3110E+02
+        INT. INDUCTANCE :  0.685990E+00
+        POL. FLUX     :   0.2130E+01
+        A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
+        ***************************************
+        """
+        (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        ) = None, None, None, None, None, None, None, None, None, None, None
+
+        file = open(os.path.join(output_dir, "fort.20"), "r")
+        while True:
+            line = file.readline()
+            if line.find("NORM. BETA") > -1:
+                spl = line.split(":")
+                betan = float(spl[1]) * 100
+            if line.find("POLOIDAL BETA") > -1:
+                spl = line.split(":")
+                betap = float(spl[1])
+            if line.find("TOTAL CURRENT") > -1:
+                spl = line.split(":")
+                total_current = float(spl[1])
+            if line.find("TOTAL AREA") > -1:
+                spl = line.split(":")
+                total_area = float(spl[1])
+            if line.find("TOTAL VOLUME") > -1:
+                spl = line.split(":")
+                total_volume = float(spl[1])
+            if line.find("TOROIDAL BETA") > -1:
+                spl = line.split(":")
+                beta_tor = float(spl[1])
+            if line.find("BETA STAR") > -1:
+                spl = line.split(":")
+                beta_star = float(spl[1])
+            if line.find("PED. BETAPOL") > -1:
+                spl = line.split(":")
+                helenaBetap = float(spl[1])
+            if line.find("A,B,C") > -1:
+                spl = line.split(":")
+                sp2 = spl[1].split()
+                b_last_round = float(sp2[1])
+            if line.find("RADIUS") > -1:
+                spl = line.split(":")
+                radius = float(spl[1])
+            if line.find("B0") > -1:
+                spl = line.split(":")
+                B0 = float(spl[1])
+                break
+        file.close()
+        return (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        )
+
+    def read_fort20_inputprofiles(self, output_dir, NRMAP):
+        """
+        ***********************************************
+        *        INPUT PROFILES :                     *
+        ***********************************************
+        *  PSI,       dP/dPSI,    FdF/dPSI,     J_phi *
+        ***********************************************
+        0.0000E+00  0.0000E+00  0.1000E+01  0.1000E+01
+        0.1000E-01  0.1940E+01  0.1000E+01  0.9789E+00
+        0.2000E-01  0.2193E+01  0.1000E+01  0.9573E+00
+        ...
+
+        """
+        filename = os.path.join(output_dir, "fort.20")
+        file = open(filename).readlines()
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if ("INPUT PROFILES" in line):
+                i_table_start = i
+                break
+            i += 1
+        if i_table_start == -1:
+            print("Input profiles not found.")
+            return
+
+        columns = np.loadtxt(
+            filename,
+            dtype=str,
+            comments=None,
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 2,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=1,
+        )
+        columns = columns[1:-1]
+        columns = [c.replace(",", "") for c in columns]
+        print(columns)
+
+        inputprofiles = np.loadtxt(
+            filename,
+            # dtype=<class 'float'>,
+            comments="*",
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 3,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=NRMAP,
+        )
+
+        i_col = 0
+        psi, dP_dPSI, FdF_dPSI, J_phi = None, None, None, None
+        for c in columns:
+            if c == "PSI":
+                psi = inputprofiles[:, i_col]
+            elif c == "dP/dPSI":
+                dP_dPSI = inputprofiles[:, i_col]
+            elif c == "FdF/dPSI":
+                FdF_dPSI = inputprofiles[:, i_col]
+            elif c == "J_phi":
+                J_phi = inputprofiles[:, i_col]
+            i_col += 1
+
+        return psi, dP_dPSI, FdF_dPSI, J_phi
