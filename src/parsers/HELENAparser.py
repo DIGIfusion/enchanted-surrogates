@@ -153,8 +153,9 @@ class HELENAparser(Parser):
             namelist["shape"]["ellip"] = params["ellip"]
         if "apf" in params:
             namelist["profile"]["apf"] = params["apf"]
-            namelist["profile"]["bpf"] = 0.5
             namelist["profile"]["cpf"] = 3.0
+        if 'bpf' in params:
+            namelist["profile"]["bpf"] = params['bpf']
 
         # Europed profiles
         if "pedestal_delta" in params:
