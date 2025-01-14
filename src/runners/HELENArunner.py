@@ -11,6 +11,7 @@ from runners.MISHKArunner import MISHKArunner
 from parsers import HELENAparser
 import subprocess
 import os
+import shutil
 from dask.distributed import print
 
 
@@ -82,6 +83,7 @@ class HELENArunner(Runner):
                 - ntor: list of int
 
         """
+        print("HELENArunner initializing...")
         self.parser = HELENAparser()
         self.executable_path = executable_path
         self.namelist_path = other_params["namelist_path"]
@@ -109,6 +111,11 @@ class HELENArunner(Runner):
             0
             if "input_parameter_type" not in other_params
             else other_params["input_parameter_type"]
+        )
+        self.pedestal_width_scan = (
+            False
+            if "pedestal_width_scan" not in other_params
+            else other_params["pedestal_width_scan"]
         )
 
         self.run_mishka = False
@@ -166,6 +173,10 @@ class HELENArunner(Runner):
         else:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
 
+        # Exit here
+        if self.only_generate_files:
+            return True
+
         # Check input parameters
         if self.beta_iteration:
             if "beta_N" not in params:
@@ -174,72 +185,108 @@ class HELENArunner(Runner):
                     "This it needed for beta iteration. EXITING.",
                 )
                 return False
-
-        os.chdir(run_dir)
-        # run code
-        if not self.only_generate_files:
-            if self.beta_iteration:
-                beta_target = params["beta_N"]
-                self.parser.modify_fast_ion_pressure("fort.10", 0.0)
-                subprocess.call([self.executable_path])
-                output_vars = self.parser.get_real_world_geometry_factors_from_f20(
-                    "fort.20"
-                )
-                beta_n0 = 1e2 * output_vars["BETAN"]
-                self.parser.modify_fast_ion_pressure("fort.10", 0.1)
-                subprocess.call([self.executable_path])
-                output_vars = self.parser.get_real_world_geometry_factors_from_f20(
-                    "fort.20"
-                )
-                beta_n01 = 1e2 * output_vars["BETAN"]
-                apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
-                self.parser.modify_fast_ion_pressure("fort.10", apftarg)
-                subprocess.call([self.executable_path])
-                output_vars = self.parser.get_real_world_geometry_factors_from_f20(
-                    "fort.20"
-                )
-                beta_n = 1e2 * output_vars["BETAN"]
-                n_beta_iteration = 0
-                while (
-                    np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
-                    and n_beta_iteration < self.max_beta_iterations
-                ):
-                    apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
-                    self.parser.modify_fast_ion_pressure("fort.10", apftarg)
-                    subprocess.call([self.executable_path])
-                    output_vars = self.parser.get_real_world_geometry_factors_from_f20(
-                        "fort.20"
-                    )
-                    beta_n = 1e2 * output_vars["BETAN"]
-                    n_beta_iteration += 1
+            if "apf" in params:
                 print(
-                    f"Target betaN: {beta_target}\n",
-                    f"Final betaN: {beta_n}\n",
-                    f"Number of beta iterations: {n_beta_iteration}",
+                    "The core ion pressure parameter APF should not be ",
+                    "part of the input parameters during beta iteration. EXITING",
                 )
-            else:
-                subprocess.call([self.executable_path])
+                return False
 
-            # process output
-            run_successful = self.parser.write_summary(run_dir, params)
-            self.parser.clean_output_files(run_dir)
+        # Needed for HELENA
+        os.chdir(run_dir)
 
-            # run MISHKA
-            if run_successful:
-                if self.run_mishka:
-                    mishka_dir = os.path.join(run_dir, "mishka")
-                    os.mkdir(mishka_dir)
-                    for ntor_sample in self.mishka_ntor_samples:
-                        mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
-                        os.mkdir(mishka_run_dir)
-                        self.mishka_runner.single_code_run(
-                            params={"ntor": ntor_sample, "helena_dir": run_dir},
-                            run_dir=mishka_run_dir,
-                        )
+        if self.beta_iteration:
+            self.run_helena_with_beta_iteration(params)
+        else:
+            subprocess.call([self.executable_path])
+
+        # process output
+        run_successful = self.parser.write_summary(run_dir, params)
+        self.parser.clean_output_files(run_dir)
+
+        # run MISHKA
+        if run_successful:
+            if self.run_mishka:
+                self.run_mishka_for_ntors(run_dir)
+        else:
+            print("HELENA run not success. MISHKA is not being run.")
+
+        # Run for multiple pedestal widths
+        if self.pedestal_width_scan:
+            if self.input_parameter_type == 3:
+                if "pedestal_delta" in params:
+                    scans = np.linspace(0.02, 0.08, 3)
+                    for _i, scan in enumerate(scans):
+                        # scan_dir = os.path.join(run_dir, f"scan_{_i}")
+                        scan_dir = f"{run_dir}_scan_{_i}"
+                        os.mkdir(scan_dir)
+                        os.chdir(scan_dir)
+                        self.parser.update_pedestal_delta(scan, run_dir, scan_dir)
+                        subprocess.call([self.executable_path])
+                        run_successful = self.parser.write_summary(scan_dir, params)
+                        self.parser.clean_output_files(scan_dir)
+                        if run_successful:
+                            if self.run_mishka:
+                                self.run_mishka_for_ntors(scan_dir)
             else:
-                print("HELENA run not success. MISHKA is not being run.")
+                print(
+                    "ERROR: Pedestal width scan is only implemented for input_parameter_type = 3."
+                )
 
         return True
+
+    def run_helena_with_beta_iteration(self, params):
+        beta_target = params["beta_N"]
+        print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
+        self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+        subprocess.call([self.executable_path])
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        beta_n0 = 1e2 * output_vars["BETAN"]
+        print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
+        self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+        subprocess.call([self.executable_path])
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        beta_n01 = 1e2 * output_vars["BETAN"]
+        print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
+        apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
+        self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+        subprocess.call([self.executable_path])
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        beta_n = 1e2 * output_vars["BETAN"]
+        print(f"BETA ITERATION {0.2}: target={beta_target}, current={beta_n}")
+        n_beta_iteration = 0
+        while (
+            np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
+            and n_beta_iteration < self.max_beta_iterations
+        ):
+            apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
+            self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+            subprocess.call([self.executable_path])
+            output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+                "fort.20"
+            )
+            beta_n = 1e2 * output_vars["BETAN"]
+            print(
+                f"BETA ITERATION {n_beta_iteration}: target={beta_target}, current={beta_n}"
+            )
+            n_beta_iteration += 1
+
+        print(
+            f"BETA ITERATION FINISHED.\nTarget betaN: {beta_target}\n",
+            f"Final betaN: {beta_n}\n",
+            f"Number of beta iterations: {n_beta_iteration}",
+        )
+
+    def run_mishka_for_ntors(self, run_dir):
+        mishka_dir = os.path.join(run_dir, "mishka")
+        os.mkdir(mishka_dir)
+        for ntor_sample in self.mishka_ntor_samples:
+            mishka_run_dir = os.path.join(mishka_dir, str(ntor_sample))
+            os.mkdir(mishka_run_dir)
+            self.mishka_runner.single_code_run(
+                params={"ntor": ntor_sample, "helena_dir": run_dir},
+                run_dir=mishka_run_dir,
+            )
 
     def pre_run_check(self):
         """
