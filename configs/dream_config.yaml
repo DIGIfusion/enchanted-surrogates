@@ -1,0 +1,33 @@
+sampler:
+  type: Grid
+  bounds: [[1.0e-5, 1.0e-5], [2.0, 2.0], [2.0, 2.0], [1.0, 1.0], [10.0,10.0]]
+  num_samples: [1, 1, 1, 1, 1]
+  parameters: ['dBB', 'alpha', 'beta', 'V_loop_wall', 'tau_V_loop']
+
+runner:
+  type: DREAMrunner
+  executable_path: "/scratch/project_2004389/aarojarvinen/DREAM_OCT_2024/build/iface/dreami"
+  other_params: {
+    "base_input_file_path": "/scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test/dream_input.h5",
+    "only_generate_files": False}
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test
+  worker_args: 
+    local: 'True'
+    account: "project_2004389"
+    queue: "medium"
+    cores: 1 
+    memory: "12GB"
+    processes: 1
+    walltime: "24:00:00" 
+    interface: "ib0"
+    job_script_prologue: 
+      - 'module load python-data'
+      - 'module load gsl'
+      - 'module load hdf5'
+      - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
+      - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
+      - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
+  num_workers: 1
