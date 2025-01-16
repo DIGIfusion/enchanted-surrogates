@@ -57,6 +57,7 @@ class HELENAparser(Parser):
     """
 
     def __init__(self):
+        print("HELENAparser initializing...")
         self.default_namelist = ""
 
     def write_input_file(self, params: dict, run_dir: str, namelist_path: str):
@@ -126,6 +127,8 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         print(f"Writing to {run_dir}. Params (europed): {params}")
+        tanh_normaliser = np.tanh(1) - np.tanh(-1)
+
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
@@ -173,7 +176,7 @@ class HELENAparser(Parser):
 
             nesep = 0.725 if "n_esep" not in params else params["n_esep"]
             neped = 3.0 if "n_eped" not in params else params["n_eped"]
-            an0 = (neped - nesep) / (np.tanh(1) * 2)
+            an0 = (neped - nesep) / tanh_normaliser
 
             an1 = 0.1 if "an1" not in params else params["an1"]
 
@@ -196,7 +199,7 @@ class HELENAparser(Parser):
                 teped = params["teped_multip"] * params["ip"] ** 2 / neped
             else:
                 teped = 1.0 if "T_eped" not in params else params["T_eped"]
-            at0 = (teped - tesep) / (np.tanh(1) * 2)
+            at0 = (teped - tesep) / tanh_normaliser
             if "core_to_ped_te" in params:
                 at1 = params["core_to_ped_te"] * teped
             else:
@@ -263,6 +266,7 @@ class HELENAparser(Parser):
         # tria = triangularity (input)
         # quad = squareness (input)
         # theta = the poloidal angle, can be a vector or a scalar (input)
+        print("shape_function")
         rvac = 2.94
         a = 0.88
 
@@ -270,13 +274,65 @@ class HELENAparser(Parser):
         r = rvac + a * np.cos(theta + tria * sint + quad * np.sin(theta * 2.0))
         z = ellip * a * sint
         return (r, z)
-    
+
+    def get_circumference(self, theta, ellip, tria, quad=0.0):
+        print("get_circumference")
+        (r, z) = self.shape_function(theta, ellip=ellip, tria=tria, quad=0.0)
+        # r0 = (max(r) + min(r)) / 2
+        # z0 = (max(z) + min(z)) / 2
+        dr = r[0:-1] - r[1:]
+        # ave_r = (r[0:-1] + r[1:])
+        dz = z[0:-1] - z[1:]
+        ds = np.power(np.real(np.power(dr, 2)) + np.real(np.power(dz, 2)), .5)
+        circumference = np.sum(ds)
+        return circumference
+
+    def get_teped(
+            self, d_ped, ip, circumference, neped, tesep, zimp=4.0, zeff=1.2, z_main_ion=1.0):
+        print("get_teped")
+        mu0 = 4e-7 * np.pi
+        Electron_Charge = 1.6022E-19
+        tanh_normaliser = np.tanh(1.0) - np.tanh(-1.0)
+        tanh_normaliser_ti = np.tanh(1.0) - np.tanh(-100.0)
+
+        bp2 = (ip * 1e6 * mu0 / circumference) ** 2
+        width_const = 0.076
+        beta_exponent = 0.5
+        betaped = (d_ped / width_const) ** (1.0 / beta_exponent)
+        pped = betaped / (2 * mu0) * bp2 / 1e3
+
+        tiped_multip = 1.0
+        tisep_multip = 1.0
+        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
+
+        print(f"betaped: {betaped}")
+        print(f"pped: {pped}")
+        print(f"bp2: {bp2}")
+        print(f"pedestal_dilution: {pedestal_dilution}")
+
+        # Caluclate the pedestal temperature based on the KBM constraint
+        teped = (
+            pped / neped /
+            (1 + tiped_multip * pedestal_dilution *
+             (1 + (1 - tanh_normaliser / tanh_normaliser_ti) *
+              (tisep_multip - 1.0) * tesep)) / Electron_Charge / 1e19
+        )
+        return teped
+
+    def get_xiab_from_ip(self, ip, bvac, eps, rvac):
+        mu0 = 4e-7 * np.pi
+        return (ip * 1e6 * mu0 / (bvac * eps * rvac))
+
+    def get_ip_from_xiab(self, xiab, bvac, eps, rvac):
+        mu0 = 4e-7 * np.pi
+        return xiab * (bvac * eps * rvac) / (1e6 * mu0)
+
     def write_input_file_europed2(self, params: dict, run_dir: str, namelist_path: str):
         """
         Writes input file fort.10.
         In config:
             "input_parameter_type": 3
-        
+
         Parameters needed:
             - pedestal_delta
             - ip
@@ -301,22 +357,19 @@ class HELENAparser(Parser):
         """
         print(f"Writing to {run_dir}. Params (europed): {params}")
         
-        mu0 = 4e-7 * np.pi
-        Electron_Charge = 1.6022E-19
-        tanh_normaliser = np.tanh(1) - np.tanh(-1)
-        tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
+        tanh_normaliser = np.tanh(1.0) - np.tanh(-1.0)
+        # tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
 
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
-            raise FileNotFoundError(f"Couldnt find {run_dir}")
+            raise FileNotFoundError(f"Could not find {run_dir}")
 
         namelist = f90nml.read(namelist_path)
 
         d_ped = params["pedestal_delta"]
         density_shift = 0.0
         psi_mid = 1.0 - 0.5 * d_ped + density_shift
-
         ellip = 1.67 if 'ellip' not in params else params["ellip"]
         tria = 0.4 if 'tria' not in params else params["tria"]
         quad = 0.0
@@ -325,7 +378,7 @@ class HELENAparser(Parser):
         if "n_eped" not in params:
             nesep = 0.725 if "n_esep" not in params else params["n_esep"]
         else:
-            nesep = params["n_eped"]/4.0 if "n_esep" not in params else params["n_esep"]
+            nesep = params["n_eped"] / 4.0 if "n_esep" not in params else params["n_esep"]
 
         an0 = (neped - nesep) / tanh_normaliser
         an1 = 1.0 if "an1" not in params else params["an1"]
@@ -333,44 +386,16 @@ class HELENAparser(Parser):
 
         # FROM EUROPED
         theta = np.linspace(0, 2 * np.pi, 1000)
-
-        (r, z) = self.shape_function(theta, ellip=ellip, tria=tria, quad=0.0)
-        # r0 = (max(r) + min(r)) / 2
-        # z0 = (max(z) + min(z)) / 2
-        dr = r[0:-1] - r[1:]
-        # ave_r = (r[0:-1] + r[1:])
-        dz = z[0:-1] - z[1:]
-        ds = np.power(np.real(np.power(dr, 2)) + np.real(np.power(dz, 2)), .5)
-        circumference = np.sum(ds)
-
+        circumference = self.get_circumference(theta, ellip, tria)
         print(f"circumference: {circumference}")
-
-        bp2 = (params["ip"] * 1e6 * mu0 / circumference) ** 2
-        width_const = 0.076
-        beta_exponent = 0.5
-        betaped = (d_ped / width_const) ** (1.0 / beta_exponent)
-        pped = betaped / (2 * mu0) * bp2 / 1e3
+        ip = params["ip"]
         zimp = 4.0
         zeff = 1.2
         z_main_ion = 1.0
 
-        tiped_multip = 1.0
-        tisep_multip = 1.0
-        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
-
-        print(f"betaped: {betaped}")
-        print(f"pped: {pped}")
-        print(f"bp2: {bp2}")
-        print(f"pedestal_dilution: {pedestal_dilution}")
-
         # Caluclate the pedestal temperature based on the KBM constraint
-        teped = (
-            pped / neped /
-            (1 + tiped_multip * pedestal_dilution *
-             (1 + (1 - tanh_normaliser / tanh_normaliser_ti) *
-              (tisep_multip - 1.0) * tesep)) / Electron_Charge / 1e19
-        )
-        print(neped, nesep, teped, tesep)
+        teped = self.get_teped(d_ped, ip, circumference, neped, tesep, zimp, zeff, z_main_ion)
+        # print(neped, nesep, teped, tesep)
 
         at0 = (teped - tesep) / tanh_normaliser
         if "core_to_ped_te" in params:
@@ -383,21 +408,16 @@ class HELENAparser(Parser):
             namelist["phys"]["bvac"] = params["bvac"]
 
         if "ip" in params and "bvac" in params:
-            namelist["phys"]["xiab"] = (
-                params["ip"]
-                * 1e6
-                * mu_0
-                / (
-                    params["bvac"]
-                    * namelist["phys"]["eps"]
-                    * namelist["phys"]["rvac"]
-                )
-            )
+            namelist["phys"]["xiab"] = self.get_xiab_from_ip(
+                ip=params["ip"],
+                bvac=params["bvac"],
+                eps=namelist["phys"]["eps"],
+                rvac=namelist["phys"]["rvac"])
 
         # FAST ION PRESSURE
         if "apf" in params:
             namelist["profile"]["apf"] = params["apf"]
-            namelist["profile"]["bpf"] = 0.5
+            namelist["profile"]["bpf"] = 0.6
             namelist["profile"]["cpf"] = 3.0
 
         # SHAPE
@@ -1217,7 +1237,7 @@ class HELENAparser(Parser):
             "hde": namelist["phys"]["hde"],
             # "ide": namelist["phys"]["ite"],
         }
-    
+
     def modify_fast_ion_pressure(self, namelist_path: str, apf: float):
         """
         Changes the fast ion pressure (apf) value in the input file fort.10.
@@ -2117,3 +2137,52 @@ class HELENAparser(Parser):
             i_col += 1
 
         return psi, dP_dPSI, FdF_dPSI, J_phi
+
+    def update_pedestal_delta(self, new_pedestal_delta, run_dir, scan_dir):
+        """
+        Read the namelist from the run_dir. Update the values depending on pedestal delta.
+        Save the updated namelist in the scan dir.
+        """
+        tanh_normaliser = np.tanh(1) - np.tanh(-1)
+        nml = f90nml.read(os.path.join(run_dir, "fort.10"))
+
+        theta = np.linspace(0, 2 * np.pi, 1000)
+        circumference = self.get_circumference(
+            theta, ellip=nml['shape']['ellip'], tria=nml['shape']['tria'])
+        ip = self.get_ip_from_xiab(
+            xiab=nml["phys"]["xiab"],
+            bvac=nml["phys"]["bvac"],
+            eps=nml["phys"]["eps"],
+            rvac=nml["phys"]["rvac"])
+        
+        # at0 = nml["phys"]["ate"]
+        tesep = nml["phys"]["bte"]
+        # at1 = nml["phys"]["cte"]
+        # at1 = params["core_to_ped_te"] * teped
+
+        an0 = nml["phys"]["ade"]
+        nesep = nml["phys"]["bde"]
+        neped = an0 * (tanh_normaliser) + nesep
+
+        # Caluclate the pedestal temperature based on the KBM constraint
+        teped = self.get_teped(
+            d_ped=new_pedestal_delta, ip=ip, circumference=circumference,
+            neped=neped, tesep=tesep,
+            zimp=nml["phys"]["zimp"],
+            zeff=nml["phys"]["zeff"],
+            z_main_ion=nml["phys"]["zmain"])
+
+        nml["shape"]["xr2"] = 1.0 - new_pedestal_delta / 2.0
+        nml["shape"]["sig2"] = new_pedestal_delta
+
+        nml["phys"]["ate"] = (teped - tesep) / tanh_normaliser
+        nml['phys']['ddte'] = 1.0 - 0.5 * new_pedestal_delta
+        nml['phys']['ete'] = new_pedestal_delta
+        nml['phys']['fte'] = 1.0 - new_pedestal_delta
+
+        nml['phys']['dde'] = 1.0 - 0.5 * new_pedestal_delta
+        nml['phys']['ede'] = new_pedestal_delta
+        nml['phys']['fde'] = 1.0 - new_pedestal_delta
+
+        nml.write(os.path.join(scan_dir, "fort.10"))
+        return
