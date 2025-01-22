@@ -15,6 +15,7 @@ import scipy
 
 mu_0 = 4e-7 * np.pi
 ElectronCharge = 1.6022e-19
+tanh_normaliser = np.tanh(1) - np.tanh(-1)
 
 
 class HELENAparser(Parser):
@@ -327,6 +328,13 @@ class HELENAparser(Parser):
         mu0 = 4e-7 * np.pi
         return xiab * (bvac * eps * rvac) / (1e6 * mu0)
 
+    def get_ip_from_namelist(self, namelist):
+        return self.get_ip_from_xiab(
+            namelist["phys"]["xiab"],
+            namelist["phys"]["bvac"],
+            namelist["phys"]["eps"],
+            namelist["phys"]["rvac"])
+
     def write_input_file_europed2(self, params: dict, run_dir: str, namelist_path: str):
         """
         Writes input file fort.10.
@@ -356,7 +364,7 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         print(f"Writing to {run_dir}. Params (europed): {params}")
-        
+        use_namelist_profiles = True
         tanh_normaliser = np.tanh(1.0) - np.tanh(-1.0)
         # tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
 
@@ -367,98 +375,115 @@ class HELENAparser(Parser):
 
         namelist = f90nml.read(namelist_path)
 
-        d_ped = params["pedestal_delta"]
-        density_shift = 0.0
-        psi_mid = 1.0 - 0.5 * d_ped + density_shift
-        ellip = 1.67 if 'ellip' not in params else params["ellip"]
-        tria = 0.4 if 'tria' not in params else params["tria"]
-        quad = 0.0
-
-        neped = 3.0 if "n_eped" not in params else params["n_eped"]
-        if "n_eped" not in params:
-            nesep = 0.725 if "n_esep" not in params else params["n_esep"]
-        else:
-            nesep = params["n_eped"] / 4.0 if "n_esep" not in params else params["n_esep"]
-
-        an0 = (neped - nesep) / tanh_normaliser
-        an1 = 1.0 if "an1" not in params else params["an1"]
-        tesep = 0.1 if "T_esep" not in params else params["T_esep"]
-
-        # FROM EUROPED
+        ellip = namelist["shape"]["ellip"] if 'ellip' not in params else params["ellip"]
+        tria = namelist["shape"]["tria"] if 'tria' not in params else params["tria"]
+        quad = namelist["shape"]["quad"]
         theta = np.linspace(0, 2 * np.pi, 1000)
         circumference = self.get_circumference(theta, ellip, tria)
         print(f"circumference: {circumference}")
-        ip = params["ip"]
-        zimp = 4.0
-        zeff = 1.2
-        z_main_ion = 1.0
 
-        # Caluclate the pedestal temperature based on the KBM constraint
-        teped = self.get_teped(d_ped, ip, circumference, neped, tesep, zimp, zeff, z_main_ion)
-        # print(neped, nesep, teped, tesep)
+        if not use_namelist_profiles:
+                
+            d_ped = (
+                namelist["phys"]["ete"] if "pedestal_delta" not in params
+                else params["pedestal_delta"])
+            density_shift = 0.0
+            psi_mid = 1.0 - 0.5 * d_ped + density_shift
+            neped = 3.0 if "n_eped" not in params else params["n_eped"]
+            if "n_eped" not in params:
+                nesep = 0.725 if "n_esep" not in params else params["n_esep"]
+            else:
+                nesep = params["n_eped"] / 4.0 if "n_esep" not in params else params["n_esep"]
 
-        at0 = (teped - tesep) / tanh_normaliser
-        if "core_to_ped_te" in params:
-            at1 = params["core_to_ped_te"] * teped
-        else:
-            at1 = 0.1 if "aT1" not in params else params["aT1"]
+            an0 = (neped - nesep) / tanh_normaliser
+            an1 = 1.0 if "an1" not in params else params["an1"]
+            tesep = 0.1 if "T_esep" not in params else params["T_esep"]
 
-        # Update namelist with input parameters
-        if "bvac" in params:
-            namelist["phys"]["bvac"] = params["bvac"]
+            # FROM EUROPED
+            ip = self.get_ip_from_namelist(namelist) if "ip" not in params else params["ip"]
+            zimp = 4.0
+            zeff = 1.2
+            z_main_ion = 1.0
 
-        if "ip" in params and "bvac" in params:
-            namelist["phys"]["xiab"] = self.get_xiab_from_ip(
-                ip=params["ip"],
-                bvac=params["bvac"],
-                eps=namelist["phys"]["eps"],
-                rvac=namelist["phys"]["rvac"])
+            # Caluclate the pedestal temperature based on the KBM constraint
+            teped = self.get_teped(d_ped, ip, circumference, neped, tesep, zimp, zeff, z_main_ion)
+            print(f"neped={neped}, nesep={nesep}, teped={teped}, tesep={tesep}")
 
-        # FAST ION PRESSURE
-        if "apf" in params:
-            namelist["profile"]["apf"] = params["apf"]
-            namelist["profile"]["bpf"] = 0.6
-            namelist["profile"]["cpf"] = 3.0
+            at0 = (teped - tesep) / tanh_normaliser
+            if "core_to_ped_te" in params:
+                at1 = params["core_to_ped_te"] * teped
+            else:
+                at1 = 0.1 if "aT1" not in params else params["aT1"]
 
-        # SHAPE
-        namelist["shape"]["xr2"] = 1 - d_ped / 2.0
-        namelist["shape"]["sig2"] = d_ped
-        namelist["shape"]["tria"] = tria
-        namelist["shape"]["ellip"] = ellip
-        namelist["shape"]["quad"] = quad
+            # Update namelist with input parameters
+            if "bvac" in params:
+                namelist["phys"]["bvac"] = params["bvac"]
 
-        # PHYS
-        namelist["phys"]["zeff"] = zeff
-        namelist["phys"]["zmain"] = z_main_ion
-        namelist["phys"]["zimp"] = zimp
+            if "ip" in params and "bvac" in params:
+                namelist["phys"]["xiab"] = self.get_xiab_from_ip(
+                    ip=params["ip"],
+                    bvac=params["bvac"],
+                    eps=namelist["phys"]["eps"],
+                    rvac=namelist["phys"]["rvac"])
 
-        # DENSITY PROFILE
-        namelist["phys"]["ade"] = an0
-        namelist["phys"]["bde"] = nesep
-        namelist["phys"]["cde"] = an1
-        namelist["phys"]["dde"] = psi_mid
-        namelist["phys"]["ede"] = d_ped
-        namelist["phys"]["fde"] = 1 - d_ped
-        namelist["phys"]["gde"] = (
-            1.1 if "alpha_n1" not in params else params["alpha_n1"]
-        )
-        namelist["phys"]["hde"] = (
-            1.1 if "alpha_n2" not in params else params["alpha_n2"]
-        )
+            # FAST ION PRESSURE
+            if "apf" in params:
+                namelist["profile"]["apf"] = params["apf"]
+                namelist["profile"]["bpf"] = 0.6
+                namelist["profile"]["cpf"] = 3.0
 
-        # TEMPERTURE PROFILE
-        namelist["phys"]["ate"] = at0
-        namelist["phys"]["bte"] = tesep
-        namelist["phys"]["cte"] = at1
-        namelist["phys"]["ddte"] = psi_mid
-        namelist["phys"]["ete"] = d_ped
-        namelist["phys"]["fte"] = 1 - d_ped
-        namelist["phys"]["gte"] = (
-            1.2 if "alpha_T1" not in params else params["alpha_T1"]
-        )
-        namelist["phys"]["hte"] = (
-            1.4 if "alpha_T2" not in params else params["alpha_T2"]
-        )
+            # SHAPE
+            namelist["shape"]["xr2"] = 1 - d_ped / 2.0
+            namelist["shape"]["sig2"] = d_ped
+            namelist["shape"]["tria"] = tria
+            namelist["shape"]["ellip"] = ellip
+            namelist["shape"]["quad"] = quad
+
+            # PHYS
+            namelist["phys"]["zeff"] = zeff
+            namelist["phys"]["zmain"] = z_main_ion
+            namelist["phys"]["zimp"] = zimp
+
+            # DENSITY PROFILE
+            namelist["phys"]["ade"] = an0
+            namelist["phys"]["bde"] = nesep
+            namelist["phys"]["cde"] = an1
+            namelist["phys"]["dde"] = psi_mid
+            namelist["phys"]["ede"] = d_ped
+            namelist["phys"]["fde"] = 1 - d_ped
+            namelist["phys"]["gde"] = (
+                1.1 if "alpha_n1" not in params else params["alpha_n1"]
+            )
+            namelist["phys"]["hde"] = (
+                1.1 if "alpha_n2" not in params else params["alpha_n2"]
+            )
+
+            # TEMPERTURE PROFILE
+            namelist["phys"]["ate"] = at0
+            namelist["phys"]["bte"] = tesep
+            namelist["phys"]["cte"] = at1
+            namelist["phys"]["ddte"] = psi_mid
+            namelist["phys"]["ete"] = d_ped
+            namelist["phys"]["fte"] = 1 - d_ped
+            namelist["phys"]["gte"] = (
+                1.2 if "alpha_T1" not in params else params["alpha_T1"]
+            )
+            namelist["phys"]["hte"] = (
+                1.4 if "alpha_T2" not in params else params["alpha_T2"]
+            )
+
+            if namelist["profile"]["ipai"] != 18:
+                coret = (teped * 2 + at1 + tesep) * 1000
+                coren = an0 * 2 + nesep + an1
+                corep = (
+                    coret * (1 + (zimp + 1 - zeff) / zimp) * coren * ElectronCharge * 1e19
+                )
+                namelist["phys"]["corep"] = corep
+
+            # Update current profile guess
+            namelist["profile"]["zjz"] = self.make_init_zjz_profile(
+                pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
+            )
 
         # ION TEMPERATURE PROFILE EQUAL TO TE
         namelist["phys"]["ati"] = 0.0
@@ -469,27 +494,6 @@ class HELENAparser(Parser):
         namelist["phys"]["fti"] = 0.0
         namelist["phys"]["gti"] = 0.0
         namelist["phys"]["hti"] = 0.0
-
-        if namelist["profile"]["ipai"] != 18:
-            coret = (teped * 2 + at1 + tesep) * 1000
-            coren = an0 * 2 + nesep + an1
-            corep = (
-                coret
-                * (
-                    1
-                    + (namelist["phys"]["zimp"] + 1 - namelist["phys"]["zeff"])
-                    / namelist["phys"]["zimp"]
-                )
-                * coren
-                * ElectronCharge
-                * 1e19
-            )
-            namelist["phys"]["corep"] = corep
-
-        # Update current profile guess
-        namelist["profile"]["zjz"] = self.make_init_zjz_profile(
-            pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
-        )
 
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
@@ -810,22 +814,22 @@ class HELENAparser(Parser):
                 VX,
                 VY,
             ) = self.read_helena_output_fort12(run_dir)
-            np.save(run_dir + "/qs.npy", QS)
-            np.save(run_dir + "/cs.npy", CS)
-            np.save(run_dir + "/p0.npy", P0)
-            np.save(run_dir + "/rbphi.npy", RBPHI)
-            np.save(run_dir + "/vxvy.npy", (VX, VY))
+            np.save(os.path.join(run_dir, "qs.npy"), QS)
+            np.save(os.path.join(run_dir, "cs.npy"), CS)
+            np.save(os.path.join(run_dir, "p0.npy"), P0)
+            np.save(os.path.join(run_dir, "rbphi.npy"), RBPHI)
+            np.save(os.path.join(run_dir, "vxvy.npy"), (VX, VY))
         except Exception:
             print(f"error reading and summarizing fort.12 in dir {run_dir}")
             success = False
 
         try:
             psi, S, J, vol, _, area = self.read_fort20_s_j_vol_area(run_dir)
-            np.save(run_dir + "/psi.npy", psi)
-            np.save(run_dir + "/s.npy", S)
-            np.save(run_dir + "/j.npy", J)
-            np.save(run_dir + "/volume.npy", vol)
-            np.save(run_dir + "/area.npy", area)
+            np.save(os.path.join(run_dir, "psi.npy"), psi)
+            np.save(os.path.join(run_dir, "s.npy"), S)
+            np.save(os.path.join(run_dir, "j.npy"), J)
+            np.save(os.path.join(run_dir, "volume.npy"), vol)
+            np.save(os.path.join(run_dir, "area.npy"), area)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
             success = False
@@ -833,11 +837,11 @@ class HELENAparser(Parser):
         try:
             (realworld_S, realworld_P, realworld_Ne,
              realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
-            np.save(run_dir + "/realworld_S.npy", realworld_S)
-            np.save(run_dir + "/realworld_P.npy", realworld_P)
-            np.save(run_dir + "/realworld_Ne.npy", realworld_Ne)
-            np.save(run_dir + "/realworld_Te.npy", realworld_Te)
-            np.save(run_dir + "/realworld_Ti.npy", realworld_Ti)
+            np.save(os.path.join(run_dir, "realworld_S.npy"), realworld_S)
+            np.save(os.path.join(run_dir, "realworld_P.npy"), realworld_P)
+            np.save(os.path.join(run_dir, "realworld_Ne.npy"), realworld_Ne)
+            np.save(os.path.join(run_dir, "realworld_Te.npy"), realworld_Te)
+            np.save(os.path.join(run_dir, "realworld_Ti.npy"), realworld_Ti)
         except Exception as e:
             print(f"Something went wrong when trying to read/write read_fort20_realworld, {e}")
             success = False
@@ -847,6 +851,17 @@ class HELENAparser(Parser):
             json.dump(summary, outfile)
 
         return success
+
+    def collect_growthrates_from_mishka(self, h_dir, save=False):
+        growthrates = []
+        if os.path.exists(os.path.join(h_dir, "mishka")):
+            for m_dir in sorted([f.path for f in os.scandir(os.path.join(h_dir, "mishka")) if f.is_dir()]):
+                ntor_gamma = np.load(os.path.join(m_dir, "ntor_gamma.npy"))
+                growthrates.append(ntor_gamma)
+        growthrates = np.array(growthrates)
+        if save:
+            np.save(os.path.join(h_dir, "growthrates.npy"), growthrates)
+        return growthrates
 
     def read_final_zjz(self, output_dir):
         """
@@ -1256,6 +1271,7 @@ class HELENAparser(Parser):
         """
         namelist = f90nml.read(namelist_path)
         namelist["profile"]["apf"] = apf
+        namelist["profile"]["bpf"] = 0.6
         f90nml.write(namelist, namelist_path, force=True)
 
     def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
@@ -2137,8 +2153,196 @@ class HELENAparser(Parser):
             i_col += 1
 
         return psi, dP_dPSI, FdF_dPSI, J_phi
+    
+    def get_teped_from_namelist(self, namelist):
+        at0 = namelist['phys']['ate'] 
+        tesep = namelist['phys']['bte']
+        return at0 * tanh_normaliser + tesep
+    
+    def find_new_at1(self, output_dir, beta_target, h, nml):
+        # Uses Newton method to calculate at1 that should give the right at1
 
-    def update_pedestal_delta(self, new_pedestal_delta, run_dir, scan_dir):
+        def eped_profile(x, x_mid, x_ped, a_0, a_1, y_sep, alpha_1, alpha_2, delta):
+            """
+            x_mid, x_ped, a_0, a_1, y_sep, alpha_1, alpha_2, delta
+            - $a_{T0}$ = ate
+            - $T_{sep}$ = bte
+            - $a_{T1}$ = cte
+            - $psi_{mid}$ = ddte
+            - $Delta$ = ete
+            - $psi_{ped}$ = fte
+            - $alpha_{T1}$ = gte
+            - $alpha_{T2}$ = hte
+            """
+            # print(f"x_mid={x_mid}, x_ped={x_ped}, a_0={a_0}, "
+            #     f"a_1={a_1}, y_sep={y_sep}, alpha_1={alpha_1}, alpha_2={alpha_2}, delta={delta}"
+            # )
+            x = np.atleast_1d(x)
+            profile = np.zeros_like(x)
+            for _idx, _x in enumerate(x):
+                term1 = (np.tanh(2 / delta * (1 - x_mid)) - np.tanh(2 / delta * (_x - x_mid)))
+                if _x > x_ped:
+                    term2 = 0.0
+                else:
+                    term2 = (1 - (_x / x_ped) ** alpha_1) ** alpha_2
+                profile[_idx] = y_sep + a_0 * term1 + a_1 * term2
+            return profile
+        
+        def convert_te_params_to_eped_params(ate, bte, cte, ddte, ete, fte, gte, hte, *args, **kwargs):
+            """
+            Returns a dict[str, float] with input parameters for the eped_profile methods.
+            """
+            return {
+                'a_0': ate,
+                'y_sep': bte,
+                'a_1': cte,
+                'x_mid': ddte,
+                'delta': ete,
+                'x_ped': fte,
+                'alpha_1': gte,
+                'alpha_2': hte}
+        
+        def get_temperature_profile_params(namelist):
+            return {
+                'ate': namelist['phys']['ate'],
+                'bte': namelist['phys']['bte'],
+                'cte': namelist['phys']['cte'],
+                'ddte': namelist['phys']['ddte'],
+                'ete': namelist['phys']['ete'],
+                'fte': namelist['phys']['fte'],
+                'gte': namelist['phys']['gte'],
+                'hte': namelist['phys']['hte'],
+                'ite': namelist['phys']['ite'],
+            }
+
+        def get_density_profile_params(namelist):
+            return {
+                'ade': namelist['phys']['ade'],
+                'bde': namelist['phys']['bde'],
+                'cde': namelist['phys']['cde'],
+                'dde': namelist['phys']['dde'],
+                'ede': namelist['phys']['ede'],
+                'fde': namelist['phys']['fde'],
+                'gde': namelist['phys']['gde'],
+                'hde': namelist['phys']['hde'],
+                'ide': namelist['phys']['ide'],
+            }
+
+        def convert_ne_params_to_eped_params(ade, bde, cde, dde, ede, fde, gde, hde, *args, **kwargs):
+            """
+            Returns a dict[str, float] with input parameters for the eped_profile methods.
+            """
+            return {
+                'a_0': ade,
+                'y_sep': bde,
+                'a_1': cde,
+                'x_mid': dde,
+                'delta': ede,
+                'x_ped': fde,
+                'alpha_1': gde,
+                'alpha_2': hde}
+
+        def make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof, neprof):
+            p = np.zeros(numpts)
+            for i in range(numpts):
+                x = psi[i]
+                p[i] = teprof.evaluate(x) * (
+                        1.0 + (zimp + zmain - zeff[i]) / zimp / zmain) * neprof.evaluate(x)
+                if x < bpf:
+                    p[i] = p[i] * (1 + apf * (1 - (bpf / x) ** 2) ** cpf)
+            return p
+
+        def integrate(p, dv):
+            parea = np.sum(p * dv)
+            return parea
+
+        def derivative(numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv):
+            at1 = te_eped_params["a_1"]
+            # at_old = at1
+            # update_at1(at1 + h), pav1 = integrate()
+            te_eped_params["a_1"] = at1 + h
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
+            pav1 = integrate(new_prof, dv)
+
+            # update_at1(at1 - 2 * h)
+            # pav2 = integrate()
+            te_eped_params["a_1"] = at1 - 2 * h
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
+            pav2 = integrate(new_prof, dv)
+
+            # update_at1(at_old)
+            te_eped_params["a_1"] = at1
+            return (pav1 - pav2) / (2 * h)
+        # last_at1 = self.at1
+        # next_at1 = self.at1 + 10 * h
+        
+        # ne_param = (
+        #     self.pedestal.an0, self.input_parameters['an1'](), self.pedestal.nesep, self.input_parameters['alpha_n1'](),
+        #     self.input_parameters['alpha_n2'](), self.pedestal.density_shift)
+        # ne_param = (an0, an1, nesep, alpha_n1, alpha_n2, density_shift)
+    
+        # te_param_old = (self.pedestal.at0, last_at1, self.pedestal.tesep, self.input_parameters['alpha_t1'](),
+        #                 self.input_parameters['alpha_t2']())
+        # te_param_old = (at0, last_at1, tesep, alpha_t1, alpha_t2)
+        
+        # te_param_new = (self.pedestal.at0, next_at1, self.pedestal.tesep, self.input_parameters['alpha_t1'](),
+        #                 self.input_parameters['alpha_t2']())
+        # te_param_new = (at0, next_at1, tesep, alpha_t1, alpha_t2)
+        
+        # coreparam = (apf, bpf, cpf)
+
+        # new_prof = Pressure(self.pedestal.delta_ne, self.pedestal.delta_te, 1.0 - self.pedestal.delta_ne,
+        #                     1.0 - self.pedestal.delta_te, te_param_new, ne_param, self.zeff_prof, psi,
+        #                     self.vol, self.input_parameters['zimp'](), coreparam, self.input_parameters['z_main_ion']())
+        # old_prof = Pressure(self.pedestal.delta_ne, self.pedestal.delta_te, 1.0 - self.pedestal.delta_ne,
+        #                     1.0 - self.pedestal.delta_te, te_param_old, ne_param, self.zeff_prof, psi,
+        #                     self.vol, self.input_parameters['zimp'](), coreparam, self.input_parameters['z_main_ion']())
+        
+        psi, _, _, _, volume, _ = self.read_fort20_s_j_vol_area(output_dir)
+        numpts = len(psi)
+        dv = volume[1:] - volume[0:-1]
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        helena_beta = 1e2 * output_vars["BETAN"]
+        apf = nml["profile"]["apf"]
+        bpf = nml["profile"]["bpf"] 
+        cpf = nml["profile"]["cpf"] 
+        zimp = nml["phys"]["zimp"]
+        zeff = nml["phys"]["zeff"]
+        zmain = nml["phys"]["zmain"]
+
+        te_params = get_temperature_profile_params(nml)
+        te_eped_params = convert_te_params_to_eped_params(**te_params)
+        last_at1 = te_eped_params["a_1"]
+        next_at1 = last_at1 + 10 * h
+        teprof_old = eped_profile(**te_eped_params)
+
+        te_eped_params_new = te_eped_params.copy()
+        te_eped_params_new["a_1"] = next_at1
+        teprof_new = eped_profile(**te_eped_params_new)
+
+        ne_params = get_density_profile_params(nml)
+        ne_eped_params = convert_ne_params_to_eped_params(**ne_params)
+        neprof = eped_profile(**ne_eped_params)
+
+        old_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
+        new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof)
+
+        target = integrate(old_prof, dv) * beta_target / helena_beta
+        while abs(next_at1 - last_at1) > h:
+            new_sum = integrate(new_prof, dv)
+            last_at1 = next_at1
+            d_new_prof = derivative(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv)
+            next_at1 = last_at1 - (new_sum - target) / d_new_prof
+            # new_prof.update_at1(next_at1)
+            te_eped_params["a_1"] = next_at1
+            teprof_new = eped_profile(**te_eped_params_new)
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof)
+
+        # print("id: %i, at1: %f"%(self.id,next_at1))
+        return next_at1
+
+    def update_pedestal_delta(self, new_pedestal_delta, beta_target, run_dir, scan_dir):
         """
         Read the namelist from the run_dir. Update the values depending on pedestal delta.
         Save the updated namelist in the scan dir.
@@ -2149,16 +2353,12 @@ class HELENAparser(Parser):
         theta = np.linspace(0, 2 * np.pi, 1000)
         circumference = self.get_circumference(
             theta, ellip=nml['shape']['ellip'], tria=nml['shape']['tria'])
-        ip = self.get_ip_from_xiab(
-            xiab=nml["phys"]["xiab"],
-            bvac=nml["phys"]["bvac"],
-            eps=nml["phys"]["eps"],
-            rvac=nml["phys"]["rvac"])
-        
-        # at0 = nml["phys"]["ate"]
+        ip = self.get_ip_from_namelist(nml)
+
         tesep = nml["phys"]["bte"]
-        # at1 = nml["phys"]["cte"]
-        # at1 = params["core_to_ped_te"] * teped
+        # at1_prev = nml["phys"]["cte"]
+        # teped_prev = self.get_teped_from_namelist(nml)
+        # core_to_ped_te = at1_prev / teped_prev
 
         an0 = nml["phys"]["ade"]
         nesep = nml["phys"]["bde"]
@@ -2171,11 +2371,15 @@ class HELENAparser(Parser):
             zimp=nml["phys"]["zimp"],
             zeff=nml["phys"]["zeff"],
             z_main_ion=nml["phys"]["zmain"])
+        # at1 = core_to_ped_te * teped
+        at1 = self.find_new_at1(output_dir=run_dir, beta_target=beta_target, h=0.01, nml=nml)
 
         nml["shape"]["xr2"] = 1.0 - new_pedestal_delta / 2.0
         nml["shape"]["sig2"] = new_pedestal_delta
 
-        nml["phys"]["ate"] = (teped - tesep) / tanh_normaliser
+        nml['phys']['ate'] = (teped - tesep) / tanh_normaliser
+        # nml['phys']['bte'] =
+        nml['phys']['cte'] = at1
         nml['phys']['ddte'] = 1.0 - 0.5 * new_pedestal_delta
         nml['phys']['ete'] = new_pedestal_delta
         nml['phys']['fte'] = 1.0 - new_pedestal_delta
@@ -2183,6 +2387,9 @@ class HELENAparser(Parser):
         nml['phys']['dde'] = 1.0 - 0.5 * new_pedestal_delta
         nml['phys']['ede'] = new_pedestal_delta
         nml['phys']['fde'] = 1.0 - new_pedestal_delta
+
+        # Keep ion temperature equal to electron temperature
+        nml['phys']['ati'] = 0.0
 
         nml.write(os.path.join(scan_dir, "fort.10"))
         return
