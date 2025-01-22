@@ -569,8 +569,8 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         namelist = f90nml.read(namelist_path)
-        namelist["profile"]["cte"] = at1_mult*namelist["profile"]["cte"]
-        namelist["profile"]["cti"] = at1_mult*namelist["profile"]["cti"]
+        namelist["phys"]["cte"] = at1_mult*namelist["phys"]["cte"]
+        namelist["phys"]["cti"] = at1_mult*namelist["phys"]["cti"]
         f90nml.write(namelist, namelist_path, force=True)
 
     def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
