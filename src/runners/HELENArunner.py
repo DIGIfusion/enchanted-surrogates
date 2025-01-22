@@ -146,6 +146,12 @@ class HELENArunner(Runner):
                     )
                     self.mishka_ntor_samples = mishka_params["ntor"]
 
+        self.beta_iterations_afp = (
+            False
+            if "beta_iterations_afp" not in other_params
+            else other_params["beta_iterations_afp"]
+        )
+
         self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
@@ -201,6 +207,14 @@ class HELENArunner(Runner):
         else:
             subprocess.call([self.executable_path])
 
+        self.parser.write_input_file(params, run_dir, self.namelist_path)
+
+        os.chdir(run_dir)
+
+        if not self.only_generate_files:
+            if self.beta_iteration:
+                
+
         # process output
         run_successful = self.parser.write_summary(run_dir, params)
         self.parser.clean_output_files(run_dir)
@@ -242,24 +256,41 @@ class HELENArunner(Runner):
                 )
 
         return True
-
+    
     def run_helena_with_beta_iteration(self, params):
         beta_target = params["beta_N"]
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
-        self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+        if self.beta_iterations_afp:
+            self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+        else:
+            self.parser.modify_at1("fort.10", 0.0)
         subprocess.call([self.executable_path])
-        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+            "fort.20"
+        )
         beta_n0 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
-        self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+        if self.beta_iterations_afp:
+            self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+        else:
+            self.parser.modify_at1("fort.10", 1.0)
         subprocess.call([self.executable_path])
-        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+            "fort.20"
+        )
         beta_n01 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
-        apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
-        self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+        if self.beta_iterations_afp:
+            apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
+            self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+        else:
+            at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+            self.parser.modify_at1("fort.10", at1_mult_targ)
+
         subprocess.call([self.executable_path])
-        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        output_vars = self.parser.get_real_world_geometry_factors_from_f20(
+            "fort.20"
+        )
         beta_n = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.2}: target={beta_target}, current={beta_n}")
         n_beta_iteration = 0
@@ -267,8 +298,12 @@ class HELENArunner(Runner):
             np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
             and n_beta_iteration < self.max_beta_iterations
         ):
-            apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
-            self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+            if self.beta_iterations_afp:
+                apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
+                self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+            else:
+                at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+                self.parser.modify_at1("fort.10", at1_mult_targ)
             subprocess.call([self.executable_path])
             output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                 "fort.20"
@@ -278,7 +313,7 @@ class HELENArunner(Runner):
                 f"BETA ITERATION {n_beta_iteration}: target={beta_target}, current={beta_n}"
             )
             n_beta_iteration += 1
-
+        
         print(
             f"BETA ITERATION FINISHED.\nTarget betaN: {beta_target}\n",
             f"Final betaN: {beta_n}\n",
