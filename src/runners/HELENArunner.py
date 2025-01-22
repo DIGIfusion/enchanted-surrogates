@@ -196,34 +196,36 @@ class HELENArunner(Runner):
         os.chdir(run_dir)
 
         # Single equilibrium run
-        if not self.pedestal_width_scan:
-            if self.beta_iteration:
-                self.run_helena_with_beta_iteration(params)
-            else:
-                subprocess.call([self.executable_path])
+        if self.beta_iteration:
+            self.run_helena_with_beta_iteration(params)
+        else:
+            subprocess.call([self.executable_path])
 
-            # process output
-            run_successful = self.parser.write_summary(run_dir, params)
-            self.parser.clean_output_files(run_dir)
+        # process output
+        run_successful = self.parser.write_summary(run_dir, params)
+        self.parser.clean_output_files(run_dir)
 
-            # run MISHKA
-            if run_successful:
-                if self.run_mishka:
-                    self.run_mishka_for_ntors(run_dir)
-                    self.parser.collect_growthrates_from_mishka(run_dir, save=True)
-            else:
-                print("HELENA run not success. MISHKA is not being run.")
+        # run MISHKA
+        if run_successful:
+            if self.run_mishka:
+                self.run_mishka_for_ntors(run_dir)
+                self.parser.collect_growthrates_from_mishka(run_dir, save=True)
+        else:
+            print("HELENA run not success. MISHKA is not being run.")
 
         # Run for multiple pedestal widths
         if self.pedestal_width_scan:
             if self.input_parameter_type == 3:
-                scans = np.linspace(0.025, 0.045, 3)
-                for _i, scan in enumerate(scans):
+                d_ped_scans = np.linspace(0.025, 0.045, 3)
+                beta_target = params["beta_N"]
+                for _i, d_ped_scan in enumerate(d_ped_scans):
                     # scan_dir = os.path.join(run_dir, f"scan_{_i}")
                     scan_dir = f"{run_dir}_scan_{_i}"
                     os.mkdir(scan_dir)
                     os.chdir(scan_dir)
-                    self.parser.update_pedestal_delta(scan, run_dir, scan_dir)
+                    self.parser.update_pedestal_delta(
+                        d_ped_scan, beta_target, run_dir, scan_dir
+                    )
                     # subprocess.call([self.executable_path])
                     self.run_helena_with_beta_iteration(params)
                     run_successful = self.parser.write_summary(scan_dir, params)

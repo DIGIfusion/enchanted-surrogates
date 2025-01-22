@@ -2301,7 +2301,7 @@ class HELENAparser(Parser):
         psi, _, _, _, volume, _ = self.read_fort20_s_j_vol_area(output_dir)
         numpts = len(psi)
         dv = volume[1:] - volume[0:-1]
-        output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
+        output_vars = self.get_real_world_geometry_factors_from_f20("fort.20")
         helena_beta = 1e2 * output_vars["BETAN"]
         apf = nml["profile"]["apf"]
         bpf = nml["profile"]["bpf"] 
@@ -2338,8 +2338,8 @@ class HELENAparser(Parser):
             te_eped_params["a_1"] = next_at1
             teprof_new = eped_profile(**te_eped_params_new)
             new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof)
+            print(f"next at1={next_at1}")
 
-        # print("id: %i, at1: %f"%(self.id,next_at1))
         return next_at1
 
     def update_pedestal_delta(self, new_pedestal_delta, beta_target, run_dir, scan_dir):
