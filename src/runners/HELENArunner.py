@@ -80,6 +80,11 @@ class HELENArunner(Runner):
             if "max_beta_iterations" not in other_params
             else other_params["max_beta_iterations"]
         )
+        self.beta_iterations_afp = (
+            False
+            if "beta_iterations_afp" not in other_params
+            else other_params["beta_iterations_afp"]
+        )
 
         self.pre_run_check()
 
@@ -114,20 +119,31 @@ class HELENArunner(Runner):
         if not self.only_generate_files:
             if self.beta_iteration:
                 beta_target = params["beta_N"]
-                self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+                if self.beta_iterations_afp:
+                    self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+                else:
+                    self.parser.modify_at1("fort.10", 0.0)
                 subprocess.call([self.executable_path])
                 output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                     "fort.20"
                 )
                 beta_n0 = 1e2 * output_vars["BETAN"]
-                self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+                if self.beta_iterations_afp:
+                    self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+                else:
+                    self.parser.modify_at1("fort.10", 1.0)
                 subprocess.call([self.executable_path])
                 output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                     "fort.20"
                 )
                 beta_n01 = 1e2 * output_vars["BETAN"]
-                apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
-                self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                if self.beta_iterations_afp:
+                    apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
+                    self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                else:
+                    at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+                    self.parser.modify_at1("fort.10", at1_mult_targ)
+                
                 subprocess.call([self.executable_path])
                 output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                     "fort.20"
@@ -138,8 +154,12 @@ class HELENArunner(Runner):
                     np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
                     and n_beta_iteration < self.max_beta_iterations
                 ):
-                    apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
-                    self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                    if self.beta_iterations_afp:
+                        apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
+                        self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                    else:
+                        at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+                        self.parser.modify_at1("fort.10", at1_mult_targ)
                     subprocess.call([self.executable_path])
                     output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                         "fort.20"

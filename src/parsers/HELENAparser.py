@@ -551,6 +551,28 @@ class HELENAparser(Parser):
         namelist["profile"]["apf"] = apf
         f90nml.write(namelist, namelist_path, force=True)
 
+    def modify_at1(self, namelist_path: str, at1_mult: float):
+        """
+        Changes the core temperature (cte & cti) value in the input file fort.10.
+
+        Parameters
+        ----------
+        namelist_path : str
+            Path to the namelist file.
+        at1_mult: float
+            Multiplier for the core temperature value in the parameterized core
+            profile.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        namelist = f90nml.read(namelist_path)
+        namelist["phys"]["cte"] = at1_mult*namelist["phys"]["cte"]
+        namelist["phys"]["cti"] = at1_mult*namelist["phys"]["cti"]
+        f90nml.write(namelist, namelist_path, force=True)
+
     def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
         """
         Function copy paste from tokamak_sampler by A. Kit
