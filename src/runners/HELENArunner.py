@@ -207,8 +207,6 @@ class HELENArunner(Runner):
         else:
             subprocess.call([self.executable_path])
 
-        self.parser.write_input_file(params, run_dir, self.namelist_path)
-
         # process output
         run_successful = self.parser.write_summary(run_dir, params)
         self.parser.clean_output_files(run_dir)
