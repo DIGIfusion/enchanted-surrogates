@@ -118,6 +118,16 @@ class HELENArunner(Runner):
             else other_params["pedestal_width_scan"]
         )
 
+        self.pedestal_width_scan_params = (
+            {
+                "min_width": 0.02,
+                "max_width": 0.06,
+                "max_iterations": 5,
+            }
+            if "pedestal_width_scan_params" not in other_params
+            else other_params["pedestal_width_scan_params"]
+        )
+
         self.run_mishka = False
         self.mishka_runner = None
 
@@ -176,6 +186,8 @@ class HELENArunner(Runner):
             self.parser.write_input_file_scaling(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 3:
             self.parser.write_input_file_europed2(params, run_dir, self.namelist_path)
+        elif self.input_parameter_type == 4:
+            self.parser.write_input_file_noKBM(params, run_dir, self.namelist_path)
         else:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
 
@@ -202,50 +214,124 @@ class HELENArunner(Runner):
         os.chdir(run_dir)
 
         # Single equilibrium run
-        if self.beta_iteration:
-            self.run_helena_with_beta_iteration(params)
-        else:
-            subprocess.call([self.executable_path])
+        if not self.pedestal_width_scan:
+            if self.beta_iteration:
+                self.run_helena_with_beta_iteration(params)
+            else:
+                subprocess.call([self.executable_path])
 
-        # process output
-        run_successful = self.parser.write_summary(run_dir, params)
-        self.parser.clean_output_files(run_dir)
+            # process output
+            run_successful = self.parser.write_summary(run_dir, params)
+            self.parser.clean_output_files(run_dir)
 
-        # run MISHKA
-        if run_successful:
-            if self.run_mishka:
-                self.run_mishka_for_ntors(run_dir)
-                self.parser.collect_growthrates_from_mishka(run_dir, save=True)
-        else:
-            print("HELENA run not success. MISHKA is not being run.")
+            # run MISHKA
+            if run_successful:
+                if self.run_mishka:
+                    self.run_mishka_for_ntors(run_dir)
+                    self.parser.collect_growthrates_from_mishka(run_dir, save=True)
+            else:
+                print("HELENA run not success. MISHKA is not being run.")
 
         # Run for multiple pedestal widths
-        if self.pedestal_width_scan:
+        else:
+            sampling_method = 1
+
             if self.input_parameter_type == 3:
-                d_ped_scans = np.linspace(0.025, 0.045, 3)
                 beta_target = params["beta_N"]
-                for _i, d_ped_scan in enumerate(d_ped_scans):
-                    # scan_dir = os.path.join(run_dir, f"scan_{_i}")
-                    scan_dir = f"{run_dir}_scan_{_i}"
-                    os.mkdir(scan_dir)
-                    os.chdir(scan_dir)
-                    self.parser.update_pedestal_delta(
-                        d_ped_scan, beta_target, run_dir, scan_dir
+                if sampling_method == 0:
+                    # Evenly spaced sample points
+                    d_ped_scans = np.linspace(
+                        self.pedestal_width_scan_params["min_width"],
+                        self.pedestal_width_scan_params["max_width"],
+                        self.pedestal_width_scan_params["max_iterations"],
                     )
-                    # subprocess.call([self.executable_path])
-                    self.run_helena_with_beta_iteration(params)
-                    run_successful = self.parser.write_summary(scan_dir, params)
-                    self.parser.clean_output_files(scan_dir)
-                    if run_successful:
-                        if self.run_mishka:
-                            self.run_mishka_for_ntors(scan_dir)
-                            self.parser.collect_growthrates_from_mishka(
-                                scan_dir, save=True
+
+                elif sampling_method == 1:
+                    # Uniform random sampling
+                    d_ped_scans = np.random.uniform(
+                        self.pedestal_width_scan_params["min_width"],
+                        self.pedestal_width_scan_params["max_width"],
+                        self.pedestal_width_scan_params["max_iterations"],
+                    )
+
+                    for _i, d_ped_scan in enumerate(d_ped_scans):
+                        try:
+                            # scan_dir = os.path.join(run_dir, f"scan_{_i}")
+                            scan_dir = f"{run_dir}_scan_{_i}"
+                            os.mkdir(scan_dir)
+                            os.chdir(scan_dir)
+                            self.parser.update_pedestal_delta(
+                                d_ped_scan, beta_target, run_dir, scan_dir
                             )
+                            subprocess.call([self.executable_path])
+
+                            at1 = self.parser.find_new_at1(
+                                output_dir=scan_dir, beta_target=beta_target, h=0.01
+                            )
+                            self.parser.update_at1(
+                                namelist_path=os.path.join(scan_dir, "fort.10"), at1=at1
+                            )
+
+                            subprocess.call([self.executable_path])
+                            run_successful = self.parser.write_summary(scan_dir, params)
+                            self.parser.clean_output_files(scan_dir)
+                            if run_successful:
+                                if self.run_mishka:
+                                    self.run_mishka_for_ntors(scan_dir)
+                                    self.parser.collect_growthrates_from_mishka(
+                                        scan_dir, save=True
+                                    )
+                        except Exception as exc:
+                            print(exc)
+                elif sampling_method == 2:
+                    # Binary search for stability boundary
+                    # self.pedestal_width_scan_params["max_iterations"]
+                    min_width = self.pedestal_width_scan_params["min_width"]
+                    max_width = self.pedestal_width_scan_params["max_width"]
+                    d_ped_initial_scan = np.random.uniform(
+                        min_width,
+                        max_width,
+                        1,
+                    )
+                    # TODO: implement stability search
+                    # d_ped_scans = np.linspace(0.025, 0.045, 3)
+                    # for _i, d_ped_scan in enumerate(d_ped_scans):
+                    #     try:
+                    #         # scan_dir = os.path.join(run_dir, f"scan_{_i}")
+                    #         scan_dir = f"{run_dir}_scan_{_i}"
+                    #         os.mkdir(scan_dir)
+                    #         os.chdir(scan_dir)
+                    #         self.parser.update_pedestal_delta(
+                    #             d_ped_scan, beta_target, run_dir, scan_dir
+                    #         )
+                    #         subprocess.call([self.executable_path])
+
+                    #         at1 = self.parser.find_new_at1(
+                    #             output_dir=scan_dir, beta_target=beta_target, h=0.01
+                    #         )
+                    #         self.parser.update_at1(
+                    #             namelist_path=os.path.join(scan_dir, "fort.10"), at1=at1
+                    #         )
+
+                    #         subprocess.call([self.executable_path])
+                    #         run_successful = self.parser.write_summary(scan_dir, params)
+                    #         self.parser.clean_output_files(scan_dir)
+                    #         if run_successful:
+                    #             if self.run_mishka:
+                    #                 self.run_mishka_for_ntors(scan_dir)
+                    #                 self.parser.collect_growthrates_from_mishka(
+                    #                     scan_dir, save=True
+                    #                 )
+                    #     except Exception as exc:
+                    #         print(exc)
+
+                else:
+                    print("ERROR: Sampling method not implemented.")
             else:
                 print(
                     "ERROR: Pedestal width scan is only implemented for input_parameter_type = 3."
                 )
+            print("HELENArunner finished.")
 
         return True
 
