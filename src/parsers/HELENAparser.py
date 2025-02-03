@@ -364,7 +364,7 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         print(f"Writing to {run_dir}. Params (europed): {params}")
-        use_namelist_profiles = True
+        use_namelist_profiles = False
         tanh_normaliser = np.tanh(1.0) - np.tanh(-1.0)
         # tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
 
@@ -1296,6 +1296,28 @@ class HELENAparser(Parser):
         namelist["phys"]["cti"] = at1_mult*namelist["phys"]["cti"]
         f90nml.write(namelist, namelist_path, force=True)
 
+    def update_at1(self, namelist_path: str, at1: float):
+        """
+        Changes the core temperature (cte & cti) value in the input file fort.10.
+
+        Parameters
+        ----------
+        namelist_path : str
+            Path to the namelist file.
+        at1_mult: float
+            Multiplier for the core temperature value in the parameterized core
+            profile.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        namelist = f90nml.read(namelist_path)
+        namelist["phys"]["cte"] = at1
+        namelist["phys"]["cti"] = at1
+        f90nml.write(namelist, namelist_path, force=True)
+
     def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
         """
         Function copy paste from tokamak_sampler by A. Kit
@@ -2181,7 +2203,20 @@ class HELENAparser(Parser):
         tesep = namelist['phys']['bte']
         return at0 * tanh_normaliser + tesep
     
-    def find_new_at1(self, output_dir, beta_target, h, nml):
+    def namelist_to_lowercase_with_defualt_values(self, namelist, default_namelist):
+        """
+        Returning a new namelist with only lower case keys and
+        default values on the keys that wern't specified in the
+        input namelist.
+        """
+        new_namelist = f90nml.Namelist(default_namelist)
+            
+        for key_section, nml_section in namelist.items():
+            for key, value in nml_section.items():
+                new_namelist[key_section.lower()][key.lower()] = value
+        return new_namelist
+
+    def find_new_at1(self, output_dir, beta_target, h):
         # Uses Newton method to calculate at1 that should give the right at1
 
         def eped_profile(x, x_mid, x_ped, a_0, a_1, y_sep, alpha_1, alpha_2, delta):
@@ -2234,7 +2269,7 @@ class HELENAparser(Parser):
                 'fte': namelist['phys']['fte'],
                 'gte': namelist['phys']['gte'],
                 'hte': namelist['phys']['hte'],
-                'ite': namelist['phys']['ite'],
+                'ite': 0.0 if 'ite' not in namelist['phys'] else namelist['phys']['ite'],
             }
 
         def get_density_profile_params(namelist):
@@ -2247,7 +2282,7 @@ class HELENAparser(Parser):
                 'fde': namelist['phys']['fde'],
                 'gde': namelist['phys']['gde'],
                 'hde': namelist['phys']['hde'],
-                'ide': namelist['phys']['ide'],
+                'ide': 0.0 if 'ide' not in namelist['phys'] else namelist['phys']['ide'],
             }
 
         def convert_ne_params_to_eped_params(ade, bde, cde, dde, ede, fde, gde, hde, *args, **kwargs):
@@ -2264,69 +2299,53 @@ class HELENAparser(Parser):
                 'alpha_1': gde,
                 'alpha_2': hde}
 
-        def make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof, neprof):
+        def make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof, neprof, psi):
             p = np.zeros(numpts)
             for i in range(numpts):
                 x = psi[i]
-                p[i] = teprof.evaluate(x) * (
-                        1.0 + (zimp + zmain - zeff[i]) / zimp / zmain) * neprof.evaluate(x)
+                p[i] = teprof[i] * (
+                        1.0 + (zimp + zmain - zeff) / zimp / zmain) * neprof[i]
                 if x < bpf:
-                    p[i] = p[i] * (1 + apf * (1 - (bpf / x) ** 2) ** cpf)
+                    p[i] = p[i] * (1 + apf * (1 - (x / bpf) ** 2) ** cpf)
             return p
 
         def integrate(p, dv):
+            print("integrate: ", p.shape, dv.shape)
             parea = np.sum(p * dv)
             return parea
 
-        def derivative(numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv):
+        def derivative(numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv, psi):
             at1 = te_eped_params["a_1"]
             # at_old = at1
             # update_at1(at1 + h), pav1 = integrate()
             te_eped_params["a_1"] = at1 + h
-            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
+            teprof_old = eped_profile(psi, **te_eped_params)
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
             pav1 = integrate(new_prof, dv)
 
             # update_at1(at1 - 2 * h)
             # pav2 = integrate()
             te_eped_params["a_1"] = at1 - 2 * h
-            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
+            teprof_old = eped_profile(psi, **te_eped_params)
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
             pav2 = integrate(new_prof, dv)
+            print("pav1", pav1, "pav2", pav2)
 
             # update_at1(at_old)
             te_eped_params["a_1"] = at1
             return (pav1 - pav2) / (2 * h)
-        # last_at1 = self.at1
-        # next_at1 = self.at1 + 10 * h
         
-        # ne_param = (
-        #     self.pedestal.an0, self.input_parameters['an1'](), self.pedestal.nesep, self.input_parameters['alpha_n1'](),
-        #     self.input_parameters['alpha_n2'](), self.pedestal.density_shift)
-        # ne_param = (an0, an1, nesep, alpha_n1, alpha_n2, density_shift)
-    
-        # te_param_old = (self.pedestal.at0, last_at1, self.pedestal.tesep, self.input_parameters['alpha_t1'](),
-        #                 self.input_parameters['alpha_t2']())
-        # te_param_old = (at0, last_at1, tesep, alpha_t1, alpha_t2)
-        
-        # te_param_new = (self.pedestal.at0, next_at1, self.pedestal.tesep, self.input_parameters['alpha_t1'](),
-        #                 self.input_parameters['alpha_t2']())
-        # te_param_new = (at0, next_at1, tesep, alpha_t1, alpha_t2)
-        
-        # coreparam = (apf, bpf, cpf)
-
-        # new_prof = Pressure(self.pedestal.delta_ne, self.pedestal.delta_te, 1.0 - self.pedestal.delta_ne,
-        #                     1.0 - self.pedestal.delta_te, te_param_new, ne_param, self.zeff_prof, psi,
-        #                     self.vol, self.input_parameters['zimp'](), coreparam, self.input_parameters['z_main_ion']())
-        # old_prof = Pressure(self.pedestal.delta_ne, self.pedestal.delta_te, 1.0 - self.pedestal.delta_ne,
-        #                     1.0 - self.pedestal.delta_te, te_param_old, ne_param, self.zeff_prof, psi,
-        #                     self.vol, self.input_parameters['zimp'](), coreparam, self.input_parameters['z_main_ion']())
-        
+        nml = f90nml.read(os.path.join(output_dir, "fort.10"))
         psi, _, _, _, volume, _ = self.read_fort20_s_j_vol_area(output_dir)
-        numpts = len(psi)
+        numpts = len(psi) - 1
         dv = volume[1:] - volume[0:-1]
-        output_vars = self.get_real_world_geometry_factors_from_f20("fort.20")
+        print("psi:\n", repr(psi))
+        print("dv:\n", repr(dv))
+        output_vars = self.get_real_world_geometry_factors_from_f20(os.path.join(output_dir,"fort.20"))
+        print(output_vars)
         helena_beta = 1e2 * output_vars["BETAN"]
         apf = nml["profile"]["apf"]
-        bpf = nml["profile"]["bpf"] 
+        bpf = nml["profile"]["bpf"]
         cpf = nml["profile"]["cpf"] 
         zimp = nml["phys"]["zimp"]
         zeff = nml["phys"]["zeff"]
@@ -2336,31 +2355,48 @@ class HELENAparser(Parser):
         te_eped_params = convert_te_params_to_eped_params(**te_params)
         last_at1 = te_eped_params["a_1"]
         next_at1 = last_at1 + 10 * h
-        teprof_old = eped_profile(**te_eped_params)
+        teprof_old = eped_profile(psi, **te_eped_params)
+        # print(teprof_old.shape, teprof_old[0:10])
 
         te_eped_params_new = te_eped_params.copy()
         te_eped_params_new["a_1"] = next_at1
-        teprof_new = eped_profile(**te_eped_params_new)
+        # print(te_eped_params_new)
+        teprof_new = eped_profile(psi, **te_eped_params_new)
+        # print(teprof_new)
+        # print(teprof_new.shape)
 
         ne_params = get_density_profile_params(nml)
         ne_eped_params = convert_ne_params_to_eped_params(**ne_params)
-        neprof = eped_profile(**ne_eped_params)
+        neprof = eped_profile(psi, **ne_eped_params)
+        print(neprof.shape, repr(neprof))
 
-        old_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof)
-        new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof)
+        old_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
+        new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof, psi)
+
+        print("old:\n", repr(old_prof))
+        print("new:\n", repr(new_prof))
 
         target = integrate(old_prof, dv) * beta_target / helena_beta
-        while abs(next_at1 - last_at1) > h:
+        print(f"target: {target}, last_at1: {last_at1}, next_at1: {next_at1}, beta_target: {beta_target}, helena_beta: {helena_beta}")
+        n = 0
+        # raise Exception
+        while abs(next_at1 - last_at1) > h and n < 100:
             new_sum = integrate(new_prof, dv)
+            print(f"({n}): last_at1: {last_at1}, next_at1: {next_at1}, new_sum: {new_sum}")
+            
             last_at1 = next_at1
             d_new_prof = derivative(
-                numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv)
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv, psi)
+            print(f"d_new_prof: {d_new_prof}, new_sum - target: {new_sum - target}")
             next_at1 = last_at1 - (new_sum - target) / d_new_prof
             # new_prof.update_at1(next_at1)
             te_eped_params["a_1"] = next_at1
-            teprof_new = eped_profile(**te_eped_params_new)
-            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof)
-            print(f"next at1={next_at1}")
+            teprof_new = eped_profile(psi, **te_eped_params)
+            print("teprof_new:\n", repr(teprof_new))
+            new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof, psi)
+            print("new_prof:", repr(new_prof))
+            print(f"{n} next at1={next_at1}")
+            n += 1
 
         return next_at1
 
@@ -2369,8 +2405,13 @@ class HELENAparser(Parser):
         Read the namelist from the run_dir. Update the values depending on pedestal delta.
         Save the updated namelist in the scan dir.
         """
-        tanh_normaliser = np.tanh(1) - np.tanh(-1)
         nml = f90nml.read(os.path.join(run_dir, "fort.10"))
+        # at1 = self.find_new_at1(output_dir=run_dir, beta_target=beta_target, h=0.01, nml=nml)
+
+        # default_nml = f90nml.read(
+        #     "/scratch/project_2009007/helena_mishka_helper/default/helena_default.nml")
+        # nml = self.namelist_to_lowercase_with_defualt_values(
+        #     namelist=nml, default_namelist=default_nml)
 
         theta = np.linspace(0, 2 * np.pi, 1000)
         circumference = self.get_circumference(
@@ -2388,20 +2429,22 @@ class HELENAparser(Parser):
 
         # Caluclate the pedestal temperature based on the KBM constraint
         teped = self.get_teped(
-            d_ped=new_pedestal_delta, ip=ip, circumference=circumference,
-            neped=neped, tesep=tesep,
+            d_ped=new_pedestal_delta,
+            ip=ip,
+            circumference=circumference,
+            neped=neped,
+            tesep=tesep,
             zimp=nml["phys"]["zimp"],
             zeff=nml["phys"]["zeff"],
             z_main_ion=nml["phys"]["zmain"])
         # at1 = core_to_ped_te * teped
-        at1 = self.find_new_at1(output_dir=run_dir, beta_target=beta_target, h=0.01, nml=nml)
 
         nml["shape"]["xr2"] = 1.0 - new_pedestal_delta / 2.0
         nml["shape"]["sig2"] = new_pedestal_delta
 
         nml['phys']['ate'] = (teped - tesep) / tanh_normaliser
         # nml['phys']['bte'] =
-        nml['phys']['cte'] = at1
+        # nml['phys']['cte'] = at1
         nml['phys']['ddte'] = 1.0 - 0.5 * new_pedestal_delta
         nml['phys']['ete'] = new_pedestal_delta
         nml['phys']['fte'] = 1.0 - new_pedestal_delta
