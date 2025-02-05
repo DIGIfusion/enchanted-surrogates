@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'feature/**'
+      - 'Feature/**'
   pull_request:
     types: [opened, reopened]
 jobs:
