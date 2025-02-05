@@ -25,4 +25,4 @@ executor:
       - 'module load python-data'
       - 'cd /scratch/project_2009007/enchanted-surrogates/'
       - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2009007/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
-    n_workers: 2
+  num_workers: 2
