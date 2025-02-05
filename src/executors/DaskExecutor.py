@@ -134,7 +134,7 @@ class DaskExecutor(Executor):
                     )
                     seq.add(new_future)
 
-            if self.output_dir is None:
+            if self.output_dir is not None:
                 print("SAVING OUTPUT IN:", self.output_dir)
                 with open(os.path.join(self.output_dir, "sequential"), "w") as out_file:
                     for output in outputs:
