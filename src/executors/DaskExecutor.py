@@ -62,8 +62,7 @@ class DaskExecutor(Executor):
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
             self.simulator_cluster = SLURMCluster(**self.worker_args)
-            self.simulator_cluster.scale()  # TODO: check num workers
-
+            # self.simulator_cluster.scale()# An empty cluster.scale() is causing no workers to be created on lumi # scale(n_jobs), not sure when n_jobs should be used, n_workers is specified in config file
             self.simulator_client = Client(self.simulator_cluster)
             self.clients = [self.simulator_client]
 
@@ -96,7 +95,7 @@ class DaskExecutor(Executor):
             print('CLIENT:', client)
             num_workers = len(client.scheduler_info()["workers"])
             if num_workers == 0:
-                raise ValueError('The client has 0 workers. \n The dask client likely is not connected to a cluster, make sure the prologue commands in the config file are such that allow the workers to have the same python and that the interface is appropriate for your HPC system.')
+                raise ValueError('The client has 0 workers. \n The dask client is likely is not connected to a cluster, make sure the prologue commands in the config file are such that allow the workers to have the same python and that the interface is appropriate for your HPC system.')
 
     def submit_batch_of_params(self, param_list: list[dict]) -> list:
         """Submits a batch of parameters to the class
