@@ -11,6 +11,8 @@ from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
 from .base import Executor, run_simulation_task
+from time import sleep
+import os 
 
 
 class DaskExecutor(Executor):
@@ -91,12 +93,7 @@ class DaskExecutor(Executor):
             raise ValueError(
                 "Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers"
             )
-        for client in self.clients:
-            print('CLIENT:', client)
-            num_workers = len(client.scheduler_info()["workers"])
-            if num_workers == 0:
-                raise ValueError('The client has 0 workers. \n The dask client is likely is not connected to a cluster, make sure the prologue commands in the config file are such that allow the workers to have the same python and that the interface is appropriate for your HPC system.')
-
+        
     def submit_batch_of_params(self, param_list: list[dict]) -> list:
         """Submits a batch of parameters to the class
 
@@ -121,13 +118,13 @@ class DaskExecutor(Executor):
         print('Making Dask Futures')
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
-
+        outputs = []
         if sampler_interface in [S.SEQUENTIAL]:
             print('Sampler is SEQUENTIAL')
             seq = as_completed(futures)
             for future in seq:
-                print('Blocking Pyhon and waiting for result one of the futures. This ensures the results come back in order.')
                 res = future.result()
+                outputs.append(str(res))
                 completed += 1
                 if self.sampler.total_budget > completed:
                     params = self.sampler.get_next_parameter()
@@ -135,6 +132,14 @@ class DaskExecutor(Executor):
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     seq.add(new_future)
+            
+                 
+            if self.output_dir != None:
+                print('SAVING OUTPUT IN:', self.output_dir)
+                with open(os.path.join(self.output_dir, 'sequential'), 'w') as out_file:
+                    for output in outputs:
+                        out_file.write(str(output)+'\n\n')
+            print('Finished Sequential Runs')
 
         elif sampler_interface in [S.BATCH]:
             while completed < self.sampler.total_budget:
