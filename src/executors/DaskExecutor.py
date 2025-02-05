@@ -51,7 +51,7 @@ class DaskExecutor(Executor):
             **kwargs: Additional keyword arguments.
         """
         sampler_type: S = self.sampler.sampler_interface
-
+        print('Initializing DASK clients')
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
             # self.simulator_cluster = LocalCluster(**self.worker_args)
@@ -92,6 +92,11 @@ class DaskExecutor(Executor):
             raise ValueError(
                 "Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers"
             )
+        for client in self.clients:
+            print('CLIENT:', client)
+            num_workers = len(client.scheduler_info()["workers"])
+            if num_workers == 0:
+                raise ValueError('The client has 0 workers. \n The dask client likely is not connected to a cluster, make sure the prologue commands in the config file are such that allow the workers to have the same python and that the interface is appropriate for your HPC system.')
 
     def submit_batch_of_params(self, param_list: list[dict]) -> list:
         """Submits a batch of parameters to the class
@@ -112,13 +117,17 @@ class DaskExecutor(Executor):
         print(100 * "=")
         print("Creating initial runs")
 
+        print('Generating Samples:')
         initial_parameters = self.sampler.get_initial_parameters()
+        print('Making Dask Futures')
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
 
         if sampler_interface in [S.SEQUENTIAL]:
+            print('Sampler is SEQUENTIAL')
             seq = as_completed(futures)
             for future in seq:
+                print('Blocking Pyhon and waiting for result one of the futures. This ensures the results come back in order.')
                 res = future.result()
                 completed += 1
                 if self.sampler.total_budget > completed:
