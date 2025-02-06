@@ -24,5 +24,6 @@ executor:
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
       - 'cd /project/project_462000451/enchanted-surrogates/'
       - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
-  num_workers: 2
+    n_workers: 2
+  n_jobs: 1
   

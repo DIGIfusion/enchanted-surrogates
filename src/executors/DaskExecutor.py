@@ -17,10 +17,14 @@ import os
 class DaskExecutor(Executor):
     """
     Handles execution of surrogate workflow on Dask.
+    SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
 
     Attributes:
-        num_workers (int): Number of worker processes to be used.
+        n_jobs (int): Number of batch jobs to be created by SLURMcluster.
+            In dask-jobqueue, a single Job may include one or more Workers.
         worker_args (dict): Dictionary of arguments for configuring worker nodes.
+            The arguments depends on the type of Cluster used.
+            - n_workers (int): Number of workers
         client (dask.distributed.Client): Dask client for task submission and execution.
         simulator_client (dask.distributed.Client): Client for simulator tasks.
         surrogate_client (dask.distributed.Client): Client for training surrogate models.
@@ -29,7 +33,7 @@ class DaskExecutor(Executor):
 
     def __init__(self, worker_args: dict, **kwargs):
         super().__init__(**kwargs)
-        self.num_workers: int = kwargs.get("num_workers", 8)
+        self.n_jobs: int = kwargs.get("n_jobs", 8)
         self.worker_args: dict = worker_args
         print("Beginning SLURMCluster Generation")
         self.initialize_clients()
@@ -63,9 +67,7 @@ class DaskExecutor(Executor):
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
             self.simulator_cluster = SLURMCluster(**self.worker_args)
-            self.simulator_cluster.scale(self.num_workers)
-            # An empty cluster.scale() is causing no workers to be created on lumi
-            # scale(n_jobs), not sure when n_jobs should be used, num_workers is specified in config file
+            self.simulator_cluster.scale(self.n_jobs)
             self.simulator_client = Client(self.simulator_cluster)
             self.clients = [self.simulator_client]
 

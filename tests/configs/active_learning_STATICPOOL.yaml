@@ -59,4 +59,4 @@ executor:
     job_script_prologue:
       - export PYTHONPATH=$PYTHONPATH:/src
 
-  num_workers: 4
+  n_jobs: 4

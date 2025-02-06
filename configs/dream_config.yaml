@@ -30,4 +30,4 @@ executor:
       - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
       - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
       - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
-  num_workers: 1
+  n_jobs: 1
