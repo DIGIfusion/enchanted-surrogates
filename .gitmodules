@@ -1,3 +1,12 @@
 [submodule "bmdal"]
 	path = src/samplers/bmdal
 	url = https://github.com/lorenzozanisi/black_box_AL
+[submodule "submodules/tokamak_samplers"]
+	path = submodules/tokamak_samplers
+	url = git@github.com:DIGIfusion/tokamak_samplers.git
+[submodule "submodules/pyrokinetics"]
+	path = submodules/pyrokinetics
+	url = git@github.com:pyro-kinetics/pyrokinetics.git
+[submodule "submodules/static_sparse_grid_approximations"]
+	path = submodules/static_sparse_grid_approximations
+	url = git@github.com:ionutfarcas/static_sparse_grid_approximations.git

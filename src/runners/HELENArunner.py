@@ -70,10 +70,21 @@ class HELENArunner(Runner):
             if "beta_iteration" not in other_params
             else other_params["beta_iteration"]
         )
+        self.constant_beta = (
+            #To set a constant beta for every sample
+            None
+            if "constant_beta" not in other_params
+            else other_params["constant_beta"]
+        )
         self.beta_tolerance = (
             1e-4
             if "beta_tolerance" not in other_params
             else other_params["beta_tolerance"]
+        )
+        self.noKBM = (
+            False
+            if "noKBM" not in other_params
+            else other_params["noKBM"]
         )
         self.max_beta_iterations = (
             10
@@ -105,24 +116,34 @@ class HELENArunner(Runner):
 
         # Check input parameters
         if self.beta_iteration:
-            if "beta_N" not in params:
+            if "beta_N" not in params and self.constant_beta==None:
                 print(
                     "The parameter configuration does not include 'beta_N'.",
-                    "This it needed for beta iteration. EXITING.",
+                    "The constant_beta is not included in the config file for the runner."
+                    "At least one is needed for the beta itteration. EXITING.",
                 )
                 return False
 
-        self.parser.write_input_file(params, run_dir, self.namelist_path)
+        if self.noKBM:
+            print('WRITING INPUT FILE WITH NO KBM CONSTRAINT')
+            self.parser.write_input_file_noKBM(params, run_dir, self.namelist_path)
+        else:    
+            self.parser.write_input_file(params, run_dir, self.namelist_path)
 
         os.chdir(run_dir)
         # run code
         if not self.only_generate_files:
             if self.beta_iteration:
-                beta_target = params["beta_N"]
+                print('PERFORMING BETA ITTERATION')
+                if self.constant_beta != None:
+                    beta_target = self.constant_beta
+                else:
+                    beta_target = params["beta_N"]
                 if self.beta_iterations_afp:
                     self.parser.modify_fast_ion_pressure("fort.10", 0.0)
                 else:
                     self.parser.modify_at1("fort.10", 0.0)
+                print('CALLING EXECUTABLE')
                 subprocess.call([self.executable_path])
                 output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                     "fort.20"
