@@ -68,7 +68,7 @@ class Executor(ABC):
     """
 
     def __init__(
-        self, sampler, runner_args, base_run_dir, config_filepath, *args, **kwargs
+        self, sampler, runner_args, base_run_dir, config_filepath, output_dir=None, *args, **kwargs
     ):
         """
         Initializes the Executor with the given parameters and prepares the environment for execution.
@@ -85,6 +85,7 @@ class Executor(ABC):
         self.sampler = sampler  # kwargs.get('sampler')
         self.runner_args = runner_args  # kwargs.get('runner_args')
         self.base_run_dir = base_run_dir  # , kwargs.get('base_run_dir')
+        self.output_dir = output_dir
         # self.max_samples = self.sampler.total_budget
         self.clients = []
         self.create_run_dir(self.base_run_dir, config_filepath)

@@ -14,7 +14,7 @@ runner:
 executor:
   type: DaskExecutor
   base_run_dir: /scratch/project_2007159/cursed-tglf/tglf_scan_shape2      # where to store runs 
-  num_workers: 12                                                                 # how many workers to run in parallel
+  n_jobs: 12                                                                 # how many workers to run in parallel
   # below is the setup for an individual worker, each worker spams runs of a code
   worker_args:
     account: "project_2007159"                                                   # changes based on HPC 

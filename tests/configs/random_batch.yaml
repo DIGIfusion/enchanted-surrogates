@@ -26,4 +26,4 @@ executor:
     interface: ib0
     job_script_prologue:
       - export PYTHONPATH=$PYTHONPATH:/src
-  num_workers: 2
+  n_jobs: 2
