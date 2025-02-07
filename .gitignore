@@ -1,7 +1,6 @@
 a8/
 gacode/
 trial_*/
-notebooks/
 tglf_setup.sh
 .venv/
 *.out
@@ -9,4 +8,3 @@ tglf_setup.sh
 __pycache__/
 .vscode/
 data_store/*
-notebooks*

@@ -1,0 +1,121 @@
+&parallelization
+    max_npw = -1
+    min_npw = -1
+    n_parallel_sims = 1
+    n_procs_s = -1
+    n_procs_sim = 128
+    n_procs_v = -1
+    n_procs_w = -1
+    n_procs_x = -1
+    n_procs_y = -1
+    n_procs_z = -1
+/
+
+&box
+    adapt_ly = .true.
+    kx_center = 0.0
+    kymin = 0.1
+    lv = 3.1
+    lw = 11
+    n_spec = 2
+    nky0 = 1
+    nv0 = 32
+    nw0 = 16
+    nx0 = 18
+    nz0 = 36
+    x0 = 0.9
+/
+
+&in_out
+    diagdir = '/scratch/project_462000451/gene_out/gene_auto_97781/'
+    istep_energy = 100
+    istep_field = 100
+    istep_mom = 2000
+    istep_nrg = 100
+    istep_omega = 10
+    istep_schpt = 5000
+    istep_srcmom = 2000
+    istep_vsp = 5000
+    iterdb_file = '/project/project_462000451/jet_97781_data/iterdb_jet_97781'
+    read_checkpoint = .false.
+/
+
+&general
+    arakawa_zv = .false.
+    beta = -1
+    bpar = .false.
+    calc_dt = .true.
+    coll = -1.0
+    coll_cons_model = 'self_adj'
+    collision_op = 'landau'
+    comp_type = 'IV'
+    debye2 = -1
+    dt_max = 0.01
+    f_version = .false.
+    hyp_z = -1
+    init_cond = 'ppjrn'
+    nblocks = 16
+    nonlinear = .false.
+    simtimelim = 7200
+    timelim = 7200
+    underflow_limit = 1e-15
+    x_local = .true.
+    zeff = 1
+/
+
+&geometry
+    amhd = 5.043417591400396
+    cn_m = -3.623194636685338e-05, 2.379181020873648e-06, -2.1413156244048678e-05,
+           1.0812730769110838e-06
+    cndr_m = 1.1417922454252922e-05, 0.00017352023653516212, -0.000230397957583161,
+             6.591470279780919e-05
+    delta = 0.35385765930081076
+    dpdx_pm = 0.04491702473680931
+    drr = -0.501822331779261
+    drz = 1.4613643187620457e-05
+    kappa = 1.6870468330197494
+    magn_geometry = 'miller_mxh'
+    major_r = 3.2642246614364834
+    major_z = 1.1089293004723002e-16
+    minor_r = 1.0
+    q0 = 5.864985638944693
+    rhostar = -1
+    s_delta = 0.6720813742594579
+    s_kappa = 0.8453068391417375
+    s_zeta = -0.013897479114266871
+    shat = 3.2926270416270484
+    sign_bt_cw = -1.0
+    sign_ip_cw = -1.0
+    sn_m = 0.0, 0.3616924208407907, 0.0052144030068149065, -0.0006673151925402485
+    sndr_m = 0.0, 0.7185735981362362, 0.013897479114266871, -0.07885437076792016
+    trpeps = 0.29731403363586484
+    zeta = -0.0052144030068149065
+/
+
+&species
+    charge = -1
+    dens = 1
+    mass = 0.0002725
+    name = 'electron'
+    omn = 1.0
+    omt = 1.0
+    prof_type = -2
+    temp = 1
+/
+
+&species
+    charge = 1
+    dens = 1
+    mass = 1.0
+    name = 'ion1'
+    omn = 1.0
+    omt = 1.0
+    prof_type = -2
+    temp = 1
+/
+
+&external_contr
+    exbrate = 0.0
+    omega0_tor = 0.0
+    pfsrate = 0.0
+/

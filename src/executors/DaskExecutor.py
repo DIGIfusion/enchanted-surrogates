@@ -32,6 +32,7 @@ class DaskExecutor(Executor):
         super().__init__(**kwargs)
         # self.num_workers: int = kwargs.get("num_workers", 8)
         self.worker_args: dict = worker_args
+        self.n_jobs: int = kwargs.get("n_jobs", 2)
         print("Beginning SLURMCluster Generation")
         self.initialize_clients()
         print("Finished Setup")
@@ -64,7 +65,7 @@ class DaskExecutor(Executor):
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
             self.simulator_cluster = SLURMCluster(**self.worker_args)
-            # self.simulator_cluster.scale()# An empty cluster.scale() is causing no workers to be created on lumi # scale(n_jobs), not sure when n_jobs should be used, n_workers is specified in config file
+            # self.simulator_cluster.scale(self.n_jobs)# An empty cluster.scale() is causing no workers to be created on lumi # scale(n_jobs), not sure when n_jobs should be used, n_workers is specified in config file
             self.simulator_client = Client(self.simulator_cluster)
             self.clients = [self.simulator_client]
 

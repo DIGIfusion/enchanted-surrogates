@@ -1,9 +1,9 @@
 sampler:
   type: StaticSparseGrid
-  bounds: [[1000,3000], [3,5], [0.001, 0.1], [0.001,0.1], [0.5,2.5]]
+  bounds: [[1,3], [3,5], [0.001, 0.1], [0.001,0.1], [0.5,2.5]]
   level: 3
   parameters: ['T_eped', 'n_eped', 'd_n_ped', 'd_T_ped', 'n_esep']
-  
+  # units [kev, 10E-19, psi, psi, 10E-19]
 runner:
   type: HELENArunner
   executable_path: "/project/project_462000451/HELENA/bin/hel13_64"
@@ -12,7 +12,9 @@ runner:
     "only_generate_files": False,
     "beta_iteration": True,
     "noKBM": True,
-    "constant_beta": 0.215}#Computed using core temp and density with magnetic field strength computed by GENE.
+    "max_beta_iterations": 3,
+    "constant_beta": 2.555}
+    #Computed using core temp and density with magnetic field strength computed by GENE.
 
 executor:
   type: DaskExecutor
@@ -20,15 +22,16 @@ executor:
   worker_args: # to be specified for the SLURMCluster in DASK
     # local: 'False'
     account: "project_462000451"
-    queue: "small"
-    cores: 1 
-    memory: "12GB"
+    queue: "standard"
+    cores: 128 
+    memory: "200GB"
     processes: 1
-    walltime: "00:30:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    walltime: "10:00:00" # Adam: survival length of worker, so possibly just set to max in cluster
     interface: "nmn0"
     job_script_prologue: # this is possibly dependent on which code you want
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
       - 'cd /project/project_462000451/enchanted-surrogates/'
       - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
-    n_workers: 1
+    # n_workers: 1
   num_workers: 1
+  #n_jobs: 2

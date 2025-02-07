@@ -10,3 +10,6 @@
 [submodule "submodules/static_sparse_grid_approximations"]
 	path = submodules/static_sparse_grid_approximations
 	url = git@github.com:ionutfarcas/static_sparse_grid_approximations.git
+[submodule "submodules/GENE_ML"]
+	path = submodules/GENE_ML
+	url = git@github.com:DanHarJor/GENE_ML.git
