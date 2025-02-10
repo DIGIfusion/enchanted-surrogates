@@ -69,3 +69,8 @@ To check the linting locally and get a full overview of all possible issues, run
 
 where the argument is the path to the file you want to check.
 
+## Acknowledgements
+The development of this framework has been support by multiple funding sources:
+- Research Council of Finland project numbers: 355460, 358941.
+- EUROfusion (Grant agreement 1010522200) through the Advanced Computing Hub frameworks of the E-TASC program as well as through a project focused on developing surrogate models for tokamak pedestal magnetohydrodynamic stability simulations.
+- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development. 
