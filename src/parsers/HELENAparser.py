@@ -115,7 +115,7 @@ class HELENAparser(Parser):
             nesep = params["n_eped"] / 4.0 if "n_esep" not in params else params["n_esep"]
 
         an0 = (neped - nesep) / tanh_normaliser
-        an1 = 1.0 if "an1" not in params else params["an1"]
+        an1 = 0.1 if "an1" not in params else params["an1"]
         tesep = 0.1 if "T_esep" not in params else params["T_esep"]
 
         teped = params["T_eped"]
