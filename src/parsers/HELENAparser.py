@@ -104,7 +104,7 @@ class HELENAparser(Parser):
         d_n_ped = params["d_n_ped"]
         d_T_ped = params["d_n_ped"]
 
-        density_shift = 0.0
+        density_shift = 0.0 if 'density_shift' not in params else params["density_shift"]
         psi_n_mid = 1.0 - 0.5 * d_n_ped + density_shift
         psi_T_mid = 1.0 - 0.5 * d_T_ped
 
