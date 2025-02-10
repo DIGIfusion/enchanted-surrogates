@@ -61,17 +61,15 @@ class HELENAparser(Parser):
         In config:
             "input_parameter_type": 4
 
-        Parameters needed:
-            - pedestal_delta
-            - ip
-            - bvac
-            - T_eped
-            - d_n_ped
-            - d_T_ped
-        Optional
-            - n_eped
-            - n_esep
-            - T_eped (default: 0.1)
+        The function inherits the setup provided in the basenamelist, given by the namelist_path.
+        Parameters that this function presently expects to be given are
+            - d_n_ped - Pedestal density width
+            - d_T_ped - Pedestal temperature width
+            - T_eped - Pedestal top temperature
+        Other parameters that user very likely is interested in giving are
+            - n_eped - Pedestal top electron density
+            - n_esep - Separatrix electron density
+            - density_shift - Relative shift between the electron density and temperature pedestals
 
         Parameters
         ----------
