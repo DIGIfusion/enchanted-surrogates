@@ -1,10 +1,10 @@
 # runners/MISHKA.py
 
 # import numpy as np
+# import json
 import os
 import shutil
 import subprocess
-import json
 from parsers import MISHKAparser
 from .base import Runner
 from dask.distributed import print
@@ -21,6 +21,9 @@ class MISHKArunner(Runner):
     and the toroidal mode number is n=20, which according to the europed
     standards gives the poloidal mode number m=71, then
     the runner will expect the executable to be found at "/bin/mishka1fast_71".
+
+    Either define the fort.12 file in the runner config file or define the
+    path to the (HELENA output) directory in the params.
 
     Attributes
     ----------
@@ -44,13 +47,12 @@ class MISHKArunner(Runner):
         self.parser = MISHKAparser(default_namelist=other_params["namelist_path"])
         self.executable_path = executable_path
         self.default_namelist = other_params["namelist_path"]
-        self.input_fort12 = other_params["input_fort12"]
-        self.input_density = other_params["input_density"]
-
-        # MISHKA can run without density file
-        # if not os.path.exists(self.input_density):
-        #     self.input_density = None
-        #     print(f"Couldn't find {self.input_density}")
+        self.input_fort12 = (
+            "" if "input_fort12" not in other_params else other_params["input_fort12"]
+        )
+        self.input_density = (
+            "" if "input_density" not in other_params else other_params["input_density"]
+        )
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -75,7 +77,10 @@ class MISHKArunner(Runner):
             return
 
         if len(self.input_fort12) > 0 and not os.path.exists(self.input_fort12):
-            print(f"Couldn't find {self.input_fort12}. \n", f"params: {params}")
+            print(
+                f"Couldn't find the defined {self.input_fort12}. \n",
+                f"params: {params}",
+            )
             return
 
         self.get_equilibrium_files(run_dir, params)
