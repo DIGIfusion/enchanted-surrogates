@@ -175,10 +175,4 @@ class MISHKArunner(Runner):
                     "runner is not found. Exiting.",
                 )
 
-        if not os.path.isfile(self.namelist_path):
-            raise FileNotFoundError(
-                f"The namelist path ({self.namelist_path}) provided to the MISHKA ",
-                "runner is not found. Exiting.",
-            )
-
         return
