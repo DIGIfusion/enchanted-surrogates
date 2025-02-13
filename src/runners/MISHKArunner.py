@@ -167,15 +167,17 @@ class MISHKArunner(Runner):
             FileNotFoundError: If the executable path or the namelist path is not found.
 
         """
-        if not os.path.isfile(self.executable_path):
-            raise FileNotFoundError(
-                f"The executable path ({self.executable_path}) provided to the HELENA ",
-                "runner is not found. Exiting.",
-            )
+        ntors = [21, 31, 41, 51, 71]
+        for ntor in ntors:
+            if not os.path.isfile(f"{self.executable_path}_{ntor}"):
+                raise FileNotFoundError(
+                    f"The executable path ({self.executable_path}_{ntor}) provided to the MISHKA ",
+                    "runner is not found. Exiting.",
+                )
 
         if not os.path.isfile(self.namelist_path):
             raise FileNotFoundError(
-                f"The namelist path ({self.namelist_path}) provided to the HELENA ",
+                f"The namelist path ({self.namelist_path}) provided to the MISHKA ",
                 "runner is not found. Exiting.",
             )
 
