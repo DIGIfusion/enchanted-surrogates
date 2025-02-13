@@ -325,8 +325,9 @@ class MISHKAparser(Parser):
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
 
-        np.save(
-            os.path.join(run_dir, "ntor_gamma.npy"),
-            np.array([params["ntor"], np.sqrt(np.max([0.0, growthrate[0]]))]),
-        )
+        if success and growthrate is not None:
+            np.save(
+                os.path.join(run_dir, "ntor_gamma.npy"),
+                np.array([params["ntor"], np.sqrt(np.max([0.0, growthrate[0]]))]),
+            )
         return summary
