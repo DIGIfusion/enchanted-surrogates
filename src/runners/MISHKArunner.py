@@ -53,6 +53,7 @@ class MISHKArunner(Runner):
         self.input_density = (
             "" if "input_density" not in other_params else other_params["input_density"]
         )
+        self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -157,3 +158,25 @@ class MISHKArunner(Runner):
         else:
             harmonic = 71
         return harmonic
+
+    def pre_run_check(self):
+        """
+        Performs pre-run checks to ensure necessary files exist before running the simulation.
+
+        Raises:
+            FileNotFoundError: If the executable path or the namelist path is not found.
+
+        """
+        if not os.path.isfile(self.executable_path):
+            raise FileNotFoundError(
+                f"The executable path ({self.executable_path}) provided to the HELENA ",
+                "runner is not found. Exiting.",
+            )
+
+        if not os.path.isfile(self.namelist_path):
+            raise FileNotFoundError(
+                f"The namelist path ({self.namelist_path}) provided to the HELENA ",
+                "runner is not found. Exiting.",
+            )
+
+        return
