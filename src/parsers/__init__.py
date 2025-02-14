@@ -8,6 +8,7 @@ Classes:
 - MISHKAparser
 - DATABASEparser
 - DREAMparser
+- SOFTparser
 Functions:
 
 """
@@ -18,3 +19,4 @@ from .HELENAparser     import HELENAparser
 from .MISHKAparser     import MISHKAparser
 from .STATICPOOLparser import STATICPOOLparser
 from .DREAMparser      import DREAMparser
+from .SOFTparser       import SOFTparser

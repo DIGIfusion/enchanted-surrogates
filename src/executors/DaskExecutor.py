@@ -6,7 +6,8 @@ Contains logic for executing surrogate workflow on Dask.
 """
 
 import time
-from dask.distributed import Client, as_completed, wait
+import os
+from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
@@ -54,11 +55,25 @@ class DaskExecutor(Executor):
 
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
-            # self.simulator_cluster = LocalCluster(**self.worker_args)
-            self.client = Client(timeout=60)
+            #self.simulator_cluster = LocalCluster(**self.worker_args)
+            self.simulator_cluster = LocalCluster(n_workers=self.worker_args['num_workers'])
+            self.client = Client(self.simulator_cluster)
             self.simulator_client = self.client
             self.surrogate_client = self.client
-            self.clients = [self.client]
+            if self.worker_args.get("secondary_SLURM", False):
+                 if not os.path.isdir(self.worker_args['slurm_args']['local_directory']):
+                     os.mkdir(self.worker_args['slurm_args']['local_directory'])
+                 self.simulator_cluster_secondary = SLURMCluster(**self.worker_args['slurm_args'])
+                 if self.worker_args.get("adapt", False):
+                     # Presently hard coded to minimum 0 and maximum 10 jobs.
+                     # TODO: Allow setting the job min and max through the configuration
+                     self.simulator_cluster_secondary.adapt(minimum_jobs=0, maximum_jobs=10)
+                 else:
+                     self.simulator_cluster_secondary.scale()
+                 self.simulator_client_secondary = Client(self.simulator_cluster_secondary)
+                 self.clients = [self.client, self.simulator_client_secondary]
+            else:
+                 self.clients = [self.client]
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
             self.simulator_cluster = SLURMCluster(**self.worker_args)
@@ -101,9 +116,11 @@ class DaskExecutor(Executor):
         """
         futures = []
         for params in param_list:
+            print('before')
             new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
             )
+            print('after')
             futures.append(new_future)
         return futures
 
@@ -115,11 +132,24 @@ class DaskExecutor(Executor):
         initial_parameters = self.sampler.get_initial_parameters()
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
-
+  
         if sampler_interface in [S.SEQUENTIAL]:
             seq = as_completed(futures)
+            sec_futures = []
             for future in seq:
                 res = future.result()
+                if self.worker_args.get("secondary_SLURM", False):
+                    for idx, tidx in enumerate(self.runner_args['other_params']['soft']['other_params']['time_idx']):
+                        sec_future = self.simulator_client_secondary.submit(
+                            run_simulation_task, self.runner_args['other_params']['soft'], 
+                            {'time_idx':tidx, 
+                             'mag_field_path':self.runner_args['other_params']['soft']['other_params']['mag_field_path'][idx]}, 
+                             res['output']
+                        )
+                        sec_futures.append(sec_future)
+                    sec_seq = as_completed(sec_futures)
+                    for sec_f in sec_seq:
+                        sec_f.release()
                 completed += 1
                 if self.sampler.total_budget > completed:
                     params = self.sampler.get_next_parameter()

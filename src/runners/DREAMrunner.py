@@ -15,7 +15,7 @@ import os
 # import numpy as np
 from .base import Runner
 import subprocess
-from parsers import DREAMparser
+from parsers import DREAMparser, SOFTparser
 
 
 class DREAMrunner(Runner):
@@ -60,6 +60,19 @@ class DREAMrunner(Runner):
         self.executable_path = executable_path
         self.base_input_file_path = other_params['base_input_file_path']
         self.only_generate_files = other_params['only_generate_files']
+        #if 'soft' in other_params:
+        #    soft_params = other_params['soft']
+        #    self.run_soft = (
+        #        False
+        #        if "run_soft" not in soft_params
+        #        else soft_params['run_soft']
+        #    )
+        #    if self.run_soft:
+        #        self.soft_parser = SOFTparser()
+        #        self.soft_runner = SOFTrunner(
+        #            soft_params['executable_path'],
+        #            other_params=soft_params['other_params'],
+        #        )
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -79,4 +92,6 @@ class DREAMrunner(Runner):
 
         if not self.only_generate_files:
             subprocess.call([self.executable_path, 'input.h5'])
-        return True
+
+        return run_dir
+
