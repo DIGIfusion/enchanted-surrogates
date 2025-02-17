@@ -69,3 +69,8 @@ To check the linting locally and get a full overview of all possible issues, run
 
 where the argument is the path to the file you want to check.
 
+## Acknowledgements
+The development of this framework has been support by multiple funding sources:
+- Research Council of Finland project numbers: 355460, 358941.
+- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
+- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
