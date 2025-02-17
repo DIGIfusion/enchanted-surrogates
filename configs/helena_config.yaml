@@ -1,8 +1,8 @@
 sampler:
   type: Grid
-  bounds: [[1.8, 10], [0.001, 0.4]]
-  num_samples: [2, 2]
-  parameters: ['alpha_T1', 'width_pressure_alpha']
+  bounds: [[0.02, 0.06], [0.0, 0.45]]
+  num_samples: [10, 10]
+  parameters: ['pedestal_delta', 'tria']
 
 runner:
   type: HELENArunner
@@ -13,7 +13,7 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/test-enchanted/helena
+  base_run_dir: /scratch/project_2005083/some_data_dir
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_2009007"
     queue: "medium"
