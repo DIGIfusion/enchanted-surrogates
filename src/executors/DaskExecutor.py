@@ -11,15 +11,20 @@ from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
 from .base import Executor, run_simulation_task
+import os
 
 
 class DaskExecutor(Executor):
     """
     Handles execution of surrogate workflow on Dask.
+    SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
 
     Attributes:
-        num_workers (int): Number of worker processes to be used.
+        n_jobs (int): Number of batch jobs to be created by SLURMcluster.
+            In dask-jobqueue, a single Job may include one or more Workers.
         worker_args (dict): Dictionary of arguments for configuring worker nodes.
+            The arguments depends on the type of Cluster used.
+            - n_workers (int): Number of workers
         client (dask.distributed.Client): Dask client for task submission and execution.
         simulator_client (dask.distributed.Client): Client for simulator tasks.
         surrogate_client (dask.distributed.Client): Client for training surrogate models.
@@ -28,7 +33,7 @@ class DaskExecutor(Executor):
 
     def __init__(self, worker_args: dict, **kwargs):
         super().__init__(**kwargs)
-        # self.num_workers: int = kwargs.get("num_workers", 8)
+        self.n_jobs: int = kwargs.get("n_jobs", 8)
         self.worker_args: dict = worker_args
         print("Beginning SLURMCluster Generation")
         self.initialize_clients()
@@ -51,7 +56,7 @@ class DaskExecutor(Executor):
             **kwargs: Additional keyword arguments.
         """
         sampler_type: S = self.sampler.sampler_interface
-
+        print("Initializing DASK clients")
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
             # self.simulator_cluster = LocalCluster(**self.worker_args)
@@ -62,8 +67,7 @@ class DaskExecutor(Executor):
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
             self.simulator_cluster = SLURMCluster(**self.worker_args)
-            self.simulator_cluster.scale()  # TODO: check num workers
-
+            self.simulator_cluster.scale(self.n_jobs)
             self.simulator_client = Client(self.simulator_cluster)
             self.clients = [self.simulator_client]
 
@@ -112,14 +116,18 @@ class DaskExecutor(Executor):
         print(100 * "=")
         print("Creating initial runs")
 
+        print("Generating samples:")
         initial_parameters = self.sampler.get_initial_parameters()
+        print("Making Dask futures")
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
-
+        outputs = []
         if sampler_interface in [S.SEQUENTIAL]:
+            print("Sampler is SEQUENTIAL")
             seq = as_completed(futures)
             for future in seq:
                 res = future.result()
+                outputs.append(str(res))
                 completed += 1
                 if self.sampler.total_budget > completed:
                     params = self.sampler.get_next_parameter()
@@ -127,6 +135,13 @@ class DaskExecutor(Executor):
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
                     seq.add(new_future)
+
+            if self.output_dir is not None:
+                print("SAVING OUTPUT IN:", self.output_dir)
+                with open(os.path.join(self.output_dir, "sequential"), "w") as out_file:
+                    for output in outputs:
+                        out_file.write(str(output) + "\n\n")
+            print("Finished sequential runs")
 
         elif sampler_interface in [S.BATCH]:
             while completed < self.sampler.total_budget:
@@ -144,7 +159,7 @@ class DaskExecutor(Executor):
                     f"Iteration {iterations}; ",
                     20 * "=",
                 )
-                
+
                 # NOTE: ------ Run Samples and block until completed ------
                 seq = wait(
                     futures
@@ -170,13 +185,13 @@ class DaskExecutor(Executor):
                 train, valid, test, pool = (
                     self.sampler.parser.get_unscaled_train_valid_test_pool_from_self()
                 )
-                
+
                 # rescale data and pool
                 train, valid, test, pool = (
                     self.sampler.parser.scale_train_val_test_pool(
                         train, valid, test, pool
                     )
-                ) 
+                )
 
                 train_data, valid_data = self.sampler.parser.make_train_valid_datasplit(
                     train, valid
@@ -232,5 +247,7 @@ class DaskExecutor(Executor):
                 # NOTE: ------ Prepare next simulator runs ----
                 futures = self.submit_batch_of_params(param_list)
                 iterations += 1
-                self.sampler.dump_iteration_results(self.base_run_dir, iterations, trained_model_state_dict)
+                self.sampler.dump_iteration_results(
+                    self.base_run_dir, iterations, trained_model_state_dict
+                )
             # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
