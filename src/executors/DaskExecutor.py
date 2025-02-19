@@ -94,7 +94,8 @@ class DaskExecutor(Executor):
             self.clients = [self.simulator_client, self.surrogate_client]
         else:
             raise ValueError(
-                "Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers"
+                "Make sure that the config has simulator_args and surrogate_args if using "
+                + "ACTIVE samplers"
             )
 
     def submit_batch_of_params(self, param_list: list[dict]) -> list:
@@ -222,9 +223,13 @@ class DaskExecutor(Executor):
                 print(f"Elapsed train task time: {time.time() - time_starttrain}")
 
                 for metric_name, metric_vals in metrics.items():
-                    # print(f'\n{metric_name}: min: {min(metric_vals)}, max: {max(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
+                    # print(f'\n{metric_name}: min: {min(metric_vals)},
+                    # max: {max(metric_vals)}
+                    # @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
                     print(
-                        f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
+                        f"\n{metric_name}: max: {max(metric_vals)} ",
+                        f"@ epoch {metric_vals.index(max(metric_vals))}, ",
+                        f"min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n",
                     )
 
                 self.sampler.update_metrics(metrics)
@@ -241,4 +246,5 @@ class DaskExecutor(Executor):
                 self.sampler.dump_iteration_results(
                     self.base_run_dir, iterations, trained_model_state_dict
                 )
-            # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
+            # self.sampler.dump_iteration_results(
+            #    base_run_dir=self.base_run_dir, iterations=iterations)

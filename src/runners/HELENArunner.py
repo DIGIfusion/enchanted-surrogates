@@ -425,7 +425,8 @@ class HELENArunner(Runner):
                             finally:
                                 _i += 1
                             print(
-                                f"Exited width scan loop, iterations {_i}, stable found: {_stable_found}, unstable found: {_unstable_found}"
+                                f"EXIT width scan loop, iterations {_i}, ",
+                                f"stable found: {_stable_found}, unstable found: {_unstable_found}",
                             )
 
                             # For a final run, check the midpoint between the two width closest to
@@ -454,7 +455,8 @@ class HELENArunner(Runner):
                                     d_ped_scan = (below[0] + above[0]) * 0.5
                                     print(
                                         (
-                                            f"FINAL SCAN {_i}, d_ped = {d_ped_scan}, dir = {scan_dir},",
+                                            f"FINAL SCAN {_i}, ",
+                                            f"d_ped = {d_ped_scan}, dir = {scan_dir},",
                                             f" minmax_width = {min_width, max_width}",
                                         ),
                                         flush=True,

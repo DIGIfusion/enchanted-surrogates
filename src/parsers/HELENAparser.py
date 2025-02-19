@@ -317,7 +317,8 @@ class HELENAparser(Parser):
         return teped
 
     def get_ip_from_teped(
-            self, d_ped, teped, circumference, neped, tesep=0.1, zimp=4.0, zeff=1.2, z_main_ion=1.0):
+            self, d_ped, teped, circumference, neped, tesep=0.1, zimp=4.0, zeff=1.2,
+            z_main_ion=1.0):
         # Constants
         tiped_multip = 1.0
         tisep_multip = 1.0
@@ -353,31 +354,35 @@ class HELENAparser(Parser):
         # b = 0.7
         aerr = 0.01037015
         berr = 0.02328804
-        # return np.random.normal(loc=a, scale=aerr, size=1) * ip + np.random.normal(loc=b, scale=berr, size=1)
-        return np.random.uniform(a - 10 * aerr, a + 10 * aerr, size=1) * ip + np.random.uniform(b - 10 * berr, b + 10 * berr, size=1)
+
+        return (
+            np.random.uniform(a - 10 * aerr, a + 10 * aerr, size=1) * ip
+            + np.random.uniform(b - 10 * berr, b + 10 * berr, size=1)
+        )
 
     def get_ip_and_btor_from_q95(
-            self, d_ped, teped, circumference, neped, q95, major_R, minor_a, tesep=0.1, zimp=4.0, zeff=1.2, z_main_ion=1.0):
+            self, d_ped, teped, circumference, neped, q95, major_R, minor_a,
+            tesep=0.1, zimp=4.0, zeff=1.2, z_main_ion=1.0):
         # Constants
         tiped_multip = 1.0
         tisep_multip = 1.0
         width_const = 0.076
         beta_exponent = 0.5
-        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion) # 0.95
+        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
 
         ti_contribution = (
             1 + tiped_multip * pedestal_dilution *
             (1 + (1 - tanh_normaliser / tanh_normaliser_ti) * (tisep_multip - 1.0) * tesep))
-        
+
         pped = (teped * ElectronCharge) * (neped * 1e19) * ti_contribution
-        
+
         # Calculate the poloidal beta at the pedestal using the KBM constraint
         betapolped = (d_ped / width_const) ** (1.0 / beta_exponent)
         # Calculate the magnetic field
         # betapol = plasma pressure / magnetic pressure (poloidal)
         #         = plasma pressure / (poloidal magnetic field^2 /(mu0 * 2))
         bp = (pped * 1e3 * (2 * mu0) / betapolped)**(1 / 2)
-        
+
         # Caluclate the current based on the KBM constraint
         ip = bp * circumference / (1e6 * mu0)
         btor = q95 * major_R * bp / minor_a
