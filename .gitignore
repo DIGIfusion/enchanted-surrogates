@@ -8,4 +8,4 @@ tglf_setup.sh
 *.err
 __pycache__/
 .vscode/
-data_store/
+data_store/*

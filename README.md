@@ -29,7 +29,12 @@ Because of this, most variables that a user might wish to change, such as code t
 
 See `configs/tglf_config.yaml` for example configuration file. That which is commented `HPC`, `CODE`, `USER` refers to wether the config parameter is modified based on the HPC system used (e.g., `Mahti`), the simulation used (e.g., `TGLF`) or user, (e.g., specific directories).
 
-After modifying `SLURMrun.bash` to point to a specific configuration file, e.g, `tglf_config.yaml`, run with your slurm or local shell, e.g., `sbatch SLURMrun.bash`. This will dump `*.out` files for each worker specified in the config, while also dumping `run.out` for the nanny.  
+After modifying `SLURMrun.bash` to point to a specific configuration file, e.g, `tglf_config.yaml`, run with your slurm or local shell, e.g., `sbatch SLURMrun.bash`. This will dump `*.out` files for each worker specified in the config, while also dumping `run.out` for the nanny. The `SLURMrun.batch` creates a nanny, thus should be executed on an interactive node, not a compute node. The `run.py` nanny sets up `workers` (or equivilantly `jobs` as per below).
+
+Some extra notes on the config file: 
+
+- `n_jobs` will modify the number of `sbatch` commands sent, each of which is a `worker` (worker resources defined in the config under `worker_args`)
+ 
 
 #### Submodules 
 
@@ -69,3 +74,8 @@ To check the linting locally and get a full overview of all possible issues, run
 
 where the argument is the path to the file you want to check.
 
+## Acknowledgements
+The development of this framework has been support by multiple funding sources:
+- Research Council of Finland project numbers: 355460, 358941.
+- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
+- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
