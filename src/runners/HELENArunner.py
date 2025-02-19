@@ -11,7 +11,8 @@ from runners.MISHKArunner import MISHKArunner
 from parsers import HELENAparser
 import subprocess
 import os
-import shutil
+
+# import shutil
 from dask.distributed import print
 
 
@@ -25,11 +26,33 @@ class HELENArunner(Runner):
     executable_path : str
         the path to the pre-compiled executable HELENA binary
 
+    See other_params.
 
     Methods
     -------
     single_code_run()
         Runs HELENA after copying and writing the input files
+
+    run_helena_with_beta_at1_iteration(run_dir, beta_target)
+        Computes the at1 parameter to achieve the desired normalized beta.
+        (at1 calculations from Europed)
+
+    run_helena_with_beta_iteration(params)
+        Iterates HELENA until the desired normalized beta is reached.
+        More accurate than at1 iteration but requires multiple runs.
+
+    run_mishka_for_ntors(run_dir)
+        Executes MISHKA for a predefined list of NTOR values using the MISHKArunner.
+        Organizes results in a dedicated directory.
+
+    check_stability(growthrates)
+        Evaluates stability based on a list of growth rates.
+        Determines whether at least one exceeds the stability threshold.
+
+    pre_run_check()
+        Ensures all required files exist before executing the simulation.
+        Raises FileNotFoundError if any essential file is missing.
+
 
     """
 
@@ -56,9 +79,15 @@ class HELENArunner(Runner):
                 Flag for either only creating input files or creating the files
                 and running HELENA.
 
-            beta_iteration: bool
+            beta_iteration: int
                 Flag for iterating HELENA to find target beta normalized. Requires that 'beta_N'
                 exists in the sampler parameters.
+                0: No beta iteration
+                1: Iterations using HELENA
+                    beta_iterations_apf:
+                        True: change apf in each iteration
+                        False: change at1 in each iteration
+                2: Calculate at1 (from Europed)
 
             beta_tolerance: float
                 (Only relevant when beta_iteration is True.)
@@ -67,6 +96,17 @@ class HELENArunner(Runner):
             max_beta_iterations: float
                 (Only relevant when beta_iteration is True.)
                 The maximum number of beta iterations.
+
+            pedestal_width_scan: bool
+                Run HELENA a number of times for different pedestal widths.
+
+            pedestal_width_sampling_method: int
+                0: Evenly spaced samples between min and max
+                1: Random (uniform) samples between min and max
+                2: Find stability boundary by increasing/decreasing the pedestal min/max
+                   width for each sample iteration depending on the stability of the previous
+                   step, like a randomized binary search.
+                   Mishka needs to be run.
 
             input_parameter_type: int
                 0: EPED/MTANH profiles using direct helena input ADE, BDE, etc.
@@ -93,7 +133,7 @@ class HELENArunner(Runner):
             else other_params["only_generate_files"]
         )
         self.beta_iteration = (
-            False
+            0
             if "beta_iteration" not in other_params
             else other_params["beta_iteration"]
         )
@@ -117,7 +157,6 @@ class HELENArunner(Runner):
             if "pedestal_width_scan" not in other_params
             else other_params["pedestal_width_scan"]
         )
-
         self.pedestal_width_scan_params = (
             {
                 "min_width": 0.02,
@@ -126,6 +165,11 @@ class HELENArunner(Runner):
             }
             if "pedestal_width_scan_params" not in other_params
             else other_params["pedestal_width_scan_params"]
+        )
+        self.pedestal_width_sampling_method = (
+            1
+            if "pedestal_width_sampling_method" not in other_params
+            else other_params["pedestal_width_sampling_method"]
         )
 
         self.run_mishka = False
@@ -177,7 +221,7 @@ class HELENArunner(Runner):
             bool: True if the simulation is successful, False otherwise.
 
         """
-        print(f"single_code_run: {run_dir}", flush=True)
+        print(f"{'='*100}\nsingle_code_run: {run_dir}", flush=True)
         if self.input_parameter_type == 0:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 1:
@@ -186,8 +230,8 @@ class HELENArunner(Runner):
             self.parser.write_input_file_scaling(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 3:
             self.parser.write_input_file_europed2(params, run_dir, self.namelist_path)
-        elif self.input_parameter_type == 4:
-            self.parser.write_input_file_noKBM(params, run_dir, self.namelist_path)
+        elif self.input_parameter_type == 6:
+            pass
         else:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
 
@@ -196,17 +240,11 @@ class HELENArunner(Runner):
             return True
 
         # Check input parameters
-        if self.beta_iteration:
+        if self.beta_iteration > 0:
             if "beta_N" not in params:
                 print(
                     "The parameter configuration does not include 'beta_N'.",
                     "This it needed for beta iteration. EXITING.",
-                )
-                return False
-            if "apf" in params:
-                print(
-                    "The core ion pressure parameter APF should not be ",
-                    "part of the input parameters during beta iteration. EXITING",
                 )
                 return False
 
@@ -215,16 +253,21 @@ class HELENArunner(Runner):
 
         # Single equilibrium run
         if not self.pedestal_width_scan:
-            if self.beta_iteration:
+            if self.beta_iteration == 1:
                 self.run_helena_with_beta_iteration(params)
+            elif self.beta_iteration == 2:
+                beta_target = params["beta_N"]
+                self.run_helena_with_beta_at1_iteration(
+                    run_dir=run_dir, beta_target=beta_target
+                )
             else:
                 subprocess.call([self.executable_path])
 
-            # process output
+            # Process output
             run_successful = self.parser.write_summary(run_dir, params)
             self.parser.clean_output_files(run_dir)
 
-            # run MISHKA
+            # Run MISHKA
             if run_successful:
                 if self.run_mishka:
                     self.run_mishka_for_ntors(run_dir)
@@ -233,98 +276,220 @@ class HELENArunner(Runner):
                 print("HELENA run not success. MISHKA is not being run.")
 
         # Run for multiple pedestal widths
-        else:
-            sampling_method = 1
-
-            if self.input_parameter_type == 3:
+        if self.pedestal_width_scan:
+            print("Starting pedestal width scan...", flush=True)
+            if self.input_parameter_type in [3, 5, 6]:
                 beta_target = params["beta_N"]
-                if sampling_method == 0:
-                    # Evenly spaced sample points
-                    d_ped_scans = np.linspace(
-                        self.pedestal_width_scan_params["min_width"],
-                        self.pedestal_width_scan_params["max_width"],
-                        self.pedestal_width_scan_params["max_iterations"],
-                    )
+                print(f"target beta_N = {beta_target}", flush=True)
+                if self.pedestal_width_sampling_method in [0, 1]:
+                    # Run for a fixed number of pedestal width scans
 
-                elif sampling_method == 1:
-                    # Uniform random sampling
-                    d_ped_scans = np.random.uniform(
-                        self.pedestal_width_scan_params["min_width"],
-                        self.pedestal_width_scan_params["max_width"],
-                        self.pedestal_width_scan_params["max_iterations"],
-                    )
-
+                    if self.pedestal_width_sampling_method == 0:
+                        # Evenly spaced sample points
+                        d_ped_scans = np.linspace(
+                            self.pedestal_width_scan_params["min_width"],
+                            self.pedestal_width_scan_params["max_width"],
+                            self.pedestal_width_scan_params["max_iterations"],
+                        )
+                    elif self.pedestal_width_sampling_method == 1:
+                        # Uniform random sampling
+                        d_ped_scans = np.random.uniform(
+                            self.pedestal_width_scan_params["min_width"],
+                            self.pedestal_width_scan_params["max_width"],
+                            self.pedestal_width_scan_params["max_iterations"],
+                        )
+                    print(f"Pedestal widths to iterate: {d_ped_scans}", flush=True)
                     for _i, d_ped_scan in enumerate(d_ped_scans):
                         try:
-                            # scan_dir = os.path.join(run_dir, f"scan_{_i}")
                             scan_dir = f"{run_dir}_scan_{_i}"
                             os.mkdir(scan_dir)
                             os.chdir(scan_dir)
                             self.parser.update_pedestal_delta(
                                 d_ped_scan, beta_target, run_dir, scan_dir
                             )
-                            subprocess.call([self.executable_path])
-
-                            at1 = self.parser.find_new_at1(
-                                output_dir=scan_dir, beta_target=beta_target, h=0.01
+                            self.run_helena_with_beta_at1_iteration(
+                                run_dir=scan_dir, beta_target=beta_target
                             )
-                            self.parser.update_at1(
-                                namelist_path=os.path.join(scan_dir, "fort.10"), at1=at1
-                            )
-
-                            subprocess.call([self.executable_path])
                             run_successful = self.parser.write_summary(scan_dir, params)
                             self.parser.clean_output_files(scan_dir)
                             if run_successful:
                                 if self.run_mishka:
                                     self.run_mishka_for_ntors(scan_dir)
-                                    self.parser.collect_growthrates_from_mishka(
-                                        scan_dir, save=True
+                                    growthrates = (
+                                        self.parser.collect_growthrates_from_mishka(
+                                            scan_dir, save=True
+                                        )
                                     )
                         except Exception as exc:
                             print(exc)
-                elif sampling_method == 2:
-                    # Binary search for stability boundary
-                    # self.pedestal_width_scan_params["max_iterations"]
+
+                elif self.pedestal_width_sampling_method == 2:
+                    # Randomized binary search for stability boundary
+                    max_iterations = self.pedestal_width_scan_params["max_iterations"]
                     min_width = self.pedestal_width_scan_params["min_width"]
                     max_width = self.pedestal_width_scan_params["max_width"]
-                    d_ped_initial_scan = np.random.uniform(
-                        min_width,
-                        max_width,
-                        1,
+                    _stable_found = False
+                    _unstable_found = False
+
+                    # Initial run
+                    d_ped_max_gr = []
+                    d_ped_scan = params["pedestal_delta"]
+
+                    print(
+                        (
+                            f"INITIAL RUN, d_ped = {d_ped_scan}, dir = {run_dir}, ",
+                            f"minmax_width = {min_width, max_width}",
+                        ),
+                        flush=True,
                     )
-                    # TODO: implement stability search
-                    # d_ped_scans = np.linspace(0.025, 0.045, 3)
-                    # for _i, d_ped_scan in enumerate(d_ped_scans):
-                    #     try:
-                    #         # scan_dir = os.path.join(run_dir, f"scan_{_i}")
-                    #         scan_dir = f"{run_dir}_scan_{_i}"
-                    #         os.mkdir(scan_dir)
-                    #         os.chdir(scan_dir)
-                    #         self.parser.update_pedestal_delta(
-                    #             d_ped_scan, beta_target, run_dir, scan_dir
-                    #         )
-                    #         subprocess.call([self.executable_path])
+                    self.run_helena_with_beta_at1_iteration(
+                        run_dir=run_dir, beta_target=beta_target
+                    )
+                    run_successful = self.parser.write_summary(run_dir, params)
+                    self.parser.clean_output_files(run_dir)
+                    if run_successful:
+                        self.run_mishka_for_ntors(run_dir)
+                        growthrates = self.parser.collect_growthrates_from_mishka(
+                            run_dir, save=True
+                        )
+                        is_stable, max_gr = self.check_stability(growthrates)
+                        d_ped_max_gr.append((d_ped_scan, max_gr))
+                        # If equilibrium is unstable, decrease the max width of the
+                        # pedestal sampler to only include smaller widths
+                        if is_stable:
+                            _stable_found = True
+                            min_width = d_ped_scan
+                        else:
+                            _unstable_found = True
+                            max_width = d_ped_scan
 
-                    #         at1 = self.parser.find_new_at1(
-                    #             output_dir=scan_dir, beta_target=beta_target, h=0.01
-                    #         )
-                    #         self.parser.update_at1(
-                    #             namelist_path=os.path.join(scan_dir, "fort.10"), at1=at1
-                    #         )
+                        # Iterate until both a stable and unstable equilibria are found
+                        # or we reach the max number of iterations
+                        d_ped_scan = (min_width + max_width) / 2.0
+                        _i = 0
+                        while _i < max_iterations and not (
+                            _stable_found and _unstable_found
+                        ):
+                            try:
+                                scan_dir = f"{run_dir}_scan_{_i}"
+                                os.mkdir(scan_dir)
+                                os.chdir(scan_dir)
 
-                    #         subprocess.call([self.executable_path])
-                    #         run_successful = self.parser.write_summary(scan_dir, params)
-                    #         self.parser.clean_output_files(scan_dir)
-                    #         if run_successful:
-                    #             if self.run_mishka:
-                    #                 self.run_mishka_for_ntors(scan_dir)
-                    #                 self.parser.collect_growthrates_from_mishka(
-                    #                     scan_dir, save=True
-                    #                 )
-                    #     except Exception as exc:
-                    #         print(exc)
+                                print(
+                                    (
+                                        f"SCAN {_i}, d_ped = {d_ped_scan}, dir = {scan_dir}, ",
+                                        f"minmax_width = {min_width, max_width}",
+                                    ),
+                                    flush=True,
+                                )
+                                self.parser.update_pedestal_delta(
+                                    d_ped_scan, beta_target, run_dir, scan_dir
+                                )
+                                self.run_helena_with_beta_at1_iteration(
+                                    run_dir=scan_dir, beta_target=beta_target
+                                )
+                                run_successful = self.parser.write_summary(
+                                    scan_dir, params
+                                )
+                                self.parser.clean_output_files(scan_dir)
+                                if run_successful:
+                                    self.run_mishka_for_ntors(scan_dir)
+                                    growthrates = (
+                                        self.parser.collect_growthrates_from_mishka(
+                                            scan_dir, save=True
+                                        )
+                                    )
+                                    is_stable, max_gr = self.check_stability(
+                                        growthrates
+                                    )
+                                    d_ped_max_gr.append((d_ped_scan, max_gr))
+                                    # If equilibrium is unstable, decrease the max width of the
+                                    # pedestal sampler to only include smaller widths
+                                    if is_stable:
+                                        _stable_found = True
+                                        min_width = d_ped_scan
+                                    else:
+                                        _unstable_found = True
+                                        max_width = d_ped_scan
 
+                                    d_ped_scan = (min_width + max_width) / 2.0
+                                else:
+                                    d_ped_scan = np.random.uniform(
+                                        min_width,
+                                        max_width,
+                                        1,
+                                    )[0]
+
+                            except Exception as exc:
+                                print(exc)
+                            finally:
+                                _i += 1
+                            print(
+                                f"Exited width scan loop, iterations {_i}, stable found: {_stable_found}, unstable found: {_unstable_found}"
+                            )
+
+                            # For a final run, check the midpoint between the two width closest to
+                            # the stability boundary
+                            if _stable_found and _unstable_found:
+                                # Store (width, growth rate) in a list and sort by growth rate
+                                data = sorted(d_ped_max_gr, key=lambda x: x[1])
+                                print(f"d_ped, gr: {data}")
+                                gr_target = 0.03
+                                below = None
+                                above = None
+
+                                # Find the closest values
+                                for width, rate in data:
+                                    if rate < gr_target:
+                                        below = (width, rate)
+                                    elif rate > gr_target and above is None:
+                                        above = (width, rate)
+                                        break  # We found the first one above, no need to continue
+
+                                if below is not None and above is not None:
+                                    _i += 1
+                                    scan_dir = f"{run_dir}_scan_{_i}"
+                                    os.mkdir(scan_dir)
+                                    os.chdir(scan_dir)
+                                    d_ped_scan = (below[0] + above[0]) * 0.5
+                                    print(
+                                        (
+                                            f"FINAL SCAN {_i}, d_ped = {d_ped_scan}, dir = {scan_dir},",
+                                            f" minmax_width = {min_width, max_width}",
+                                        ),
+                                        flush=True,
+                                    )
+                                    self.parser.update_pedestal_delta(
+                                        d_ped_scan, beta_target, run_dir, scan_dir
+                                    )
+                                    subprocess.call([self.executable_path])
+
+                                    at1 = self.parser.find_new_at1(
+                                        output_dir=scan_dir,
+                                        beta_target=beta_target,
+                                        h=0.01,
+                                    )
+                                    self.parser.update_at1(
+                                        namelist_path=os.path.join(scan_dir, "fort.10"),
+                                        at1=at1,
+                                    )
+
+                                    subprocess.call([self.executable_path])
+                                    run_successful = self.parser.write_summary(
+                                        scan_dir, params
+                                    )
+                                    self.parser.clean_output_files(scan_dir)
+                                    if run_successful:
+                                        self.run_mishka_for_ntors(scan_dir)
+                                        growthrates = (
+                                            self.parser.collect_growthrates_from_mishka(
+                                                scan_dir, save=True
+                                            )
+                                        )
+                                        is_stable = self.check_stability(growthrates)
+                                        d_ped_max_gr.append((d_ped_scan, max_gr))
+
+                            print(f"Final d_ped vs growth rate: {d_ped_max_gr}")
                 else:
                     print("ERROR: Sampling method not implemented.")
             else:
@@ -332,10 +497,29 @@ class HELENArunner(Runner):
                     "ERROR: Pedestal width scan is only implemented for input_parameter_type = 3."
                 )
             print("HELENArunner finished.")
-
         return True
 
+    def run_helena_with_beta_at1_iteration(self, run_dir, beta_target):
+        """
+        Calculate the at1 parameter for the temperature profile in
+        order to get the correct normalized beta.
+        Only needs to run HELENA twice.
+        """
+        subprocess.call([self.executable_path])
+        at1 = self.parser.find_new_at1(
+            output_dir=run_dir, beta_target=beta_target, h=0.01
+        )
+        self.parser.update_at1(namelist_path=os.path.join(run_dir, "fort.10"), at1=at1)
+        subprocess.call([self.executable_path])
+        return
+
     def run_helena_with_beta_iteration(self, params):
+        """
+        Iterate HELENA until the chosen normalized beta is found.
+        Define the beta_tolerance and max_beta_iterations in the config file.
+        Slower then at1 iteration since it needs to run HELENA more times,
+        but can reach a more accurate betaN.
+        """
         beta_target = params["beta_N"]
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
         if self.beta_iterations_afp:
@@ -393,6 +577,9 @@ class HELENArunner(Runner):
         )
 
     def run_mishka_for_ntors(self, run_dir):
+        """
+        Run MISHKA using the MISHKArunner for the list of NTORs defined in the config
+        """
         mishka_dir = os.path.join(run_dir, "mishka")
         os.mkdir(mishka_dir)
         for ntor_sample in self.mishka_ntor_samples:
@@ -402,6 +589,27 @@ class HELENArunner(Runner):
                 params={"ntor": ntor_sample, "helena_dir": run_dir},
                 run_dir=mishka_run_dir,
             )
+
+    def check_stability(self, growthrates: list):
+        """
+        Given a list of growthrates, check if at least one exceeds the stability threshold.
+        """
+        print(f"Growth rates:\n{growthrates}")
+        is_stable = False
+        if growthrates.shape[0] > 0:
+            max_gr = np.max(np.array(growthrates)[:, 1])
+            if max_gr > 0.03:
+                print(
+                    f"UNSTABLE EQUILIBRIUM FOUND (gamma_max = {max_gr})",
+                    flush=True,
+                )
+            else:
+                is_stable = True
+                print(
+                    f"STABLE EQUILIBRIUM FOUND (gamma_max = {max_gr})",
+                    flush=True,
+                )
+        return is_stable, max_gr
 
     def pre_run_check(self):
         """
