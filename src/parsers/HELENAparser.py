@@ -4,13 +4,21 @@ import f90nml
 import numpy as np
 import json
 from .base import Parser
+import shutil
+try:
+    from dask.distributed import print
+except Exception:
+    pass
 import fortranformat as ff
 import scipy
+from datetime import datetime
 
 # import subprocess
 
-mu_0 = 4e-7 * np.pi
 ElectronCharge = 1.6022e-19
+mu0 = 4e-7 * np.pi
+tanh_normaliser = np.tanh(1) - np.tanh(-1)
+tanh_normaliser_ti = np.tanh(1) - np.tanh(-100)
 
 
 class HELENAparser(Parser):
@@ -53,9 +61,59 @@ class HELENAparser(Parser):
     """
 
     def __init__(self):
+        print("HELENAparser initializing...")
         self.default_namelist = ""
 
     def write_input_file(self, params: dict, run_dir: str, namelist_path: str):
+        """
+        Writes input file fort.10.
+        The sample parameters should be directly from the HELENA fort.10 file.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing input parameters.
+        run_dir : str
+            Path to the run directory.
+        namelist_path : str
+            Path to the namelist file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        print(f"Writing to {run_dir}. \nParams: {params}")
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, "fort.10")
+        else:
+            raise FileNotFoundError(f"Couldnt find {run_dir}")
+
+        namelist = f90nml.read(namelist_path)
+
+        # Update namelist with input parameters
+        helena_shape_params = ["tria", "ellip", "quad"]
+        for p in helena_shape_params:
+            if p in params:
+                namelist["shape"][p] = params[p]
+
+        helena_phys_params = [
+            "eps", "b", "betap", "alfa", "xiab", "q95", "rvac", "bvac", "zn0", "zeff",  # fmt: skip
+            "idete", "iscalejz", "neosig", "xiab", "scalemix", "zjzsmooth",     # fmt: skip
+            "bsmultip", "zimp", "corep", "bkeep", "bsmodel", "efitsig",         # fmt: skip
+            "ifastsca", "safemode", "coreneo", "amain", "zmain", "idete",       # fmt: skip
+            "ade", "bde", "cde", "dde", "ede", "fde", "gde", "hde", "ide",      # fmt: skip
+            "ate", "bte", "cte", "ddte", "ete", "fte", "gte", "hte", "ite",     # fmt: skip
+            "ati", "bti", "cti", "ddti", "eti", "fti", "gti", "hti", "iti"]     # fmt: skip
+        for p in helena_phys_params:
+            if p in params:
+                namelist["phys"][p] = params[p]
+
+        f90nml.write(namelist, input_fpath)
+        print(f"fort.10 written to: {input_fpath}")
+        return
+
+    def write_input_file_europed(self, params: dict, run_dir: str, namelist_path: str):
         """
         Writes input file fort.10.
 
@@ -73,34 +131,39 @@ class HELENAparser(Parser):
         FileNotFoundError
             If the specified run directory is not found.
         """
-        print(run_dir, params)
-        print("Writing to", run_dir)
+        print(f"Writing to {run_dir}. Params (europed): {params}")
         if os.path.exists(run_dir):
             input_fpath = os.path.join(run_dir, "fort.10")
         else:
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
         namelist = f90nml.read(namelist_path)
+        namelist["phys"]["idete"] = 7
 
         # Update namelist with input parameters
-        helena_shape_params = ["tria", "ellip", "quad"]
-        for p in helena_shape_params:
-            if p in params:
-                namelist["shape"][p] = params[p]
-
         if "bvac" in params:
             namelist["phys"]["bvac"] = params["bvac"]
-            if "ip" in params:
-                namelist["phys"]["xiab"] = (
-                    params["ip"]
-                    * 1e6
-                    * mu_0
-                    / (
-                        params["bvac"]
-                        * namelist["phys"]["eps"]
-                        * namelist["phys"]["rvac"]
-                    )
+        if "ip" in params and "bvac" in params:
+            namelist["phys"]["xiab"] = (
+                params["ip"]
+                * 1e6
+                * mu0
+                / (
+                    params["bvac"]
+                    * namelist["phys"]["eps"]
+                    * namelist["phys"]["rvac"]
                 )
+            )
+        if "tria" in params:
+            namelist["shape"]["tria"] = params["tria"]
+        if "ellip" in params:
+            namelist["shape"]["ellip"] = params["ellip"]
+        if "apf" in params:
+            namelist["profile"]["apf"] = params["apf"]
+            namelist["profile"]["cpf"] = 3.0
+        if 'bpf' in params:
+            namelist["profile"]["bpf"] = params['bpf']
+
         # Europed profiles
         if "pedestal_delta" in params:
             d_ped = params["pedestal_delta"]
@@ -116,7 +179,8 @@ class HELENAparser(Parser):
 
             nesep = 0.725 if "n_esep" not in params else params["n_esep"]
             neped = 3.0 if "n_eped" not in params else params["n_eped"]
-            an0 = (neped - nesep) / (np.tanh(1) * 2)
+            an0 = (neped - nesep) / tanh_normaliser
+
             an1 = 0.1 if "an1" not in params else params["an1"]
 
             namelist["phys"]["ade"] = an0
@@ -138,7 +202,7 @@ class HELENAparser(Parser):
                 teped = params["teped_multip"] * params["ip"] ** 2 / neped
             else:
                 teped = 1.0 if "T_eped" not in params else params["T_eped"]
-            at0 = (teped - tesep) / (np.tanh(1) * 2)
+            at0 = (teped - tesep) / tanh_normaliser
             if "core_to_ped_te" in params:
                 at1 = params["core_to_ped_te"] * teped
             else:
@@ -156,16 +220,15 @@ class HELENAparser(Parser):
             namelist["phys"]["hte"] = (
                 1.4 if "alpha_T2" not in params else params["alpha_T2"]
             )
-
-            # Update ion temperature profile = electron temperature profile
-            namelist["phys"]["ati"] = namelist["phys"]["ate"]
-            namelist["phys"]["bti"] = namelist["phys"]["bte"]
-            namelist["phys"]["cti"] = namelist["phys"]["cte"]
-            namelist["phys"]["ddti"] = namelist["phys"]["ddte"]
-            namelist["phys"]["eti"] = namelist["phys"]["ete"]
-            namelist["phys"]["fti"] = namelist["phys"]["fte"]
-            namelist["phys"]["gti"] = namelist["phys"]["gte"]
-            namelist["phys"]["hti"] = namelist["phys"]["hte"]
+            # ION TEMPERATURE PROFILE EQUAL TO TE
+            namelist["phys"]["ati"] = 0.0
+            namelist["phys"]["bti"] = 0.0
+            namelist["phys"]["cti"] = 0.0
+            namelist["phys"]["ddti"] = 0.0
+            namelist["phys"]["eti"] = 0.0
+            namelist["phys"]["fti"] = 0.0
+            namelist["phys"]["gti"] = 0.0
+            namelist["phys"]["hti"] = 0.0
 
             if namelist["profile"]["ipai"] != 18:
                 coret = (teped * 2 + at1 + tesep) * 1000
@@ -197,6 +260,360 @@ class HELENAparser(Parser):
 
         f90nml.write(namelist, input_fpath)
         print(f"fort.10 written to: {input_fpath}")
+        return
+
+    def shape_function(self, theta, ellip, tria, quad):
+        """
+        EUROPED
+        returns the R and Z values given the boundary parameters (HELENA equation 11)
+        ellip = ellipticity (input)
+        tria = triangularity (input)
+        quad = squareness (input)
+        theta = the poloidal angle, can be a vector or a scalar (input)
+        """
+        rvac = 2.94
+        a = 0.88
+        sint = np.sin(theta)
+        r = rvac + a * np.cos(theta + tria * sint + quad * np.sin(theta * 2.0))
+        z = ellip * a * sint
+        return (r, z)
+
+    def get_circumference(self, theta, ellip, tria, quad=0.0):
+        """ Calculate the circumfence of the parametrised shape"""
+        (r, z) = self.shape_function(theta, ellip=ellip, tria=tria, quad=quad)
+        dr = r[0:-1] - r[1:]
+        dz = z[0:-1] - z[1:]
+        ds = np.power(np.real(np.power(dr, 2)) + np.real(np.power(dz, 2)), .5)
+        circumference = np.sum(ds)
+        # print(f"circumference = {circumference}")
+        return circumference
+
+    def get_teped(
+            self, d_ped, ip, circumference, neped, tesep=0.1, zimp=4.0, zeff=1.2, z_main_ion=1.0):
+        """Calculate teped according to the KBM constraint"""
+        # Constants
+        tiped_multip = 1.0
+        tisep_multip = 1.0
+        width_const = 0.076
+        beta_exponent = 0.5
+
+        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
+        bp2 = (ip * 1e6 * mu0 / circumference) ** 2
+        betapolped = (d_ped / width_const) ** (1.0 / beta_exponent)
+        pped = betapolped / (2 * mu0) * bp2 / 1e3
+
+        # Caluclate the pedestal temperature based on the KBM constraint
+        ti_contribution = (
+            1 + tiped_multip * pedestal_dilution *
+            (1 + (1 - tanh_normaliser / tanh_normaliser_ti) * (tisep_multip - 1.0) * tesep))
+        teped = pped / neped / ti_contribution / ElectronCharge / 1e19
+
+        print(f"ip: {ip}")
+        print(f"betapolped: {betapolped}")
+        print(f"pped: {pped}")
+        print(f"bp2: {bp2}")
+        print(f"pedestal_dilution: {pedestal_dilution}")
+        print(f"teped: {teped}")
+        return teped
+
+    def get_ip_from_teped(
+            self, d_ped, teped, circumference, neped, tesep=0.1, zimp=4.0, zeff=1.2,
+            z_main_ion=1.0):
+        # Constants
+        tiped_multip = 1.0
+        tisep_multip = 1.0
+        width_const = 0.076
+        beta_exponent = 0.5
+
+        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
+        betapolped = (d_ped / width_const) ** (1.0 / beta_exponent)
+        ti_contribution = (
+            1 + tiped_multip * pedestal_dilution *
+            (1 + (1 - tanh_normaliser / tanh_normaliser_ti) * (tisep_multip - 1.0) * tesep))
+        pped = (teped * ElectronCharge) * (neped * 1e19) * ti_contribution
+        bp2 = pped * 1e3 * (2 * mu0) / betapolped
+
+        # Caluclate the current based on the KBM constraint
+        ip = bp2**(1 / 2) * circumference / (1e6 * mu0)
+
+        print(f"ip: {ip}")
+        print(f"betapolped: {betapolped}")
+        print(f"pped: {pped}")
+        print(f"bp2: {bp2}")
+        print(f"pedestal_dilution: {pedestal_dilution}")
+        print(f"teped: {teped}")
+        return ip
+
+    def get_bt_from_ip(self, ip):
+        """
+        y = a*x + b
+        where a and b are fit to the JET pedestal database.
+        """
+        a = 0.72396612
+        b = 0.87679142
+        # b = 0.7
+        aerr = 0.01037015
+        berr = 0.02328804
+
+        return (
+            np.random.uniform(a - 10 * aerr, a + 10 * aerr, size=1) * ip
+            + np.random.uniform(b - 10 * berr, b + 10 * berr, size=1)
+        )
+
+    def get_ip_and_btor_from_q95(
+            self, d_ped, teped, circumference, neped, q95, major_R, minor_a,
+            tesep=0.1, zimp=4.0, zeff=1.2, z_main_ion=1.0):
+        # Constants
+        tiped_multip = 1.0
+        tisep_multip = 1.0
+        width_const = 0.076
+        beta_exponent = 0.5
+        pedestal_dilution = ((zimp + z_main_ion - zeff) / zimp / z_main_ion)
+
+        ti_contribution = (
+            1 + tiped_multip * pedestal_dilution *
+            (1 + (1 - tanh_normaliser / tanh_normaliser_ti) * (tisep_multip - 1.0) * tesep))
+
+        pped = (teped * ElectronCharge) * (neped * 1e19) * ti_contribution
+
+        # Calculate the poloidal beta at the pedestal using the KBM constraint
+        betapolped = (d_ped / width_const) ** (1.0 / beta_exponent)
+        # Calculate the magnetic field
+        # betapol = plasma pressure / magnetic pressure (poloidal)
+        #         = plasma pressure / (poloidal magnetic field^2 /(mu0 * 2))
+        bp = (pped * 1e3 * (2 * mu0) / betapolped)**(1 / 2)
+
+        # Caluclate the current based on the KBM constraint
+        ip = bp * circumference / (1e6 * mu0)
+        btor = q95 * major_R * bp / minor_a
+        print(f"ip: {ip}")
+        print(f"btor: {btor}")
+        print(f"betapolped: {betapolped}")
+        print(f"pped: {pped}")
+        print(f"bp: {bp}")
+        # print(f"pedestal_dilution: {pedestal_dilution}")
+        print(f"teped: {teped}")
+        return ip, btor
+
+    def get_xiab_from_ip(self, ip, bvac, eps, rvac):
+        return (ip * 1e6 * mu0 / (bvac * eps * rvac))
+
+    def get_ip_from_xiab(self, xiab, bvac, eps, rvac):
+        return xiab * (bvac * eps * rvac) / (1e6 * mu0)
+
+    def get_ip_from_namelist(self, namelist):
+        return self.get_ip_from_xiab(
+            namelist["phys"]["xiab"],
+            namelist["phys"]["bvac"],
+            namelist["phys"]["eps"],
+            namelist["phys"]["rvac"])
+
+    def get_betapolped(self, pedestal_delta: float):
+        """
+        Poloidal beta at the pedestal depends in the pedestal width according to the KBM constraint
+        """
+        width_const = 0.076
+        beta_exponent = 0.5
+        return (pedestal_delta / width_const) ** (1.0 / beta_exponent)
+
+    def write_input_file_europed2(self, params: dict, run_dir: str, namelist_path: str):
+        """
+        Writes input file fort.10.
+        In config:
+            "input_parameter_type": 3
+
+        Parameters needed:
+            - pedestal_delta
+            - ip
+            - bvac
+        Optional
+            - n_eped
+            - n_esep
+            - T_esep = 0.1
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing input parameters.
+        run_dir : str
+            Path to the run directory.
+        namelist_path : str
+            Path to the namelist file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        print(f"Writing to {run_dir}. Params (europed): {params}")
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, "fort.10")
+        else:
+            raise FileNotFoundError(f"Could not find {run_dir}")
+
+        namelist = f90nml.read(namelist_path)
+        ellip = namelist["shape"]["ellip"] if 'ellip' not in params else params["ellip"]
+        tria = namelist["shape"]["tria"] if 'tria' not in params else params["tria"]
+        quad = namelist["shape"]["quad"]
+        theta = np.linspace(0, 2 * np.pi, 1000)
+        circumference = self.get_circumference(theta, ellip, tria)
+        zimp = 4.0
+        zeff = 1.2
+        z_main_ion = 1.0
+
+        d_ped = (
+            namelist["phys"]["ete"] if "pedestal_delta" not in params
+            else params["pedestal_delta"])
+        density_shift = 0.0
+        psi_mid = 1.0 - 0.5 * d_ped + density_shift
+        neped = 3.0 if "n_eped" not in params else params["n_eped"]
+        if "n_eped" not in params:
+            nesep = 0.725 if "n_esep" not in params else params["n_esep"]
+        else:
+            nesep = params["n_eped"] / 4.0 if "n_esep" not in params else params["n_esep"]
+
+        an0 = (neped - nesep) / tanh_normaliser
+        an1 = 0.1 if "an1" not in params else params["an1"]
+        tesep = 0.1 if "T_esep" not in params else params["T_esep"]
+
+        # FROM EUROPED
+        # Caluclate the pedestal temperature based on the KBM constraint
+        if "ip" in params:
+            ip = self.get_ip_from_namelist(namelist) if "ip" not in params else params["ip"]
+            teped = self.get_teped(d_ped, ip, circumference, neped, tesep, zimp, zeff, z_main_ion)
+        else:
+            teped = params["T_eped"]
+            ip = self.get_ip_from_teped(
+                d_ped, teped, circumference, neped, tesep, zimp, zeff, z_main_ion)
+
+        if "bvac" in params:
+            bvac = params["bvac"]
+        else:
+            bvac = self.get_bt_from_ip(ip)
+
+        print(f"neped={neped}, nesep={nesep}, teped={teped}, tesep={tesep}, ip={ip}")
+
+        at0 = (teped - tesep) / tanh_normaliser
+        if "core_to_ped_te" in params:
+            at1 = params["core_to_ped_te"] * teped
+        else:
+            at1 = 0.1 if "aT1" not in params else params["aT1"]
+
+        # Update namelist with input parameters
+        namelist["phys"]["bvac"] = bvac
+        namelist["phys"]["xiab"] = self.get_xiab_from_ip(
+            ip=ip,
+            bvac=bvac,
+            eps=namelist["phys"]["eps"],
+            rvac=namelist["phys"]["rvac"])
+
+        # FAST ION PRESSURE
+        if "apf" in params:
+            namelist["profile"]["apf"] = params["apf"]
+            namelist["profile"]["bpf"] = 0.6
+            namelist["profile"]["cpf"] = 3.0
+
+        # SHAPE
+        namelist["shape"]["xr2"] = 1 - d_ped / 2.0
+        namelist["shape"]["sig2"] = d_ped
+        namelist["shape"]["tria"] = tria
+        namelist["shape"]["ellip"] = ellip
+        namelist["shape"]["quad"] = quad
+
+        # PHYS
+        namelist["phys"]["zeff"] = zeff
+        namelist["phys"]["zmain"] = z_main_ion
+        namelist["phys"]["zimp"] = zimp
+
+        # DENSITY PROFILE
+        namelist["phys"]["ade"] = an0
+        namelist["phys"]["bde"] = nesep
+        namelist["phys"]["cde"] = an1
+        namelist["phys"]["dde"] = psi_mid
+        namelist["phys"]["ede"] = d_ped
+        namelist["phys"]["fde"] = 1 - d_ped
+        namelist["phys"]["gde"] = (
+            1.1 if "alpha_n1" not in params else params["alpha_n1"]
+        )
+        namelist["phys"]["hde"] = (
+            1.1 if "alpha_n2" not in params else params["alpha_n2"]
+        )
+
+        # TEMPERTURE PROFILE
+        namelist["phys"]["ate"] = at0
+        namelist["phys"]["bte"] = tesep
+        namelist["phys"]["cte"] = at1
+        namelist["phys"]["ddte"] = psi_mid
+        namelist["phys"]["ete"] = d_ped
+        namelist["phys"]["fte"] = 1 - d_ped
+        namelist["phys"]["gte"] = (
+            1.2 if "alpha_T1" not in params else params["alpha_T1"]
+        )
+        namelist["phys"]["hte"] = (
+            1.4 if "alpha_T2" not in params else params["alpha_T2"]
+        )
+
+        if namelist["profile"]["ipai"] != 18:
+            coret = (teped * 2 + at1 + tesep) * 1000
+            coren = an0 * 2 + nesep + an1
+            corep = (
+                coret * (1 + (zimp + 1 - zeff) / zimp) * coren * ElectronCharge * 1e19
+            )
+            namelist["phys"]["corep"] = corep
+
+        # Update current profile guess
+        namelist["profile"]["zjz"] = self.make_init_zjz_profile(
+            pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
+        )
+
+        # ION TEMPERATURE PROFILE EQUAL TO TE
+        namelist["phys"]["ati"] = 0.0
+        namelist["phys"]["bti"] = 0.0
+        namelist["phys"]["cti"] = 0.0
+        namelist["phys"]["ddti"] = 0.0
+        namelist["phys"]["eti"] = 0.0
+        namelist["phys"]["fti"] = 0.0
+        namelist["phys"]["gti"] = 0.0
+        namelist["phys"]["hti"] = 0.0
+
+        f90nml.write(namelist, input_fpath)
+        print(f"fort.10 written to: {input_fpath}")
+        return
+
+    def write_input_file_scaling(self, params: dict, run_dir: str, namelist_path: str):
+        """
+        Writes input file fort.10.
+        2: using a scaling law for changing ATE and CTE, requires input parameter "scaling_factor"
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing input parameters.
+        run_dir : str
+            Path to the run directory.
+        namelist_path : str
+            Path to the namelist file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        print(f"Writing to {run_dir}. Params (scaling): {params}")
+        if os.path.exists(run_dir):
+            input_fpath = os.path.join(run_dir, "fort.10")
+        else:
+            raise FileNotFoundError(f"Couldnt find {run_dir}")
+
+        namelist = f90nml.read(namelist_path)
+
+        # Update namelist with input parameters
+        sf = params["scaling_factor"]
+        namelist["phys"]["ate"] = namelist["phys"]["ate"] * sf**(-6)
+        namelist["phys"]["cte"] = namelist["phys"]["ate"] * sf**(8)
+
+        f90nml.write(namelist, input_fpath)
+        return
 
     def read_output_file(self, run_dir: str):
         """
@@ -223,7 +640,7 @@ class HELENAparser(Parser):
         mercier_stable = True
 
         try:
-            file = open(run_dir + "/fort.20", "r")
+            file = open(os.path.join(run_dir, "fort.20"), "r")
         except FileNotFoundError as e:
             print(str(e))
             return success, mercier_stable, ballooning_stable
@@ -355,11 +772,11 @@ class HELENAparser(Parser):
             2 / delta * (psi - psi_mid)
         )
         if 1 - psi / psi_ped >= 0:
-            term2 = a_1 * (1 - (psi / psi_ped) ** alpha_1) ** alpha_2
+            term2 = (1 - (psi / psi_ped) ** alpha_1) ** alpha_2
         else:
             term2 = 0.0
 
-        return sep + a_0 * term1 + term2
+        return sep + a_0 * term1 + a_1 * term2
 
     def clean_output_files(self, run_dir: str):
         """
@@ -377,17 +794,55 @@ class HELENAparser(Parser):
             "fort.27",
             "fort.41",
             "fort.51",
-            "eliteinp",
+            # "eliteinp",
             "density",
             "helena_bnd",
             "EQDSK",
             "PCUBEQ",
         ]
         for file_name in files_to_remove:
-            if os.path.exists(run_dir + "/" + file_name):
-                os.remove(run_dir + "/" + file_name)
-
+            if os.path.exists(os.path.join(run_dir, file_name)):
+                os.remove(os.path.join(run_dir, file_name))
         return
+
+    def get_profile_fit_from_fort10(self, run_dir):
+        profile_fit = {}
+        try:
+            fort10 = f90nml.read(os.path.join(run_dir, "fort.10"))
+            profile_fit["ipai"] = fort10["profile"]["ipai"]
+            profile_fit["idete"] = fort10["phys"]["idete"]
+            # Electron temperature
+            profile_fit["te"] = {}
+            profile_fit["te"]["ate"] = fort10["phys"]["ate"]
+            profile_fit["te"]["bte"] = fort10["phys"]["bte"]
+            profile_fit["te"]["cte"] = fort10["phys"]["cte"]
+            profile_fit["te"]["ddte"] = fort10["phys"]["ddte"]
+            profile_fit["te"]["ete"] = fort10["phys"]["ete"]
+            profile_fit["te"]["fte"] = fort10["phys"]["fte"]
+            profile_fit["te"]["gte"] = fort10["phys"]["gte"]
+            profile_fit["te"]["hte"] = fort10["phys"]["hte"]
+            profile_fit["te"]["ite"] = (
+                0.0 if "ite" not in fort10["phys"].keys() else fort10["phys"]["ite"])
+            # Electron density
+            profile_fit["de"] = {}
+            profile_fit["de"]["ade"] = fort10["phys"]["ade"]
+            profile_fit["de"]["bde"] = fort10["phys"]["bde"]
+            profile_fit["de"]["cde"] = fort10["phys"]["cde"]
+            profile_fit["de"]["dde"] = fort10["phys"]["dde"]
+            profile_fit["de"]["ede"] = fort10["phys"]["ede"]
+            profile_fit["de"]["fde"] = fort10["phys"]["fde"]
+            profile_fit["de"]["gde"] = fort10["phys"]["gde"]
+            profile_fit["de"]["hde"] = fort10["phys"]["hde"]
+            profile_fit["de"]["ide"] = (
+                0.0 if "ide" not in fort10["phys"] else fort10["phys"]["ide"])
+            # Pressure profile core term
+            profile_fit["pe"] = {}
+            profile_fit["pe"]["apf"] = fort10["profile"]["apf"]
+            profile_fit["pe"]["bpf"] = fort10["profile"]["bpf"]
+            profile_fit["pe"]["cpf"] = fort10["profile"]["cpf"]
+        except Exception as exc:
+            print("get_profile_fit_from_fort10", str(exc))
+        return profile_fit
 
     def write_summary(self, run_dir: str, params: dict):
         """
@@ -408,26 +863,99 @@ class HELENAparser(Parser):
             success status, Mercier criterion presence, and ballooning
             criterion presence.
         """
-        file_name = run_dir + "/summary.yml"
         summary = {"run_dir": run_dir, "params": params}
         success, mercier_stable, ballooning_stable = self.read_output_file(run_dir)
-        summary["success"] = success
+        summary["h_id"] = run_dir.split("/")[-1]
         summary["mercier_stable"] = mercier_stable
         summary["ballooning_stable"] = ballooning_stable
-        with open(file_name, "w") as outfile:
-            json.dump(summary, outfile)
+        summary["profile_fit"] = self.get_profile_fit_from_fort10(run_dir)
         try:
-            CS, QS, _, _, _, _, _, _, P0, RBPHI, VX, VY = self.read_output_fort12(
-                run_dir
-            )
-            np.save(run_dir + "/qs.npy", QS)
-            np.save(run_dir + "/cs.npy", CS)
-            np.save(run_dir + "/p0.npy", P0)
-            np.save(run_dir + "/rbphi.npy", RBPHI)
-            np.save(run_dir + "/vxvy.npy", (VX, VY))
+            (betan, betap, total_current, total_area, total_volume, _,
+                _, _, _, _, _) = self.read_fort20_beta_section(output_dir=run_dir)
+            summary["betan"] = betan
+            summary["betap"] = betap
+            summary["total_current"] = total_current
+            summary["total_area"] = total_area
+            summary["total_volume"] = total_volume
+
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_beta_section, {e}")
+            success = False
+
+        try:
+            (
+                JS0,
+                CS,
+                QS,
+                P0,
+                RBPHI,
+                VX,
+                VY,
+            ) = self.read_helena_output_fort12(run_dir)
+            np.save(os.path.join(run_dir, "qs.npy"), QS)
+            np.save(os.path.join(run_dir, "cs.npy"), CS)
+            np.save(os.path.join(run_dir, "p0.npy"), P0)
+            np.save(os.path.join(run_dir, "rbphi.npy"), RBPHI)
+            np.save(os.path.join(run_dir, "vxvy.npy"), (VX, VY))
         except Exception:
             print(f"error reading and summarizing fort.12 in dir {run_dir}")
-        return summary
+            success = False
+
+        try:
+            psi, S, J, vol, _, area = self.read_fort20_s_j_vol_area(run_dir)
+            np.save(os.path.join(run_dir, "psi.npy"), psi)
+            np.save(os.path.join(run_dir, "s.npy"), S)
+            np.save(os.path.join(run_dir, "j.npy"), J)
+            np.save(os.path.join(run_dir, "volume.npy"), vol)
+            np.save(os.path.join(run_dir, "area.npy"), area)
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_s_j_vol_area, {e}")
+            success = False
+
+        try:
+            (realworld_S, realworld_P, realworld_Ne,
+             realworld_Te, realworld_Ti) = self.read_fort20_realworld(run_dir)
+            np.save(os.path.join(run_dir, "realworld_S.npy"), realworld_S)
+            np.save(os.path.join(run_dir, "realworld_P.npy"), realworld_P)
+            np.save(os.path.join(run_dir, "realworld_Ne.npy"), realworld_Ne)
+            np.save(os.path.join(run_dir, "realworld_Te.npy"), realworld_Te)
+            np.save(os.path.join(run_dir, "realworld_Ti.npy"), realworld_Ti)
+        except Exception as e:
+            print(f"Something went wrong when trying to read/write read_fort20_realworld, {e}")
+            success = False
+
+        summary["success"] = success
+        with open(os.path.join(run_dir, "summary.json"), "w") as outfile:
+            json.dump(summary, outfile)
+
+        return success
+
+    def _get_summary(self, x_dir):
+        x_summary_path = os.path.join(x_dir, "summary.json")
+        if os.path.isfile(x_summary_path):
+            x_summary_file = open(x_summary_path)
+            x_summary = json.load(x_summary_file)
+            return x_summary
+        else:
+            return None
+
+    def collect_growthrates_from_mishka(self, h_dir, save=False):
+        growthrates = []
+        if os.path.exists(os.path.join(h_dir, "mishka")):
+            for m_dir in sorted(
+                    [f.path for f in os.scandir(os.path.join(h_dir, "mishka")) if f.is_dir()]
+            ):
+                m_summary = self._get_summary(m_dir)
+                if m_summary is not None:
+                    if m_summary["success"]:
+                        ntor_gamma = np.load(os.path.join(m_dir, "ntor_gamma.npy"))
+                        growthrates.append(ntor_gamma)
+                    else:
+                        print(f"MISHKA FAILED: {m_dir} (not including in growthrates)")
+        growthrates = np.array(growthrates)
+        if save:
+            np.save(os.path.join(h_dir, "growthrates.npy"), growthrates)
+        return growthrates
 
     def read_final_zjz(self, output_dir):
         """
@@ -435,9 +963,7 @@ class HELENAparser(Parser):
         zjz(   2)=     1.01337,
         zjz(   3)=     0.83545,
         """
-
-        filename = output_dir + "/final_zjz"
-        file = open(filename, "r")
+        file = open(os.path.join(output_dir, "final_zjz"), "r")
         lines = file.readlines()
         zjz = []
         for line in lines:
@@ -460,6 +986,27 @@ class HELENAparser(Parser):
     def read_output_fort12(self, output_dir):
         """
         Read the output file fort.12 which is used as input by MISHKA.
+
+        JS0: NRMAP - 1
+        CS: sqrt(psi)
+        QS:
+        DQS_1, DQEC
+        DQS: derivative of QS
+        CURJ
+        DJ0, DJE
+        NCHI: number of poloidal grid points written to output file
+        CHI
+        GEM11
+        GEM12
+        CPSURF, RADIUS
+        GEM33
+        RAXIS
+        P0
+        DP0, DPE
+        RBPHI
+        DRBPHI0, DRBPHIE
+        VX, VY
+        EPS
         """
         filename = output_dir + "/" + "fort.12"
         file = open(filename, "r")
@@ -479,7 +1026,7 @@ class HELENAparser(Parser):
         DJ0, DJE = float(lines[endline].split()[0]), float(lines[endline].split()[1])
         NCHI = int(lines[endline + 1].split()[0])
         CHI, endline = self.read_multiline_list(
-            lines, startline=endline + 2, n_listitems=NCHI + 1
+            lines, startline=endline + 2, n_listitems=NCHI
         )
         GEM11, endline = self.read_multiline_list(
             lines,
@@ -531,6 +1078,275 @@ class HELENAparser(Parser):
         # )
         return CS, QS, DQS, CURJ, CHI, GEM11, GEM12, GEM33, P0, RBPHI, VX, VY
 
+    def read_fort20_NUM(self, output_dir):
+        """
+        Find the numerical parameters
+
+        Returns
+
+        NR: number of radial grid points
+        NP: number of poloidal grid points
+        NRMAP: number of radial grid points in mapping to flux surface grid (should be 2*NR)
+        NPMAP: number of poloidal grid points in mapping (should be 2*NP)
+        NCHI: number of poloidal grid points written to output file
+        (should be 2*NMAP, NCHI must be 2^n + 1)
+        NRCUR: number of radial grid points for iteration current profile (should be NR)
+        NPCUR: number of poloidal grid points (should be NP)
+        NITER: (ICUR≠0) or 1 (ICUR=0) maximum number of iterations over current profile
+        """
+        filename = os.path.join(output_dir, "fort.20")
+        file = open(filename).readlines()
+
+        start_line = file.index(
+            "*  HELENA : GRAD-SHAFRANOV EQUILIBRIUM  *\n"
+        )
+        NR, NP, NRMAP, NPMAP, NCHI, NITER = 0, 0, 0, 0, 0, 0
+
+        for line in file[start_line:start_line + 30]:
+            index = line.find("NR =")
+            if index != -1:
+                NR = int(line[index + 4:index + 7])
+            index = line.find("NP =")
+            if index != -1:
+                NP = int(line[index + 4:index + 7])
+            index = line.find("NRMAP =")
+            if index != -1:
+                NRMAP = int(line[index + 7:index + 10])
+            index = line.find("NPMAP =")
+            if index != -1:
+                NPMAP = int(line[index + 7:index + 10])
+            index = line.find("NCHI =")
+            if index != -1:
+                NCHI = int(line[index + 6:index + 10])
+            index = line.find("NITER =")
+            if index != -1:
+                NITER = int(line[index + 7:index + 11])
+
+        return NR, NP, NRMAP, NPMAP, NCHI, NITER
+
+    def read_lines(self, lines, startline, endline, dtype=float):
+        lines = lines[startline:endline]
+        res = []
+        for line in lines:
+            res = res + line.split()
+        res = np.array([float(x) for x in res])
+        return res
+
+    def read_helena_output_fort12(self, run_dir):
+        """
+        USE THIS ONE FOR FORT.12
+        Read the HELENA output file fort.12 which is used as input by MISHKA.
+        """
+        filename = os.path.join(run_dir, "fort.12")
+        if not os.path.exists(filename):
+            print("Cannot find", filename)
+            return
+
+        lines = open(filename, "r").readlines()
+        JS0 = int(lines[0].split()[0])
+        JS0_lines = math.ceil(JS0 / 4)
+        JS0_1_lines = math.ceil((JS0 + 1) / 4)
+
+        startline = 1
+        endline = JS0_1_lines + 1
+        CS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        QS = self.read_lines(lines, startline, endline)
+
+        # DQS_1, DQEC = (
+        #     float(lines[endline].split()[0]), 
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_lines
+        # DQS = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + JS0_1_lines
+        # CURJ = self.read_lines(lines, startline, endline)
+
+        # DJ0, DJE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        endline += 1
+        NCHI = int(lines[endline].split()[0])
+        # NCHI_lines = math.ceil((NCHI - 1) / 4)
+        NCHI_1_lines = math.ceil((NCHI) / 4)
+        NCHI_JS0_lines = math.ceil((NCHI * (JS0 + 1) - (NCHI + 1)) / 4)
+
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        # CHI = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM11 = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_JS0_lines
+        # GEM12 = self.read_lines(lines, startline, endline)
+
+        # CPSURF, RADIUS = float(lines[endline].split()[0]), float(
+        #     lines[endline].split()[1]
+        # )
+
+        startline = endline + 1
+        endline = startline + NCHI_JS0_lines
+        # GEM33 = self.read_lines(lines, startline, endline)
+        # RAXIS = float(lines[endline].split()[0])
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        P0 = self.read_lines(lines, startline, endline)
+
+        # DP0, DPE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        startline = endline + 1
+        endline = startline + JS0_1_lines
+        RBPHI = self.read_lines(lines, startline, endline)
+
+        # DRBPHI0, DRBPHIE = (
+        #     float(lines[endline].split()[0]),
+        #     float(lines[endline].split()[1]))
+
+        # Vacuum data
+        startline = endline + 1
+        endline = startline + NCHI_1_lines
+        VX = self.read_lines(lines, startline, endline)
+
+        startline = endline
+        endline = startline + NCHI_1_lines
+        VY = self.read_lines(lines, startline, endline)
+
+        # EPS = float(lines[endline].split()[0])
+        # startline = endline + 1
+        # endline = startline + NCHI_JS0_lines
+        # XOUT = self.read_lines(lines, startline, endline)
+
+        # startline = endline
+        # endline = startline + NCHI_JS0_lines
+        # YOUT = self.read_lines(lines, startline, endline)
+
+        return (
+            JS0,
+            CS,
+            QS,
+            P0,
+            RBPHI,
+            VX,
+            VY,
+        )
+
+    def read_fort20_s_j_vol_area(self, output_dir):
+        """
+
+        *********************************************************************
+        * I   PSI     S      <J>     ERROR   LENGTH    BUSSAC   VOL    VOLP   AREA *
+        *********************************************************************
+        300  0.000159  0.012600    1.0029  3.95E-03    0.0809    0.0035    0.0032   19.9232
+                0.0005
+        299  0.000635  0.025200    1.0115  1.58E-02    0.1614    0.0137    0.0126   19.7961
+                0.0020
+
+        """
+        NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
+        npts = NRMAP - 1
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if (" LENGTH    BUSSAC   VOL    VOLP   AREA" in line):
+                i_table_start = i
+                break
+            i += 1
+        numerical_lines = lines[i_table_start + 2:i_table_start + 1 + npts]
+
+        # Convert the data to numpy arrays
+        data_array = np.array(
+            [list(map(float, line.split())) for line in numerical_lines]
+        )
+
+        # Split into columns
+        psi = data_array[:, 1]
+        S = data_array[:, 2]
+        J = data_array[:, 3]
+        vol = data_array[:, 7]
+        volp = data_array[:, 8]
+        area = data_array[:, 9]
+        return psi, S, J, vol, volp, area
+
+    def get_namelist(self, output_dir):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        return f90nml.read(namelist_path)
+
+    def read_fort20_realworld(self, output_dir):
+        """
+        **************************************************
+            S,   P [Pa], Ne [10^19m^-3], Te [eV],  Ti [eV],
+        **************************************************
+        """
+        NRMAP = self.get_namelist(output_dir=output_dir)["NUM"]["NRMAP"]
+        npts = NRMAP - 1
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if "S,   P [Pa], Ne [10^19m^-3], Te [eV],  Ti [eV]" in line:
+                i_table_start = i
+                break
+            i += 1
+        numerical_lines = lines[i_table_start + 2:i_table_start + 1 + npts]
+
+        # Convert the data to numpy arrays
+        data_array = np.array(
+            [list(map(float, line.split())) for line in numerical_lines]
+        )
+
+        # Split into columns
+        S = data_array[:, 0]
+        P = data_array[:, 1]
+        Ne = data_array[:, 2]
+        Te = data_array[:, 3]
+        Ti = data_array[:, 4]
+        return S, P, Ne, Te, Ti
+
+    def get_te_params(self, output_dir: str):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        namelist = f90nml.read(namelist_path)
+        return {
+            "ate": namelist["phys"]["ate"],
+            "bte": namelist["phys"]["bte"],
+            "cte": namelist["phys"]["cte"],
+            "ddte": namelist["phys"]["ddte"],
+            "ete": namelist["phys"]["ete"],
+            "fte": namelist["phys"]["fte"],
+            "gte": namelist["phys"]["gte"],
+            "hte": namelist["phys"]["hte"],
+            # "ite": namelist["phys"]["ite"],
+        }
+
+    def get_ne_params(self, output_dir: str):
+        namelist_path = os.path.join(output_dir, "fort.10")
+        namelist = f90nml.read(namelist_path)
+        return {
+            "ade": namelist["phys"]["ade"],
+            "bde": namelist["phys"]["bde"],
+            "cde": namelist["phys"]["cde"],
+            "dde": namelist["phys"]["dde"],
+            "ede": namelist["phys"]["ede"],
+            "fde": namelist["phys"]["fde"],
+            "gde": namelist["phys"]["gde"],
+            "hde": namelist["phys"]["hde"],
+            # "ide": namelist["phys"]["ite"],
+        }
+
     def modify_fast_ion_pressure(self, namelist_path: str, apf: float):
         """
         Changes the fast ion pressure (apf) value in the input file fort.10.
@@ -549,6 +1365,7 @@ class HELENAparser(Parser):
         """
         namelist = f90nml.read(namelist_path)
         namelist["profile"]["apf"] = apf
+        namelist["profile"]["bpf"] = 0.6
         f90nml.write(namelist, namelist_path, force=True)
 
     def modify_at1(self, namelist_path: str, at1_mult: float):
@@ -569,8 +1386,38 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         namelist = f90nml.read(namelist_path)
-        namelist["phys"]["cte"] = at1_mult*namelist["phys"]["cte"]
-        namelist["phys"]["cti"] = at1_mult*namelist["phys"]["cti"]
+        namelist["phys"]["cte"] = at1_mult * namelist["phys"]["cte"]
+        namelist["phys"]["cti"] = at1_mult * namelist["phys"]["cti"]
+        f90nml.write(namelist, namelist_path, force=True)
+
+    def update_at1(self, namelist_path: str, at1: float):
+        """
+        Changes the core temperature (cte & cti) value in the input file fort.10.
+
+        Parameters
+        ----------
+        namelist_path : str
+            Path to the namelist file.
+        at1_mult: float
+            Multiplier for the core temperature value in the parameterized core
+            profile.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified run directory is not found.
+        """
+        namelist = f90nml.read(namelist_path)
+        f90nml.write(namelist, f"{namelist_path}_{datetime.now():%Y%m%d_%H%M%S}")
+        try:
+            shutil.copy(
+                namelist_path.replace("fort.10", "fort.20"),
+                f"{namelist_path.replace('fort.10', 'fort.20')}_{datetime.now():%Y%m%d_%H%M%S}"
+            )
+        except Exception as exc:
+            print(exc)
+        namelist["phys"]["cte"] = at1
+        namelist["phys"]["cti"] = at1
         f90nml.write(namelist, namelist_path, force=True)
 
     def get_real_world_geometry_factors_from_f20(self, f20_fort: str):
@@ -589,8 +1436,8 @@ class HELENAparser(Parser):
             Read: BVAC, RVAC, EPS, XAXIS, CPSURF, ALFA, BETAP, BETAT, BETAN, XIAB
             Derived: RADIUS (minor radius), RMAGAXIS, CURRENT
 
-            - XIAB: normalized total current: XIAB = mu_0 I / (a*B0))
-                -> CURRENT = (XIAB / MU_0) * (a*B0)
+            - XIAB: normalized total current: XIAB = mu0 I / (a*B0))
+                -> CURRENT = (XIAB / MU0) * (a*B0)
         """
         BVAC, RVAC, EPS, XAXIS, CPSURF, ALFA, BETAP, BETAT, BETAN, XIAB = (
             0.0,
@@ -608,7 +1455,7 @@ class HELENAparser(Parser):
         with open(f20_fort, "r") as f:
             lines = f.readlines()
 
-            """ 
+            """
             Looking for
             $PHYS     EPS  =  0.320, ALFA =  2.438, B =  0.006, C =  1.000,
                     XIAB =  1.350, BETAP =  -1.0000,COREP =   43259.3989
@@ -668,7 +1515,7 @@ class HELENAparser(Parser):
 
         RMAGAXIS = RVAC * (1 + EPS * XAXIS)
         RADIUS = RVAC * EPS  # Minor radius
-        CURRENT = (XIAB / mu_0) * (RADIUS * BVAC)
+        CURRENT = (XIAB / mu0) * (RADIUS * BVAC)
 
         # print(f'RMAGAXIS={RMAGAXIS}')
         # print(f'RADIUS={RADIUS}')
@@ -806,7 +1653,8 @@ class HELENAparser(Parser):
             # (2022) nbbbs,limitr
             file.write(format_2022.write([NBBBS, limitr]) + "\n")
             # (2020) (rbbbs(i),zbbbs(i),i=1,nbbbs)
-            # See: https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
+            # See:
+            # https://github.com/Fusion-Power-Plant-Framework/eqdsk/blob/main/eqdsk/file.py#L733
             towrite = np.array([RBBBS, ZBBBS]).flatten(order="F")
             file.write(format_2020.write(towrite) + "\n")
             # (2020) (rlim(i),zlim(i),i=1,limitr)
@@ -916,7 +1764,7 @@ class HELENAparser(Parser):
         !! normalized  w.r.t  magnetic axis  \c  R_m  and  total toroidal  field  at
         !! magnetic axis \c B_m:
         !!  - <tt> RBphi[Tm]     = F_H[] R_m[m] B_m[T] </tt>,
-        !!  - <tt> pres[N/m^2]   = pres_H[] (B_m[T])^2/mu_0[N/A^2] </tt>,
+        !!  - <tt> pres[N/m^2]   = pres_H[] (B_m[T])^2/mu0[N/A^2] </tt>,
         !!  - <tt> flux_p[Tm^2]  = 2pi (s[])^2 cpsurf[] B_m[T] (R_m[m])^2 </tt>.
 
         The result of the mapping is a dictionary with the following
@@ -1172,9 +2020,9 @@ class HELENAparser(Parser):
             ) * CPSURF  # * B0 * (RVAC**2)
             # NOTE: I am not sure the above is correct or wrong, below gives better results?
 
-            # SCALE pressure, p*(B_m[T])^2/mu_0[N/A^2] </tt>,
+            # SCALE pressure, p*(B_m[T])^2/mu0[N/A^2] </tt>,
             helena_fort12_outputs["P0_SCALED"] = (helena_fort12_outputs["P0"]) * (
-                B0**2 / (mu_0)
+                B0**2 / (mu0)
             )
 
         return helena_fort12_outputs
@@ -1278,7 +2126,7 @@ class HELENAparser(Parser):
         def write_quantity(vector):
             number = math.ceil(len(vector) / 6)
             for i in range(number):
-                f_out.write(" " + format_iterdb.write(vector[6 * i : 6 * i + 6]) + "\n")
+                f_out.write(" " + format_iterdb.write(vector[6 * i:6 * i + 6]) + "\n")
             f_out.write(" " + format_iterdb.write([0.0]) + "\n")
 
         psi = elite_data["Psi"]
@@ -1318,3 +2166,414 @@ class HELENAparser(Parser):
         write_quantity(np.ones(len(ne)))
         write_closure()
         f_out.close()
+
+    def read_fort20_beta_section(self, output_dir):
+        """
+         ***************************************
+        MAGNETIC AXIS :   0.01908  0.00000
+        POLOIDAL BETA :   0.1198E+00
+        TOROIDAL BETA :   0.3802E-02
+        BETA STAR     :   0.4250E-02
+        NORM. BETA    :   0.00335
+        TOTAL CURRENT :   0.1428E+01
+        TOTAL AREA    :   0.5115E+01
+        TOTAL VOLUME  :   0.3110E+02
+        INT. INDUCTANCE :  0.685990E+00
+        POL. FLUX     :   0.2130E+01
+        A,B,C         :   0.4176E+01  0.1522E-01  0.1000E+01
+        ***************************************
+        """
+        (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        ) = None, None, None, None, None, None, None, None, None, None, None
+
+        file = open(os.path.join(output_dir, "fort.20"), "r")
+        lines = file.readlines()
+        for line in lines:
+            # line = file.readline()
+            if line.find("NORM. BETA") > -1:
+                spl = line.split(":")
+                betan = float(spl[1]) * 100
+            if line.find("POLOIDAL BETA") > -1:
+                spl = line.split(":")
+                betap = float(spl[1])
+            if line.find("TOTAL CURRENT") > -1:
+                spl = line.split(":")
+                total_current = float(spl[1])
+            if line.find("TOTAL AREA") > -1:
+                spl = line.split(":")
+                total_area = float(spl[1])
+            if line.find("TOTAL VOLUME") > -1:
+                spl = line.split(":")
+                total_volume = float(spl[1])
+            if line.find("TOROIDAL BETA") > -1:
+                spl = line.split(":")
+                beta_tor = float(spl[1])
+            if line.find("BETA STAR") > -1:
+                spl = line.split(":")
+                beta_star = float(spl[1])
+            if line.find("PED. BETAPOL") > -1:
+                spl = line.split(":")
+                helenaBetap = float(spl[1])
+            if line.find("A,B,C") > -1:
+                spl = line.split(":")
+                sp2 = spl[1].split()
+                b_last_round = float(sp2[1])
+            if line.find("RADIUS") > -1:
+                spl = line.split(":")
+                radius = float(spl[1])
+            if line.find("B0") > -1:
+                spl = line.split(":")
+                B0 = float(spl[1])
+                break
+        file.close()
+        return (
+            betan, betap, total_current, total_area, total_volume, beta_tor,
+            beta_star, helenaBetap, b_last_round, radius, B0
+        )
+
+    def read_fort20_inputprofiles(self, output_dir, NRMAP):
+        """
+        ***********************************************
+        *        INPUT PROFILES :                     *
+        ***********************************************
+        *  PSI,       dP/dPSI,    FdF/dPSI,     J_phi *
+        ***********************************************
+        0.0000E+00  0.0000E+00  0.1000E+01  0.1000E+01
+        0.1000E-01  0.1940E+01  0.1000E+01  0.9789E+00
+        0.2000E-01  0.2193E+01  0.1000E+01  0.9573E+00
+        ...
+
+        """
+        filename = os.path.join(output_dir, "fort.20")
+        file = open(filename).readlines()
+        i = 0
+        i_table_start = -1
+        with open(os.path.join(output_dir, "fort.20"), "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if ("INPUT PROFILES" in line):
+                i_table_start = i
+                break
+            i += 1
+        if i_table_start == -1:
+            print("Input profiles not found.")
+            return
+
+        columns = np.loadtxt(
+            filename,
+            dtype=str,
+            comments=None,
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 2,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=1,
+        )
+        columns = columns[1:-1]
+        columns = [c.replace(",", "") for c in columns]
+        print(columns)
+
+        inputprofiles = np.loadtxt(
+            filename,
+            # dtype=<class 'float'>,
+            comments="*",
+            # delimiter=' ',
+            converters=None,
+            skiprows=i_table_start + 3,
+            # usecols=None, unpack=False, ndmin=0, encoding='bytes',
+            max_rows=NRMAP,
+        )
+
+        i_col = 0
+        psi, dP_dPSI, FdF_dPSI, J_phi = None, None, None, None
+        for c in columns:
+            if c == "PSI":
+                psi = inputprofiles[:, i_col]
+            elif c == "dP/dPSI":
+                dP_dPSI = inputprofiles[:, i_col]
+            elif c == "FdF/dPSI":
+                FdF_dPSI = inputprofiles[:, i_col]
+            elif c == "J_phi":
+                J_phi = inputprofiles[:, i_col]
+            i_col += 1
+
+        return psi, dP_dPSI, FdF_dPSI, J_phi
+
+    def get_teped_from_namelist(self, namelist):
+        at0 = namelist['phys']['ate'] 
+        tesep = namelist['phys']['bte']
+        return at0 * tanh_normaliser + tesep
+
+    def get_neped_from_namelist(self, namelist):
+        # an0 = (neped - nesep) / tanh_normaliser
+        an0 = namelist['phys']['ade'] 
+        nesep = namelist['phys']['bde']
+        return an0 * tanh_normaliser + nesep
+
+    def namelist_to_lowercase_with_defualt_values(self, namelist, default_namelist):
+        """
+        Returning a new namelist with only lower case keys and
+        default values on the keys that wern't specified in the
+        input namelist.
+        """
+        new_namelist = f90nml.Namelist(default_namelist)
+        for key_section, nml_section in namelist.items():
+            for key, value in nml_section.items():
+                new_namelist[key_section.lower()][key.lower()] = value
+        return new_namelist
+
+    def find_new_at1(self, output_dir, beta_target, h):
+        # Uses Newton method to calculate at1 that should give the right at1
+
+        def eped_profile(x, x_mid, x_ped, a_0, a_1, y_sep, alpha_1, alpha_2, delta):
+            """
+            x_mid, x_ped, a_0, a_1, y_sep, alpha_1, alpha_2, delta
+            - $a_{T0}$ = ate
+            - $T_{sep}$ = bte
+            - $a_{T1}$ = cte
+            - $psi_{mid}$ = ddte
+            - $Delta$ = ete
+            - $psi_{ped}$ = fte
+            - $alpha_{T1}$ = gte
+            - $alpha_{T2}$ = hte
+            """
+            # print(f"x_mid={x_mid}, x_ped={x_ped}, a_0={a_0}, "
+            #     f"a_1={a_1}, y_sep={y_sep}, alpha_1={alpha_1}, alpha_2={alpha_2}, delta={delta}"
+            # )
+            x = np.atleast_1d(x)
+            profile = np.zeros_like(x)
+            for _idx, _x in enumerate(x):
+                term1 = (np.tanh(2 / delta * (1 - x_mid)) - np.tanh(2 / delta * (_x - x_mid)))
+                if _x > x_ped:
+                    term2 = 0.0
+                else:
+                    term2 = (1 - (_x / x_ped) ** alpha_1) ** alpha_2
+                profile[_idx] = y_sep + a_0 * term1 + a_1 * term2
+            return profile
+
+        def convert_te_params_to_eped_params(
+                ate, bte, cte, ddte, ete, fte, gte, hte, *args, **kwargs):
+            """
+            Returns a dict[str, float] with input parameters for the eped_profile methods.
+            """
+            return {
+                'a_0': ate,
+                'y_sep': bte,
+                'a_1': cte,
+                'x_mid': ddte,
+                'delta': ete,
+                'x_ped': fte,
+                'alpha_1': gte,
+                'alpha_2': hte}
+
+        def get_temperature_profile_params(namelist):
+            return {
+                'ate': namelist['phys']['ate'],
+                'bte': namelist['phys']['bte'],
+                'cte': namelist['phys']['cte'],
+                'ddte': namelist['phys']['ddte'],
+                'ete': namelist['phys']['ete'],
+                'fte': namelist['phys']['fte'],
+                'gte': namelist['phys']['gte'],
+                'hte': namelist['phys']['hte'],
+                'ite': 0.0 if 'ite' not in namelist['phys'] else namelist['phys']['ite'],
+            }
+
+        def get_density_profile_params(namelist):
+            return {
+                'ade': namelist['phys']['ade'],
+                'bde': namelist['phys']['bde'],
+                'cde': namelist['phys']['cde'],
+                'dde': namelist['phys']['dde'],
+                'ede': namelist['phys']['ede'],
+                'fde': namelist['phys']['fde'],
+                'gde': namelist['phys']['gde'],
+                'hde': namelist['phys']['hde'],
+                'ide': 0.0 if 'ide' not in namelist['phys'] else namelist['phys']['ide'],
+            }
+
+        def convert_ne_params_to_eped_params(
+                ade, bde, cde, dde, ede, fde, gde, hde, *args, **kwargs):
+            """
+            Returns a dict[str, float] with input parameters for the eped_profile methods.
+            """
+            return {
+                'a_0': ade,
+                'y_sep': bde,
+                'a_1': cde,
+                'x_mid': dde,
+                'delta': ede,
+                'x_ped': fde,
+                'alpha_1': gde,
+                'alpha_2': hde}
+
+        def make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof, neprof, psi):
+            p = np.zeros(numpts)
+            for i in range(numpts):
+                x = psi[i]
+                p[i] = teprof[i] * (
+                    1.0 + (zimp + zmain - zeff) / zimp / zmain) * neprof[i]
+                if x < bpf:
+                    p[i] = p[i] * (1 + apf * (1 - (x / bpf) ** 2) ** cpf)
+            return p
+
+        def integrate(p, dv):
+            # print("integrate: ", p.shape, dv.shape)
+            parea = np.sum(p * dv)
+            return parea
+
+        def derivative(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv, psi):
+            at1 = te_eped_params["a_1"]
+            # at_old = at1
+            # update_at1(at1 + h), pav1 = integrate()
+            te_eped_params["a_1"] = at1 + h
+            teprof_old = eped_profile(psi, **te_eped_params)
+            new_prof = make_profile(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
+            pav1 = integrate(new_prof, dv)
+
+            # update_at1(at1 - 2 * h)
+            # pav2 = integrate()
+            te_eped_params["a_1"] = at1 - 2 * h
+            teprof_old = eped_profile(psi, **te_eped_params)
+            new_prof = make_profile(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
+            pav2 = integrate(new_prof, dv)
+            # print("pav1", pav1, "pav2", pav2)
+
+            # update_at1(at_old)
+            te_eped_params["a_1"] = at1
+            return (pav1 - pav2) / (2 * h)
+
+        print("Calculating new at1...")
+        nml = f90nml.read(os.path.join(output_dir, "fort.10"))
+        psi, _, _, _, volume, _ = self.read_fort20_s_j_vol_area(output_dir)
+        numpts = len(psi) - 1
+        dv = volume[1:] - volume[0:-1]
+        # print("psi:\n", repr(psi))
+        # print("dv:\n", repr(dv))
+        output_vars = self.get_real_world_geometry_factors_from_f20(
+            os.path.join(output_dir, "fort.20"))
+        # print(output_vars)
+        helena_beta = 1e2 * output_vars["BETAN"]
+        apf = nml["profile"]["apf"]
+        bpf = nml["profile"]["bpf"]
+        cpf = nml["profile"]["cpf"]
+        zimp = nml["phys"]["zimp"]
+        zeff = nml["phys"]["zeff"]
+        zmain = nml["phys"]["zmain"]
+
+        te_params = get_temperature_profile_params(nml)
+        te_eped_params = convert_te_params_to_eped_params(**te_params)
+        last_at1 = te_eped_params["a_1"]
+        next_at1 = last_at1 + 10 * h
+        teprof_old = eped_profile(psi, **te_eped_params)
+        # print(teprof_old.shape, teprof_old[0:10])
+
+        te_eped_params_new = te_eped_params.copy()
+        te_eped_params_new["a_1"] = next_at1
+        # print(te_eped_params_new)
+        teprof_new = eped_profile(psi, **te_eped_params_new)
+        # print(teprof_new)
+        # print(teprof_new.shape)
+
+        ne_params = get_density_profile_params(nml)
+        ne_eped_params = convert_ne_params_to_eped_params(**ne_params)
+        neprof = eped_profile(psi, **ne_eped_params)
+        # print(neprof.shape, repr(neprof))
+
+        old_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_old, neprof, psi)
+        new_prof = make_profile(numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof, psi)
+
+        # print("old:\n", repr(old_prof))
+        # print("new:\n", repr(new_prof))
+
+        target = integrate(old_prof, dv) * beta_target / helena_beta
+        print(f"target sum: {target},",
+              f" beta_target: {beta_target}, helena_beta: {helena_beta}")
+        n = 0
+        # raise Exception
+        while abs(next_at1 - last_at1) > h and n < 10:
+            new_sum = integrate(new_prof, dv)
+            print(f"({n}): last_at1: {last_at1}, next_at1: {next_at1}, new_sum: {new_sum}")
+
+            last_at1 = next_at1
+            d_new_prof = derivative(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, h, te_eped_params, neprof, dv, psi)
+            # print(f"d_new_prof: {d_new_prof}, new_sum - target: {new_sum - target}")
+            next_at1 = last_at1 - (new_sum - target) / d_new_prof
+            # new_prof.update_at1(next_at1)
+            te_eped_params["a_1"] = next_at1
+            teprof_new = eped_profile(psi, **te_eped_params)
+            # print("teprof_new:\n", repr(teprof_new))
+            new_prof = make_profile(
+                numpts, zimp, zmain, zeff, apf, bpf, cpf, teprof_new, neprof, psi)
+            # print("new_prof:", repr(new_prof))
+            n += 1
+
+        # Damping from EUROped
+        te_damping = 0.0
+        next_at1 = next_at1 * (1 - te_damping) + te_damping * te_eped_params["a_1"]
+        return next_at1
+
+    def update_pedestal_delta(self, new_pedestal_delta, beta_target, run_dir, scan_dir):
+        """
+        Read the namelist from the run_dir. Update the values depending on pedestal delta.
+        Save the updated namelist in the scan dir.
+        """
+        nml = f90nml.read(os.path.join(run_dir, "fort.10"))
+        # at1 = self.find_new_at1(output_dir=run_dir, beta_target=beta_target, h=0.01, nml=nml)
+
+        # default_nml = f90nml.read(
+        #     "/scratch/project_2009007/helena_mishka_helper/default/helena_default.nml")
+        # nml = self.namelist_to_lowercase_with_defualt_values(
+        #     namelist=nml, default_namelist=default_nml)
+
+        theta = np.linspace(0, 2 * np.pi, 1000)
+        circumference = self.get_circumference(
+            theta, ellip=nml['shape']['ellip'], tria=nml['shape']['tria'])
+        ip = self.get_ip_from_namelist(nml)
+
+        tesep = nml["phys"]["bte"]
+        # at1_prev = nml["phys"]["cte"]
+        # teped_prev = self.get_teped_from_namelist(nml)
+        # core_to_ped_te = at1_prev / teped_prev
+
+        an0 = nml["phys"]["ade"]
+        nesep = nml["phys"]["bde"]
+        neped = an0 * (tanh_normaliser) + nesep
+
+        # Caluclate the pedestal temperature based on the KBM constraint
+        teped = self.get_teped(
+            d_ped=new_pedestal_delta,
+            ip=ip,
+            circumference=circumference,
+            neped=neped,
+            tesep=tesep,
+            zimp=nml["phys"]["zimp"],
+            zeff=nml["phys"]["zeff"],
+            z_main_ion=nml["phys"]["zmain"])
+        # at1 = core_to_ped_te * teped
+
+        nml["shape"]["xr2"] = 1.0 - new_pedestal_delta / 2.0
+        nml["shape"]["sig2"] = new_pedestal_delta
+
+        nml['phys']['ate'] = (teped - tesep) / tanh_normaliser
+        # nml['phys']['bte'] =
+        # nml['phys']['cte'] = at1
+        nml['phys']['ddte'] = 1.0 - 0.5 * new_pedestal_delta
+        nml['phys']['ete'] = new_pedestal_delta
+        nml['phys']['fte'] = 1.0 - new_pedestal_delta
+
+        nml['phys']['dde'] = 1.0 - 0.5 * new_pedestal_delta
+        nml['phys']['ede'] = new_pedestal_delta
+        nml['phys']['fde'] = 1.0 - new_pedestal_delta
+
+        # Keep ion temperature equal to electron temperature
+        nml['phys']['ati'] = 0.0
+
+        nml.write(os.path.join(scan_dir, "fort.10"))
+        return

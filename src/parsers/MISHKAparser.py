@@ -52,6 +52,9 @@ class MISHKAparser(Parser):
         The main output file.
         Looking for line:
          INSTABILITY FOUND :   -10    9  0.3076E+00  0.2167E-08
+
+        If number of iterations reached the maximum limit (usually 20),
+        then the growthrate is assumed to be 0. (Europed)
         """
         success = False
         growthrate = None
@@ -63,7 +66,12 @@ class MISHKAparser(Parser):
                 if "INSTABILITY" in line:
                     print(line)
                     spl = line.split()
-                    growthrate = (float(spl[5]), float(spl[6]))
+                    iteration = int(spl[4])
+                    growthrate = (
+                        (0.0, 0.0)
+                        if iteration >= 20
+                        else (float(spl[5]), float(spl[6]))
+                    )
                     success = True
         except FileNotFoundError as e:
             print(f"(read_output_fort20) FileNotFoundError: {e}")
@@ -301,7 +309,7 @@ class MISHKAparser(Parser):
             status, Mercier criterion presence, and ballooning criterion
             presence.
         """
-        file_name = "summary.json"
+        file_name = os.path.join(run_dir, "summary.json")
         summary = {"run_dir": run_dir, "params": params}
         success, growthrate = self.read_output_fort20(run_dir)
         summary["success"] = success
@@ -312,7 +320,14 @@ class MISHKAparser(Parser):
 
         if "helena_dir" in params:
             summary["helena_dir"] = params["helena_dir"]
+            summary["h_id"] = params["helena_dir"].split("/")[-1]
 
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
+
+        if success and growthrate is not None:
+            np.save(
+                os.path.join(run_dir, "ntor_gamma.npy"),
+                np.array([params["ntor"], np.sqrt(np.max([0.0, growthrate[0]]))]),
+            )
         return summary

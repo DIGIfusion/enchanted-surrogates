@@ -1,12 +1,13 @@
 # runners/MISHKA.py
 
 # import numpy as np
+# import json
 import os
 import shutil
 import subprocess
-import json
 from parsers import MISHKAparser
 from .base import Runner
+from dask.distributed import print
 
 
 class MISHKArunner(Runner):
@@ -20,6 +21,9 @@ class MISHKArunner(Runner):
     and the toroidal mode number is n=20, which according to the europed
     standards gives the poloidal mode number m=71, then
     the runner will expect the executable to be found at "/bin/mishka1fast_71".
+
+    Either define the fort.12 file in the runner config file or define the
+    path to the (HELENA output) directory in the params.
 
     Attributes
     ----------
@@ -40,27 +44,16 @@ class MISHKArunner(Runner):
     """
 
     def __init__(self, executable_path: str, other_params: dict, *args, **kwargs):
-        self.parser = MISHKAparser(default_namelist=other_params["default_namelist"])
+        self.parser = MISHKAparser(default_namelist=other_params["namelist_path"])
         self.executable_path = executable_path
-        self.default_namelist = other_params["default_namelist"]
-        self.input_fort12 = other_params["input_fort12"]
-        self.input_density = other_params["input_density"]
-
-        if not os.path.exists(self.default_namelist):
-            raise FileNotFoundError(
-                f"Couldn't find {self.default_namelist}. ",
-                f"other_params: {other_params}",
-            )
-
-        if len(self.input_fort12) > 0 and not os.path.exists(self.input_fort12):
-            raise FileNotFoundError(
-                f"Couldn't find {self.input_fort12}. ", f"other_params: {other_params}"
-            )
-
-        # MISHKA can run without density file
-        # if not os.path.exists(self.input_density):
-        #     self.input_density = None
-        #     print(f"Couldn't find {self.input_density}")
+        self.default_namelist = other_params["namelist_path"]
+        self.input_fort12 = (
+            "" if "input_fort12" not in other_params else other_params["input_fort12"]
+        )
+        self.input_density = (
+            "" if "input_density" not in other_params else other_params["input_density"]
+        )
+        self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -75,8 +68,22 @@ class MISHKArunner(Runner):
         -------
         None
         """
-        print(params)
+        print(run_dir, params)
         # check if equilibrium files exist and copy them to run_dir
+        if not os.path.exists(self.default_namelist):
+            print(
+                f"Couldn't find {self.default_namelist}. \n",
+                f"params: {params}",
+            )
+            return
+
+        if len(self.input_fort12) > 0 and not os.path.exists(self.input_fort12):
+            print(
+                f"Couldn't find the defined {self.input_fort12}. \n",
+                f"params: {params}",
+            )
+            return
+
         self.get_equilibrium_files(run_dir, params)
 
         # write input file
@@ -111,9 +118,10 @@ class MISHKArunner(Runner):
         None
         """
         if "helena_dir" in params:
-            file_path = params["helena_dir"] + "/fort.12"
+            file_path = os.path.join(params["helena_dir"], "fort.12")
         else:
             file_path = self.input_fort12
+        print(f"copying {file_path}")
         shutil.copy(file_path, run_dir)
 
         # if self.input_density is not None:
@@ -150,3 +158,21 @@ class MISHKArunner(Runner):
         else:
             harmonic = 71
         return harmonic
+
+    def pre_run_check(self):
+        """
+        Performs pre-run checks to ensure necessary files exist before running the simulation.
+
+        Raises:
+            FileNotFoundError: If the executable path or the namelist path is not found.
+
+        """
+        ntors = [21, 31, 41, 51, 71]
+        for ntor in ntors:
+            if not os.path.isfile(f"{self.executable_path}_{ntor}"):
+                raise FileNotFoundError(
+                    f"The executable path ({self.executable_path}_{ntor}) provided to the MISHKA ",
+                    "runner is not found. Exiting.",
+                )
+
+        return

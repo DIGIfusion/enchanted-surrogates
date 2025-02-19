@@ -94,7 +94,8 @@ class DaskExecutor(Executor):
             self.clients = [self.simulator_client, self.surrogate_client]
         else:
             raise ValueError(
-                "Make sure that the config has simulator_args and surrogate_args if using ACTIVE samplers"
+                "Make sure that the config has simulator_args and surrogate_args if using "
+                + "ACTIVE samplers"
             )
 
     def submit_batch_of_params(self, param_list: list[dict]) -> list:
@@ -104,11 +105,13 @@ class DaskExecutor(Executor):
             ValueError: If the configuration is incomplete for ACTIVE sampler types.
         """
         futures = []
+        print(param_list)
         for params in param_list:
             new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
             )
             futures.append(new_future)
+        print(futures)
         return futures
 
     def start_runs(self):
@@ -123,18 +126,7 @@ class DaskExecutor(Executor):
         completed = 0
         outputs = []
         if sampler_interface in [S.SEQUENTIAL]:
-            print("Sampler is SEQUENTIAL")
-            seq = as_completed(futures)
-            for future in seq:
-                res = future.result()
-                outputs.append(str(res))
-                completed += 1
-                if self.sampler.total_budget > completed:
-                    params = self.sampler.get_next_parameter()
-                    new_future = self.simulator_client.submit(
-                        run_simulation_task, self.runner_args, params, self.base_run_dir
-                    )
-                    seq.add(new_future)
+            seq = wait(futures)
 
             if self.output_dir is not None:
                 print("SAVING OUTPUT IN:", self.output_dir)
@@ -231,9 +223,13 @@ class DaskExecutor(Executor):
                 print(f"Elapsed train task time: {time.time() - time_starttrain}")
 
                 for metric_name, metric_vals in metrics.items():
-                    # print(f'\n{metric_name}: min: {min(metric_vals)}, max: {max(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
+                    # print(f'\n{metric_name}: min: {min(metric_vals)},
+                    # max: {max(metric_vals)}
+                    # @ epoch {metric_vals.index(min(metric_vals))}\n', metric_vals)
                     print(
-                        f"\n{metric_name}: max: {max(metric_vals)} @ epoch {metric_vals.index(max(metric_vals))}, min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n"
+                        f"\n{metric_name}: max: {max(metric_vals)} ",
+                        f"@ epoch {metric_vals.index(max(metric_vals))}, ",
+                        f"min: {min(metric_vals)} @ epoch {metric_vals.index(min(metric_vals))}\n",
                     )
 
                 self.sampler.update_metrics(metrics)
@@ -250,4 +246,5 @@ class DaskExecutor(Executor):
                 self.sampler.dump_iteration_results(
                     self.base_run_dir, iterations, trained_model_state_dict
                 )
-            # self.sampler.dump_iteration_results(base_run_dir=self.base_run_dir, iterations=iterations)
+            # self.sampler.dump_iteration_results(
+            #    base_run_dir=self.base_run_dir, iterations=iterations)
