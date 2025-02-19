@@ -298,6 +298,9 @@ class HELENArunner(Runner):
                             self.pedestal_width_scan_params["max_width"],
                             self.pedestal_width_scan_params["max_iterations"],
                         )
+                    else:
+                        d_ped_scans = []
+
                     print(f"Pedestal widths to iterate: {d_ped_scans}", flush=True)
                     for _i, d_ped_scan in enumerate(d_ped_scans):
                         try:
