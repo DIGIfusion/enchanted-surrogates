@@ -1,5 +1,5 @@
 sampler:
-  type: Grid
+  type: RandSampler
   bounds: [[1.8, 1.9], [0.05, 0.051]]
   num_samples: [2, 1]
   parameters: ['beta_N', 'pedestal_delta']
@@ -8,17 +8,22 @@ runner:
   type: HELENArunner
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {
-    "namelist_path": "/scratch/project_2009007/aarojarvinen/fort.10",
+    "namelist_path": "/scratch/project_2009007/ench-surr-helper/helena/fort_jet_simple.10",
     "only_generate_files": False,
-    "beta_iteration": True}
+    "input_parameter_type": 3, 
+    "beta_iteration": True,
+    "beta_tolerance": 0.01,
+    "max_beta_iterations": 3,
+  }
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2009007/aarojarvinen/helena_beta_run
+  base_run_dir: /scratch/project_2009007/helena_beta_run
   worker_args: # to be specified for the SLURMCluster in DASK
-    local: 'True'
+    # local: 1
     account: "project_2009007"
-    queue: "medium"
+    queue: "small"
+    job_cpu: 8
     cores: 1 
     memory: "12GB"
     processes: 1

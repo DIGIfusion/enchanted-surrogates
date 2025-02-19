@@ -1,7 +1,7 @@
 sampler:
   type: Grid
-  bounds: [[0.02, 0.06], [0.0, 0.45]]
-  num_samples: [10, 10]
+  bounds: [[0.02, 0.04], [0.0, 0.45]]
+  num_samples: [2, 2]
   parameters: ['pedestal_delta', 'tria']
 
 runner:
@@ -9,15 +9,19 @@ runner:
   executable_path: "/scratch/project_2009007/HELENA/bin/hel13_64"
   other_params: {
     "namelist_path": "/scratch/project_2009007/ench-surr-helper/helena/fort.10",
-    "only_generate_files": False}
+    "only_generate_files": False,
+    "input_parameter_type": 3, 
+  }
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2005083/some_data_dir
+  base_run_dir: /scratch/project_2009007/tmp/some_data_dir
   worker_args: # to be specified for the SLURMCluster in DASK
+    local: 1
     account: "project_2009007"
-    queue: "medium"
+    queue: "small"
     cores: 1 
+    job_cpu: 6
     memory: "12GB"
     processes: 1
     walltime: "00:10:00" # Adam: survival length of worker, so possibly just set to max in cluster
