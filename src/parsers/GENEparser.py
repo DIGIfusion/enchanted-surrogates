@@ -14,6 +14,20 @@ from scipy import interpolate
 from scipy.interpolate import RBFInterpolator
 from scipy.interpolate import CubicSpline
 
+import f90nml
+import re
+from collections import deque
+
+
+#import from submodules
+try: 
+    from IFS_scripts.geomWrapper import calc_kperp_omd, init_read_geometry_file
+    from IFS_scripts.parIOWrapper import init_read_parameters_file
+
+    from TPED.projects.GENE_sim_reader.archive.ARCHIVE_GENE_field_data import GeneField as GF
+    from TPED.projects.GENE_sim_reader.utils.find_GENE_files import GeneFileFinder as GFF
+except: ModuleNotFoundError("You need to add sys.path.append(relative/dir/submodules) to your script or notebook for these to be imported.\n For example if in the notebooks dir sys.path.append('../submodules')")
+
 
 from parsers.HELENAparser import *
 HELENAparser = HELENAparser()
@@ -257,7 +271,6 @@ class GENEparser(Parser):
         ###print "psip_n_temp[psisep_ind]~1", psip_n_unifR[psisep_ind]
         #print "we have a problem here because uniform R grid doesn't have enough resolution near separatrix"
         psip_n_obmp = psip_n_unifR[:psisep_ind].copy()
-        print(*psip_n_obmp)
         ###print "psip_n_obmp[0]~0", psip_n_obmp[0]
         ###print "psip_n_obmp[-1]~1", psip_n_obmp[-1]
         #plt.plot(psi_pol_obmp)
@@ -826,5 +839,144 @@ class GENEparser(Parser):
             # (2020) (rlim(i),zlim(i),i=1,limitr)
             towrite = np.array([RLIM, ZLIM]).flatten(order="F")
             file.write(format_2020.write(towrite) + "\n")
+
+    
+    def calc_mixing_length(self, scanfiles_dir, suffix):
+        field_path = os.path.join(scanfiles_dir,f'field_{suffix}')
+        field = GF(field_path)
+        field_dict = field.field_filepath_to_dict(time_criteria='last')
+        zgrid = field_dict['zgrid']
+        apar = np.abs(field_dict['field_apar'][-1])
+        phi = np.abs(field_dict['field_phi'][-1])
+        
+        cwd = os.getcwd()
+        os.chdir(scanfiles_dir)
+        pars = init_read_parameters_file('_'+suffix)
+        geom_type, geom_pars, geom_coeff = init_read_geometry_file('_'+suffix, pars)
+        os.chdir(cwd)
+        
+        kperp, omd_curv, omd_gradB = calc_kperp_omd(geom_type,geom_coeff,pars,False,False)
+        
+        avg_kperp_squared_phi = np.sum((phi/np.sum(phi)) * kperp**2)
+        avg_kperp_squared_A = np.sum((apar/np.sum(apar)) * kperp**2)
+        gamma = pars['kymin']
+        return [gamma/avg_kperp_squared_phi, gamma/avg_kperp_squared_A]
+    
+    def get_all_suffixes(self, scanfiles_dir):
+        files = os.listdir(scanfiles_dir)
+        pattern = r'\d{4}'
+        matched_strings = []
+        for filename in files:
+            matches = re.findall(pattern, filename)
+            matched_strings.extend(matches)
+        suffix_s = np.unique(matched_strings)
+        return suffix_s
+    
+    def get_all_mixing_lengths(self, scanfiles_dir):
+        suffix_s = self.get_all_suffixes(scanfiles_dir)
+
+        mixing_lengths_phi = []
+        mixing_lengths_A = []
+        for suffix in suffix_s:
+            mxl_phi, mxl_A = self.calc_mixing_length(scanfiles_dir, suffix)
+            mixing_lengths_phi.append(mxl_phi)
+            mixing_lengths_A.append(mxl_A)
             
+        return mixing_lengths_phi, mixing_lengths_A
+    
+    def read_fluxes(self, scanfiles_dir, suffix, species_names=['Electrons','Ions']):
+        nspecies = len(species_names)
+        print('READING FLUXES')
+        nrg_path = os.path.join(scanfiles_dir,f'nrg_{suffix}')
+        with open(nrg_path, 'r') as nrg_file:
+            lines = deque(nrg_file, maxlen=nspecies)
+            #lines = nrg_file.readlines()[-nspecies:]
+        species_fluxes = {}
+        for species_name, l in zip(species_names, lines):
+            values = re.findall("(-?\d+\.\d+E[+-]?\d+)", l)#np.array(l.split('  ')"
+            fluxes = values[4:8]
+            fluxes = {f'particle_electrostatic_{species_name}':float(fluxes[0]), f'particle_electromagnetic_{species_name}':float(fluxes[1]), f'heat_electrostatic_{species_name}':float(fluxes[2]), f'heat_electromagnetic_{species_name}':float(fluxes[3])}
+            species_fluxes[species_name] = fluxes
+        # The species are in the same order as in the gene_parameters file.
+        return species_fluxes
+    
+    def get_fingerprints(self, scanfiles_dir, suffix, species_names=['Electrons','Ions']):
+        parameters_path = os.path.join(scanfiles_dir, f'parameters_{suffix}')
+        parameters_dict = self.read_parameters_dict(parameters_path)
+        nref = parameters_dict['units']['nref']
+        Tref = parameters_dict['units']['tref']
+        Lref = parameters_dict['units']['lref']
+        keys = list(parameters_dict.keys())
+        species = [s for s in keys if 'species' in s]
+        fluxes = self.read_fluxes(scanfiles_dir, suffix)
+        diffusivities = {}
+        for name, spec in zip(species_names,species):
+            particle_flux = fluxes[name][f'particle_electrostatic_{name}'] + fluxes[name][f'particle_electromagnetic_{name}']#fluxes_df[f'particle_electrostatic_{name}'].iloc[i] + fluxes_df[f'particle_electromagnetic_{name}'].iloc[i]
+            omn = parameters_dict[spec]['omn']
+            n = nref * parameters_dict[spec]['dens']
+            grad_n = -(n/Lref) * omn
+            particle_diff = - particle_flux / grad_n
             
+            heat_flux = fluxes[name][f'heat_electrostatic_{name}'] + fluxes[name][f'heat_electromagnetic_{name}']            
+            omt = parameters_dict[spec]['omt'] 
+            T = parameters_dict[spec]['temp'] * Tref
+            grad_T = omt * -(T/Lref)
+            
+            heat_diff = -(heat_flux - (3/2)*T*particle_flux)/(n * grad_T)
+            diffusivities[name] = {'particle_diff':particle_diff, 'heat_diff':heat_diff}
+        
+        fingerprints = [diffusivities['Ions']['heat_diff'] / diffusivities['Electrons']['heat_diff'], diffusivities['Electrons']['particle_diff'] / diffusivities['Electrons']['heat_diff']]
+        return fingerprints
+    
+    def get_local_equlibrium(self, scanfiles_dir, suffix):
+        cwd = os.getcwd()
+        os.chdir(scanfiles_dir)
+        pars = init_read_parameters_file('_'+suffix)
+        geom_type, geom_pars, geom_coeff = init_read_geometry_file('_'+suffix, pars)
+        os.chdir(cwd)
+        # print('GEOME TYPE', geom_type)
+        # print('GEOME PARS', geom_pars)
+        # print('GEOME COEFF', geom_coeff)
+        return geom_pars, geom_coeff
+    
+    #ANNA: your version returns a dict that only has one species in it.
+    def read_parameters_dict(self, parameters_path):
+        # for some reason f90nml fails to parse with 'FCVERSION' line in the parameters file, so I comment it
+        with open(parameters_path, 'r') as parameters_file:
+            lines = parameters_file.readlines()
+            for i, line in enumerate(lines):
+                if 'FCVERSION' in line:
+                    lines[i] = '!'+line
+
+        with open(parameters_path, 'w') as parameters_file:
+            parameters_file.writelines(lines)
+
+        with open(parameters_path, 'r') as parameters_file:
+            nml = f90nml.read(parameters_file)
+            parameters_dict= nml.todict()
+        return parameters_dict
+    
+    def get_normalised_gradients(self, scanfiles_dir, suffix):
+        parameters_path = os.path.join(scanfiles_dir, f'parameters_{suffix}')
+        params = self.read_parameters_dict(parameters_path)
+        norm_grad = [params['_grp_species_0']['omt'], params['_grp_species_0']['omn'], params['_grp_species_1']['omn']] 
+        return norm_grad
+        
+    def get_model_inputs(self, scanfiles_dir, suffix):
+        print('GETTING MODEL INPUTS')
+        norm_grad = self.get_normalised_gradients(scanfiles_dir, suffix)
+        geom_pars, geom_coeff = self.get_local_equlibrium(scanfiles_dir, suffix)
+        print('NORM GRAD', norm_grad)
+        print('GEOM COEFF', geom_coeff)
+        x = norm_grad + [geom_pars['q0'], geom_pars['shat'], geom_pars['s0'], geom_pars['beta'], geom_pars['my_dpdx']]
+        
+        for k,v in geom_coeff.items():
+            x = x + list(v)
+        
+        return np.array(x)
+    
+    def get_model_outputs(self, scanfiles_dir, suffix):
+        mixing_lengths = self.calc_mixing_length(scanfiles_dir, suffix)
+        fingerprints = self.get_fingerprints(scanfiles_dir,suffix)
+        y = mixing_lengths + fingerprints
+        return np.array(y)
