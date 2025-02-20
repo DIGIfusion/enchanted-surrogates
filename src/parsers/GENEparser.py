@@ -980,3 +980,20 @@ class GENEparser(Parser):
         fingerprints = self.get_fingerprints(scanfiles_dir,suffix)
         y = mixing_lengths + fingerprints
         return np.array(y)
+    
+    def write_parameters_file_pyro(self, psi_n, iterdb_path, eqdsk_path, write_path):
+        from pyrokinetics import Pyro
+        # Load up pyro object
+        pyro = Pyro(
+            eq_file=eqdsk_path,
+            eq_type="GEQDSK",
+            gk_code="GENE",
+        )
+        from pyrokinetics_extra.iterdb import KineticsReaderITERDB
+        reader = KineticsReaderITERDB()
+        kinetics = reader.read_from_file(iterdb_path, pyro.eq)
+        pyro.kinetics = kinetics
+        pyro.load_local_geometry(psi_n=psi_n, local_geometry="FourierGENE", show_fit=False)
+        pyro.write_gk_file(file_name=write_path)
+        
+        
