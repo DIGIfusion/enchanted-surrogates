@@ -669,7 +669,6 @@ class GENEparser(Parser):
             RADIUS=geometry_vars["RADIUS"],
         )
         psi_arr_og = elite_data["Psi"]#[1:-1]
-        psi_arr_og = psi_arr_og - np.max(psi_arr_og)
         max_value = np.max(psi_arr_og)
         fpol_arr_og = elite_data["fpol"]#[1:-1]#[1:]
         pres_arr_og = helena_fort12_outputs["P0_SCALED"]#[1:-1]
@@ -683,7 +682,7 @@ class GENEparser(Parser):
         RLEFT = (r_arr_og.min())-(r_arr_og.max() - r_arr_og.min())*0.05
  
 
-        SIMAG = psi_arr_og.min() #(psi_arr_og.max())#-psi_arr_og.min()) #psi_arr_og.min()
+        SIMAG = 0 #psi_arr_og.min() #(psi_arr_og.max())#-psi_arr_og.min()) #psi_arr_og.min()
         SIBRY = psi_arr_og.max() #0
         RMAXIS = geometry_vars["RMAGAXIS"]
         RCENTR = geometry_vars["RVAC"]
@@ -794,9 +793,9 @@ class GENEparser(Parser):
                     grid_lin[j, i] = grid_lin_boundary[int(clos_i[0])] + PSI21[1]/d_21_2[int(clos_i2[0])]*d
 
         
-        #SIMAG = -(psi_arr_og.max())#-psi_arr_og.min())
-        #SIBRY = 0
-        #grid_lin = grid_lin - max_grid_lin #+ SIMAG #max_grid_lin
+        SIMAG = -(psi_arr_og.max())#-psi_arr_og.min())
+        SIBRY = 0
+        grid_lin = grid_lin -max_grid_lin#+ SIMAG #max_grid_lin
         
         format_2000 = ff.FortranRecordWriter("(6a8, 3i4)")
         format_2020 = ff.FortranRecordWriter("(5e16.9)")
@@ -842,7 +841,7 @@ class GENEparser(Parser):
             file.write(format_2020.write(towrite) + "\n")
 
     
-    def calc_mixing_length(self, scanfiles_dir, suffix):
+    def calc_mixing_length(self, scanfiles_dir, suffix, as_dict=False):
         field_path = os.path.join(scanfiles_dir,f'field_{suffix}')
         field = GF(field_path)
         field_dict = field.field_filepath_to_dict(time_criteria='last')
@@ -861,7 +860,11 @@ class GENEparser(Parser):
         avg_kperp_squared_phi = np.sum((phi/np.sum(phi)) * kperp**2)
         avg_kperp_squared_A = np.sum((apar/np.sum(apar)) * kperp**2)
         gamma = pars['kymin']
-        return [gamma/avg_kperp_squared_phi, gamma/avg_kperp_squared_A]
+        if as_dict:
+            mixing_lengths = {'mixing_length_phi':gamma/avg_kperp_squared_phi, 'mixing_length_Aperp':gamma/avg_kperp_squared_A}
+        else:
+            mixing_lengths = [gamma/avg_kperp_squared_phi, gamma/avg_kperp_squared_A]
+        return mixing_lengths
     
     def get_all_suffixes(self, scanfiles_dir):
         files = os.listdir(scanfiles_dir)
@@ -887,7 +890,7 @@ class GENEparser(Parser):
     
     def read_fluxes(self, scanfiles_dir, suffix, species_names=['Electrons','Ions']):
         nspecies = len(species_names)
-        print('READING FLUXES')
+        # print('READING FLUXES')
         nrg_path = os.path.join(scanfiles_dir,f'nrg_{suffix}')
         with open(nrg_path, 'r') as nrg_file:
             lines = deque(nrg_file, maxlen=nspecies)
@@ -901,7 +904,7 @@ class GENEparser(Parser):
         # The species are in the same order as in the gene_parameters file.
         return species_fluxes
     
-    def get_fingerprints(self, scanfiles_dir, suffix, species_names=['Electrons','Ions']):
+    def get_fingerprints(self, scanfiles_dir, suffix, species_names=['Electrons','Ions'], as_dict=False):
         parameters_path = os.path.join(scanfiles_dir, f'parameters_{suffix}')
         parameters_dict = self.read_parameters_dict(parameters_path)
         nref = parameters_dict['units']['nref']
@@ -926,7 +929,11 @@ class GENEparser(Parser):
             heat_diff = -(heat_flux - (3/2)*T*particle_flux)/(n * grad_T)
             diffusivities[name] = {'particle_diff':particle_diff, 'heat_diff':heat_diff}
         
-        fingerprints = [diffusivities['Ions']['heat_diff'] / diffusivities['Electrons']['heat_diff'], diffusivities['Electrons']['particle_diff'] / diffusivities['Electrons']['heat_diff']]
+        if as_dict:
+            fingerprints = {'Q_i/Q_e':diffusivities['Ions']['heat_diff'] / diffusivities['Electrons']['heat_diff'], 'chi_e/Q_e':  diffusivities['Electrons']['particle_diff'] / diffusivities['Electrons']['heat_diff']}    
+        else:
+            fingerprints = [diffusivities['Ions']['heat_diff'] / diffusivities['Electrons']['heat_diff'], diffusivities['Electrons']['particle_diff'] / diffusivities['Electrons']['heat_diff']]
+        
         return fingerprints
     
     def get_local_equlibrium(self, scanfiles_dir, suffix):
@@ -957,30 +964,71 @@ class GENEparser(Parser):
             parameters_dict= nml.todict()
         return parameters_dict
     
-    def get_normalised_gradients(self, scanfiles_dir, suffix):
+    def get_normalised_gradients(self, scanfiles_dir, suffix, as_dict=False, species_names = ['Electrons', 'Ions']):
         parameters_path = os.path.join(scanfiles_dir, f'parameters_{suffix}')
         params = self.read_parameters_dict(parameters_path)
-        norm_grad = [params['_grp_species_0']['omt'], params['_grp_species_0']['omn'], params['_grp_species_1']['omn']] 
+        if as_dict:
+            norm_grad = {'kymin':params['box']['kymin'],'omt':params['_grp_species_0']['omt'], species_names[0]+'_omn':params['_grp_species_0']['omn'],species_names[1]+'_omn': params['_grp_species_1']['omn']}
+        else:
+            norm_grad = [params['_grp_species_0']['omt'], params['_grp_species_0']['omn'], params['_grp_species_1']['omn'], params['box']['kymin']] 
         return norm_grad
         
-    def get_model_inputs(self, scanfiles_dir, suffix):
-        print('GETTING MODEL INPUTS')
-        norm_grad = self.get_normalised_gradients(scanfiles_dir, suffix)
+    def get_model_inputs(self, scanfiles_dir, suffix, as_dict=False):
+        # print('GETTING MODEL INPUTS')
+        norm_grad = self.get_normalised_gradients(scanfiles_dir, suffix, as_dict=as_dict)
         geom_pars, geom_coeff = self.get_local_equlibrium(scanfiles_dir, suffix)
-        print('NORM GRAD', norm_grad)
-        print('GEOM COEFF', geom_coeff)
-        x = norm_grad + [geom_pars['q0'], geom_pars['shat'], geom_pars['s0'], geom_pars['beta'], geom_pars['my_dpdx']]
+        # print('NORM GRAD', norm_grad)
+        # print('GEOM COEFF', geom_coeff)
         
-        for k,v in geom_coeff.items():
-            x = x + list(v)
-        
-        return np.array(x)
+        if as_dict:
+            x = norm_grad | {'q0':geom_pars['q0']} | {'shat':geom_pars['shat']} | {'s0':geom_pars['s0']} | {'beta':geom_pars['beta']} | {'my_dpdx':geom_pars['my_dpdx']} | geom_coeff
+        else:            
+            x = norm_grad + [geom_pars['q0'], geom_pars['shat'], geom_pars['s0'], geom_pars['beta'], geom_pars['my_dpdx']]
+            
+            for k,v in geom_coeff.items():
+                x = x + list(v)
+            x = np.array(x)
+        return x
     
-    def get_model_outputs(self, scanfiles_dir, suffix):
-        mixing_lengths = self.calc_mixing_length(scanfiles_dir, suffix)
-        fingerprints = self.get_fingerprints(scanfiles_dir,suffix)
-        y = mixing_lengths + fingerprints
-        return np.array(y)
+    def get_model_outputs(self, scanfiles_dir, suffix, as_dict=False):
+        mixing_lengths = self.calc_mixing_length(scanfiles_dir, suffix, as_dict=as_dict)
+        fingerprints = self.get_fingerprints(scanfiles_dir,suffix, as_dict=as_dict)
+        
+        if as_dict:
+            y = mixing_lengths | fingerprints
+        else:
+            y = mixing_lengths + fingerprints
+            y = np.array(y)
+        return y
+    
+    def get_all_model_io(self, all_scanfiles_dir:list, as_dict=False):
+        first=True
+        if as_dict:
+            x={}
+            y={}
+        else:
+            x = []
+            y = []
+        for scanfiles_dir in all_scanfiles_dir:
+            suffix_s = self.get_all_suffixes(scanfiles_dir)
+            for suffix in suffix_s:
+                xi = self.get_model_inputs(scanfiles_dir, suffix, as_dict)
+                yi = self.get_model_outputs(scanfiles_dir, suffix, as_dict)
+                if as_dict:
+                    for k,v in xi.items():
+                        if first: 
+                            x[k] = []
+                        x[k]=x[k]+[v]
+                    first=False
+                else:
+                    x.append(xi)
+                    y.append(yi)
+        
+        if not as_dict:
+            x = np.array(x)
+            y = np.array(y)
+        
+        return x, y
     
     def write_parameters_file_pyro(self, psi_n, iterdb_path, eqdsk_path, write_path):
         from pyrokinetics import Pyro
@@ -996,5 +1044,11 @@ class GENEparser(Parser):
         pyro.kinetics = kinetics
         pyro.load_local_geometry(psi_n=psi_n, local_geometry="FourierGENE", show_fit=False)
         pyro.write_gk_file(file_name=write_path)
+        
+    def get_latest_scanfiles_dir(self, output_dir):
+        scanfiles_dir = os.listdir(output_dir)
+        scanfiles_number = [re.findall('[0-9]{4}',sc_dir) for sc_dir in scanfiles_dir]
+        latest_scanfiles_dir = scanfiles_dir[np.argmax(np.array(scanfiles_number).astype('int'))]
+        return latest_scanfiles_dir
         
         
