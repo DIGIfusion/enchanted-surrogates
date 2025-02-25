@@ -8,8 +8,8 @@ print(sys.argv)
 this_script_path, fpath, eqdsk_path = sys.argv
 
 gp = GENEparser()
-NR = 900
-NZ = 900
+NR = 1200
+NZ = 1200
 
 print('showing fpath and eqdsk path in python')
 print(fpath)

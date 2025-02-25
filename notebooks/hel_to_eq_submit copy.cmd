@@ -4,7 +4,7 @@
 #SBATCH -t 01:00:00                # wallclock limit
 #SBATCH -N 1                       # total number of nodes, 2 CPUs with 64 rank each
 #SBATCH --ntasks=1      # 64 per CPU (i.e. 128 per node). Additional 2 hyperthreads disabled
-#SBATCH --mem=900MB                    # Allocate all the memory on each node
+#SBATCH --mem=500MB                    # Allocate all the memory on each node
 #SBATCH -p small                # all options see: scontrol show partition
 #SBATCH -J hel_to_eqdsk                    # Job name
 #SBATCH -o ./slurm_out/%x.%j.out

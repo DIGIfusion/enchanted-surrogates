@@ -669,6 +669,7 @@ class GENEparser(Parser):
             RADIUS=geometry_vars["RADIUS"],
         )
         psi_arr_og = elite_data["Psi"]#[1:-1]
+        psi_arr_og = psi_arr_og - np.max(psi_arr_og)
         max_value = np.max(psi_arr_og)
         fpol_arr_og = elite_data["fpol"]#[1:-1]#[1:]
         pres_arr_og = helena_fort12_outputs["P0_SCALED"]#[1:-1]
@@ -682,7 +683,7 @@ class GENEparser(Parser):
         RLEFT = (r_arr_og.min())-(r_arr_og.max() - r_arr_og.min())*0.05
  
 
-        SIMAG = 0 #psi_arr_og.min() #(psi_arr_og.max())#-psi_arr_og.min()) #psi_arr_og.min()
+        SIMAG = psi_arr_og.min() #(psi_arr_og.max())#-psi_arr_og.min()) #psi_arr_og.min()
         SIBRY = psi_arr_og.max() #0
         RMAXIS = geometry_vars["RMAGAXIS"]
         RCENTR = geometry_vars["RVAC"]
@@ -793,9 +794,9 @@ class GENEparser(Parser):
                     grid_lin[j, i] = grid_lin_boundary[int(clos_i[0])] + PSI21[1]/d_21_2[int(clos_i2[0])]*d
 
         
-        SIMAG = -(psi_arr_og.max())#-psi_arr_og.min())
-        SIBRY = 0
-        grid_lin = grid_lin -max_grid_lin#+ SIMAG #max_grid_lin
+        #SIMAG = -(psi_arr_og.max())#-psi_arr_og.min())
+        #SIBRY = 0
+        #grid_lin = grid_lin - max_grid_lin #+ SIMAG #max_grid_lin
         
         format_2000 = ff.FortranRecordWriter("(6a8, 3i4)")
         format_2020 = ff.FortranRecordWriter("(5e16.9)")

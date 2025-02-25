@@ -13,3 +13,6 @@
 [submodule "submodules/GENE_ML"]
 	path = submodules/GENE_ML
 	url = git@github.com:DanHarJor/GENE_ML.git
+[submodule "submodules/IFS_scripts"]
+	path = submodules/IFS_scripts
+	url = git@github.com:drdrhatch/IFS_scripts.git
