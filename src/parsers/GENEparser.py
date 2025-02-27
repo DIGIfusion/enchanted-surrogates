@@ -1054,5 +1054,31 @@ class GENEparser(Parser):
         scanfiles_number = [re.findall('[0-9]{4}',sc_dir) for sc_dir in scanfiles_dir]
         latest_scanfiles_dir = scanfiles_dir[np.argmax(np.array(scanfiles_number).astype('int'))]
         return latest_scanfiles_dir
+    
+    def read_kymin_growthrate(self, filepath):
+    # Dictionary to store the kymin values and growthrates
+        results = {}
+        kymins = []
+        growthrates = []
+        with open(filepath, 'r') as file:
+            next(file)            
+            for line in file:
+                # Split the line at the '|' character
+                parts = line.strip().split('|')
+                
+                if len(parts) >= 3:
+                    # Get the kymin value from the second part
+                    kymin = float(parts[1].strip())
+                    
+                    # Get the growthrate value, which is the first value after the second '|'
+                    growthrate_parts = parts[2].strip().split()
+                    growthrate = float(growthrate_parts[0])
+                    kymins.append(kymin)
+                    growthrates.append(growthrate)
+                    results['growthrate'] = growthrate
+            results['ky'] = kymins
+            results['growthrate'] = growthrates
+
+        return results
         
         
