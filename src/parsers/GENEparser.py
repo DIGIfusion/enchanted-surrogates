@@ -117,8 +117,12 @@ class GENEparser(Parser):
         f = open(efit_file_name,'r')
         eqdsk=f.readlines()
         line1=eqdsk[0].split()
-        nw=int(eqdsk[0].split()[-2])
-        nh=int(eqdsk[0].split()[-1])
+        try:
+            nw=int(eqdsk[0].split()[-2])
+            nh=int(eqdsk[0].split()[-1])
+        except:
+            nw=int(1200)
+            nh=int(1200) #NOTE added for going around specific cases
         print ('EFIT file Resolution: %d x %d' %(nw,nh))
 
         entrylength=16
@@ -676,17 +680,17 @@ class GENEparser(Parser):
         qpsi_arr_og = elite_data["q"]#[1:-1]
         r_arr_og = elite_data["R"]#[:, 1:-1]
         z_arr_og = elite_data["z"]#[:, 1:-1]
-        RDIM = (r_arr_og.max() - r_arr_og.min())*1.1
-        ZDIM = (z_arr_og.max() - z_arr_og.min())*1.1
-        ZMID = z_arr_og[0, 0]#z_arr_og.max() - ZDIM/2 #-ZDIM / 2.0 #was 0.0
-        RLEFT = (r_arr_og.min())-(r_arr_og.max() - r_arr_og.min())*0.05
+        RDIM = (r_arr_og.max() - r_arr_og.min())*1.01
+        ZDIM = (z_arr_og.max() - z_arr_og.min())*1.01
+        ZMID = z_arr_og.min() + (z_arr_og.max() - z_arr_og.min())*0.505 #z_arr_og[0, 0]#z_arr_og.max() - ZDIM/2 #-ZDIM / 2.0 #was 0.0
+        RLEFT = (r_arr_og.min())-(r_arr_og.max() - r_arr_og.min())*0.005
  
 
         SIMAG = 0 #psi_arr_og.min() #(psi_arr_og.max())#-psi_arr_og.min()) #psi_arr_og.min()
         SIBRY = psi_arr_og.max() #0
         RMAXIS = geometry_vars["RMAGAXIS"]
         RCENTR = geometry_vars["RVAC"]
-        ZMAXIS = ZMID  # NOTE: Assumption
+        ZMAXIS = z_arr_og[0, 0] # ZMID  # NOTE: Assumption
         BCENTR = geometry_vars["BVAC"]
         CURRENT = geometry_vars["CURRENT"]
         
