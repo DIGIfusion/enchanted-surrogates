@@ -11,8 +11,8 @@ import run
 #     runner = SIMPLErunner(executable_path="tests/simple/simple.sh")
 #     assert runner.single_code_run(params={'a': 1, 'b': 2, 'c':3}, run_dir="./simple_test_runs")
 
-data_path = os.path.join(os.getcwd(), "tests/train.csv")
-test_config_dir = os.path.join(os.getcwd(), "tests/configs")
+data_path = os.path.join(os.getcwd(), "tests/automated_tests_no_HPC/train.csv")
+test_config_dir = os.path.join(os.getcwd(), "tests/automated_tests_no_HPC/configs")
 configs_to_test = os.listdir(test_config_dir)
 configs_to_test = [
     conf

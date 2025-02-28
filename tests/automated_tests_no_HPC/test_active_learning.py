@@ -8,7 +8,7 @@ import run
 
 
 config_filepath2 = os.path.join(
-    os.getcwd(), "tests/configs/active_learning_STATICPOOL_ex_dset.yaml"
+    os.getcwd(), "tests/automated_tests_no_HPC/configs/active_learning_STATICPOOL_ex_dset.yaml"
 )
 
 data_path = os.path.join(os.getcwd(), "tests/train.csv")
