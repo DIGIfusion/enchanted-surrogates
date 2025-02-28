@@ -52,7 +52,7 @@ To add submodules: `git submodule update --init --recursive`
 - `main` branch is for stable code
 - `develop/{feature}` or `develop/{user}` for changes, but try to keep `main` up to date and minimize lifetime of branches
 - For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
-
+- The configs folder on git hub is to be kept for test config files and example cases that would be benifical to the wider community. Please keep personal config files in your local repositories either by adding them to .gitignore or keeping them in a seperate branch. 
 
 ## Coding Style Standards
 
@@ -61,18 +61,23 @@ Although we will likely lint with `flake` so don't worry too much about it.
 
 
 ## Testing
-
+### Automated Testing at Pull Request
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
     python -m pytest tests -v -s
 
 and will also be automatically run by Github Actions at certain pushes.
+
+### Linting Tests
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
 To check the linting locally and get a full overview of all possible issues, run:
 
     pylint src/runners/SIMPLErunner.py 
 
 where the argument is the path to the file you want to check.
+
+### Machine Specific Tests
+For security reasons it is currently not possible for automated tests to access HPC harware. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. When submitting a pull request please suggest assignees that you believe should test the new branch on their machine before the merge. 
 
 ## Acknowledgements
 The development of this framework has been support by multiple funding sources:
