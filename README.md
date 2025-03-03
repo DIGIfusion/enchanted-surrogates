@@ -1,5 +1,7 @@
 # enchated-surrogates
 
+sanity-check
+
 A framework for creating databases for surrogate models of complex physics codes.
 
 ## Database generation for a simulation consists of: 
