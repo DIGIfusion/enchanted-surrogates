@@ -39,8 +39,11 @@ Some extra notes on the config file:
 #### Submodules 
 
 If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
+If one plans on manually running pytests (see 'Testing' section) to debug before submitting a pull request then the submodules are also necessary. 
 
-To add submodules: `git submodule update --init --recursive` 
+To add submodules: 
+
+    git submodule update --init --recursive
 
 ## What we do not plan to handle
 
@@ -64,9 +67,13 @@ Although we will likely lint with `flake` so don't worry too much about it.
 ### Automated Testing at Pull Request
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
-    python -m pytest tests -v -s
+    python -m pytest tests/automated_tests_no_HPC -v -s
 
-and will also be automatically run by Github Actions at certain pushes.
+and will also be automatically run by Github Actions at certain pushes and pull-requests. It is recommended to manually run the tests before submitting a pull request.
+
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. For some tests it will be necessary to have the submodules initialised and updated:
+
+    git submodule update --init --recursive
 
 ### Linting Tests
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
@@ -78,6 +85,10 @@ where the argument is the path to the file you want to check.
 
 ### Machine Specific Tests
 For security reasons it is currently not possible for automated tests to access HPC harware. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. When submitting a pull request please suggest assignees that you believe should test the new branch on their machine before the merge. 
+
+On the contrary, if you create a tests folder for your machine e.g. enchanted-surrogates/tests/MACHINE_NAME_tests then others users with access to that machine can run your tests before submitting a pull request and leave a note in the pull request that all tests were sucessfull on your machine.
+
+    python -m pytest tests/MACHINE_NAME_tests
 
 ## Acknowledgements
 The development of this framework has been support by multiple funding sources:
