@@ -27,13 +27,7 @@ jobs:
         git submodule update
     - name: Running pytest
       run: |
-        # Should test everthing in this folder but some are not ready yet
-        # coverage run -m pytest tests/automated_tests_no_HPC -v -s
-        
-        coverage run -m pytest tests/automated_tests_no_HPC/test_grid.py -v -s
-        coverage run -m pytest tests/automated_tests_no_HPC/test_random.py -v -s
-        coverage run -m pytest tests/automated_tests_no_HPC/test_simple.py -v -s
-        
+        coverage run -m pytest tests/automated_tests_no_HPC -v -s        
     - name: Generate Coverage Report  
       run: |  
         coverage report -m
