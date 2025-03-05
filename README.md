@@ -39,7 +39,7 @@ Some extra notes on the config file:
 #### Submodules 
 
 If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
-If one plans on manually running pytests (see 'Testing' section) to debug before submitting a pull request then the submodules are also necessary. 
+Submodules are necessary also for running the pytests locally (although this is done in any PR). 
 
 To add submodules: 
 
@@ -55,7 +55,7 @@ To add submodules:
 - `main` branch is for stable code
 - `develop/{feature}` or `develop/{user}` for changes, but try to keep `main` up to date and minimize lifetime of branches
 - For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
-- The configs folder on git hub is to be kept for test config files and example cases that would be benifical to the wider community. Please keep personal config files in your local repositories either by adding them to .gitignore or keeping them in a seperate branch. 
+- The configs folder in the source is to be kept for test config files and example cases that would be benefical to the wider community.  
 
 ## Coding Style Standards
 
@@ -71,22 +71,20 @@ The `tests` folder contains unit tests. These can be run manually by using the c
 
 and will also be automatically run by Github Actions at certain pushes and pull-requests. It is recommended to manually run the tests before submitting a pull request.
 
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. For some tests it will be necessary to have the submodules initialised and updated:
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests.
 
-    git submodule update --init --recursive
 
 ### Linting Tests
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
 To check the linting locally and get a full overview of all possible issues, run:
 
-    pylint src/runners/SIMPLErunner.py 
+    pylint /path/to/file.py  
 
-where the argument is the path to the file you want to check.
 
 ### Machine Specific Tests
-For security reasons it is currently not possible for automated tests to access HPC harware. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. When submitting a pull request please suggest assignees that you believe should test the new branch on their machine before the merge. 
+For now, no HPC specific tests are run as part of the automated testsing procedure. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. 
 
-On the contrary, if you create a tests folder for your machine e.g. enchanted-surrogates/tests/MACHINE_NAME_tests then others users with access to that machine can run your tests before submitting a pull request and leave a note in the pull request that all tests were sucessfull on your machine.
+Alternatively, one may ceate a tests folder for a specific machine in  `/enchanted-surrogates/tests/MACHINE_NAME_tests`, which should be executable via
 
     python -m pytest tests/MACHINE_NAME_tests
 
