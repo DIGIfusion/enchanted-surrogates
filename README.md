@@ -39,8 +39,11 @@ Some extra notes on the config file:
 #### Submodules 
 
 If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
+Submodules are necessary also for running the pytests locally (although this is done in any PR). 
 
-To add submodules: `git submodule update --init --recursive` 
+To add submodules: 
+
+    git submodule update --init --recursive
 
 ## What we do not plan to handle
 
@@ -52,7 +55,7 @@ To add submodules: `git submodule update --init --recursive`
 - `main` branch is for stable code
 - `develop/{feature}` or `develop/{user}` for changes, but try to keep `main` up to date and minimize lifetime of branches
 - For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
-
+- The configs folder in the source is to be kept for test config files and example cases that would be benefical to the wider community.  
 
 ## Coding Style Standards
 
@@ -61,18 +64,29 @@ Although we will likely lint with `flake` so don't worry too much about it.
 
 
 ## Testing
-
+### Automated Testing at Pull Request
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
-    python -m pytest tests -v -s
+    python -m pytest tests/automated_tests_no_HPC -v -s
 
-and will also be automatically run by Github Actions at certain pushes.
+and will also be automatically run by Github Actions at certain pushes and pull-requests. It is recommended to manually run the tests before submitting a pull request.
+
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests.
+
+
+### Linting Tests
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
 To check the linting locally and get a full overview of all possible issues, run:
 
-    pylint src/runners/SIMPLErunner.py 
+    pylint /path/to/file.py  
 
-where the argument is the path to the file you want to check.
+
+### Machine Specific Tests
+For now, no HPC specific tests are run as part of the automated testsing procedure. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. 
+
+Alternatively, one may ceate a tests folder for a specific machine in  `/enchanted-surrogates/tests/MACHINE_NAME_tests`, which should be executable via
+
+    python -m pytest tests/MACHINE_NAME_tests
 
 ## Acknowledgements
 The development of this framework has been support by multiple funding sources:
