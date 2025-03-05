@@ -50,16 +50,29 @@ class TGLFrunner(Runner):
         # write input file
         self.parser.write_input_file(params, run_dir)
 
-        # process input file
-        tglf_sim_dir = "/".join(run_dir.split("/")[-2:])
-        subprocess.run(["tglf", "-i", f"{tglf_sim_dir}"])
+
+        # # process input file
+        # tglf_sim_dir = "/".join(run_dir.split("/")[-2:])
+        print()
 
         # run TGLF
-        subprocess.run(["tglf", "-e", f"{tglf_sim_dir}"])
+        try: 
+            # print('Runnning tglf')
+            exe_string = "tglf -e"
+            result = subprocess.run(exe_string, 
+                        cwd=run_dir, 
+                        shell=True, 
+                        check=True, 
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                        )
+            print(f"TGLF outpu t at {run_dir}:\n{result.stdout}")
+        except subprocess.CalledProcessError as e: 
+            print(f"Error running executable:\n{e.stderr}")
 
         # process TGLF
-        self.parser.read_output_file(run_dir)
+        output = self.parser.read_output_file(run_dir)
 
         # return fluxes
-        output = self.parser.fluxes
         return output
