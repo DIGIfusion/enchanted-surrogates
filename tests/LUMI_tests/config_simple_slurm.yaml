@@ -1,0 +1,33 @@
+sampler:
+  type: Grid
+  bounds: [[1, 3], [1, 3]]
+  num_samples: 3
+  parameters: ['m', 'n']
+
+runner:
+  type: SIMPLErunner
+  executable_path: /users/danieljordan/enchanted-surrogates/tests/automated_tests_no_HPC/simple/simple.sh
+  other_params: {}
+
+executor:
+  type: SlurmExecutor
+  config_path: /users/danieljordan/enchanted-surrogates/tests/LUMI_tests/config_simple_slurm.yaml
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/simple_slurm
+  # Only specify the resources needed for one run, 
+  # the actual run is handled by the runner,
+  # i.e. runner.single_code_run(params, run_dir)
+  # Must specify lines to load the python enviroment for enchanted surrogates
+  # Must add enchanted-surrogates/src to the python path
+  sbatch: 
+    - '#!/bin/bash'
+    - '#SBATCH --time=00-00:30:00  ## wallclock limit, dd-hh:mm:ss'
+    - '#SBATCH --nodes=1  ## total number of nodes, 2 CPUs with 64 rank each'
+    - '#SBATCH --ntasks=1      # 64 per CPU (i.e. 128 per node). Additional 2 hyperthreads disabled'
+    - '#SBATCH --mem=10MB'
+    - '#SBATCH --partition=small # all options see: scontrol show partition'
+    - '#SBATCH --job-name=simple_slurm  # Job name'
+    - '#SBATCH --output=./%x.%j.out'
+    - '#SBATCH --error=./%x.%j.err'
+    - 'export PATH=/project/project_462000451/enchanted_container_lumi3/bin:$PATH'
+    - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates/src'
+  num_paralell_jobs: 3
