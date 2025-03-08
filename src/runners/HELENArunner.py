@@ -114,6 +114,7 @@ class HELENArunner(Runner):
                 'teped_multip'
                 2: using a scaling law for changing ATE and CTE, requires input parameter
                 "scaling_factor"
+                7: noKBM, used for the DEEPlasma workflow where all mtanh parameters for profiles are specified.  
 
             run_mishka: bool
                 Flag for running MISHKA after the HELENA run. If run_mishka is True
@@ -136,6 +137,12 @@ class HELENArunner(Runner):
             0
             if "beta_iteration" not in other_params
             else other_params["beta_iteration"]
+        )
+        self.constant_beta = (
+            #To set a constant beta for every sample
+            None
+            if "constant_beta" not in other_params
+            else other_params["constant_beta"]
         )
         self.beta_tolerance = (
             1e-4
@@ -232,6 +239,8 @@ class HELENArunner(Runner):
             self.parser.write_input_file_europed2(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 6:
             pass
+        elif self.input_parameter_type == 7:
+            self.parser.write_input_file_noKBM(params, run_dir, self.namelist_path)
         else:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
 
@@ -241,9 +250,11 @@ class HELENArunner(Runner):
 
         # Check input parameters
         if self.beta_iteration > 0:
-            if "beta_N" not in params:
+            if "beta_N" not in params and self.constant_beta==None:
                 print(
                     "The parameter configuration does not include 'beta_N'.",
+                    "The constant_beta is not included in the config file for the runner."
+                    "At least one is needed for the beta itteration. EXITING.",
                     "This it needed for beta iteration. EXITING.",
                 )
                 return False
@@ -256,7 +267,10 @@ class HELENArunner(Runner):
             if self.beta_iteration == 1:
                 self.run_helena_with_beta_iteration(params)
             elif self.beta_iteration == 2:
-                beta_target = params["beta_N"]
+                if self.constant_beta != None:
+                    beta_target = self.constant_beta
+                else:
+                    beta_target = params["beta_N"]
                 self.run_helena_with_beta_at1_iteration(
                     run_dir=run_dir, beta_target=beta_target
                 )
@@ -279,7 +293,10 @@ class HELENArunner(Runner):
         if self.pedestal_width_scan:
             print("Starting pedestal width scan...", flush=True)
             if self.input_parameter_type in [3, 5, 6]:
-                beta_target = params["beta_N"]
+                if self.constant_beta != None:
+                    beta_target = self.constant_beta
+                else:
+                    beta_target = params["beta_N"]
                 print(f"target beta_N = {beta_target}", flush=True)
                 if self.pedestal_width_sampling_method in [0, 1]:
                     # Run for a fixed number of pedestal width scans
@@ -525,7 +542,10 @@ class HELENArunner(Runner):
         Slower then at1 iteration since it needs to run HELENA more times,
         but can reach a more accurate betaN.
         """
-        beta_target = params["beta_N"]
+        if self.constant_beta != None:
+            beta_target = self.constant_beta
+        else:
+            beta_target = params["beta_N"]
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", 0.0)
@@ -575,11 +595,16 @@ class HELENArunner(Runner):
             )
             n_beta_iteration += 1
 
-        print(
+        beta_iteration_results = [
             f"BETA ITERATION FINISHED.\nTarget betaN: {beta_target}\n",
             f"Final betaN: {beta_n}\n",
             f"Number of beta iterations: {n_beta_iteration}",
-        )
+        ]
+        print(beta_iteration_results)
+        
+        with open('beta_iteration_results', 'w') as file:
+            for line in beta_iteration_results:
+                file.write(line)
 
     def run_mishka_for_ntors(self, run_dir):
         """
