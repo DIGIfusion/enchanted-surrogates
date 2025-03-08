@@ -1,0 +1,45 @@
+# sampler:
+#   type: StaticSparseGrid
+#   bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
+#   level: 2
+#   parameters: ['T_eped', 'n_eped', 'd_n_ped', 'n_esep']
+#   # units [kev, 10E-19, psi, 10E-19]
+
+sampler:
+  type: Grid
+  bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
+  num_samples: [2, 2, 2, 2]
+  parameters: ['T_eped', 'n_eped', 'd_n_ped', 'n_esep']
+
+runner:
+  type: HELENArunner
+  executable_path: "/project/project_462000451/HELENA/bin/hel13_64"
+  other_params: {
+    # "namelist_path": "/project/project_462000451/jet_97781_data/97781_T029_fort.10",
+    "namelist_path": "/projappl/project_462000451/aarojarvinen/hel_test_runt/fort.10",
+    "only_generate_files": False,
+    "beta_iteration": True,
+    "input_parameter_type": 7,
+    "beta_iteration": 1,
+    "beta_tolerance": 0.1,
+    "max_beta_iterations": 3,
+    "constant_beta": 2.555}
+    #Computed using core temp and density with magnetic field strength computed by GENE.
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN
+  worker_args: # to be specified for the SLURMCluster in DASK
+    # local: 'False'
+    account: "project_462000451"
+    queue: "standard"
+    cores: 1 
+    memory: "2GB"
+    processes: 1
+    walltime: "01:00:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    interface: "nmn0"
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
+      - 'cd /project/project_462000451/enchanted-surrogates/'
+      - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+  n_jobs: 2
