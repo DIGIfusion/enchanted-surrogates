@@ -559,11 +559,11 @@ class HELENArunner(Runner):
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", 0.1)
         else:
-            self.parser.modify_at1("fort.10", 1.0)
+            self.parser.modify_at1("fort.10", 0.1)#1.0)
         subprocess.call([self.executable_path])
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n01 = 1e2 * output_vars["BETAN"]
-        print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
+        print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}, previous={beta_n0}")
         if self.beta_iterations_afp:
             apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
             self.parser.modify_fast_ion_pressure("fort.10", apftarg)
@@ -574,12 +574,13 @@ class HELENArunner(Runner):
         subprocess.call([self.executable_path])
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n = 1e2 * output_vars["BETAN"]
-        print(f"BETA ITERATION {0.2}: target={beta_target}, current={beta_n}")
+        print(f"BETA ITERATION {0.2}: target={beta_target}, current={beta_n}, previous={beta_n01}")
         n_beta_iteration = 0
         while (
             np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
             and n_beta_iteration < self.max_beta_iterations
         ):
+            print('BETA ITTERATION ENTERING WHILE LOOP')
             if self.beta_iterations_afp:
                 apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
                 self.parser.modify_fast_ion_pressure("fort.10", apftarg)
