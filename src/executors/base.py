@@ -52,9 +52,8 @@ def run_simulation_task(
         runner_output = runner.single_code_run(params_from_sampler, run_dir)
         result = {"input": params_from_sampler, "output": runner_output}
     except Exception as exc:
-        print("="*100,f"\nThere was a Python error on a DASK worker when running a simulation task:\n{exc}", flush=True)
+        print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
         #print the whole traceback and not just the last error
-        print(traceback.format_exc())
         result = None
     return result
 
