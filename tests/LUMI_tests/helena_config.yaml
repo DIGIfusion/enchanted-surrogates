@@ -9,8 +9,8 @@ runner:
   executable_path: "/project/project_462000451/HELENA/bin/hel13_64"
   other_params: {
     "namelist_path": "/projappl/project_462000451/aarojarvinen/hel_test_runt/fort.10",
-    "only_generate_files": True,
-    "input_parameter_type": 3, 
+    "only_generate_files": False,
+    "input_parameter_type": 3,
   }
 
 executor:
