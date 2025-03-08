@@ -18,10 +18,10 @@ runner:
     # "namelist_path": "/project/project_462000451/jet_97781_data/97781_T029_fort.10",
     "namelist_path": "/projappl/project_462000451/aarojarvinen/hel_test_runt/fort.10",
     "only_generate_files": False,
-    #"beta_iteration": True,
     "input_parameter_type": 7,
     "beta_iteration": 1,
     "beta_tolerance": 1, #0.7
+    "beta_iterations_afp": True, # Having this causes a HELENA crash, not having it causes BETA to not change and we get a divide by zero error
     "max_beta_iterations": 5,
     "constant_beta": 2.555}
     #Computed using core temp and density with magnetic field strength computed by GENE.
@@ -40,9 +40,10 @@ executor:
     interface: "nmn0"
     job_script_prologue: # this is possibly dependent on which code you want
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
-      - 'cd /project/project_462000451/enchanted-surrogates/'
       # VERY IMPORTANT TO MAKE SURE THIS MATCHES THE ENCHANTED SURROGATES BEING RAN FROM
       - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates/src'
+      - 'cd /users/danieljordan/enchanted-surrogates/src'
+      # - 'cd /project/project_462000451/enchanted-surrogates/'
       # - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
     job_extra_directives:
       - '-o /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN/%x.%j.out'
