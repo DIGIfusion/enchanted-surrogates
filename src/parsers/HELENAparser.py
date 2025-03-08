@@ -246,7 +246,7 @@ class HELENAparser(Parser):
 
         # Update current profile guess
         namelist["profile"]["zjz"] = self.make_init_zjz_profile(
-            pedestal_delta=params["d_T_ped"], npts=namelist["profile"]["npts"] #would be better if d_T_ped was pressure width instead.
+            pedestal_delta=d_n_ped, npts=namelist["profile"]["npts"] #would be better if d_n_ped was pressure width instead.
             # pedestal_delta=params["pedestal_delta"], npts=namelist["profile"]["npts"]
         )
 
