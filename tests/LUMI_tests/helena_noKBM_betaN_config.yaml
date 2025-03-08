@@ -41,7 +41,9 @@ executor:
     job_script_prologue: # this is possibly dependent on which code you want
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
       - 'cd /project/project_462000451/enchanted-surrogates/'
-      - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+      # VERY IMPORTANT TO MAKE SURE THIS MATCHES THE ENCHANTED SURROGATES BEING RAN FROM
+      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates/src'
+      # - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
     job_extra_directives:
       - '-o /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN/%x.%j.out'
       - '-e /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN/%x.%j.err'
