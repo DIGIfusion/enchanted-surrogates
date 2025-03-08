@@ -240,6 +240,7 @@ class HELENArunner(Runner):
         elif self.input_parameter_type == 6:
             pass
         elif self.input_parameter_type == 7:
+            print('USING IMPUT PARAMETER TYPE 7, noKBM')
             self.parser.write_input_file_noKBM(params, run_dir, self.namelist_path)
         else:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
