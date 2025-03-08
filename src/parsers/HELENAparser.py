@@ -418,7 +418,8 @@ class HELENAparser(Parser):
 
     def write_input_file_europed2(self, params: dict, run_dir: str, namelist_path: str):
         """
-        Writes input file fort.10.
+        Writes input file fort.10. Assuming IDETE = 7.
+
         In config:
             "input_parameter_type": 3
 
@@ -482,7 +483,9 @@ class HELENAparser(Parser):
             ip = self.get_ip_from_namelist(namelist) if "ip" not in params else params["ip"]
             teped = self.get_teped(d_ped, ip, circumference, neped, tesep, zimp, zeff, z_main_ion)
         else:
-            teped = params["T_eped"]
+            teped = (
+                self.get_teped_from_namelist(namelist) if "T_eped" not in params
+                else params["T_eped"])
             ip = self.get_ip_from_teped(
                 d_ped, teped, circumference, neped, tesep, zimp, zeff, z_main_ion)
 
@@ -1156,7 +1159,7 @@ class HELENAparser(Parser):
         QS = self.read_lines(lines, startline, endline)
 
         # DQS_1, DQEC = (
-        #     float(lines[endline].split()[0]), 
+        #     float(lines[endline].split()[0]),
         #     float(lines[endline].split()[1]))
 
         startline = endline + 1
@@ -2302,15 +2305,30 @@ class HELENAparser(Parser):
         return psi, dP_dPSI, FdF_dPSI, J_phi
 
     def get_teped_from_namelist(self, namelist):
-        at0 = namelist['phys']['ate'] 
+        """Only implemented for IDETE = 7: at0 = (teped - tesep) / tanh_normaliser"""
+        at0 = namelist['phys']['ate']
         tesep = namelist['phys']['bte']
         return at0 * tanh_normaliser + tesep
 
     def get_neped_from_namelist(self, namelist):
-        # an0 = (neped - nesep) / tanh_normaliser
-        an0 = namelist['phys']['ade'] 
+        """Only implemented for IDETE = 7: an0 = (neped - nesep) / tanh_normaliser"""
+        an0 = namelist['phys']['ade']
         nesep = namelist['phys']['bde']
         return an0 * tanh_normaliser + nesep
+
+    def get_delta_te_eped_from_namelist(self, namelist):
+        if namelist['phys']['idete'] == 4:
+            return namelist['phys']['ete'] * 4
+        if namelist['phys']['idete'] == 7:
+            return namelist['phys']['ete']
+        return None
+
+    def get_delta_ne_eped_from_namelist(self, namelist):
+        if namelist['phys']['idete'] == 4:
+            return namelist['phys']['ede'] * 4
+        if namelist['phys']['idete'] == 7:
+            return namelist['phys']['ede']
+        return None
 
     def namelist_to_lowercase_with_defualt_values(self, namelist, default_namelist):
         """
