@@ -21,7 +21,7 @@ import shutil
 from abc import ABC, abstractmethod
 import uuid
 import runners
-
+import traceback
 from dask.distributed import print
 
 # TODO: move to seperate file, tasks.py?
@@ -53,7 +53,8 @@ def run_simulation_task(
         result = {"input": params_from_sampler, "output": runner_output}
     except Exception as exc:
         print("="*100,f"\nThere was a Python error on a DASK worker when running a simulation task:\n{exc}", flush=True)
-
+        #print the whole traceback and not just the last error
+        print(traceback.format_exc())
     return result
 
 
