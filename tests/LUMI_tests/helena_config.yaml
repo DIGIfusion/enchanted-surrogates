@@ -6,10 +6,10 @@ sampler:
 
 runner:
   type: HELENArunner
-  executable_path: "configs/helena_config.yaml/hel13_64"
+  executable_path: "/project/project_462000451/HELENA/bin/hel13_64"
   other_params: {
     "namelist_path": "/projappl/project_462000451/aarojarvinen/hel_test_runt/fort.10",
-    "only_generate_files": False,
+    "only_generate_files": True,
     "input_parameter_type": 3, 
   }
 
@@ -21,13 +21,14 @@ executor:
     account: "project_462000451"
     queue: "small"
     cores: 1 
-    job_cpu: 6
-    memory: "12GB"
+    # job_cpu: 6
+    memory: "1GB"
     processes: 1
-    walltime: "00:10:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    walltime: "01:00:00" # Adam: survival length of worker, so possibly just set to max in cluster
     interface: "nmn0" #Dependant on HPC, options include ['lo', 'nmn0', 'hsn1', 'hsn0', 'can0', 'bond0', 'net1', 'net2', 'net3'] but there may be others
     job_script_prologue: # this is possibly dependent on which code you want
-      
+      - 'export DASK_DISTRIBUTED__WORKER__LOG_DIRECTORY=/users/danieljordan/enchanted-surrogates/dask_logs/scheduler'
+      - 'export DASK_DISTRIBUTED__SCHEDULER__LOG_DIRECTORY=/users/danieljordan/enchanted-surrogates/dask_logs/workers'
       # - 'module load python-data'
       - 'export PATH=/project/project_462000451/enchanted_container_lumi3/bin:$PATH'
       # - 'cd /scratch/project_2009007/enchanted-surrogates'
