@@ -121,6 +121,7 @@ class DaskExecutor(Executor):
 
         print("Generating samples:")
         initial_parameters = self.sampler.get_initial_parameters()
+        print("Number of initial samples generated:", len(initial_parameters))
         print("Making Dask futures")
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
