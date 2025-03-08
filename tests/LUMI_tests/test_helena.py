@@ -47,10 +47,13 @@ def test_helena_noKBM_betaN():
     config_filepath = "tests/LUMI_tests/helena_noKBM_betaN_config.yaml"
     args = run.load_configuration(config_filepath)
     args.executor["config_filepath"] = config_filepath
+    base_run_dir = args.executor["base_run_dir"]
+    print('DELETEING WHAT IS IN BASE RUN DIR BEFORE RUNNING:\n',base_run_dir)
+    os.system(f'rm -rf {base_run_dir}/*')
+    
     print('STARTING ENCHANTED SURROGATES MAIN')
     run.main(args)
     print('FINISHED ENCHANTED SURROGATES MAIN')
-    base_run_dir = args.executor["base_run_dir"]
     
     run_directories = [name for name in os.listdir(base_run_dir) if os.path.isdir(os.path.join(base_run_dir, name))]
     run_directories = [os.path.join(base_run_dir, run_dir) for run_dir in run_directories]

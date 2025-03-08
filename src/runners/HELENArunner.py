@@ -228,7 +228,7 @@ class HELENArunner(Runner):
             bool: True if the simulation is successful, False otherwise.
 
         """
-        print(f"{'='*100}\nsingle_code_run: {run_dir}", flush=True)
+        print(f"{'='*100}\n single_code_run: {run_dir}", flush=True)
         if self.input_parameter_type == 0:
             self.parser.write_input_file(params, run_dir, self.namelist_path)
         elif self.input_parameter_type == 1:
@@ -593,6 +593,14 @@ class HELENArunner(Runner):
             print(
                 f"BETA ITERATION {n_beta_iteration}: target={beta_target}, current={beta_n}"
             )
+            beta_iteration_results = [
+                f"BETA ITERATION NOT FINNISHED.\nTarget betaN: {beta_target}\n",
+                f"Current betaN: {beta_n}\n",
+                f"Number of beta iterations: {n_beta_iteration}",
+            ]
+            with open('beta_iteration_results', 'w') as file:
+                for line in beta_iteration_results:
+                    file.write(line)
             n_beta_iteration += 1
 
         beta_iteration_results = [
