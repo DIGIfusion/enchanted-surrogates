@@ -20,7 +20,7 @@ runner:
     "only_generate_files": False,
     "input_parameter_type": 7,
     "beta_iteration": 1,
-    "beta_tolerance": 1, #0.7
+    "beta_tolerance": 0.5,
     "beta_iterations_afp": True, # Having this causes a HELENA crash, not having it causes BETA to not change and we get a divide by zero error
     "max_beta_iterations": 5,
     "constant_beta": 2.555}
