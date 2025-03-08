@@ -21,7 +21,8 @@ import shutil
 from abc import ABC, abstractmethod
 import uuid
 import runners
-
+import traceback
+from dask.distributed import print
 
 # TODO: move to seperate file, tasks.py?
 def run_simulation_task(
@@ -43,11 +44,17 @@ def run_simulation_task(
         FileNotFoundError: If the base_run_dir does not exist and cannot be created.
         Exception: For other exceptions that may arise during the simulation run.
     """
-    run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
-    os.mkdir(run_dir)
-    runner = getattr(runners, runner_args["type"])(**runner_args)
-    runner_output = runner.single_code_run(params_from_sampler, run_dir)
-    result = {"input": params_from_sampler, "output": runner_output}
+
+    try:
+        run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
+        os.mkdir(run_dir)
+        runner = getattr(runners, runner_args["type"])(**runner_args)
+        runner_output = runner.single_code_run(params_from_sampler, run_dir)
+        result = {"input": params_from_sampler, "output": runner_output}
+    except Exception as exc:
+        print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
+        #print the whole traceback and not just the last error
+        result = None
     return result
 
 
