@@ -88,6 +88,10 @@ def test_helena_noKBM_betaN():
         return True
 
 def test_helena_runner():
+    
+    # Current Issue:
+    # There is a problem with the beta iteration, It kept going lower away from the target. You should print the variables involved in setting the new value based on the old value. 
+    
     # without dask
     # runner:
     #   type: HELENArunner
@@ -109,16 +113,17 @@ def test_helena_runner():
         "only_generate_files": False,
         "input_parameter_type": 7,
         "beta_iteration": 1,
-        "beta_iterations_afp": True,
-        "beta_tolerance": 0.5,
-        "max_beta_iterations": 5,
-        "constant_beta": 2.555
+        "beta_iterations_afp": False,
+        "beta_tolerance": 0.01,
+        "max_beta_iterations": 10,
+        "constant_beta": 2.555 # 
         }
     runner = HELENArunner(executable_path, other_params)
     # bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
     #   num_samples: [2, 1, 1, 1]
     #   parameters: ['T_eped', 'n_eped', 'd_n_ped', 'n_esep']
-    sample = {'T_eped':1.5, 'n_eped':3.5, 'd_n_ped':0.5, 'n_esep':1}
+    
+    sample = {'T_eped':1.5, 'n_eped':3.5, 'd_n_ped':0.07, 'n_esep':1}
     run_dir = "/scratch/project_462000451/daniel/sprint_out/helena_beta/notebook_test"
     os.system(f'rm -rf {run_dir}/*')
     runner.single_code_run(sample, run_dir)
@@ -133,7 +138,7 @@ def test_helena_runner():
         for line in file:
             if 'NORM. BETA' in line:
                 break
-        beta_N = line.strip().split(' ')[-1]
+        beta_N = float(line.strip().split(' ')[-1])
     success2 = np.abs(beta_N-beta_target) < beta_tolerance*beta_N
     success = success1 and success2
     assert success

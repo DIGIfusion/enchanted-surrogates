@@ -551,16 +551,23 @@ class HELENArunner(Runner):
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", 0.0)
         else:
-            self.parser.modify_at1("fort.10", 0.0)
+            self.parser.update_at1("fort.10", 0.0)
         subprocess.call([self.executable_path])
+        import shutil
+        shutil.copy('fort.10','fort.10_1')
+        shutil.copy('fort.20','fort.20_1')
+        
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n0 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", 0.1)
         else:
-            self.parser.modify_at1("fort.10", 0.1)#1.0)
+            self.parser.update_at1("fort.10", 20.0)
         subprocess.call([self.executable_path])
+        shutil.copy('fort.10','fort.10_2')
+        shutil.copy('fort.20','fort.20_2')
+
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n01 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}, previous={beta_n0}")
