@@ -1,8 +1,11 @@
 sampler:
-  type: Grid
-  bounds: [[1.0e-5, 1.0e-4], [2.0, 2.0], [2.0, 2.0], [1.0, 1.0], [10.0,10.0]]
-  num_samples: [2, 1, 1, 1, 1]
+  type: BayesianOptimization
+  budget: 200
+  bounds: [[1.0e-6, 1.0e-2], [0.01, 30.0], [0.01, 30.0], [0.01, 20.0], [0.01,30.0]]
   parameters: ['dBB', 'alpha', 'beta', 'V_loop_wall', 'tau_V_loop']
+  observations: {'IP':'/scratch/project_2004389/aarojarvinen/JET_95135/experimental_data/Ip95135.h5',
+                 'images':['/scratch/project_2004389/aarojarvinen/JET_95135/synchrotron_images/KLDT-E5WC-95135-7562.npz',
+                           '/scratch/project_2004389/aarojarvinen/JET_95135/synchrotron_images/KLDT-E5WC-95135-7582.npz']}
 
 runner:
   type: DREAMrunner
@@ -25,20 +28,37 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test
+  base_run_dir: /scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test2
   worker_args: 
-    local: 'True'
-    secondary_SLURM: 'True'
+    local: 'False'
     adapt: 'True'
     slurm_args:
+      account: "project_2004389"
+      queue: "small"
+      cores: 1
+      memory: "8GB"
+      processes: 1
+      walltime: "6:00:00" 
+      interface: "ib0"
+      local_directory: "SLURMlog_primary"
+      job_script_prologue: 
+        - 'export OMP_NUM_THREADS=1'
+        - 'module load python-data'
+        - 'module load gsl'
+        - 'module load hdf5'
+        - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
+        - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
+        - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
+    secondary_SLURM: 'True'
+    secondary_slurm_args:
       account: "project_2004389"
       queue: "small"
       cores: 32 
       memory: "32GB"
       processes: 1
-      walltime: "24:00:00" 
+      walltime: "6:00:00" 
       interface: "ib0"
-      local_directory: "SLURMlog"
+      local_directory: "SLURMlog_secondary"
       job_script_prologue: 
         - 'export OMP_NUM_THREADS=32'
         - 'module load python-data'
@@ -47,4 +67,4 @@ executor:
         - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
         - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
         - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
-    num_workers: 2
+    num_workers: 32

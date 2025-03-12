@@ -7,6 +7,7 @@ class S(Enum):
     BATCH = 1
     ACTIVE = 2
     ACTIVEDB = 3
+    BO = 4
 
 
 """

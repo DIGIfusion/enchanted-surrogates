@@ -31,7 +31,7 @@ class DaskExecutor(Executor):
         super().__init__(**kwargs)
         # self.num_workers: int = kwargs.get("num_workers", 8)
         self.worker_args: dict = worker_args
-        print("Beginning SLURMCluster Generation")
+        print("Beginning Cluster Generation")
         self.initialize_clients()
         print("Finished Setup")
 
@@ -75,12 +75,28 @@ class DaskExecutor(Executor):
             else:
                  self.clients = [self.client]
 
-        elif sampler_type in [S.SEQUENTIAL, S.BATCH]:
-            self.simulator_cluster = SLURMCluster(**self.worker_args)
-            self.simulator_cluster.scale()  # TODO: check num workers
-
-            self.simulator_client = Client(self.simulator_cluster)
-            self.clients = [self.simulator_client]
+        elif sampler_type in [S.SEQUENTIAL, S.BATCH, S.BO]:
+            if self.worker_args.get("secondary_SLURM", False):
+                if not os.path.isdir(self.worker_args['slurm_args']['local_directory'])
+                    os.mkdir(self.worker_args['slurm_args']['local_directory'])
+                if not os.path.isdir(self.worker_args['secondary_slurm_args']['local_directory'])
+                    os.mkdir(self.worker_args['secondary_slurm_args']['local_directory'])
+                self.simulator_cluster_primary = SLURMCluster(**self.worker_args['slurm_args'])
+                self.simulator_cluster_primary.adapt(minumum_jobs=0, maximum_jobs=40) 
+                self.simulator_client = Client(self.simulator_cluster)
+                self.simulator_cluster_secondary = SLURMCluster(**self.worker_args['secondary_slurm_args'])
+                # Presently hard coded to minimum 0 and maximum 10 jobs.
+                # TODO: Allow setting the job min and max through the configuration
+                self.simulator_cluster_secondary.adapt(minimum_jobs=0, maximum_jobs=10)
+                self.simulator_client_secondary = Client(self.simulator_cluster_secondary)
+                self.clients = [self.client, self.simulator_client_secondary]
+                #self.clients = [self.simulator_client]
+            else:
+                self.simulator_cluster = SLURMCluster(**self.worker_args)
+                self.simulator_cluster.scale()  # TODO: check num workers
+  
+                self.simulator_client = Client(self.simulator_cluster)
+                self.clients = [self.simulator_client]
 
         elif (
             sampler_type in [S.ACTIVE, S.ACTIVEDB]
@@ -116,22 +132,29 @@ class DaskExecutor(Executor):
         """
         futures = []
         for params in param_list:
-            print('before')
             new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
             )
-            print('after')
             futures.append(new_future)
         return futures
 
     def start_runs(self):
         sampler_interface: S = self.sampler.sampler_interface
         print(100 * "=")
-        print("Creating initial runs")
-
-        initial_parameters = self.sampler.get_initial_parameters()
-        futures = self.submit_batch_of_params(initial_parameters)
-        completed = 0
+        if sampler_interface in [S.BO]:
+            print("Using the Bayesian Optimization sampler.")
+            if self.sampler.result_dictionary == [None]:
+                self.sampler.build_result_dictionary(self.base_run_dir)
+                if self.sampler_result_dictionary == [None]:
+                    initial_parameters = self.sampler.get_initial_parameters()
+                    futures = self.submit_batch_of_params(initial_parameters)
+                    submitted = len(futures)
+        else:
+            print("Creating initial runs")
+            initial_parameters = self.sampler.get_initial_parameters()
+            futures = self.submit_batch_of_params(initial_parameters)
+            completed = 0
+            submitted = len(futures)
   
         if sampler_interface in [S.SEQUENTIAL]:
             seq = as_completed(futures)
@@ -151,11 +174,14 @@ class DaskExecutor(Executor):
                     for sec_f in sec_seq:
                         sec_f.release()
                 completed += 1
-                if self.sampler.total_budget > completed:
+                # AEJ - February 14th 2025 - Use the number of submitted rather than completed to
+                # decide when to stop submission. Otherwise, completed > self.total_budget in the end.
+                if self.sampler.total_budget > submitted:
                     params = self.sampler.get_next_parameter()
                     new_future = self.simulator_client.submit(
                         run_simulation_task, self.runner_args, params, self.base_run_dir
                     )
+                    submitted += 1
                     seq.add(new_future)
 
         elif sampler_interface in [S.BATCH]:
@@ -165,6 +191,12 @@ class DaskExecutor(Executor):
                 futures = self.submit_batch_of_params(param_list)
                 completed += len(futures)
                 print("BATCH SAMPLER", 20 * "=", completed, 20 * "=")
+
+        elif sampler_interface in [S.BO]:
+            while submitted < self.sampler.total_budget:
+                param_list = self.sampler.get_next_parameter()
+
+
 
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             iterations = 0
