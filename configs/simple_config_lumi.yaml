@@ -1,12 +1,12 @@
 sampler:
   type: Grid
   bounds: [[1, 3], [1, 3]]
-  num_samples: 3
+  num_samples: [3,3] #Number of samples in each dimension to form a grid
   parameters: ['m', 'n']
 
 runner:
   type: SIMPLErunner
-  executable_path: /project/project_462000451/enchanted-surrogates/tests/simple/simple.sh
+  executable_path: /users/danieljordan/enchanted-surrogates/tests/automated_tests_no_HPC/simple/simple.sh
   other_params: {}
 
 executor:
@@ -16,14 +16,22 @@ executor:
   worker_args: # to be specified for the SLURMCluster in DASK
     account: "project_462000451"
     queue: "small"
-    cores: 2 # Total number of cores to be split amongst the workers
-    memory: "4GB"
-    walltime: "00:10:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    cores: 1
+    memory: "1GB"
+    #Set the walltime for entire cluster to be able to run everything set in the sampler, taking into account the number of workers. 
+    walltime: "00:10:00"
     interface: "nmn0"
+
+    # The job script prologue is ran on every worker at start up
     job_script_prologue: # this is possibly dependent on which code you want
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
-      - 'cd /project/project_462000451/enchanted-surrogates/'
-      - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
-    n_workers: 2
+      # Change this for your own personal enchanted surrogates clone
+      - 'cd /users/danieljordan/enchanted-surrogates/'
+      # This command gives the worker access to the python within our container. 
+      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+    
+    # These are appended to the sbatch that requestes the resources for each worker.
+    job_extra_directives:
+      - '-o /scratch/project_462000451/gene_out/enchanted_out/simple_test/%x.%j.out'
+      - '-e /scratch/project_462000451/gene_out/enchanted_out/simple_test/%x.%j.err'
   n_jobs: 1
-  
