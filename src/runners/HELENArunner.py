@@ -535,7 +535,13 @@ class HELENArunner(Runner):
         self.parser.update_at1(namelist_path=os.path.join(run_dir, "fort.10"), at1=at1)
         subprocess.call([self.executable_path])
         return
-
+    
+    def linear_pred(self, ax, ay, bx, by, x):
+        grad = np.abs(ay-by) / np.abs(ax-bx)
+        y_intercept = ay-grad*ax
+        y = grad * x + y_intercept 
+        return y
+    
     def run_helena_with_beta_iteration(self, params):
         """
         Iterate HELENA until the chosen normalized beta is found.
@@ -548,10 +554,11 @@ class HELENArunner(Runner):
         else:
             beta_target = params["beta_N"]
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
+        at1_0 = 0.0
         if self.beta_iterations_afp:
-            self.parser.modify_fast_ion_pressure("fort.10", 0.0)
+            self.parser.modify_fast_ion_pressure("fort.10", at1_0)
         else:
-            self.parser.update_at1("fort.10", 0.0)
+            self.parser.update_at1("fort.10", at1_0)
         subprocess.call([self.executable_path])
         import shutil
         shutil.copy('fort.10','fort.10_1')
@@ -560,10 +567,11 @@ class HELENArunner(Runner):
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n0 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
+        at1_1 = 20
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", 0.1)
         else:
-            self.parser.update_at1("fort.10", 20.0)
+            self.parser.update_at1("fort.10", at1_1)
         subprocess.call([self.executable_path])
         shutil.copy('fort.10','fort.10_2')
         shutil.copy('fort.20','fort.20_2')
@@ -571,12 +579,16 @@ class HELENArunner(Runner):
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n01 = 1e2 * output_vars["BETAN"]
         print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}, previous={beta_n0}")
+        data_point_1 = beta_n0, at1_0
+        data_point_2 = beta_n01, at1_1
         if self.beta_iterations_afp:
             apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
             self.parser.modify_fast_ion_pressure("fort.10", apftarg)
         else:
-            at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
-            self.parser.modify_at1("fort.10", at1_mult_targ)
+            # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+            # self.parser.modify_at1("fort.10", at1_mult_targ)
+            at1_guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+            self.parser.update_at1("fort.10", at1_guess)
 
         subprocess.call([self.executable_path])
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
@@ -592,8 +604,19 @@ class HELENArunner(Runner):
                 apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
                 self.parser.modify_fast_ion_pressure("fort.10", apftarg)
             else:
-                at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
-                self.parser.modify_at1("fort.10", at1_mult_targ)
+                # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
+                # self.parser.modify_at1("fort.10", at1_mult_targ)
+                # We then draw a line between the new point and which ever of the two previous data points are closest to beta_target
+                if np.abs(data_point_2(0) - beta_target) < np.abs(data_point_1(0) - beta_target):
+                    # data point 2 is closer to the target beta so we should use it
+                    data_point_1 = data_point_2
+                else:
+                    # data point 1 is closer to the target beta so we should use it
+                    data_point_1 = data_point_1
+                # We always need to use our new point 
+                data_point_2 = beta_n, at1_guess
+                at1_guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+                
             subprocess.call([self.executable_path])
             output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                 "fort.20"
