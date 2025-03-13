@@ -124,13 +124,15 @@ class DaskExecutor(Executor):
         print("Making Dask futures")
         futures = self.submit_batch_of_params(initial_parameters)
         completed = 0
-        outputs = []
-        if sampler_interface in [S.SEQUENTIAL]:
+        if sampler_interface in [S.SEQUENTIAL]:    
             seq = wait(futures)
-
             if self.output_dir is not None:
-                print("SAVING OUTPUT IN:", self.output_dir)
-                with open(os.path.join(self.output_dir, "sequential"), "w") as out_file:
+                outputs = []
+                for res in seq.done:
+                    outputs.append(res.result())
+                output_file_path = os.path.join(self.output_dir, "sequential")
+                print("SAVING OUTPUT IN:", output_file_path)
+                with open(output_file_path, "w") as out_file:
                     for output in outputs:
                         out_file.write(str(output) + "\n\n")
             print("Finished sequential runs")
