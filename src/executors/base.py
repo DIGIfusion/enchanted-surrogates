@@ -26,7 +26,7 @@ from dask.distributed import print
 
 # TODO: move to seperate file, tasks.py?
 def run_simulation_task(
-    runner_args: dict, params_from_sampler: dict, base_run_dir: str
+    runner_args: dict, run_dir:str, params_from_sampler: dict=None
 ) -> dict:
     """
     Runs a single simulation task using the specified runner and parameters.
@@ -44,18 +44,21 @@ def run_simulation_task(
         FileNotFoundError: If the base_run_dir does not exist and cannot be created.
         Exception: For other exceptions that may arise during the simulation run.
     """
-
     try:
-        run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
-        os.mkdir(run_dir)
         runner = getattr(runners, runner_args["type"])(**runner_args)
-        runner_output = runner.single_code_run(params_from_sampler, run_dir)
-        result = {"input": params_from_sampler, "output": runner_output}
+        if type(params_from_sampler) == type(None):
+        #we are not given sampled parameters so we assume the run directories have already been set up
+        # and we can simply run the code. This will happen if the executor calling this function is second (or third etc) in a pipeline
+            runner_output = runner.single_code_run(run_dir)
+        else:
+            os.mkdir(run_dir)
+            runner_output = runner.single_code_run(params_from_sampler, run_dir)        
+    
     except Exception as exc:
         print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
         #print the whole traceback and not just the last error
         result = None
-    return result
+    return runner_output
 
 
 class Executor(ABC):
