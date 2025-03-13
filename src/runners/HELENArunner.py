@@ -607,7 +607,7 @@ class HELENArunner(Runner):
                 # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
                 # self.parser.modify_at1("fort.10", at1_mult_targ)
                 # We then draw a line between the new point and which ever of the two previous data points are closest to beta_target
-                if np.abs(data_point_2(0) - beta_target) < np.abs(data_point_1(0) - beta_target):
+                if np.abs(data_point_2[0] - beta_target) < np.abs(data_point_1[0] - beta_target):
                     # data point 2 is closer to the target beta so we should use it
                     data_point_1 = data_point_2
                 else:
