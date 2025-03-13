@@ -131,7 +131,7 @@ class DaskExecutor(Executor):
                 for res in seq.done:
                     outputs.append(res.result())
                 output_file_path = os.path.join(self.output_dir, "sequential")
-                print("SAVING OUTPUT IN:", self.output_dir)
+                print("SAVING OUTPUT IN:", output_file_path)
                 with open(output_file_path, "w") as out_file:
                     for output in outputs:
                         out_file.write(str(output) + "\n\n")
