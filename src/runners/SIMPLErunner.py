@@ -38,6 +38,7 @@ class SIMPLErunner(Runner):
         """
         self.parser = SIMPLEparser()
         self.executable_path = executable_path
+        self.type = kwargs.get('type')
 
     # in the pipeline executor we do not need to call this.
     def parse_params(self, params:dict, run_dir:str):
