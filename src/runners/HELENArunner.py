@@ -599,7 +599,7 @@ class HELENArunner(Runner):
             np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
             and n_beta_iteration < self.max_beta_iterations
         ):
-            print('BETA ITTERATION ENTERING WHILE LOOP')
+            print('BETA ITTERATION IN WHILE LOOP')
             if self.beta_iterations_afp:
                 apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
                 self.parser.modify_fast_ion_pressure("fort.10", apftarg)
@@ -607,16 +607,24 @@ class HELENArunner(Runner):
                 # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
                 # self.parser.modify_at1("fort.10", at1_mult_targ)
                 # We then draw a line between the new point and which ever of the two previous data points are closest to beta_target
+                print('OLD DATA POINT 1: beta_n, at1', data_point_1)
+                print('OLD DATA POINT 2: beta_n, at1', data_point_2)
+                print('PREDICTED POINT: beta_n, at1', beta_n, at1_guess)
                 if np.abs(data_point_2[0] - beta_target) < np.abs(data_point_1[0] - beta_target):
                     # data point 2 is closer to the target beta so we should use it
                     data_point_1 = data_point_2
+                    print('OLD DATA POINT 2 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
                 else:
                     # data point 1 is closer to the target beta so we should use it
                     data_point_1 = data_point_1
+                    print('OLD DATA POINT 1 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
                 # We always need to use our new point 
                 data_point_2 = beta_n, at1_guess
                 at1_guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
-                
+                print('NEW DATA POINT 1: beta_n, at1', data_point_1)
+                print('NEW DATA POINT 2: beta_n, at1', data_point_2)
+                print('NEW PREDICTED AT1:', at1_guess)
+                self.parser.update_at1('fort.10', at1_guess)
             subprocess.call([self.executable_path])
             output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                 "fort.20"
