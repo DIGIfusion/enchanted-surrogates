@@ -17,7 +17,7 @@ import os
 from .base import Runner
 import subprocess
 from parsers import SIMPLEparser
-
+from dask.distributed import print
 
 class SIMPLErunner(Runner):
     """
@@ -55,12 +55,16 @@ class SIMPLErunner(Runner):
         """
         os.chdir(run_dir)
         if type(params) != type(None):
+            print('SAMPLE PROVIDED TO SINGLE CODE RUN, MAKING INPUT FILE', 'sample:', params)
+            print(os.system('ls'))
             self.parse_params(params, run_dir)
+            print(os.system('ls'))
             #If we are after the first code run in a pipeline then the inputfile parsing
             # parsing will be handeled by the executor and no params will be provided
-         
+        else:
+            print('SAMPLE NOT PROVIDED TO SINGLE CODE RUN, IPUT FILE, in.json, SHOULD ALREADY BE PRESENT IN', run_dir)
         params = self.parser.read_input_file(run_dir)
         # command to run the code in the terminal which will be carried out on the workers
         subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
         res = self.parser.read_output_file(run_dir)
-        return res
+        return res, run_dir, out_dir

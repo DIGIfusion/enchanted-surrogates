@@ -25,6 +25,7 @@ class DaskExecutorSimulation():
         self.sampler = sampler
         self.do_initialize_client=do_initialize_client
         runner_args = kwargs.get("runner")
+        print('KWARGS:',kwargs)
         if type(runner_args) == type(None):
             raise ValueError('''
                              Every ExecutorSimulation needs a runner. 
@@ -46,15 +47,6 @@ class DaskExecutorSimulation():
             raise Warning('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
-        if self.base_run_dir==None:
-            raise ValueError('''Enchanted surrogates handeles the creation of run directories. 
-                             You must supply a base_run_dir in your configs file. Example:
-                             executor:
-                                type: DaskExecutorSimulation
-                                base_run_dir: /project/project_462000451/test-enchanted/trial-dask
-                             ...
-                             ...
-                             ''')
         self.base_out_dir = kwargs.get("base_out_dir")    
         
     def clean(self):
@@ -81,6 +73,17 @@ class DaskExecutorSimulation():
         self.client = Client(self.cluster ,timeout=180)
             
     def start_runs(self, samples=None, base_run_directory_is_ready=False):
+        if self.base_run_dir==None:
+            raise ValueError('''Enchanted surrogates handeles the creation of run directories. 
+                             You must supply a base_run_dir in your configs file. Example:
+                             executor:
+                                type: DaskExecutorSimulation
+                                base_run_dir: /project/project_462000451/test-enchanted/trial-dask
+                             ...
+                             ...
+                             ''')
+        
+        
         print(f"STARTING RUNS FOR RUNNER {self.runner.type}, FROM WITHIN A {__class__}")
         if self.do_initialize_client:
             self.initialize_client()   
