@@ -44,7 +44,7 @@ class SIMPLErunner(Runner):
     def parse_params(self, params:dict, run_dir:str):
         self.parser.write_input_file(params, run_dir)
     
-    def single_code_run(self, run_dir: str, params=None):
+    def single_code_run(self, run_dir: str, params=None, out_dir=None):
         """
         Runs a simple test program like a bash script.
         Args:
