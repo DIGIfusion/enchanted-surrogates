@@ -7,9 +7,11 @@ sampler:
 executor:
   type: DaskExecutorSimulationPipeline
   base_run_dir: /path/to/simplePipeline
+  base_out_dir: None
   # This must have 'executor' in the key_name and an integer that corresponds to the order in the pipeline.
   executor_simulation_1:
     type: DaskExecutorSimulation
+    
     #not necessary as this will be defined by the highest level executor
     #base_run_dir: /project/project_462000451/test-enchanted/simple_1
     runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/simple_test/runner_return
@@ -19,7 +21,6 @@ executor:
       executable_path: /users/danieljordan/enchanted-surrogates/tests/automated_tests_no_HPC/simple/simple.sh
       other_params: {}
       
-
     worker_args: # to be specified for the SLURMCluster in DASK
       account: "project_462000451"
       queue: "small"
@@ -43,7 +44,6 @@ executor:
 
   #This must have the string pipeline_parser in the key and an integer that corresponds to the order in the pipeline.
   pipeline_parser_1:
-    type: SimplePipelineParser
     function: simple_out_to_simple_in
 
   executor_simulation_2:

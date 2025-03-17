@@ -55,6 +55,7 @@ class DaskExecutorSimulation():
                              ...
                              ...
                              ''')
+        self.base_out_dir = kwargs.get("base_out_dir")    
         
     def clean(self):
         self.client.shutdown()
@@ -110,9 +111,14 @@ class DaskExecutorSimulation():
             samples = self.sampler.get_initial_parameters()
             print("MAKING AND SUBMITTING DASK FUTURES")         
             for sample in samples:
-                run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
+                random_run_id = str(uuid.uuid4())
+                run_dir = os.path.join(self.base_run_dir, random_run_id)
+                if self.base_out_dir == None:
+                    out_dir = run_dir
+                else:
+                    out_dir = os.path.join(self.base_out_dir, random_run_id)
                 new_future = self.client.submit(
-                    run_simulation_task, self.runner, run_dir, sample
+                    run_simulation_task, self.runner, run_dir, out_dir, sample 
                 )
                 futures.append(new_future)
         seq = wait(futures)

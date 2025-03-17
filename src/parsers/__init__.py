@@ -18,5 +18,5 @@ from .HELENAparser          import HELENAparser
 from .MISHKAparser          import MISHKAparser
 from .STATICPOOLparser      import STATICPOOLparser
 from .DREAMparser           import DREAMparser
-from .SimplePipelineParser  import SimplePipelineParser
+from .SimplePipelineParser  import simple_out_to_simple_in
 

@@ -4,10 +4,11 @@ from dask.distributed import print
 
 # when submitting functions to dask workers to be ran, they cannot be functions from a class. They must be defined in another file. This file
 
-def run_simulation_task(runner, run_dir:str, params_from_sampler: dict=None, out_dir=None) -> dict:
+def run_simulation_task(runner, run_dir:str, out_dir:str, params_from_sampler: dict=None, future=None) -> dict:
         """
         Runs a single simulation task using the specified runner and parameters.
         Args:
+            Future: A dask future to be used as a dependancy. Dask will not allow a future to run on a worker untill all dependant futures have finished and returned a value.
         Returns:
         Raises:
         """
@@ -22,7 +23,7 @@ def run_simulation_task(runner, run_dir:str, params_from_sampler: dict=None, out
             else:
                 print('MAKING RUN DIRECTORY', run_dir)
                 os.mkdir(run_dir)
-                runner_output = runner.single_code_run(run_dir, params_from_sampler, out_dir) 
+                runner_output = runner.single_code_run(run_dir, out_dir, params_from_sampler) 
             
         except Exception as exc:
             print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
