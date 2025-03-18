@@ -15,8 +15,9 @@ def run_simulation_task(runner, run_dir:str, out_dir:str, params_from_sampler: d
         try:
             print('RUNNING SIMULATION TASK:')
             if future!=None:
-                #Calling future.result() is needed to establish dependancy on the future.
-                print('RESULT OF INPUTTED FUTURE:', future.result())
+                #Even though a future is inputed dask replaces the variable with the futures results when it gets to 
+                # actually run this function. 
+                print('RESULT OF INPUTTED FUTURE:', future)
             
             if out_dir == None:
                 out_dir = run_dir
@@ -38,3 +39,12 @@ def run_simulation_task(runner, run_dir:str, out_dir:str, params_from_sampler: d
             #print the whole traceback and not just the last error
             runner_output = None
         return runner_output
+    
+def print_error_wrapper(function, *args, **kwargs):
+    try:
+        output = function(*args, **kwargs)
+    except Exception as exc:
+        print("="*100,f"\nThere was a Python ERROR on a DASK worker when running {function.__name__}:\n{exc}\n",traceback.format_exc(), flush=True)
+        #print the whole traceback and not just the last error
+        output = None
+    return output

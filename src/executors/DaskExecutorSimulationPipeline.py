@@ -10,8 +10,8 @@ import uuid
 import executors
 import numpy as np
 import re
-from executors.tasks import run_simulation_task
-from dask.distributed import wait, print
+from executors.tasks import run_simulation_task, print_error_wrapper
+from dask.distributed import wait, print, as_completed
 
 
 def extract_integer(s):
@@ -68,21 +68,19 @@ class DaskExecutorSimulationPipeline():
     def initialise_clients(self):
         for executor in self.executors:
             executor.initialize_client()
-        print('SLEEPING 10 BEFORE PRINTING CLUSTER INFO')
-        time.sleep(10)
-        for executor in self.executors:
-            print('='*100)
-            print(executor.client)
-            workers_info = executor.client.scheduler_info()['workers']
-            for worker, info in workers_info.items():
-                print(f"Worker: {worker}")
-                print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
-                print(f"  Cores: {info['nthreads']}")
-                print(f"  Host: {info['host']}")
-                print(f"  Local Directory: {info['local_directory']}")
-                print()
-            
-        
+        # print('SLEEPING 10 BEFORE PRINTING CLUSTER INFO')
+        # time.sleep(10)
+        # for executor in self.executors:
+        #     print('='*100)
+        #     print(executor.client)
+        #     workers_info = executor.client.scheduler_info()['workers']
+        #     for worker, info in workers_info.items():
+        #         print(f"Worker: {worker}")
+        #         print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
+        #         print(f"  Cores: {info['nthreads']}")
+        #         print(f"  Host: {info['host']}")
+        #         print(f"  Local Directory: {info['local_directory']}")
+        #         print()
     
     def clean(self):
         for executor in self.executors:
@@ -125,12 +123,15 @@ class DaskExecutorSimulationPipeline():
         
 
         print('ENTERING FOR LOOP OVER EACH SIMULATION EXECUTOR')
-        previous_parse_futures = [None]*num_samples
         executing_last_simulation = False
         executing_first_simulation = True
         last_futures=[]
+        previous_parse_futures=[]
         for index, executor in enumerate(self.executors):
             print('='*100)
+            print('LOOPING OVER EXECUTORS, INDEX:',index)
+            print('='*100)
+            
             if executor.base_run_dir != None or executor.base_out_dir != None:
                 raise Warning(f'''The run and out directories are being handeled by the Pipeline Executor.
                               This means that the Simulation Executor run and out directories are being ignored:
@@ -139,16 +140,23 @@ class DaskExecutorSimulationPipeline():
                               run: {self.base_run_dir}, out:{self.base_out_dir}''') 
             
             if index == len(self.executors)-1:
+                print('*'*100,'\nEXECUTING LAST SIMULATION\n','*'*100)
                 executing_last_simulation = True
+                
             if index > 0:
                 executing_first_simulation = False
-            parse_futures = []
+            if executing_first_simulation:
+                print('*'*100,'\nEXECUTING FIRST SIMULATION\n','*'*100)
+
             run_dirs = base_run_dir_simulation_s[index]
             out_dirs = base_out_dir_simulation_s[index]
             if not executing_last_simulation:
                 next_run_dirs = base_run_dir_simulation_s[index+1]
+            else:
+                next_run_dirs = [None]*len(run_dirs)
             
             futures = []
+            parse_futures = []
             for run_index, run_dir, out_dir, next_run_dir in zip(range(num_samples),run_dirs, out_dirs, next_run_dirs):
                 # if this is the first executor then we need to take samples from the sampler
                 # If after first executor then run_dir should be already be set up
@@ -157,27 +165,28 @@ class DaskExecutorSimulationPipeline():
                     print('SAMPLE:',sample)
                 else:
                     sample=None
-                # This send the run_simulation_task to be ran on a worker as soon as possible
-                # Dask will wait untill all dependent futures have finished and returned a value
-                
-                #???????????????????????????????????????????????????????????
-                if not executing_last_simulation:
-                    new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample, future=previous_parse_futures[run_index])
-                else:
-                    new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)
-                    
+                # This sends the run_simulation_task to be ran on a worker as soon as possible
+                print('MAKING RUNNER FUTURES WITH RUNDIR', run_dir, 'OUT DIR', out_dir)
+                new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
                 futures.append(new_future)
                 #Make future for parsing
                 if not executing_last_simulation:
                     print('MAKING PIPELINE PARSE FUTURES FROM', out_dir, 'TO', next_run_dir)
-                    new_parse_future = executor.client.submit(self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, future=new_future)
+                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, future=new_future)
                     parse_futures.append(new_parse_future)
+            previous_parse_futures = parse_futures
+            print('WAITING FOR FUTURES AS THEY ARE MADE', 'INDEX:',index)
+            wait(futures)
             if not executing_last_simulation:
-                previous_parse_futures = parse_futures
+                print('RUN FUTURES COMPLETE, WAITING FOR PARSE FUTURES','INDEX:',index)
+                wait(parse_futures)
+                print('PARSE FUTURES COMPLETE, NOW WE CAN MOVE TO NEXT RUNNER KNOWING THE INPUT FILES ARE ALL THERE.', 'INDEX:', index)
+
             if executing_last_simulation:
                 last_futures = futures
         
-        print('WAITING UNTILL ALL FUTURES HAVE FINISHED')
+        print('WAITING UNTILL ALL FUTURES HAVE FINISHED', 'INDEX:',index)
+        print('NUM LAST FUTURES:',len(last_futures))
         seq = wait(last_futures)
         
         outputs = []

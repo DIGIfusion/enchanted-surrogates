@@ -18,6 +18,7 @@ from .base import Runner
 import subprocess
 from parsers import SIMPLEparser
 from dask.distributed import print
+import time
 
 class SIMPLErunner(Runner):
     """
@@ -45,6 +46,8 @@ class SIMPLErunner(Runner):
         self.parser.write_input_file(params, run_dir)
     
     def single_code_run(self, run_dir: str, out_dir:str, params=None):
+        print('$$$$$$$','SINGLE CODE RUN','$$$$$$$$')
+        # time.sleep(10)
         """
         Runs a simple test program like a bash script.
         Args:
@@ -56,9 +59,9 @@ class SIMPLErunner(Runner):
         os.chdir(run_dir)
         if type(params) != type(None):
             print('SAMPLE PROVIDED TO SINGLE CODE RUN, MAKING INPUT FILE', 'sample:', params)
-            print(os.system('ls'))
+            print('before parse params:',os.system('ls'))
             self.parse_params(params, run_dir)
-            print(os.system('ls'))
+            print('after parse params:',os.system('ls'))
             #If we are after the first code run in a pipeline then the inputfile parsing
             # parsing will be handeled by the executor and no params will be provided
         else:
