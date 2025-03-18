@@ -89,103 +89,99 @@ class DaskExecutorSimulationPipeline():
     def start_runs(self):
         print(100 * "=")
         print('STARTING PIPELINE')
+        
         print('MAKING DASK CLUSTERS')
         self.initialise_clients()
+        
         print('MAKING INITIAL SAMPLES')
         samples = self.sampler.get_initial_parameters()
         num_samples = len(samples)
+        
         print('MAKING RANDOM RUN IDs')
         run_ids = [str(uuid.uuid4()) for sample in samples]
-        run_dict = {run_id:sample for run_id, sample in zip(run_ids, samples)}
-            
+        run_sample_dict = {run_id:sample for run_id, sample in zip(run_ids, samples)}
+        run_dict_s = []
+        out_dict_s = []
+        
         print('MAKING ALL NECESSARY DIRECTORIES')
-        base_run_dir_simulation_s = []
         for index, executor in enumerate(self.executors):
             base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner.__class__.__name__+f'_{index}')
             run_dirs = [os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids]
-            base_run_dir_simulation_s.append(run_dirs)
+            run_dict = {run_id:os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids}
+            run_dict_s.append(run_dict)
             for run_dir in run_dirs:
                 os.system(f'mkdir {run_dir} -p')
         
         # if base_out_dir is in configs file for the pipeline executor then we will make out_dirs other wise we set it to be the same as the run_dir
         if self.base_out_dir!=None:
             print('BASE OUT DIR IS SPECIFIED SO MAKING OUT DIRS')
-            base_out_dir_simulation_s = []
             for index, executor in enumerate(self.executors):
                 base_out_dir_simulation = os.path.join(self.base_out_dir,executor.runner.__class__.__name__+f'_{index}')
                 out_dirs = [os.path.join(base_out_dir_simulation, run_id) for run_id in run_ids]
-                base_out_dir_simulation_s.append(out_dirs)
+                out_dict = {run_id:os.path.join(base_out_dir_simulation, run_id) for run_id in run_ids}
+                out_dict_s.append(out_dict)
                 for out_dir in out_dirs:
                     os.system(f'mkdir {out_dir} -p')
         else:
             print('BASE OUT DIR IS NOT SPECIFIED SO SETTING TO RUN DIRs')
-            base_out_dir_simulation_s = base_run_dir_simulation_s          
+            out_dict_s = run_dict_s          
         
-
-        print('ENTERING FOR LOOP OVER EACH SIMULATION EXECUTOR')
-        executing_last_simulation = False
-        executing_first_simulation = True
-        last_futures=[]
+        print('PERFORMING FIRST SIMULATION')
+        executor = self.executors[0] 
+        run_dict = run_dict_s[0]
+        out_dict = out_dict_s[0]
         previous_parse_futures=[]
-        for index, executor in enumerate(self.executors):
-            print('='*100)
-            print('LOOPING OVER EXECUTORS, INDEX:',index)
-            print('='*100)
-            
-            if executor.base_run_dir != None or executor.base_out_dir != None:
-                raise Warning(f'''The run and out directories are being handeled by the Pipeline Executor.
-                              This means that the Simulation Executor run and out directories are being ignored:
-                              run: {executor.base_run_dir} out:{executor.base_out_dir}
-                              The ExecutorSimulationPileline base run and out directories are being used:
-                              run: {self.base_run_dir}, out:{self.base_out_dir}''') 
-            
-            if index == len(self.executors)-1:
-                print('*'*100,'\nEXECUTING LAST SIMULATION\n','*'*100)
-                executing_last_simulation = True
+        if executor.base_run_dir != None or executor.base_out_dir != None:
+            raise Warning(f'''The run and out directories are being handeled by the Pipeline Executor.
+                            This means that the Simulation Executor run and out directories are being ignored:
+                            run: {executor.base_run_dir} out:{executor.base_out_dir}
+                            The ExecutorSimulationPileline base run and out directories are being used:
+                            run: {self.base_run_dir}, out:{self.base_out_dir}''') 
                 
-            if index > 0:
-                executing_first_simulation = False
-            if executing_first_simulation:
-                print('*'*100,'\nEXECUTING FIRST SIMULATION\n','*'*100)
-
-            run_dirs = base_run_dir_simulation_s[index]
-            out_dirs = base_out_dir_simulation_s[index]
-            if not executing_last_simulation:
-                next_run_dirs = base_run_dir_simulation_s[index+1]
-            else:
-                next_run_dirs = [None]*len(run_dirs)
-            
-            futures = []
-            parse_futures = []
-            for run_index, run_dir, out_dir, next_run_dir in zip(range(num_samples),run_dirs, out_dirs, next_run_dirs):
-                # if this is the first executor then we need to take samples from the sampler
-                # If after first executor then run_dir should be already be set up
-                if executing_first_simulation:
-                    sample=samples[run_index]
-                    print('SAMPLE:',sample)
-                else:
-                    sample=None
-                # This sends the run_simulation_task to be ran on a worker as soon as possible
-                print('MAKING RUNNER FUTURES WITH RUNDIR', run_dir, 'OUT DIR', out_dir)
-                new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
-                futures.append(new_future)
-                #Make future for parsing
-                if not executing_last_simulation:
-                    print('MAKING PIPELINE PARSE FUTURES FROM', out_dir, 'TO', next_run_dir)
-                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, future=new_future)
-                    parse_futures.append(new_parse_future)
-            previous_parse_futures = parse_futures
-            print('WAITING FOR FUTURES AS THEY ARE MADE', 'INDEX:',index)
-            wait(futures)
-            if not executing_last_simulation:
-                print('RUN FUTURES COMPLETE, WAITING FOR PARSE FUTURES','INDEX:',index)
-                wait(parse_futures)
-                print('PARSE FUTURES COMPLETE, NOW WE CAN MOVE TO NEXT RUNNER KNOWING THE INPUT FILES ARE ALL THERE.', 'INDEX:', index)
-
-            if executing_last_simulation:
-                last_futures = futures
+        futures = []
+        parse_futures = []
+        for run_id in run_ids:
+            sample=run_sample_dict[run_id]
+            print('SAMPLE:',sample)
+            run_dir=run_dict[run_id]
+            next_run_dir=run_dict_s[1][run_id] 
+            out_dir=out_dict[run_id]
+            # This sends the run_simulation_task to be ran on a worker as soon as possible
+            print('MAKING RUNNER FUTURES WITH RUNDIR', run_dir, 'OUT DIR', out_dir)
+            new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
+            futures.append(new_future)
+            #Make future for parsing
+            print('MAKING PIPELINE PARSE FUTURES FROM', out_dir, 'TO', next_run_dir)
+            new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[0], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=new_future)
+            parse_futures.append(new_parse_future)
+        previous_parse_futures = parse_futures
         
-        print('WAITING UNTILL ALL FUTURES HAVE FINISHED', 'INDEX:',index)
+        print('FIRST SIMULATION FINNISHED, EXECUTING THE REST')
+        executing_last_simulation=False
+        last_futures=[]
+        for index, executor, run_dict, out_dict in zip(range(1,len(self.executors[1:])) ,self.executors[1:], run_dict_s[1:], out_dict_s[1:]):
+            print('index',index,len(self.executors[1:])-1)
+            if index==len(self.executors[1:])-1:
+                executing_last_simulation=True
+                print('EXECUTING LAST SIMULATION')
+            
+            parse_futures=[]    
+            for future in as_completed(previous_parse_futures):
+                _, _, run_id = future.result()
+                run_dir = run_dict[run_id]
+                out_dir = out_dict[run_id]
+                sample = None
+                new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
+                if executing_last_simulation:
+                    last_futures.append(new_future)
+                if not executing_last_simulation:
+                    next_run_dir = out_dict_s[index+1][run_id]
+                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=new_future)
+                    parse_futures.append(new_parse_future)
+            if not executing_last_simulation:
+                previous_parse_futures = parse_futures
+    
+        print('WAITING UNTILL LAST FUTURES HAVE FINISHED')
         print('NUM LAST FUTURES:',len(last_futures))
         seq = wait(last_futures)
         
