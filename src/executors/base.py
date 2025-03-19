@@ -57,7 +57,7 @@ def run_simulation_task(
     except Exception as exc:
         print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
         #print the whole traceback and not just the last error
-        result = None
+        runner_output = None
     return runner_output
 
 
