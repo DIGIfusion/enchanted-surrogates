@@ -13,23 +13,14 @@ def run_simulation_task(runner, run_dir:str, out_dir:str, params_from_sampler: d
         Raises:
         """
         try:
-            print('RUNNING SIMULATION TASK:')
-            if future!=None:
-                #Even though a future is inputed dask replaces the variable with the futures results when it gets to 
-                # actually run this function. 
-                print('RESULT OF INPUTTED FUTURE:', future)
-            
             if out_dir == None:
                 out_dir = run_dir
+            
             if type(params_from_sampler) == type(None):
             #we are not given sampled parameters so we assume the run directories have already been set up
             # and we can simply run the code. This will happen if the executor calling this function is second (or third etc) in a pipeline
-                print('ASSUMING RUN DIRECTORIES HAVE BEEN SET UP')
-                print('run_dir:', run_dir,'out_dir:',out_dir)
-                print(os.system(f'ls {run_dir}'))
                 runner_output = runner.single_code_run(run_dir, out_dir)
             else:
-                print('MAKING RUN DIRECTORY', run_dir)
                 if not os.path.exists(run_dir):
                     os.mkdir(run_dir)
                 runner_output = runner.single_code_run(run_dir, out_dir, params_from_sampler) 

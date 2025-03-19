@@ -12,6 +12,7 @@ import runners
 import os
 import traceback
 from .tasks import run_simulation_task
+import warnings
 
 class DaskExecutorSimulation():
     """
@@ -25,7 +26,6 @@ class DaskExecutorSimulation():
         self.sampler = sampler
         self.do_initialize_client=do_initialize_client
         runner_args = kwargs.get("runner")
-        print('KWARGS:',kwargs)
         if type(runner_args) == type(None):
             raise ValueError('''
                              Every ExecutorSimulation needs a runner. 
@@ -38,13 +38,14 @@ class DaskExecutorSimulation():
                                     executable_path: /path/to/to/simple.sh
                                     other_params: {}
                                     base_run_dir: /path/to/base/run
-                                    output_dir: /path/to/base/out''')
+                                    output_dir: /path/to/base/out
+                            ''')
         self.runner = getattr(runners, runner_args["type"])(**runner_args)
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
         if self.n_jobs == 1:
-            raise Warning('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
+            warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
         self.base_out_dir = kwargs.get("base_out_dir")    
@@ -62,11 +63,10 @@ class DaskExecutorSimulation():
         print("Initializing DASK client")
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
-            print('MAKING A LOCAL CLUSTER')
+            print(f'MAKING A LOCAL CLUSTER FOR {self.runner.__class__.__name__}')
             self.cluster = LocalCluster(**self.worker_args)
         else:
-            print('MAKING A SLURM CLUSTER')
-            print('self.worker_args', self.worker_args)
+            print(f'MAKING A SLURM CLUSTER FOR {self.runner.__class__.__name__}')
             self.cluster = SLURMCluster(**self.worker_args)
             self.cluster.scale(self.n_jobs)    
             
@@ -74,7 +74,8 @@ class DaskExecutorSimulation():
             
     def start_runs(self, samples=None, base_run_directory_is_ready=False):
         if self.base_run_dir==None:
-            raise ValueError('''Enchanted surrogates handeles the creation of run directories. 
+            raise ValueError('''
+                             Enchanted surrogates handeles the creation of run directories. 
                              You must supply a base_run_dir in your configs file. Example:
                              executor:
                                 type: DaskExecutorSimulation
