@@ -26,11 +26,14 @@ class DaskExecutorSimulationPipeline():
     one output being the input to the next, 
     each can be ran on a different cluster with different resources per worker.
     Args:
+        dynamic_clusters: Boolean. When True the clusters will be created and deleted when needed, including all workers and schedulers
+                                    When False the clusters will remain alive untill enchanted surrogates is finnished
     Returns:
     Raises:
     """
     def __init__(self, sampler, **kwargs):
         self.sampler = sampler
+        self.dynamic_clusters = kwargs.get('dynamic_clusters', False)
         
         # Making a list of executors in the order of their intergers specified in their key, of config file
         executor_keys = [key for key in kwargs.keys() if 'executor' in key]
@@ -90,8 +93,9 @@ class DaskExecutorSimulationPipeline():
         print(100 * "=")
         print('STARTING PIPELINE')
         
-        print('MAKING DASK CLUSTERS')
-        self.initialise_clients()
+        if not self.dynamic_clusters:
+            print('MAKING DASK CLUSTERS')
+            self.initialise_clients()
         
         print('MAKING INITIAL SAMPLES')
         samples = self.sampler.get_initial_parameters()
@@ -127,18 +131,23 @@ class DaskExecutorSimulationPipeline():
             out_dict_s = run_dict_s          
         
         print('PERFORMING FIRST SIMULATION')
-        executor = self.executors[0] 
+        executor = self.executors[0]
+
+        if self.dynamic_clusters:
+            print('INITALIZING CLUSTER 1')
+            executor.initialize_client() 
         run_dict = run_dict_s[0]
         out_dict = out_dict_s[0]
-        previous_parse_futures=[]
+        
         if executor.base_run_dir != None or executor.base_out_dir != None:
             raise Warning(f'''The run and out directories are being handeled by the Pipeline Executor.
                             This means that the Simulation Executor run and out directories are being ignored:
                             run: {executor.base_run_dir} out:{executor.base_out_dir}
                             The ExecutorSimulationPileline base run and out directories are being used:
-                            run: {self.base_run_dir}, out:{self.base_out_dir}''') 
-                
-        futures = []
+                            run: {self.base_run_dir}, out:{self.base_out_dir}''')         
+        
+        run_futures = []
+        parse_futures_s = [] #each item will be a list of parse futures for one simulation
         parse_futures = []
         for run_id in run_ids:
             sample=run_sample_dict[run_id]
@@ -148,42 +157,52 @@ class DaskExecutorSimulationPipeline():
             out_dir=out_dict[run_id]
             # This sends the run_simulation_task to be ran on a worker as soon as possible
             print('MAKING RUNNER FUTURES WITH RUNDIR', run_dir, 'OUT DIR', out_dir)
-            new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
-            futures.append(new_future)
+            run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
+            run_futures.append(run_future)
             #Make future for parsing
             print('MAKING PIPELINE PARSE FUTURES FROM', out_dir, 'TO', next_run_dir)
-            new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[0], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=new_future)
+            new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[0], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
             parse_futures.append(new_parse_future)
-        previous_parse_futures = parse_futures
+        parse_futures_s.append(parse_futures)
         
-        print('FIRST SIMULATION FINNISHED, EXECUTING THE REST')
+        print('FUTURES FOR FIRST SIMULATION SENT, SENDING THE REST')
         executing_last_simulation=False
         last_futures=[]
-        for index, executor, run_dict, out_dict in zip(range(1,len(self.executors[1:])) ,self.executors[1:], run_dict_s[1:], out_dict_s[1:]):
-            print('index',index,len(self.executors[1:])-1)
-            if index==len(self.executors[1:])-1:
+        for index, executor, run_dict, out_dict in zip(range(1,len(self.executors)) ,self.executors[1:], run_dict_s[1:], out_dict_s[1:]):
+            if self.dynamic_clusters:
+                executor.initialize_client()
+            
+            print('index',index,len(self.executors)-1)
+            if index==len(self.executors)-1:
                 executing_last_simulation=True
                 print('EXECUTING LAST SIMULATION')
             
-            parse_futures=[]    
-            for future in as_completed(previous_parse_futures):
+            parse_futures=[]
+            run_futures = []
+            for future in as_completed(parse_futures_s[index-1]):
                 _, _, run_id = future.result()
                 run_dir = run_dict[run_id]
                 out_dir = out_dict[run_id]
                 sample = None
-                new_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
+                run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)
+                run_futures.append(run_future)
+                if self.dynamic_clusters and len(run_futures) == len(parse_futures_s[index-1]):
+                        #we need the previous cluster to provide the future.result()
+                        # Once all the new futures are made we can shut down the previous cluster
+                        self.executors[index-1].client.shutdown()
                 if executing_last_simulation:
-                    last_futures.append(new_future)
+                    last_futures.append(run_future)
                 if not executing_last_simulation:
                     next_run_dir = out_dict_s[index+1][run_id]
-                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=new_future)
+                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
                     parse_futures.append(new_parse_future)
             if not executing_last_simulation:
-                previous_parse_futures = parse_futures
+                parse_futures_s.append(parse_futures)
     
         print('WAITING UNTILL LAST FUTURES HAVE FINISHED')
         print('NUM LAST FUTURES:',len(last_futures))
         seq = wait(last_futures)
+        
         
         outputs = []
         for res in seq.done:
@@ -194,6 +213,10 @@ class DaskExecutorSimulationPipeline():
                 for output in outputs:
                     out_file.write(str(output) + "\n\n")
         print("Finished sequential runs")
+        
+        if self.dynamic_clusters:
+            self.executors[-1].client.shutdown()
+        
         return outputs
                         
             
