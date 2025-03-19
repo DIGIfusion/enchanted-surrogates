@@ -37,7 +37,7 @@ def main(args: argparse.Namespace):
     sampler = getattr(samplers, args.sampler.pop("type"))(**args.sampler)
     
     # Legacy support for DaskExecutor, in DaskExecutorSimulation the runner should be defined within the executor.
-    args.executor['runner_args'] = args.get('runner')
+    args.executor['runner_args'] = getattr(args, 'runner', None)
     
     executor = getattr(executors, args.executor.pop("type"))(sampler = sampler, **args.executor)
     print("STARTING RUNS")
