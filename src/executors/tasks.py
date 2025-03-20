@@ -21,8 +21,13 @@ def run_simulation_task(runner, run_dir:str, out_dir:str, params_from_sampler: d
             # and we can simply run the code. This will happen if the executor calling this function is second (or third etc) in a pipeline
                 runner_output = runner.single_code_run(run_dir, out_dir)
             else:
-                if not os.path.exists(run_dir):
-                    os.mkdir(run_dir)
+                if run_dir != None:
+                    if not os.path.exists(run_dir):
+                        os.mkdir(run_dir)
+                if out_dir != None:
+                    if not os.path.exists(out_dir):
+                        os.mkdir(out_dir)
+                        
                 runner_output = runner.single_code_run(run_dir, out_dir, params_from_sampler) 
             
         except Exception as exc:
