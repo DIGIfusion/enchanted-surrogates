@@ -21,10 +21,9 @@ class DaskExecutorSimulation():
 
     Attributes:
     """
-    def __init__(self, sampler=None, do_initialize_client=True, **kwargs):
+    def __init__(self, sampler=None, **kwargs):
         # This control will be needed by the pipeline and active learning.
         self.sampler = sampler
-        self.do_initialize_client=do_initialize_client
         runner_args = kwargs.get("runner")
         if type(runner_args) == type(None):
             raise ValueError('''
@@ -72,59 +71,49 @@ class DaskExecutorSimulation():
             
         self.client = Client(self.cluster ,timeout=180)
             
-    def start_runs(self, samples=None, base_run_directory_is_ready=False):
+    def start_runs(self):
+        print(f"STARTING RUNS FOR RUNNER {self.runner.type}, FROM WITHIN A {__class__}")
+        
+        print('MAKING CLUSTER')
+        self.initialize_client()
+        
+        futures = []
+        print("GENERATING INITIAL SAMPLES:")
+        samples = self.sampler.get_initial_parameters()
+        
         if self.base_run_dir==None:
-            raise ValueError('''
-                             Enchanted surrogates handeles the creation of run directories. 
-                             You must supply a base_run_dir in your configs file. Example:
+            raise warnings.warn('''
+                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
+                             This could be true if the runner is executing a python function and not a simulation.
+                             Otherwise see how to insert a base_run_dir into a config file below:
+                             Example:
                              executor:
                                 type: DaskExecutorSimulation
-                                base_run_dir: /project/project_462000451/test-enchanted/trial-dask
+                                base_run_dir: /project/path/to/base_run_dir/
                              ...
                              ...
                              ''')
-        
-        
-        print(f"STARTING RUNS FOR RUNNER {self.runner.type}, FROM WITHIN A {__class__}")
-        if self.do_initialize_client:
-            self.initialize_client()   
-        
-        futures = []
-        print('MAKING AND SUBMITTING DASK FUTURES')
-        if base_run_directory_is_ready:
-            print('BASE RUN DIRECTORY IS READY:', self.base_run_dir)
-            run_dir_s = os.listdir(self.base_run_dir)
-            run_dir_s = [directory for directory in run_dir_s if os.path.isdir(directory)]
-            for run_dir in run_dir_s:
-                new_future = self.client.submit(run_simulation_task, self.runner, run_dir)
-                futures.append(new_future)
-        elif type(samples) != type(None):
-            print('SAMPLES HAVE BEEN PROVIDED')
-            # we have been given samples so we should use them.
-            # This could be done in an active learning executor for example 
-            for sample in samples:
-                run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
-                new_future = self.client.submit(
-                    run_simulation_task, self.runner, run_dir, sample
-                )
-                futures.append(new_future)
-        else:
-            # Otherwise we assume this is the first time this is running and we need
-            # to get the initial samples from the sampler
-            print("GENERATING INITIAL SAMPLES:")
-            samples = self.sampler.get_initial_parameters()
-            print("MAKING AND SUBMITTING DASK FUTURES")         
-            for sample in samples:
+        else: # Make run_dirs
+            print("MAKING RUN DIRECTORIES")
+            run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
+            for index, sample in enumerate(samples):
                 random_run_id = str(uuid.uuid4())
                 run_dir = os.path.join(self.base_run_dir, random_run_id)
                 if self.base_out_dir == None:
                     out_dir = run_dir
                 else:
                     out_dir = os.path.join(self.base_out_dir, random_run_id)
-                new_future = self.client.submit(
-                    run_simulation_task, self.runner, run_dir, out_dir, sample 
-                )
-                futures.append(new_future)
+                os.system(f'mkdir {run_dir} {out_dir} -p')
+                run_dirs[index] = run_dir
+                out_dirs[index] = out_dir
+                     
+        print("MAKING AND SUBMITTING DASK FUTURES")         
+        for index, sample in enumerate(samples):
+            new_future = self.client.submit(
+                run_simulation_task, self.runner, run_dirs[index], out_dir[index], sample 
+            )
+            futures.append(new_future)
+            
         seq = wait(futures)
         outputs = []
         for res in seq.done:
