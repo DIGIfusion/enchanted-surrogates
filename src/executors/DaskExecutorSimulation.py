@@ -87,10 +87,11 @@ class DaskExecutorSimulation():
                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
                             This could be true if the runner is executing a python function and not a simulation.
                             Otherwise see how to insert a base_run_dir into a config file below:
-                            Example:
+                            Example
+                            
                             executor:
-                            type: DaskExecutorSimulation
-                            base_run_dir: /project/path/to/base_run_dir/
+                                type: DaskExecutorSimulation
+                                base_run_dir: /project/path/to/base_run_dir/
                             ...
                             ...
                         ''')
@@ -113,7 +114,8 @@ class DaskExecutorSimulation():
                 run_simulation_task, self.runner, run_dirs[index], out_dirs[index], sample 
             )
             futures.append(new_future)
-            
+        
+        print("DASK FUTURES SUBMITTED, WAITING FOR THEM TO COMPLETE")
         seq = wait(futures)
         outputs = []
         for res in seq.done:
