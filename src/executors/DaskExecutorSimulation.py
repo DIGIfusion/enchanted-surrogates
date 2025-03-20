@@ -81,6 +81,7 @@ class DaskExecutorSimulation():
         print("GENERATING INITIAL SAMPLES:")
         samples = self.sampler.get_initial_parameters()
         
+        run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
         if self.base_run_dir==None:
             warnings.warn('''
                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
@@ -95,7 +96,6 @@ class DaskExecutorSimulation():
                         ''')
         else: # Make run_dirs
             print("MAKING RUN DIRECTORIES")
-            run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
             for index, sample in enumerate(samples):
                 random_run_id = str(uuid.uuid4())
                 run_dir = os.path.join(self.base_run_dir, random_run_id)
