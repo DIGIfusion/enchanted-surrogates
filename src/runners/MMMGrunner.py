@@ -35,7 +35,7 @@ class MMMGrunner(Runner):
         def find_first_int(string):
             return int(re.search(r'\d+',string).group())
         
-        keys = params.keys()
+        keys = list(params.keys())
         ordinals = [find_first_int(key) for key in keys]
         indicies = np.argsort(ordinals)
         keys = [keys[index] for index in indicies]
