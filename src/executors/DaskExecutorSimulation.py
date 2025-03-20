@@ -82,17 +82,17 @@ class DaskExecutorSimulation():
         samples = self.sampler.get_initial_parameters()
         
         if self.base_run_dir==None:
-            raise warnings.warn('''
-                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
-                             This could be true if the runner is executing a python function and not a simulation.
-                             Otherwise see how to insert a base_run_dir into a config file below:
-                             Example:
-                             executor:
-                                type: DaskExecutorSimulation
-                                base_run_dir: /project/path/to/base_run_dir/
-                             ...
-                             ...
-                             ''')
+            warnings.warn('''
+                            No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
+                            This could be true if the runner is executing a python function and not a simulation.
+                            Otherwise see how to insert a base_run_dir into a config file below:
+                            Example:
+                            executor:
+                            type: DaskExecutorSimulation
+                            base_run_dir: /project/path/to/base_run_dir/
+                            ...
+                            ...
+                        ''')
         else: # Make run_dirs
             print("MAKING RUN DIRECTORIES")
             run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
