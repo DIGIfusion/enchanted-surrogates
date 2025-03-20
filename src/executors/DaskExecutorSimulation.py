@@ -72,7 +72,7 @@ class DaskExecutorSimulation():
         self.client = Client(self.cluster ,timeout=180)
             
     def start_runs(self):
-        print(f"STARTING RUNS FOR RUNNER {self.runner.type}, FROM WITHIN A {__class__}")
+        print(f"STARTING RUNS FOR RUNNER {self.runner.__class__.__name__}, FROM WITHIN A {__class__}")
         
         print('MAKING CLUSTER')
         self.initialize_client()
