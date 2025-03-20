@@ -9,6 +9,7 @@ import numpy as np
 from .base import Runner
 from runners.MISHKArunner import MISHKArunner
 from parsers import HELENAparser
+import warnings
 import subprocess
 import os
 
@@ -138,11 +139,30 @@ class HELENArunner(Runner):
             if "beta_iteration" not in other_params
             else other_params["beta_iteration"]
         )
-        self.constant_beta = (
+        
+        if self.beta_iteration != 1 and ('input_value_1' in other_params or 'input_value_2' in other_params):
+            warnings.warn('''
+                          Parameters: input_value_1 and input_value_2 are only relevant if beta_iteration=1
+                          Since beta_iteration does not equal 1 these parameters are being ignored. 
+                          ''')
+            
+        # Only relevant if beta_iteration = 1
+        self.input_value_1 = (
+            0.0
+            if "input_value_1" not in other_params
+            else other_params["input_value_1"]
+        )
+        self.input_value_2 = (
+            1.0
+            if "input_value_2" not in other_params
+            else other_params["input_value_2"]
+        )
+        
+        self.beta_N_target = (
             #To set a constant beta for every sample
             None
-            if "constant_beta" not in other_params
-            else other_params["constant_beta"]
+            if "beta_N_target" not in other_params
+            else other_params["beta_N_target"]
         )
         self.beta_tolerance = (
             1e-4
@@ -251,10 +271,10 @@ class HELENArunner(Runner):
 
         # Check input parameters
         if self.beta_iteration > 0:
-            if "beta_N" not in params and self.constant_beta==None:
+            if "beta_N" not in params and self.beta_N_target==None:
                 print(
                     "The parameter configuration does not include 'beta_N'.",
-                    "The constant_beta is not included in the config file for the runner."
+                    "The beta_N_target is not included in the config file for the runner."
                     "At least one is needed for the beta itteration. EXITING.",
                     "This it needed for beta iteration. EXITING.",
                 )
@@ -268,8 +288,8 @@ class HELENArunner(Runner):
             if self.beta_iteration == 1:
                 self.run_helena_with_beta_iteration(params)
             elif self.beta_iteration == 2:
-                if self.constant_beta != None:
-                    beta_target = self.constant_beta
+                if self.beta_N_target != None:
+                    beta_target = self.beta_N_target
                 else:
                     beta_target = params["beta_N"]
                 self.run_helena_with_beta_at1_iteration(
@@ -294,8 +314,8 @@ class HELENArunner(Runner):
         if self.pedestal_width_scan:
             print("Starting pedestal width scan...", flush=True)
             if self.input_parameter_type in [3, 5, 6]:
-                if self.constant_beta != None:
-                    beta_target = self.constant_beta
+                if self.beta_N_target != None:
+                    beta_target = self.beta_N_target
                 else:
                     beta_target = params["beta_N"]
                 print(f"target beta_N = {beta_target}", flush=True)
@@ -549,16 +569,18 @@ class HELENArunner(Runner):
         Slower then at1 iteration since it needs to run HELENA more times,
         but can reach a more accurate betaN.
         """
-        if self.constant_beta != None:
-            beta_target = self.constant_beta
+        if self.beta_N_target != None:
+            beta_target = self.beta_N_target
         else:
             beta_target = params["beta_N"]
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
-        at1_0 = 0.0
+
         if self.beta_iterations_afp:
-            self.parser.modify_fast_ion_pressure("fort.10", at1_0)
+            self.parser.modify_fast_ion_pressure("fort.10", self.input_value_1)
         else:
-            self.parser.update_at1("fort.10", at1_0)
+            self.parser.update_at1("fort.10", self.input_value_1)
+        
+        
         subprocess.call([self.executable_path])
         import shutil
         shutil.copy('fort.10','fort.10_1')
@@ -566,91 +588,116 @@ class HELENArunner(Runner):
         
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n0 = 1e2 * output_vars["BETAN"]
+        
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
-        at1_1 = 20
+        
+        with open('beta_iteration_results', 'a') as file:
+            file.write(f"BETA ITERATION {0.0}: input_value={self.input_value_1}, target={beta_target}, current={beta_n0}\n")
+        
         if self.beta_iterations_afp:
-            self.parser.modify_fast_ion_pressure("fort.10", 0.1)
+            self.parser.modify_fast_ion_pressure("fort.10", self.input_value_2)
         else:
-            self.parser.update_at1("fort.10", at1_1)
+            self.parser.update_at1("fort.10", 1.0)
         subprocess.call([self.executable_path])
         shutil.copy('fort.10','fort.10_2')
         shutil.copy('fort.20','fort.20_2')
 
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n01 = 1e2 * output_vars["BETAN"]
-        print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}, previous={beta_n0}")
-        data_point_1 = beta_n0, at1_0
-        data_point_2 = beta_n01, at1_1
+        
+        print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
+        
+        with open('beta_iteration_results', 'a') as file:
+            file.write(f"BETA ITERATION {0.1}: input_value={self.input_value_2}, target={beta_target}, current={beta_n01}\n")
+    
         if self.beta_iterations_afp:
-            apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
-            self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+            # apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
+            # self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+            data_point_1 = beta_n0, self.input_value_1
+            data_point_2 = beta_n01, self.input_value_2
+            guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+            self.parser.modify_fast_ion_pressure("fort.10", guess)
+            
         else:
+            data_point_1 = beta_n0, self.input_value_1
+            data_point_2 = beta_n01, self.input_value_2
             # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
             # self.parser.modify_at1("fort.10", at1_mult_targ)
-            at1_guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
-            self.parser.update_at1("fort.10", at1_guess)
+            guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+            self.parser.update_at1("fort.10", guess)
+
+        print(f"BETA ITERATION {0.2}: guess={guess}")
+        
+        with open('beta_iteration_results', 'a') as file:
+            file.write(f"BETA ITERATION {0.2}: guess_input_value={guess}\n")
 
         subprocess.call([self.executable_path])
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n = 1e2 * output_vars["BETAN"]
-        print(f"BETA ITERATION {0.2}: target={beta_target}, current={beta_n}, previous={beta_n01}")
+
+        print(f"BETA ITERATION {0.2}: input_value={guess}, target={beta_target}, current={beta_n}, previous={beta_n01}")
+
+        with open('beta_iteration_results', 'a') as file:
+            file.write(f"BETA ITERATION {0.2}: input_value={guess}, target={beta_target}, current={beta_n}\n")
+        
         n_beta_iteration = 0
         while (
-            np.abs(beta_target - beta_n) > self.beta_tolerance * beta_target
+            np.abs(beta_target - beta_n) > self.beta_tolerance
             and n_beta_iteration < self.max_beta_iterations
-        ):
+        ):  
+            previous_guess = guess
             print('BETA ITTERATION IN WHILE LOOP')
+            # We then draw a line between the new point and which ever of the two previous data points are closest to beta_target
+            print('OLD DATA POINT 1: beta_n, at1', data_point_1)
+            print('OLD DATA POINT 2: beta_n, at1', data_point_2)
+            print('PREDICTED POINT: beta_n, at1', beta_n, guess)
+            if np.abs(data_point_2[0] - beta_target) < np.abs(data_point_1[0] - beta_target):
+                # data point 2 is closer to the target beta so we should use it
+                data_point_1 = data_point_2
+                print('OLD DATA POINT 2 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
+            else:
+                # data point 1 is closer to the target beta so we should use it
+                data_point_1 = data_point_1
+                print('OLD DATA POINT 1 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
             if self.beta_iterations_afp:
-                apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
-                self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                # apftarg = (beta_target - beta_n0) * apftarg / (beta_n - beta_n0)
+                # self.parser.modify_fast_ion_pressure("fort.10", apftarg)
+                guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+                data_point_2 = beta_n, guess
+                print('NEW DATA POINT 1: beta_n, apftarg', data_point_1)
+                print('NEW DATA POINT 2: beta_n, apftarg', data_point_2)
+                print('NEW PREDICTED apftarg:', guess)
+                self.parser.modify_fast_ion_pressure('fort.10', guess)
             else:
                 # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
                 # self.parser.modify_at1("fort.10", at1_mult_targ)
-                # We then draw a line between the new point and which ever of the two previous data points are closest to beta_target
-                print('OLD DATA POINT 1: beta_n, at1', data_point_1)
-                print('OLD DATA POINT 2: beta_n, at1', data_point_2)
-                print('PREDICTED POINT: beta_n, at1', beta_n, at1_guess)
-                if np.abs(data_point_2[0] - beta_target) < np.abs(data_point_1[0] - beta_target):
-                    # data point 2 is closer to the target beta so we should use it
-                    data_point_1 = data_point_2
-                    print('OLD DATA POINT 2 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
-                else:
-                    # data point 1 is closer to the target beta so we should use it
-                    data_point_1 = data_point_1
-                    print('OLD DATA POINT 1 IS CLOSER TO BETA TARGET SO WE MAKE IT DATA POINT 1')
                 # We always need to use our new point 
-                data_point_2 = beta_n, at1_guess
-                at1_guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
+                data_point_2 = beta_n, guess
+                guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
                 print('NEW DATA POINT 1: beta_n, at1', data_point_1)
                 print('NEW DATA POINT 2: beta_n, at1', data_point_2)
-                print('NEW PREDICTED AT1:', at1_guess)
-                self.parser.update_at1('fort.10', at1_guess)
+                print('NEW PREDICTED AT1:', guess)
+                self.parser.update_at1('fort.10', guess)
+            
+            print(f"BETA ITERATION {n_beta_iteration}: input_value={previous_guess}, target={beta_target}, current={beta_n}, guess_input_for_next={guess}\n")
+            with open('beta_iteration_results', 'a') as file:
+                file.write(f"BETA ITERATION {n_beta_iteration}: input_value={previous_guess}, target={beta_target}, current={beta_n}, guess_input_for_next={guess}\n")
+            
             subprocess.call([self.executable_path])
             output_vars = self.parser.get_real_world_geometry_factors_from_f20(
                 "fort.20"
             )
             beta_n = 1e2 * output_vars["BETAN"]
-            print(
-                f"BETA ITERATION {n_beta_iteration}: target={beta_target}, current={beta_n}"
-            )
-            beta_iteration_results = [
-                f"BETA ITERATION NOT FINNISHED.\nTarget betaN: {beta_target}\n",
-                f"Current betaN: {beta_n}\n",
-                f"Number of beta iterations: {n_beta_iteration}",
-            ]
-            with open('beta_iteration_results', 'w') as file:
-                for line in beta_iteration_results:
-                    file.write(line)
+            
             n_beta_iteration += 1
 
         beta_iteration_results = [
             f"BETA ITERATION FINISHED.\nTarget betaN: {beta_target}\n",
             f"Final betaN: {beta_n}\n",
-            f"Number of beta iterations: {n_beta_iteration}",
+            f"Number of beta iterations: {n_beta_iteration}\n",
         ]
-        print(beta_iteration_results)
-        
-        with open('beta_iteration_results', 'w') as file:
+        print(beta_iteration_results)        
+        with open('beta_iteration_results', 'a') as file:
             for line in beta_iteration_results:
                 file.write(line)
 

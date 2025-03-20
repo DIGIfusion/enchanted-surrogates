@@ -63,7 +63,7 @@ def test_helena_noKBM_betaN():
     run_directories = [os.path.join(base_run_dir, run_dir) for run_dir in run_directories]
     
     beta_tolerance = args.runner['other_params']['beta_tolerance']
-    beta_target = args.runner['other_params']['constant_beta']
+    beta_target = args.runner['other_params']['beta_N_target']
     max_beta_iterations = args.runner['other_params']['max_beta_iterations']
     beta_N_s = []
     for run_dir in run_directories:
@@ -113,10 +113,12 @@ def test_helena_runner():
         "only_generate_files": False,
         "input_parameter_type": 7,
         "beta_iteration": 1,
+        "input_value_1": 0.0,
+        "input_value_2": 10.0,
         "beta_iterations_afp": False,
-        "beta_tolerance": 0.01,
-        "max_beta_iterations": 10,
-        "constant_beta": 2.555 # 
+        "beta_tolerance": 0.01, # changed to absolute tolerence
+        "max_beta_iterations": 5,
+        "beta_N_target": 2.555 # 
         }
     runner = HELENArunner(executable_path, other_params)
     # bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
@@ -131,17 +133,22 @@ def test_helena_runner():
     success1, mercier_stable, ballooning_stable = parser.read_output_file(run_dir)
     
     beta_tolerance = other_params['beta_tolerance']
-    beta_target = other_params['constant_beta']
-    max_beta_iterations = other_params['max_beta_iterations']
+    beta_target = other_params['beta_N_target']
     fort20 = os.path.join(run_dir, 'fort.20')
     with open(fort20, 'r') as file:
         for line in file:
             if 'NORM. BETA' in line:
                 break
-        beta_N = float(line.strip().split(' ')[-1])
-    success2 = np.abs(beta_N-beta_target) < beta_tolerance*beta_N
+        beta_N = float(line.strip().split(' ')[-1])*1e2
+    success2 = np.abs(beta_N-beta_target) < beta_tolerance
     success = success1 and success2
     assert success
+    
+'''
+BETA ITERATION FINISHED.
+Target betaN: 2.555
+Final betaN: 2.544
+'''
 
 if __name__ == '__main__':
     # test_example_configs()
