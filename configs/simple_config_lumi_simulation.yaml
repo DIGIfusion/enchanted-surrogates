@@ -27,9 +27,9 @@ executor:
     job_script_prologue: # this is possibly dependent on which code you want
       - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
       # Change this for your own personal enchanted surrogates clone
-      - 'cd /users/danieljordan/enchanted-surrogates/'
+      - 'cd /users/danieljordan/enchanted-surrogates2/'
       # This command gives the worker access to the python within our container. 
-      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NB: to use the enchanted-surrogate library
     # These are appended to the sbatch that requestes the resources for each worker.
     job_extra_directives:
       - '-o /scratch/project_462000451/gene_out/enchanted_out/simple_test/%x.%j.out'
