@@ -118,7 +118,7 @@ def test_helena_runner():
         "beta_iterations_afp": False,
         "beta_tolerance": 0.01, # changed to absolute tolerence
         "max_beta_iterations": 5,
-        "beta_N_target": 2.555 # 
+        "beta_N_target": 2.555 #
         }
     runner = HELENArunner(executable_path, other_params)
     # bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
