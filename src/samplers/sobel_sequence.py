@@ -43,7 +43,7 @@ class SobelSequence(Sampler):
         self.bounds = bounds
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters do not match. Please define the same number of bounds as parameters')
-        self.num_samples = num_samples
+        self.num_samples = self.num_initial_points = num_samples
         self.samples = self.generate_parameters()
         self.current_index = 0
 
