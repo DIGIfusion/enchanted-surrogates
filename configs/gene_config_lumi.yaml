@@ -1,0 +1,41 @@
+sampler:
+  type: GENEky
+  ion_scale_bounds: [0.001, 10]
+  electron_scale_bounds: [10,500]
+  num_ion_scale_samples: 5
+  num_electron_scale_samples: 5
+  sub_sampler:
+    type: SobelSequence #This must take in at least, parameters, bounds, num_samples
+
+executor:
+  type: DaskExecutorSimulation
+  base_run_dir: /scratch/project_462000451/gene_enchanted/
+  base_out_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
+  runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/gene_test/runner_return
+
+  runner:
+    type: GENErunner
+    # executable_path: /users/danieljordan/enchanted-surrogates/tests/automated_tests_no_HPC/simple/simple.sh
+    base_parameters_file_path: /project/project_462000451/DEEPlasma/parameters_base_jet_97781
+    
+  worker_args: # to be specified for the SLURMCluster in DASK
+    cores: 1
+    memory: "0" # When 0 use all memory available
+    walltime: "12:00:00" #Max time limit of entire cluster
+    job_extra_directives:
+      - "--nodes 1"
+      - "--partition standard"
+      - "--account project_462000451"
+      - "--ntasks 128"
+      - '-o /scratch/project_462000451/gene_out/enchanted_out/gene_test/%x.%j.out'
+      - '-e /scratch/project_462000451/gene_out/enchanted_out/gene_test/%x.%j.err'
+    interface: "nmn0"
+    # The job script prologue is ran on every worker at start up
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
+      # Change this for your own personal enchanted surrogates clone
+      - 'cd /users/danieljordan/enchanted-surrogates2/'
+      # This command gives the worker access to the python within our container. 
+      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NB: to use the enchanted-surrogate library
+    # These are appended to the sbatch that requestes the resources for each worker.
+  n_jobs: 2
