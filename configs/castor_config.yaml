@@ -1,0 +1,35 @@
+sampler:
+  type: ArraySampler
+  bounds: [
+    [5, 15, 50],
+    ["/scratch/project_2009007/ambrunc/castor_example_scan/jet84794_329_40"]
+  ]
+  num_samples: [3, 1]
+  parameters: ['ntor', 'helena_dir']
+
+runner:
+  type: CASTORrunner
+  executable_path: "/projappl/project_2009007/CASTOR/bin/cas12"
+  other_params: {
+    "default_namelist": "/projappl/project_2009007/CASTOR/namelist/example_namelist",
+    "single_run": True,
+    "trace_eigenvalues": True,
+    "width_scan": True,
+    }
+
+executor:
+  type: LocalDaskExecutor
+  base_run_dir: /scratch/project_2009007/castor_runs/0
+  worker_args: # to be specified for the SLURMCluster in DASK
+    account: "project_2009007"
+    queue: "small"
+    cores: 1 
+    memory: "12GB"
+    processes: 1
+    walltime: "00:20:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    interface: "ib0"
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'module load python-data'
+      - 'cd /scratch/project_2009007/enchanted-surrogates'
+      - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2009007/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+  n_jobs: 1
