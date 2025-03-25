@@ -39,9 +39,11 @@ class CASTORrunner(Runner):
     """
 
     def __init__(self, executable_path: str, other_params: dict, *args, **kwargs):
-        self.parser = CASTORparser(default_namelist=other_params["namelist_path"])
+        self.parser = CASTORparser(namelist_path=other_params["namelist_path"])
+
         self.executable_path = executable_path
-        self.default_namelist = other_params["namelist_path"]
+        self.namelist_path = other_params["namelist_path"]
+        self.eigenvalue_tracing = other_params["eigenvalue_tracing"]
         self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
@@ -147,9 +149,9 @@ class CASTORrunner(Runner):
                     f"The executable path ({self.executable_path}_{ntor}) provided to the CASTOR ",
                     "runner is not found. Exiting.",
                 )
-        if not os.path.exists(self.default_namelist):
+        if not os.path.exists(self.namelist_path):
             raise FileNotFoundError(
-                f"Couldn't find {self.default_namelist}. Exiting.",
+                f"Couldn't find {self.namelist_path}. Exiting.",
             )
 
         return

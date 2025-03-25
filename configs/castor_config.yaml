@@ -11,7 +11,7 @@ runner:
   type: CASTORrunner
   executable_path: "/projappl/project_2009007/CASTOR/bin/cas12"
   other_params: {
-    "default_namelist": "/projappl/project_2009007/CASTOR/namelist/example_namelist",
+    "namelist_path": "/projappl/project_2009007/CASTOR/namelist/example_namelist",
     "single_run": True,
     "trace_eigenvalues": True,
     "width_scan": True,

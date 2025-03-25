@@ -28,8 +28,8 @@ class CASTORparser(Parser):
 
     """
 
-    def __init__(self, default_namelist: str):
-        self.default_namelist = default_namelist
+    def __init__(self, namelist_path: str):
+        self.namelist_path = namelist_path
 
     def write_input_file(self, params: dict, run_dir: str):
         print("parser params", params)
@@ -41,7 +41,7 @@ class CASTORparser(Parser):
             raise FileNotFoundError(f"Couldnt find {run_dir}")
 
         # Update toroidal mode number
-        namelist = f90nml.read(self.default_namelist)
+        namelist = f90nml.read(self.namelist_path)
         namelist["newrun"][0]["ntor"] = -int(params["ntor"])
 
         f90nml.write(namelist, input_fpath)
