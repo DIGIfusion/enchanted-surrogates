@@ -17,12 +17,115 @@ from parsers.submodules.TPED.projects.GENE_sim_reader.utils.find_GENE_files impo
 
 class GENEparser(Parser):
     def __init__(self):
-        None
+        self.output_headder = 'mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency'
+        self.base_params_nml_string = '''
+            &parallelization
+                n_parallel_sims = 1
+                n_procs_sim = 128
+                n_procs_s = -1
+                n_procs_z = -1
+                n_procs_w = -1
+                min_npw = -1
+                max_npw = -1
+                n_procs_v = -1
+                n_procs_x = -1
+                n_procs_y = -1
+            /
 
-    def write_input_file(self, params: dict, run_dir: str, base_params_file_path: str):
+            &box
+                n_spec = 2
+                nx0 = 18
+                nky0 = 1
+                nz0 = 36
+                nv0 = 32
+                nw0 = 16
+                kymin = 0.1
+                lv = 3.1
+                lw = 11
+                x0 = 0.9
+                kx_center = 0.0
+                adapt_ly = .true.
+            /
+
+            &in_out
+                diagdir = '/scratch/project_462000451/gene_out/gene_auto_97781/'
+                read_checkpoint = .false.
+                istep_nrg = 100
+                istep_field = 100
+                istep_mom = 2000
+                istep_energy = 100
+                istep_omega = 100
+                istep_vsp = 5000
+                istep_schpt = 5000
+                istep_srcmom = 2000
+                iterdb_file = '/project/project_462000451/jet_97781_data/iterdb_jet_97781'
+            /
+
+            &general
+                nblocks = 16
+                f_version = .false.
+                nonlinear = .false.
+                x_local = .true.
+                arakawa_zv = .false.
+                comp_type = 'IV'
+                calc_dt = .true.
+                timelim = 7200
+                simtimelim = 7200
+                underflow_limit = 1e-15
+                collision_op = 'landau'
+                coll_cons_model = 'self_adj'
+                coll = -1
+                zeff = 1
+                beta = -1
+                debye2 = -1
+                hyp_z = -1
+                init_cond = 'ppjrn'
+            /
+
+            &geometry
+                edge_opt = 1.0
+                magn_geometry = 'tracer_efit'
+                geomdir = ''
+                geomfile = '/project/project_462000451/jet_97781_data/jet97781.eqdsk'
+                rhostar = -1
+                mag_prof = .true.
+                sign_ip_cw = 1
+                sign_bt_cw = 1
+            /
+
+            &species
+                name = 'Electrons'
+                mass = 0.0002725
+                charge = -1
+                prof_type = -2
+            /
+
+            &species
+                name = 'Ions'
+                mass = 1.0
+                charge = 1
+                prof_type = -2
+            /
+
+            &units
+                tref = -1
+                nref = -1
+                bref = -1
+                lref = -1
+                mref = 2
+                omegatorref = -1
+            /
+            '''
+
+    def write_input_file(self, params: dict, run_dir: str, out_dir:str, base_params_file_path: str):
+        if base_params_file_path != None:
+            namelist = f90nml.read(base_params_file_path)
+            namelist_string = str(namelist)
+        elif self.base_params_nml_string != None:
+            namelist = f90nml.reads(self.base_params_nml_string)
+            namelist_string = self.base_params_nml_string
+            
         parameters_path = os.path.join(run_dir, 'parameters')
-        namelist = f90nml.read(base_params_file_path)
-        namelist_string = str(namelist)
         # params example {('box','kymin'): 0.5}
         #populate params: dict with all omn's required. Since each should be identical
         if ('species','omn') in params:
@@ -36,8 +139,9 @@ class GENEparser(Parser):
             group, var = key
             patch[group] = {var:value}
             # patch = {group: {var: value}}
-        namelist.patch(patch)
+        patch['in_out'] = {'diagdir':out_dir}
         
+        namelist.patch(patch)        
         f90nml.write(parameters_path, namelist)
     
     def calculate_kperp(self, out_dir):
@@ -112,7 +216,16 @@ class GENEparser(Parser):
 
         fingerprints = self.calculate_fingerprints(out_dir)
         
-        return mixing_length_phi, mixing_length_A, fingerprints
+        return mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency
+
+    def print_default_nml_string(self, base_params_file_path):
+        #to prevent each worker needing to read the base parameters file
+        # you can print the default namelist string and paste it into the parser.
+        nml = f90nml.read(base_params_file_path)
+        print("COPY AND PASTE THE STRING BELOW INTO, GENEparser --> __init__ --> self.base_params_nml_string, FOR OPTMAL PERFORMANCE")
+        print(str(nml))
+        return str(nml)
+
 def read_Gamma_Q(time,nrgs,print_val,setTime=-1):
      
     if (setTime == -1):
@@ -140,4 +253,4 @@ def read_Gamma_Q(time,nrgs,print_val,setTime=-1):
 
     return Gamma_es, Gamma_em, Qheat_es, Qheat_em
         
-
+    

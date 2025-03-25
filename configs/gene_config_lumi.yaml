@@ -15,8 +15,15 @@ executor:
 
   runner:
     type: GENErunner
-    # executable_path: /users/danieljordan/enchanted-surrogates/tests/automated_tests_no_HPC/simple/simple.sh
-    base_parameters_file_path: /project/project_462000451/DEEPlasma/parameters_base_jet_97781
+    pre_run_commands:
+      - export MEMORY_PER_CORE=1800
+      - export OMP_NUM_THREADS=1
+      - export HDF5_USE_FILE_LOCKING=FALSE
+    #You can specify a base_parameters_file_path
+    #Although this means each worker must read from this file
+    # It is more optimal to use GENEparser.print_default_nml_string(base_params_file_path) to get a string
+    # Then paste this string directly into the GENEparser --> __init__ --> self.base_params_nml_string varaible
+    #base_parameters_file_path: /project/project_462000451/DEEPlasma/parameters_base_jet_97781
     
   worker_args: # to be specified for the SLURMCluster in DASK
     cores: 1
