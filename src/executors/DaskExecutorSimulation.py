@@ -43,6 +43,10 @@ class DaskExecutorSimulation():
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
+        self.runner_return_headder = kwargs.get("runner_return_headder")
+        if self.runner_return_path != None and self.runner_return_headder != None:
+            with open(self.runner_return_path, 'w') as file:
+                file.write(self.runner_return_headder)
         if self.n_jobs == 1:
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
@@ -122,7 +126,7 @@ class DaskExecutorSimulation():
             outputs.append(res.result())
         if self.runner_return_path is not None:
             print("SAVING OUTPUT IN:", self.runner_return_path)
-            with open(self.runner_return_path, "w") as out_file:
+            with open(self.runner_return_path, "a") as out_file:
                 for output in outputs:
                     out_file.write(str(output) + "\n\n")
         print("Finished sequential runs")

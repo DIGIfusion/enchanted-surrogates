@@ -12,7 +12,7 @@ executor:
   base_run_dir: /scratch/project_462000451/gene_enchanted/
   base_out_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
   runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/gene_test/runner_return
-
+  renner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency'
   runner:
     type: GENErunner
     pre_run_commands:
