@@ -18,12 +18,14 @@ runner:
     }
 
 executor:
-  type: LocalDaskExecutor
+  type: DaskExecutor
   base_run_dir: /scratch/project_2009007/castor_runs/0
   worker_args: # to be specified for the SLURMCluster in DASK
+    local: 1
     account: "project_2009007"
     queue: "small"
-    cores: 1 
+    cores: 1
+    job_cpu: 10  
     memory: "12GB"
     processes: 1
     walltime: "00:20:00" # Adam: survival length of worker, so possibly just set to max in cluster

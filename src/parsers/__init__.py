@@ -8,13 +8,16 @@ Classes:
 - MISHKAparser
 - DATABASEparser
 - DREAMparser
+- CASTORparser
 Functions:
 
 """
-from .base             import Parser
-from .TGLFparser       import TGLFparser
-from .SIMPLEparser     import SIMPLEparser
-from .HELENAparser     import HELENAparser
-from .MISHKAparser     import MISHKAparser
+
+from .base import Parser
+from .TGLFparser import TGLFparser
+from .SIMPLEparser import SIMPLEparser
+from .HELENAparser import HELENAparser
+from .MISHKAparser import MISHKAparser
 from .STATICPOOLparser import STATICPOOLparser
-from .DREAMparser      import DREAMparser
+from .DREAMparser import DREAMparser
+from .CASTORparser import CASTORparser
