@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+from datetime import datetime
 from parsers import CASTORparser
 from .base import Runner
 from dask.distributed import print
@@ -44,6 +45,7 @@ class CASTORrunner(Runner):
         self.executable_path = executable_path
         self.namelist_path = other_params["namelist_path"]
         self.eigenvalue_tracing = other_params["eigenvalue_tracing"]
+        self.resistivity_type = other_params["resistivity_type"]
         self.pre_run_check()
 
     def single_code_run(self, params: dict, run_dir: str):
@@ -59,24 +61,34 @@ class CASTORrunner(Runner):
         -------
         None
         """
-        self.get_equilibrium_files(run_dir, params)
+        start_time = datetime.now()
+        print(f"CASTOR run starting... ({run_dir}) ({start_time})", flush=True)
 
-        # write input file
+        # Get files from HELENA equilibrium
+        self.get_equilibrium_files(run_dir, params, self.resistivity_type)
+
+        # Write input file
         self.parser.write_input_file(params, run_dir)
         mpol = self.get_mpol(params["ntor"])
 
-        # run code
+        # Run code
         os.chdir(run_dir)
         subprocess.call([f"{self.executable_path}_{mpol}"])
 
-        # process output
+        # Process output
         # self.parser.read_output_file(run_dir)
-        self.parser.write_summary(run_dir, mpol, params)
+        success, growthrate = self.parser.write_summary(run_dir, mpol, params)
         self.parser.clean_output_files(run_dir)
 
-        return True
+        print(
+            f"CASTOR run finished in {datetime.now() - start_time}. ({run_dir})",
+            flush=True,
+        )
+        return success, growthrate
 
-    def get_equilibrium_files(self, run_dir: str, params: dict):
+    def get_equilibrium_files(
+        self, run_dir: str, params: dict, resistivity_type: str = "spitzer"
+    ):
         """
         Copies the equilibirum files to the run directory.
 
@@ -95,7 +107,7 @@ class CASTORrunner(Runner):
             self.parser.extract_resistivity(
                 filepath=os.path.join(params["helena_dir"], "fort.20"),
                 outputpath=os.path.join(run_dir, "fort.14"),
-                resistivity_type="spitzer",
+                resistivity_type=resistivity_type,
             )
         else:
             raise FileNotFoundError(

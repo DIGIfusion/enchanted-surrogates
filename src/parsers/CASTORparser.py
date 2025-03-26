@@ -57,7 +57,7 @@ class CASTORparser(Parser):
         then the growthrate is assumed to be 0. (Europed)
         """
         success = False
-        growthrate = None
+        growthrate = (None, None)
         filename = run_dir + "/fort.20"
         try:
             file = open(filename, "r")
@@ -316,7 +316,6 @@ class CASTORparser(Parser):
         summary["mpol"] = mpol
         summary["ntor"] = params["ntor"]
         summary["growthrate"] = growthrate
-        summary["growthrate_c"] = growthrate
 
         if "helena_dir" in params:
             summary["helena_dir"] = params["helena_dir"]
@@ -325,12 +324,11 @@ class CASTORparser(Parser):
         with open(file_name, "w") as outfile:
             json.dump(summary, outfile)
 
-        if success and growthrate is not None:
-            np.save(
-                os.path.join(run_dir, "ntor_gamma.npy"),
-                np.array([params["ntor"], np.sqrt(np.max([0.0, growthrate[0]]))]),
-            )
-        return summary
+        np.save(
+            os.path.join(run_dir, "ntor_growthrate.npy"),
+            np.array([params["ntor"], growthrate[0], growthrate[1]]),
+        )
+        return success, growthrate
 
     def extract_resistivity(
         self, filepath: str, outputpath: str, resistivity_type: str = "spitzer"
