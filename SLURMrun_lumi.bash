@@ -2,7 +2,7 @@
 # Call with `sbatch SLURMrun.bash` and modify below with your relevant SLURM config
 #SBATCH --job-name=SURROGATE_WORKFLOW
 #SBATCH --account=project_462000451
-#SBATCH --time=00:30:00
+#SBATCH --time=12:00:00
 #SBATCH --partition=small
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -19,7 +19,7 @@ echo ADDING SRC TO PYTHON PATH
 current_dir=$(pwd)
 export PYTHONPATH=$PYTHONPATH:$current_dir/src   # does not change!
 
-config_file=simple_config_lumi_simulation.yaml                     # changes based on USE CASE
+config_file=gene_config_lumi.yaml                     # changes based on USE CASE
 
 echo RUNNING ENCHANTED SURROGATES WITH CONFIG FILE: $current_dir/configs/$config_file  # does not change!
 python3 src/run.py -cf=$current_dir/configs/$config_file
