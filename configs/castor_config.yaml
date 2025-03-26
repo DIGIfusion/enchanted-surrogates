@@ -1,8 +1,9 @@
 sampler:
   type: ArraySampler
   bounds: [
-    [5, 15, 50],
-    ["/scratch/project_2009007/ambrunc/castor_example_scan/jet84794_329_40"]
+    [15, 50],
+    ["/scratch/project_2009007/ambrunc/castor_example_scan/jet84794_329_40",
+    "/scratch/project_2009007/ambrunc/castor_example_scan/jet84794_329_36"]
   ]
   num_samples: [3, 1]
   parameters: ['ntor', 'helena_dir']
@@ -13,22 +14,24 @@ runner:
   other_params: {
     "namelist_path": "/projappl/project_2009007/CASTOR/namelist/example_namelist",
     "single_run": True,
-    "trace_eigenvalues": True,
+    "eigenvalue_tracing": True,
     "width_scan": True,
+    "resistivity_type": "spitzer",
     }
 
 executor:
   type: DaskExecutor
   base_run_dir: /scratch/project_2009007/castor_runs/0
   worker_args: # to be specified for the SLURMCluster in DASK
-    local: 1
+    # local: 1
     account: "project_2009007"
     queue: "small"
     cores: 1
-    job_cpu: 10  
-    memory: "12GB"
+    job_cpu: 20
+    # job_mem: "26GB"
+    memory: "40GB"
     processes: 1
-    walltime: "00:20:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    walltime: "04:00:00" # Adam: survival length of worker, so possibly just set to max in cluster
     interface: "ib0"
     job_script_prologue: # this is possibly dependent on which code you want
       - 'module load python-data'
