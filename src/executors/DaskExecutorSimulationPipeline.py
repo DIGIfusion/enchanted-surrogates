@@ -57,6 +57,10 @@ class DaskExecutorSimulationPipeline():
         # self.pipeline_parser_functions = [getattr(pipeline_parser, function_string) for pipeline_parser,function_string in zip(pipeline_parsers, pipeline_parser_function_strings)]
         
         self.last_runner_return_path=kwargs.get("last_runner_return_path")
+        self.runner_return_headder = kwargs.get('runnner_return_headder')
+        if self.last_runner_return_path != None and self.runner_return_headder != None:
+            with open(self.last_runner_return_path, 'w') as file:
+                file.write(self.runner_return_headder)
         self.status_report_dir = kwargs.get("status_report_dir")
         if self.status_report_dir != None and self.dynamic_clusters:
             warnings.warn('''
@@ -268,7 +272,7 @@ class DaskExecutorSimulationPipeline():
             outputs.append(res.result())
         if self.last_runner_return_path is not None:
             print("SAVING OUTPUT IN:", self.last_runner_return_path)
-            with open(self.last_runner_return_path, "w") as out_file:
+            with open(self.last_runner_return_path, "a") as out_file:
                 for output in outputs:
                     out_file.write(str(output) + "\n\n")
         
