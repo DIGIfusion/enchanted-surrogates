@@ -53,7 +53,6 @@ class DaskExecutorSimulation():
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
-        self.base_out_dir = kwargs.get("base_out_dir")    
         
     def clean(self):
         self.client.shutdown()
@@ -89,7 +88,7 @@ class DaskExecutorSimulation():
         print("GENERATING INITIAL SAMPLES:")
         samples = self.sampler.get_initial_parameters()
         
-        run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
+        run_dirs = [None]*len(samples)
         if self.base_run_dir==None:
             warnings.warn('''
                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
@@ -108,18 +107,13 @@ class DaskExecutorSimulation():
             for index, sample in enumerate(samples):
                 random_run_id = str(uuid.uuid4())
                 run_dir = os.path.join(self.base_run_dir, random_run_id)
-                if self.base_out_dir == None:
-                    out_dir = run_dir
-                else:
-                    out_dir = os.path.join(self.base_out_dir, random_run_id)
-                os.system(f'mkdir {run_dir} {out_dir} -p')
+                os.system(f'mkdir {run_dir} -p')
                 run_dirs[index] = run_dir
-                out_dirs[index] = out_dir
                      
         print("MAKING AND SUBMITTING DASK FUTURES")         
         for index, sample in enumerate(samples):
             new_future = self.client.submit(
-                run_simulation_task, self.runner, run_dirs[index], out_dirs[index], sample 
+                run_simulation_task, self.runner, run_dirs[index], sample 
             )
             futures.append(new_future)
         
