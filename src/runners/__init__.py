@@ -4,4 +4,5 @@ from .HELENArunner import HELENArunner
 from .DREAMrunner import DREAMrunner
 from .MISHKArunner import MISHKArunner
 from .STATICPOOLrunner import STATICPOOLrunner
+from .GENErunner import GENErunner
 

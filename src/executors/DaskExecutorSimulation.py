@@ -44,9 +44,11 @@ class DaskExecutorSimulation():
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
         self.runner_return_headder = kwargs.get("runner_return_headder")
+        
         if self.runner_return_path != None and self.runner_return_headder != None:
+            print('MAKING RUNNER RETURN FILE')
             with open(self.runner_return_path, 'w') as file:
-                file.write(self.runner_return_headder)
+                file.write(self.runner_return_headder+'\n')
         if self.n_jobs == 1:
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
@@ -72,6 +74,8 @@ class DaskExecutorSimulation():
             print(f'MAKING A SLURM CLUSTER FOR {self.runner.__class__.__name__}')
             self.cluster = SLURMCluster(**self.worker_args)
             self.cluster.scale(self.n_jobs)    
+            print('THE JOB SCRIPT FOR A WORKER IS:')
+            print(self.cluster.job_script())
             
         self.client = Client(self.cluster ,timeout=180)
             

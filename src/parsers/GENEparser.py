@@ -17,7 +17,6 @@ from parsers.submodules.TPED.projects.GENE_sim_reader.utils.find_GENE_files impo
 
 class GENEparser(Parser):
     def __init__(self):
-        self.output_headder = 'mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency'
         self.base_params_nml_string = '''
             &parallelization
                 n_parallel_sims = 1
@@ -142,7 +141,7 @@ class GENEparser(Parser):
         patch['in_out'] = {'diagdir':out_dir}
         
         namelist.patch(patch)        
-        f90nml.write(parameters_path, namelist)
+        f90nml.write(namelist, parameters_path)
     
     def calculate_kperp(self, out_dir):
         current_dir = os.getcwd()
@@ -216,7 +215,7 @@ class GENEparser(Parser):
 
         fingerprints = self.calculate_fingerprints(out_dir)
         
-        return mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency
+        return mixing_length_phi, mixing_length_A, *fingerprints, growthrate, frequency
 
     def print_default_nml_string(self, base_params_file_path):
         #to prevent each worker needing to read the base parameters file

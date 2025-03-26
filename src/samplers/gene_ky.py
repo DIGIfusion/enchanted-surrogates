@@ -51,7 +51,7 @@ class GENEky(Sampler):
         
         self.samples = self.generate_parameters()
         
-        self.parameters = ['ky']
+        self.parameters = [('box','kymin')]
         self.num_samples = self.num_initial_points =  num_ion_scale_samples + num_electron_scale_samples
         self.current_index = 0
 

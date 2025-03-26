@@ -1,24 +1,20 @@
 sampler:
   type: GENEky
-  ion_scale_bounds: [0.001, 10]
-  electron_scale_bounds: [10,500]
-  num_ion_scale_samples: 5
-  num_electron_scale_samples: 5
+  ion_scale_bounds: [0.4, 0.5]
+  electron_scale_bounds: [0.5,0.55]
+  num_ion_scale_samples: 1
+  num_electron_scale_samples: 1
   sub_sampler:
     type: SobelSequence #This must take in at least, parameters, bounds, num_samples
 
 executor:
   type: DaskExecutorSimulation
-  base_run_dir: /scratch/project_462000451/gene_enchanted/
-  base_out_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
+  base_run_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
   runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/gene_test/runner_return
-  renner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, fingerprints, growthrate, frequency'
+  runner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, electron_heat_diffusivity_ratio, chi_i/chi_e, D_e/chi_e, growthrate, frequency'
   runner:
     type: GENErunner
-    pre_run_commands:
-      - export MEMORY_PER_CORE=1800
-      - export OMP_NUM_THREADS=1
-      - export HDF5_USE_FILE_LOCKING=FALSE
+    executable_path: /scratch/project_462000451/gene_enchanted/enchanted_executable/gene_lumi_csc
     #You can specify a base_parameters_file_path
     #Although this means each worker must read from this file
     # It is more optimal to use GENEparser.print_default_nml_string(base_params_file_path) to get a string
@@ -27,7 +23,7 @@ executor:
     
   worker_args: # to be specified for the SLURMCluster in DASK
     cores: 1
-    memory: "0" # When 0 use all memory available
+    memory: "240GB" # Memory on a lumi cpu node 256GB
     walltime: "12:00:00" #Max time limit of entire cluster
     job_extra_directives:
       - "--nodes 1"

@@ -7,25 +7,27 @@ Defines the GENErunner class for running the GENE code.
 
 # import numpy as np
 from .base import Runner
-from parsers import GENEparser
+from parsers.GENEparser import GENEparser
 import subprocess
-
+import sys, os
 import warnings
+from dask.distributed import print
+from time import sleep
 
 
-class TGLFrunner(Runner):
+class GENErunner(Runner):
     """
-    Class for running TGLF codes.
+    Class for running the GENE code.
 
     Methods:
         __init__(*args, **kwargs)
-            Initializes the TGLFrunner object.
+            Initializes the GENErunner object.
         single_code_run(params: dict, run_dir: str) -> dict
-            Runs a single TGLF code simulation.
+            Runs a single GENE code simulation.
 
     """
 
-    def __init__(self, pre_run_commands:list=None, *args, **kwargs):
+    def __init__(self, executable_path:str, pre_run_commands:list=None, *args, **kwargs):
         """
         Initializes the GENErunner object.
 
@@ -34,22 +36,8 @@ class TGLFrunner(Runner):
             **kwargs: Arbitrary keyword arguments.
 
         """
+        self.executable_path = executable_path
         self.base_parameters_file_path = kwargs.get('base_parameters_file_path', None)
-        if type(pre_run_commands) == type(None):
-            warnings.warn('''
-                             GENE needs some pre run commands to function.
-                             The default commands will be used
-                             To remove this warning paste the defaults into your config file:
-                             runner:
-                                 type: GENErunner
-                                 pre_run_commands:
-                                 - export MEMORY_PER_CORE=1800
-                                 - export OMP_NUM_THREADS=1
-                                 - export HDF5_USE_FILE_LOCKING=FALSE
-                             ''')
-            self.pre_run_commands = ['export MEMORY_PER_CORE=1800', 'export OMP_NUM_THREADS=1','export HDF5_USE_FILE_LOCKING=FALSE']
-        else:
-            self.pre_run_commands = pre_run_commands
         self.parser = GENEparser()
         
         
@@ -65,18 +53,29 @@ class TGLFrunner(Runner):
 
         Returns:
             (str): Containing comma seperated values of interest parsed from the GENE output 
-        """
+        """        
         # Edit the parameters file with the passed sample params
-        self.parser.write_input_file(params, run_dir, out_dir, self.base_params_file_path)
+        self.parser.write_input_file(params, run_dir, out_dir, self.base_parameters_file_path)
         
-        #Performing prerun commands
-        subprocess.run(self.pre_run_commands)
+        # Move to run directory for executing the commands
+        print('RUNNING GENE IN RUN DIR:',run_dir)
+        run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output=std_out.txt --error=err_out.txt -l -K -n 128 {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
+        result = subprocess.run(run_command, shell=True, capture_output=False, text=True)
+        # out = result.stdout
+        # err = result.stderr
+        # print('OUT', out)
+        # print('ERR', err)
         
-        #Running GENE
-        run_commands = ['set -x','srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc','set +x']
-        subprocess.run(run_commands) 
-
+        finished = False
+        while not finished:
+            files = os.listdir(run_dir)
+            if 'GENE.finished' in files:
+                finished = True
+            sleep(5)
+        
         # read relevant output values
         output = self.parser.read_output(out_dir)
-        output = ','.join(output)
-        return output
+        output = [str(v) for v in output]
+        params_list = [str(v) for k,v in params.items()]
+        return_list = params_list + output
+        return ','.join(return_list)

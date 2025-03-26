@@ -3,3 +3,4 @@ from .array import ArraySampler
 from .rand import RandBatchSampler, RandSampler
 from .activelearner import ActiveLearnerBMDAL, ActiveLearningBMDALStaticPoolSampler
 from .sobel_sequence import SobelSequence
+from .gene_ky import GENEky
