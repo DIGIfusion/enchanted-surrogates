@@ -40,35 +40,21 @@ class DaskExecutorActive():
         
         static_executor_kwargs = kwargs['static_executor']
         self.static_executor = getattr(executors, static_executor_kwargs['type'])(**static_executor_kwargs)
+        
     def clean(self):
-        self.client.shutdown()
+        self.static_executor.clean()
 
     def initialize_client(self):
-        """
-        Initializes the client
-        Args:
-            worker_args (dict): Dictionary of arguments for configuring worker nodes.
-            **kwargs: Additional keyword arguments.
-        """
-        print("Initializing DASK client")
-        if self.worker_args.get("local", False):
-            # TODO: Increase num parallel workers on local
-            print(f'MAKING A LOCAL CLUSTER FOR {self.runner.__class__.__name__}')
-            self.cluster = LocalCluster(**self.worker_args)
-        else:
-            print(f'MAKING A SLURM CLUSTER FOR {self.runner.__class__.__name__}')
-            self.cluster = SLURMCluster(**self.worker_args)
-            self.cluster.scale(self.n_jobs)    
-            print('THE JOB SCRIPT FOR A WORKER IS:')
-            print(self.cluster.job_script())
-            
-        self.client = Client(self.cluster ,timeout=180)
+        self.static_executor.initialize_client()
             
     def start_runs(self):
-        print(f"STARTING RUNS FOR RUNNER {self.runner.__class__.__name__}, FROM WITHIN A {__class__}")
+        print(f"STARTING ACTIVE CYCLE, FROM WITHIN A {__class__}")
         
-        print('MAKING CLUSTER')
+        print('MAKING CLUSTERS')
         self.initialize_client()
+        
+        
+        
         
         futures = []
         print("GENERATING INITIAL SAMPLES:")
