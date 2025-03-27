@@ -5,6 +5,8 @@ from .base import Runner
 import warnings
 import re
 
+from dask.distributed import print
+
 class MMMGrunner(Runner):
     def __init__(self, *args, **kwargs):
         num_dim = kwargs['num_dim']
@@ -50,6 +52,7 @@ class MaxOfManyGaussians():
         self.bounds = bounds
             
     def specify_gaussians(self, means, stds):
+        print('SET GAUSSIANS HAVE-:\nMEANS OF:', means, '\n','STDs:', stds)
         means = np.array(means)
         stds = np.array(stds)
         self.gaussians = []
@@ -87,6 +90,7 @@ class MaxOfManyGaussians():
             # cov = np.dot(cov, cov.T)  # Ensure the covariance matrix is positive semi-definite
             cov = np.diag(self.rg.uniform(*cov_bounds, (self.num_dim,self.num_dim)))
             gaussians.append(multivariate_normal(mean, cov))
+            print('RANDOM GAUSSIANS HAVE-:\nMEANS OF:', mean, '\n','STDs:', np.sqrt(np.diag(cov)))
         return gaussians
 
     def evaluate(self, pos):

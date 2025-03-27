@@ -1,13 +1,13 @@
 sampler:
-  type: Grid
+  type: SobelSequence
   bounds: [[0,1], [0,1], [0,1]]
-  num_samples: [5,5,5] #Number of samples in each dimension to form a grid
+  num_samples: 100
   parameters: ['x0', 'x1', 'x2']
 
 executor:
   type: DaskExecutorSimulation
   runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
-
+  
   runner:
     type: MMMGrunner
     num_dim: 3 #Necessary
@@ -40,4 +40,4 @@ executor:
     job_extra_directives:
       - '-o /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.out'
       - '-e /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.err'
-  n_jobs: 3
+  n_jobs: 5
