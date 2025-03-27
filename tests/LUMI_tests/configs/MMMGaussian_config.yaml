@@ -7,7 +7,7 @@ sampler:
 executor:
   type: DaskExecutorSimulation
   runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
-  
+  runner_return_headder: 'x0,x1,x2,MMMG'
   runner:
     type: MMMGrunner
     num_dim: 3 #Necessary

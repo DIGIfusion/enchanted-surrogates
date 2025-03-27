@@ -43,7 +43,8 @@ class MMMGrunner(Runner):
         keys = [keys[index] for index in indicies]
         pos = np.array([params[key] for key in keys])
         
-        return self.mmg.evaluate(pos), params
+        params_values = ','.join(list(params.values()))
+        return params_values + ',' + str(self.mmg.evaluate(pos))
         
 
 class MaxOfManyGaussians():
