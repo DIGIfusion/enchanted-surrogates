@@ -30,9 +30,9 @@ class MMMGrunner(Runner):
                              params cannot be None: The MMMGrunner needs to be provided parameters. It is a python function that does not read from input files
                              ''')
         
-        if run_dir != None or out_dir != None:
+        if run_dir != None:
             warnings.warn('''
-                             The MMMGrunner does not read or write to file, yet a run_dir or out_dir was passed. These will not be used. 
+                             The MMMGrunner does not read or write to file, yet a run_dir was passed. This will not be used. 
                              ''') 
         def find_first_int(string):
             return int(re.search(r'\d+',string).group())
