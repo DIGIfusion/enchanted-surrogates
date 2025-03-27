@@ -1,11 +1,12 @@
 # run.py
+from dask.distributed import print
+print('PERFORMING IMPORTS')
 import yaml
 import samplers
 
 import executors
 import argparse
 
-from dask.distributed import print
 
 
 def load_configuration(config_path: str) -> argparse.Namespace:

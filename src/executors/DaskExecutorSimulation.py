@@ -43,11 +43,16 @@ class DaskExecutorSimulation():
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
+        self.runner_return_headder = kwargs.get("runner_return_headder")
+        
+        if self.runner_return_path != None and self.runner_return_headder != None:
+            print('MAKING RUNNER RETURN FILE')
+            with open(self.runner_return_path, 'w') as file:
+                file.write(self.runner_return_headder+'\n')
         if self.n_jobs == 1:
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
-        self.base_out_dir = kwargs.get("base_out_dir")    
         
     def clean(self):
         self.client.shutdown()
@@ -68,6 +73,8 @@ class DaskExecutorSimulation():
             print(f'MAKING A SLURM CLUSTER FOR {self.runner.__class__.__name__}')
             self.cluster = SLURMCluster(**self.worker_args)
             self.cluster.scale(self.n_jobs)    
+            print('THE JOB SCRIPT FOR A WORKER IS:')
+            print(self.cluster.job_script())
             
         self.client = Client(self.cluster ,timeout=180)
             
@@ -81,16 +88,17 @@ class DaskExecutorSimulation():
         print("GENERATING INITIAL SAMPLES:")
         samples = self.sampler.get_initial_parameters()
         
-        run_dirs, out_dirs = [None]*len(samples), [None]*len(samples)
+        run_dirs = [None]*len(samples)
         if self.base_run_dir==None:
             warnings.warn('''
                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
                             This could be true if the runner is executing a python function and not a simulation.
                             Otherwise see how to insert a base_run_dir into a config file below:
-                            Example:
+                            Example
+                            
                             executor:
-                            type: DaskExecutorSimulation
-                            base_run_dir: /project/path/to/base_run_dir/
+                                type: DaskExecutorSimulation
+                                base_run_dir: /project/path/to/base_run_dir/
                             ...
                             ...
                         ''')
@@ -99,28 +107,24 @@ class DaskExecutorSimulation():
             for index, sample in enumerate(samples):
                 random_run_id = str(uuid.uuid4())
                 run_dir = os.path.join(self.base_run_dir, random_run_id)
-                if self.base_out_dir == None:
-                    out_dir = run_dir
-                else:
-                    out_dir = os.path.join(self.base_out_dir, random_run_id)
-                os.system(f'mkdir {run_dir} {out_dir} -p')
+                os.system(f'mkdir {run_dir} -p')
                 run_dirs[index] = run_dir
-                out_dirs[index] = out_dir
                      
         print("MAKING AND SUBMITTING DASK FUTURES")         
         for index, sample in enumerate(samples):
             new_future = self.client.submit(
-                run_simulation_task, self.runner, run_dirs[index], out_dirs[index], sample 
+                run_simulation_task, self.runner, run_dirs[index], sample 
             )
             futures.append(new_future)
-            
+        
+        print("DASK FUTURES SUBMITTED, WAITING FOR THEM TO COMPLETE")
         seq = wait(futures)
         outputs = []
         for res in seq.done:
             outputs.append(res.result())
         if self.runner_return_path is not None:
             print("SAVING OUTPUT IN:", self.runner_return_path)
-            with open(self.runner_return_path, "w") as out_file:
+            with open(self.runner_return_path, "a") as out_file:
                 for output in outputs:
                     out_file.write(str(output) + "\n\n")
         print("Finished sequential runs")
