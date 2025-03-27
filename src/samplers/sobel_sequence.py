@@ -45,6 +45,8 @@ class SobelSequence(Sampler):
             raise ValueError('The number of bounds and parameters do not match. Please define the same number of bounds as parameters')
         self.num_samples = self.num_initial_points = num_samples
         self.samples = self.generate_parameters()
+        
+        print('GENERATED SAMPLES:\n', self.samples)
         self.current_index = 0
 
     def get_initial_parameters(
@@ -57,6 +59,7 @@ class SobelSequence(Sampler):
             list[dict[str, float]]: The initial parameters.
         """
         # self.samples[:self.num_initial_points]
+        
         return [self.get_next_parameter() for _ in range(self.num_initial_points)]
 
     def generate_parameters(self):
@@ -78,7 +81,7 @@ class SobelSequence(Sampler):
         sobol = Sobol(d=dim, scramble=False)
 
         power = int(np.log2(self.num_samples))
-        
+        self.num_samples = self.num_initial_points = 2**power
         print(f'''
               GENERATING SOBOL SEQUENCE SAMPLES, NUM SAMPLES REQUESTED: {self.num_samples}, NUM SAMPLES: {2**power}\n
               PARAMETERS: {self.parameters}
