@@ -24,7 +24,7 @@ class MMMGrunner(Runner):
             stds = kwargs['specify_gaussians']['stds']
             self.mmg.specify_gaussians(means, stds)
     
-    def single_code_run(self, run_dir: str=None, out_dir:str=None, params:dict=None):
+    def single_code_run(self, run_dir: str=None, params:dict=None):
         if type(params)==(None):
             raise ValueError('''
                              params cannot be None: The MMMGrunner needs to be provided parameters. It is a python function that does not read from input files
