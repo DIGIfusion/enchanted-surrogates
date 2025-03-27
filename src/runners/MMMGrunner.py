@@ -43,7 +43,7 @@ class MMMGrunner(Runner):
         keys = [keys[index] for index in indicies]
         pos = np.array([params[key] for key in keys])
         
-        params_values = ','.join(list(params.values()))
+        params_values = ','.join([str(v) for v in params.values()])
         return params_values + ',' + str(self.mmg.evaluate(pos))
         
 
