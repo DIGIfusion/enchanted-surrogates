@@ -45,8 +45,6 @@ class SobelSequence(Sampler):
             raise ValueError('The number of bounds and parameters do not match. Please define the same number of bounds as parameters')
         self.num_samples = self.num_initial_points = num_samples
         self.samples = self.generate_parameters()
-        
-        print('GENERATED SAMPLES:\n', self.samples)
         self.current_index = 0
 
     def get_initial_parameters(
