@@ -2,20 +2,18 @@ sampler:
   type: SpatiallyAdaptiveSparseGrids
   bounds: [[0,1], [0,1], [0,1]]
   parameters: ['x0', 'x1', 'x2']
-  max_cycles: 4
   initial_level: 3
 
 
 executor:
   type: DaskExecutorActive
-  run_base_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: 'x0,x1,x2,MMMG'
-    
+  max_cycles: 3
 
   static_executor:
     type: DaskExecutorSimulation
-    max_cycles: 3
     runner:
       type: MMMGrunner
       num_dim: 3 #Necessary

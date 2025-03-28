@@ -35,7 +35,7 @@ class MMMGrunner(Runner):
             warnings.warn('''
                              The MMMGrunner does not need to read or write to file, yet a run_dir was passed. 
                              ''')
-            function_out_file_path = os.join(run_dir, 'function_out.txt')
+            function_out_file_path = os.path.join(run_dir, 'function_out.txt')
             #Just make a file like a real simulation would. For testing purposes
             with open(function_out_file_path, 'w') as file:
                 file.write('THIS IS WHERE THE SIMULATION WOULD PUT SOME OUTPUT')

@@ -180,7 +180,7 @@ class DaskExecutorSimulationPipeline():
                 
         print('MAKING ALL NECESSARY DIRECTORIES')
         for index, executor in enumerate(self.executors):
-            base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner.__class__.__name__+f'_{index}')
+            base_run_dir_simulation = os.path.join(base_run_dir,executor.runner.__class__.__name__+f'_{index}')
             run_dirs = [os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids]
             run_dict = {run_id:os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids}
             run_dict_s.append(run_dict)
@@ -201,7 +201,7 @@ class DaskExecutorSimulationPipeline():
                           This means that the Simulation Executor run directory is being ignored:
                           run: {executor.base_run_dir}
                           The ExecutorSimulationPileline base run directory is being used:
-                          run: {self.base_run_dir}
+                          run: {base_run_dir}
                           ''')         
         
         parse_futures_s = [] #each item will be a list of parse futures for one simulation

@@ -125,7 +125,7 @@ class DaskExecutorSimulation():
             print("MAKING RUN DIRECTORIES")
             for index, sample in enumerate(params):
                 random_run_id = str(uuid.uuid4())
-                run_dir = os.path.join(self.base_run_dir, random_run_id)
+                run_dir = os.path.join(base_run_dir, random_run_id)
                 os.system(f'mkdir {run_dir} -p')
                 run_dirs[index] = run_dir
                      

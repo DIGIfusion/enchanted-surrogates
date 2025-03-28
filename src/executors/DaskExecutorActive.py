@@ -39,12 +39,29 @@ class DaskExecutorActive():
         assert self.sampler.sampler_interface == S.ACTIVE
         
         self.base_run_dir = kwargs.get("base_run_dir")
+        if self.base_run_dir == None:
+            raise ValueError("""For the DaskExecutorActive executor a base_run_dir must be specified in the configs file. example:-
+                             executor:
+                                type: DaskExecutorActive
+                                base_run_dir: path/to/base_run_dir
+                                ...
+                             """)
+        if not os.path.isdir(self.base_run_dir):
+            print('MAKING BASE RUN DIR')
+            os.makedirs(self.base_run_dir, exist_ok=True)
+        else:
+            if os.path.isfile(os.path.join(self.base_run_dir,'FINNISHED')):
+                raise FileExistsError(f'''
+                                      The FINNISHED file is in, {self.base_run_dir}, 
+                                      this indicates there is already results stored in this directory. 
+                                      Please point to an empty or non existent directory''')
+        
         self.runner_return_path = kwargs.get("runner_return_path")
         self.runner_return_headder = kwargs.get("runner_return_headder", f'{__class__}: no runner_return_headder, was provided in configs file')
-        if self.base_run_dir==None and self.last_runner_return_path==None:
+        if self.base_run_dir==None and self.runner_return_path==None:
             warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
-        elif self.last_runner_return_path==None and self.base_run_dir!=None:
-            self.last_runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
+        elif self.runner_return_path==None and self.base_run_dir!=None:
+            self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
         if self.runner_return_path != None and self.runner_return_headder != None:
             print('MAKING RUNNER RETURN FILE')
@@ -61,13 +78,14 @@ class DaskExecutorActive():
         self.static_executor.initialize_client()
             
     def start_runs(self):
+        time_start = time.time()
         print(f"STARTING ACTIVE CYCLE, FROM WITHIN A {__class__}")
         
         print('MAKING CLUSTERS')
         self.initialize_client()
         
         print("GENERATING INITIAL SAMPLES:")
-        initial_params = self.sampler.get_initial_parameters()
+        initial_params = self.sampler.get_initial_parameters()    
         
         if self.base_run_dir==None:
             warnings.warn('''
@@ -89,17 +107,16 @@ class DaskExecutorActive():
         initial_futures = self.static_executor.submit_batch_of_params(initial_params, initial_dir)
         
         train={}
-        time_start = time.time()
         runner_return=[]
         seq=wait(initial_futures)
-        for future in seq:
+        for future in seq.done:
             out = future.result()
             runner_return.append(out)
             #It is assumed that the runner returns a string in the form:
             # "x0,x1,x3,f(x1 x2 x3)"
             out = out.split(',')
-            coordinate = tuple(out[i] for i in self.sampler.parameters)
-            label = out[-1]
+            coordinate = tuple(float(out[i]) for i in range(len(self.sampler.parameters)))
+            label = float(out[-1])
             train[coordinate] = label
         runner_return_path = os.path.join(initial_dir,'runner_return.txt')
         print('INITIAL FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)    
@@ -109,10 +126,10 @@ class DaskExecutorActive():
                 out_file.write(str(out)+'\n')
         
         batch_params = self.sampler.get_next_parameters(train)
-        
-        
+            
         num_cycles = 1
         num_samples = len(initial_params)
+        time_now=time.time()
         while num_samples<self.total_budget and \
             time_start-time_now<self.time_limit and \
             num_cycles < self.max_cycles and \
@@ -126,14 +143,16 @@ class DaskExecutorActive():
             time_start = time.time()
             runner_return=[]
             seq = wait(futures)
-            for future in seq:
+            for future in seq.done:
                 out = future.result()
                 runner_return.append(out)
                 #It is assumed that the runner returns a string in the form:
                 # "x0,x1,x3,f(x1 x2 x3)"
                 out = out.split(',')
-                coordinate = tuple(out[i] for i in self.sampler.parameters)
-                label = out[-1]
+                coordinate = tuple(float(out[i]) for i in range(len(self.sampler.parameters)))
+                label = float(out[-1])
+                if coordinate in train.keys():
+                    print('COORDINATE',coordinate,'in train')
                 train[coordinate] = label
             runner_return_path = os.path.join(cycle_dir,'runner_return.txt')
             print(f'CYCLE {num_cycles} FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)
@@ -149,7 +168,7 @@ class DaskExecutorActive():
             num_cycles+=1
             #--------------------------            
             batch_params = self.sampler.get_next_parameters(train)
-            
+                    
         if num_samples>=self.total_budget:
             print('ACTIVE CYCLES FINISHED: num_samples HIT THE total_budget:', self.total_budget)
         if time_start-time_now>=self.time_limit:
@@ -163,14 +182,18 @@ class DaskExecutorActive():
         wait(futures)
         print("MAKING THE AN OUTPUT FILE CONTAINING ALL DATA:", self.runner_return_path)
         with open(self.runner_return_path, 'w') as file:
-            file.write(self.runner_return_headder)
+            file.write(self.runner_return_headder+'\n')
             for coordinate, label in train.items():
-                file.write(f'{','.join(list(coordinate))},{label}')
+                file.write(f"{','.join([str(co) for co in coordinate])},{label}\n")
                 
         print('ACTIVE CYCLES FINISHED')
         print('num_samples:',num_samples)
         print('num_cycles:',num_cycles)
         time_now = time.time()
-        print('wall time sec:', time_start-time_now)
+        print('wall time sec:', time_now-time_start)
+        
+        finished_file_path = os.path.join(self.base_run_dir, 'FINNISHED')
+        with open(finished_file_path,'w') as file:
+            file.write('FINNISHED')
 
     

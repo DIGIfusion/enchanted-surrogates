@@ -1,12 +1,12 @@
 import numpy as np
 import warnings
-
+from common import S
 import pysgpp
 from pysgpp import BoundingBox1D
 
 class SpatiallyAdaptiveSparseGrids:
     def __init__(self, bounds, parameters, poly_basis_degree=3, initial_level=3):
-
+        self.sampler_interface = S.ACTIVE
         self.bounds = bounds
         self.parameters = parameters
         self.poly_basis_degree= poly_basis_degree
@@ -70,11 +70,11 @@ class SpatiallyAdaptiveSparseGrids:
         args
         train, dict: A dictionary where the keys are a tuple of inputs (x0,x1,x2) (*in the order of the origional parameters) and the value is a label
         """
-        
+        # 
         for i in range(self.gridStorage.getSize()):
             gp = self.gridStorage.getPoint(i)    
             unit_point = ()
-            for j in self.dim:
+            for j in range(self.dim):
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
             box_point = self.point_transform_unit2box(unit_point) 
             self.alpha[i] = train[box_point]
@@ -82,7 +82,9 @@ class SpatiallyAdaptiveSparseGrids:
         
         pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(self.alpha)
         number_of_points_to_refine = 1
+        print('grid size before refinement:', self.gridStorage.getSize())
         self.gridGen.refine(pysgpp.SurplusRefinementFunctor(self.alpha, number_of_points_to_refine))
+        print('grid size after refinement:', self.gridStorage.getSize())
         # print("refinement step {}, new grid size: {}".format(refnum+1, gridStorage.getSize()))  
         self.alpha.resizeZero(self.gridStorage.getSize())
         
@@ -97,13 +99,13 @@ class SpatiallyAdaptiveSparseGrids:
             
             if box_point not in train.keys():
                 param_dict = {}
-                for param in self.parameters:
+                for j, param in enumerate(self.parameters):
                     param_dict[param]=gp.getStandardCoordinate(j)
                 batch_samples.append(param_dict)
                 
         return batch_samples
     
-    def update_custom_limit_value():
+    def update_custom_limit_value(self):
         NotImplemented
         
 # # import pysgpp library
