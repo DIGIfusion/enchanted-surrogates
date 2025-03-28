@@ -8,6 +8,7 @@ from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 import uuid
 from common import S
+import numpy as np
 import runners
 import os
 import traceback
@@ -23,20 +24,32 @@ class DaskExecutorActive():
     Attributes:
     """
     
-    def __init__(self, sampler=None, **kwargs):
+    def __init__(self, sampler=None, total_budget=np.inf, max_cycles=np.inf, time_limit=np.inf, **kwargs):
+        if total_budget==np.inf and max_cycles==np.inf and time_limit==np.inf:
+            raise ValueError('''NO LIMITATION IS SET. YOU MUST DECLARE AT LEAST ONE OF:
+                            total_budget, ie max number of samples,
+                            max_cycles, ie max number of active learning cycles, sample , train, sample 
+                            time_limit, in seconds''')
+        self.total_budget = total_budget
+        self.max_cycles = max_cycles
+        self.time_limit = time_limit
+        
         # This control will be needed by the pipeline and active learning.
         self.sampler = sampler
         assert self.sampler.sampler_interface == S.ACTIVE
         
+        self.base_run_dir = kwargs.get("base_run_dir")
         self.runner_return_path = kwargs.get("runner_return_path")
-        self.runner_return_headder = kwargs.get("runner_return_headder")
+        self.runner_return_headder = kwargs.get("runner_return_headder", f'{__class__}: no runner_return_headder, was provided in configs file')
+        if self.base_run_dir==None and self.last_runner_return_path==None:
+            warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
+        elif self.last_runner_return_path==None and self.base_run_dir!=None:
+            self.last_runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
         if self.runner_return_path != None and self.runner_return_headder != None:
             print('MAKING RUNNER RETURN FILE')
             with open(self.runner_return_path, 'w') as file:
                 file.write(self.runner_return_headder+'\n')
-        
-        self.base_run_dir = kwargs.get("base_run_dir")
         
         static_executor_kwargs = kwargs['static_executor']
         self.static_executor = getattr(executors, static_executor_kwargs['type'])(**static_executor_kwargs)
@@ -53,53 +66,111 @@ class DaskExecutorActive():
         print('MAKING CLUSTERS')
         self.initialize_client()
         
-        
-        
-        
-        futures = []
         print("GENERATING INITIAL SAMPLES:")
-        samples = self.sampler.get_initial_parameters()
+        initial_params = self.sampler.get_initial_parameters()
         
-        run_dirs = [None]*len(samples)
         if self.base_run_dir==None:
             warnings.warn('''
-                            No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
+                            No base_run_dir has been provided. It is now assumed that the runner/s being used does not need a run_dir and will be passed None.
                             This could be true if the runner is executing a python function and not a simulation.
                             Otherwise see how to insert a base_run_dir into a config file below:
                             Example
                             
                             executor:
-                                type: DaskExecutorSimulation
+                                type: DaskExecutorActive
                                 base_run_dir: /project/path/to/base_run_dir/
                             ...
                             ...
                         ''')
-        else: # Make run_dirs
-            print("MAKING RUN DIRECTORIES")
-            for index, sample in enumerate(samples):
-                random_run_id = str(uuid.uuid4())
-                run_dir = os.path.join(self.base_run_dir, random_run_id)
-                os.system(f'mkdir {run_dir} -p')
-                run_dirs[index] = run_dir
                      
-        print("MAKING AND SUBMITTING DASK FUTURES")         
-        for index, sample in enumerate(samples):
-            new_future = self.client.submit(
-                run_simulation_task, self.runner, run_dirs[index], sample 
-            )
-            futures.append(new_future)
+        print("MAKING AND SUBMITING DASK FUTURES FOR INITIAL RUNS")
+        initial_dir = os.path.join(self.base_run_dir, 'initial_runs')
+        os.system(f'mkdir {initial_dir} -p')
+        initial_futures = self.static_executor.submit_batch_of_params(initial_params, initial_dir)
         
-        print("DASK FUTURES SUBMITTED, WAITING FOR THEM TO COMPLETE")
-        seq = wait(futures)
-        outputs = []
-        for res in seq.done:
-            outputs.append(res.result())
-        if self.runner_return_path is not None:
-            print("SAVING OUTPUT IN:", self.runner_return_path)
-            with open(self.runner_return_path, "a") as out_file:
-                for output in outputs:
-                    out_file.write(str(output) + "\n\n")
-        print("Finished sequential runs")
-        return outputs
+        train={}
+        time_start = time.time()
+        runner_return=[]
+        seq=wait(initial_futures)
+        for future in seq:
+            out = future.result()
+            runner_return.append(out)
+            #It is assumed that the runner returns a string in the form:
+            # "x0,x1,x3,f(x1 x2 x3)"
+            out = out.split(',')
+            coordinate = tuple(out[i] for i in self.sampler.parameters)
+            label = out[-1]
+            train[coordinate] = label
+        runner_return_path = os.path.join(initial_dir,'runner_return.txt')
+        print('INITIAL FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)    
+        with open(runner_return_path,'w')as out_file:
+            out_file.write(self.runner_return_headder+'\n')
+            for out in runner_return:
+                out_file.write(str(out)+'\n')
+        
+        batch_params = self.sampler.get_next_parameters(train)
+        
+        
+        num_cycles = 1
+        num_samples = len(initial_params)
+        while num_samples<self.total_budget and \
+            time_start-time_now<self.time_limit and \
+            num_cycles < self.max_cycles and \
+            self.sampler.custom_limit_value<self.sampler.custom_limit:
+            #---------------------------------------------------------
+            print(f'SUBMITTING FUTURES FOR ACTIVE LEARNING CYCLE {num_cycles}')
+            cycle_dir = os.path.join(self.base_run_dir, f'active_cycle_{num_cycles}')
+            os.system(f'mkdir {cycle_dir} -p')
+            futures = self.static_executor.submit_batch_of_params(batch_params, cycle_dir)
+            
+            time_start = time.time()
+            runner_return=[]
+            seq = wait(futures)
+            for future in seq:
+                out = future.result()
+                runner_return.append(out)
+                #It is assumed that the runner returns a string in the form:
+                # "x0,x1,x3,f(x1 x2 x3)"
+                out = out.split(',')
+                coordinate = tuple(out[i] for i in self.sampler.parameters)
+                label = out[-1]
+                train[coordinate] = label
+            runner_return_path = os.path.join(cycle_dir,'runner_return.txt')
+            print(f'CYCLE {num_cycles} FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)
+            with open(runner_return_path,'w')as out_file:
+                out_file.write(self.runner_return_headder+'\n')
+                for out in runner_return:
+                    out_file.write(str(out)+'\n')
+
+            # Update stopping variables
+            self.sampler.update_custom_limit_value()
+            num_samples+=len(batch_params)
+            time_now = time.time()
+            num_cycles+=1
+            #--------------------------            
+            batch_params = self.sampler.get_next_parameters(train)
+            
+        if num_samples>=self.total_budget:
+            print('ACTIVE CYCLES FINISHED: num_samples HIT THE total_budget:', self.total_budget)
+        if time_start-time_now>=self.time_limit:
+            print('ACTIVE CYCLES FINISHED: HIT THE TIME LIMIT:', self.time_limit, 'sec')
+        if num_cycles >= self.max_cycles: 
+            print('ACTIVE CYCLES FINISHED: num_cycles HIT THE max_cycles:', self.max_cycles)
+        if self.sampler.custom_limit_value >= self.sampler.custom_limit:
+            print('ACTIVE CYCLES FINISHED: sampler.custom_limit_value HIT THE sampler.custom_limit:', self.sampler.custom_limit)
+        
+        print("WAITING FOR LAST FUTURES TO COMPLETE")
+        wait(futures)
+        print("MAKING THE AN OUTPUT FILE CONTAINING ALL DATA:", self.runner_return_path)
+        with open(self.runner_return_path, 'w') as file:
+            file.write(self.runner_return_headder)
+            for coordinate, label in train.items():
+                file.write(f'{','.join(list(coordinate))},{label}')
+                
+        print('ACTIVE CYCLES FINISHED')
+        print('num_samples:',num_samples)
+        print('num_cycles:',num_cycles)
+        time_now = time.time()
+        print('wall time sec:', time_start-time_now)
 
     

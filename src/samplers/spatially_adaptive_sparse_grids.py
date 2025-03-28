@@ -5,19 +5,15 @@ import pysgpp
 from pysgpp import BoundingBox1D
 
 class SpatiallyAdaptiveSparseGrids:
-    def __init__(self, bounds, parameters, poly_basis_degree=3, total_budget=np.inf, max_cycles=np.inf, time_limit=np.inf, initial_level=3):
-        if total_budget==np.inf and max_cycles==np.inf and time_limit==np.inf:
-            raise ValueError('''NO LIMITATION IS SET. YOU MUST DECLARE AT LEAST ONE OF:
-                             total_budget, ie max number of samples,
-                             max_cycles, ie max number of active learning cycles, sample , train, sample 
-                             time_limit, in seconds''')
+    def __init__(self, bounds, parameters, poly_basis_degree=3, initial_level=3):
+
         self.bounds = bounds
         self.parameters = parameters
         self.poly_basis_degree= poly_basis_degree
+        self.initial_level = initial_level
         
-        self.total_budget=total_budget
-        self.max_cycles=max_cycles
-        self.time_limit=time_limit
+        self.custom_limit = np.inf
+        self.custom_limit_value=0 
         
         self.dim=len(parameters)
     
@@ -64,7 +60,7 @@ class SpatiallyAdaptiveSparseGrids:
             batch_samples.append(param_dict)
         return batch_samples
     
-    def get_next_parameter(
+    def get_next_parameters(
         self,
         train: dict,
         *args,
@@ -106,6 +102,9 @@ class SpatiallyAdaptiveSparseGrids:
                 batch_samples.append(param_dict)
                 
         return batch_samples
+    
+    def update_custom_limit_value():
+        NotImplemented
         
 # # import pysgpp library
 # import pysgpp

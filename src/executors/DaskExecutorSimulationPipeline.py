@@ -34,6 +34,8 @@ class DaskExecutorSimulationPipeline():
     Raises:
     """
     def __init__(self, sampler, **kwargs):
+        self.all_futures = []
+        
         self.sampler = sampler
         self.dynamic_clusters = kwargs.get('dynamic_clusters', False)
         
@@ -56,21 +58,15 @@ class DaskExecutorSimulationPipeline():
         
         # self.pipeline_parser_functions = [getattr(pipeline_parser, function_string) for pipeline_parser,function_string in zip(pipeline_parsers, pipeline_parser_function_strings)]
         
-        self.last_runner_return_path=kwargs.get("last_runner_return_path")
-        self.runner_return_headder = kwargs.get('runnner_return_headder')
-        if self.last_runner_return_path != None and self.runner_return_headder != None:
-            with open(self.last_runner_return_path, 'w') as file:
-                file.write(self.runner_return_headder)
-        self.status_report_dir = kwargs.get("status_report_dir")
-        if self.status_report_dir != None and self.dynamic_clusters:
+        
+        if self.dynamic_clusters:
             warnings.warn('''
                           If dynamic clusters is true then a results report cannot currently be made,
                           as the futures results are stored in the workers that are dynamically closed.
                           Althought the 'complete_report' will still be made.
                           If you need a results report then set dynamic clusters to False.
                           ''')
-        
-        os.system(f'mkdir {self.status_report_dir} -p')
+                
         
         self.base_run_dir = kwargs.get("base_run_dir")
         if self.base_run_dir==None:
@@ -83,6 +79,18 @@ class DaskExecutorSimulationPipeline():
                              ...
                              ...
                              ''')
+
+        self.runner_return_path=kwargs.get("runner_return_path")
+        self.runner_return_headder = kwargs.get('runnner_return_headder', f'{__class__}: no runner_return_headder, was provided in configs file')
+        if self.base_run_dir==None and self.runner_return_path==None:
+            warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
+        elif self.runner_return_path==None and self.base_run_dir!=None:
+            self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
+        
+        self.status_report_dir = kwargs.get("status_report_dir", self.base_run_dir)
+        os.system(f'mkdir {self.status_report_dir} -p')
+        if self.status_report_dir==None:
+            warnings.warn('self.status_report_dir IS None')
         # self.runner = getattr(parsers, runner_args["type"])(**runner_args)
         
         # Status Tracking
@@ -116,7 +124,6 @@ class DaskExecutorSimulationPipeline():
             executor.clean()
     
     def start_runs(self):
-        all_futures = []
         print(100 * "=")
         print('STARTING PIPELINE')
         print(100 * "=")
@@ -125,19 +132,46 @@ class DaskExecutorSimulationPipeline():
             self.initialise_client()
         
         print('MAKING INITIAL SAMPLES')
-        samples = self.sampler.get_initial_parameters()
-        num_samples = len(samples)
+        params = self.sampler.get_initial_parameters()
+        num_params = len(params)
         
+        last_futures = self.submit_batch_of_params(params, self.base_run_dir, self.status_report_dir)
+        
+        print('WAITING UNTILL LAST FUTURES HAVE FINISHED')
+        print('NUM LAST FUTURES:',len(last_futures))
+        seq = wait(last_futures)
+        print('*'*100,"\nFINISHED PIPELINE FOR ALL SAMPLES\n",'*'*100)
+        outputs = []
+        for res in seq.done:
+            outputs.append(res.result())
+        if self.runner_return_path is not None:
+            print("SAVING OUTPUT IN:", self.runner_return_path)
+            with open(self.runner_return_path, "w") as out_file:
+                out_file.write(self.runner_return_headder+'\n')
+                for output in outputs:
+                    out_file.write(str(output)+"\n")
+        
+        if self.dynamic_clusters:
+            self.executors[-1].client.shutdown()
+        
+        return outputs
+    
+    
+    
+    
+    def submit_batch_of_params(self, params:dict, base_run_dir:str=None, status_report_dir:str=None):        
+        if base_run_dir==None:
+            base_run_dir=self.base_run_dir
+            
         print('MAKING RANDOM RUN IDs')
-        run_ids = [str(uuid.uuid4()) for sample in samples]
-        run_sample_dict = {run_id:sample for run_id, sample in zip(run_ids, samples)}
+        run_ids = [str(uuid.uuid4()) for p in params]
+        run_sample_dict = {run_id:sample for run_id, sample in zip(run_ids, params)}
         run_dict_s = []
         
         # Status tracking
         run_id_futures = {run_id:[] for run_id in run_ids}
-        
-        
-        
+        all_futures = []
+                
         print('MAKING ALL NECESSARY DIRECTORIES')
         for index, executor in enumerate(self.executors):
             base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner.__class__.__name__+f'_{index}')
@@ -158,9 +192,9 @@ class DaskExecutorSimulationPipeline():
         if executor.base_run_dir != None:
             warnings.warn(f'''
                           The run and out directories are being handeled by the Pipeline Executor.
-                          This means that the Simulation Executor run directories are being ignored:
+                          This means that the Simulation Executor run directory is being ignored:
                           run: {executor.base_run_dir}
-                          The ExecutorSimulationPileline base run and out directories are being used:
+                          The ExecutorSimulationPileline base run directory is being used:
                           run: {self.base_run_dir}
                           ''')         
         
@@ -218,18 +252,18 @@ class DaskExecutorSimulationPipeline():
                     parse_futures.append(new_parse_future)
             if not executing_last_simulation:
                 parse_futures_s.append(parse_futures)
-
+        
         def result_if_ready(future):
             if future.done():
                 return future.result()
             else:
                 return None
         
-        if self.status_report_dir != None:
-            print('MAKING STATUS REPORTS, CONCURRENTLY, IN DIR:', self.status_report_dir)
+        if status_report_dir != None:
+            print('MAKING STATUS REPORTS, CONCURRENTLY, IN DIR:', status_report_dir)
             for future in as_completed(all_futures):
                 # Making status reports
-                with open(os.path.join(self.status_report_dir, 'completed_report'), 'w') as file:
+                with open(os.path.join(status_report_dir, 'completed_report'), 'w') as file:
                     headder = f"run_id,{','.join(self.execution_order)}\n"
                     file.write(headder)
                     for run_id in run_ids:
@@ -237,29 +271,17 @@ class DaskExecutorSimulationPipeline():
                         file.write(line)
                 
                 if not self.dynamic_clusters:
-                    with open(os.path.join(self.status_report_dir, 'results_report'), 'w') as file:
+                    with open(os.path.join(status_report_dir, 'results_report'), 'w') as file:
                         headder = f"run_id,{','.join(self.execution_order)}\n"
                         file.write(headder)
                         for run_id in run_ids:
                             line = f"{run_id}," + ','.join([str(result_if_ready(future)) for future in run_id_futures[run_id]]) + '\n'
                             file.write(line)
         
-        print('WAITING UNTILL LAST FUTURES HAVE FINISHED')
-        print('NUM LAST FUTURES:',len(last_futures))
-        seq = wait(last_futures)
-        print('*'*100,"\nFINISHED PIPELINE FOR ALL SAMPLES\n",'*'*100)
-        outputs = []
-        for res in seq.done:
-            outputs.append(res.result())
-        if self.last_runner_return_path is not None:
-            print("SAVING OUTPUT IN:", self.last_runner_return_path)
-            with open(self.last_runner_return_path, "a") as out_file:
-                for output in outputs:
-                    out_file.write(str(output) + "\n\n")
         
-        if self.dynamic_clusters:
-            self.executors[-1].client.shutdown()
+        return last_futures
+
         
-        return outputs
+            
                         
             

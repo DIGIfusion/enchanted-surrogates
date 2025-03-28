@@ -8,13 +8,14 @@ sampler:
 
 executor:
   type: DaskExecutorActive
-  run_base_dir: None # Because the runner only executes a python function I do not need a run_base_dir
-  runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
+  run_base_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG # Because the runner only executes a python function I do not need a run_base_dir
+  # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: 'x0,x1,x2,MMMG'
     
 
   static_executor:
     type: DaskExecutorSimulation
+    max_cycles: 3
     runner:
       type: MMMGrunner
       num_dim: 3 #Necessary
@@ -34,7 +35,7 @@ executor:
       cores: 1
       memory: "2GB"
       #Set the walltime for entire cluster to be able to run everything set in the sampler, taking into account the number of workers. 
-      walltime: "00:10:00"
+      walltime: "00:40:00"
       interface: "nmn0"
       # The job script prologue is ran on every worker at start up
       job_script_prologue: # this is possibly dependent on which code you want

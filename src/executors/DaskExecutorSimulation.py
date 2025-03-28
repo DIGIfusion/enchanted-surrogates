@@ -42,17 +42,17 @@ class DaskExecutorSimulation():
         self.runner = getattr(runners, runner_args["type"])(**runner_args)
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
-        self.runner_return_path = kwargs.get("runner_return_path")
-        self.runner_return_headder = kwargs.get("runner_return_headder")
         
-        if self.runner_return_path != None and self.runner_return_headder != None:
-            print('MAKING RUNNER RETURN FILE')
-            with open(self.runner_return_path, 'w') as file:
-                file.write(self.runner_return_headder+'\n')
         if self.n_jobs == 1:
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
+        self.runner_return_path = kwargs.get("runner_return_path", os.path.join(self.base_run_dir,'runner_return.txt'))
+        self.runner_return_headder = kwargs.get("runner_return_headder", f'{__class__}: no runner_return_headder, was provided in configs file')
+        if self.base_run_dir==None and self.runner_return_path==None:
+            warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
+        elif self.last_runner_return_path==None and self.base_run_dir!=None:
+            self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
     def clean(self):
         self.client.shutdown()
@@ -94,11 +94,13 @@ class DaskExecutorSimulation():
         outputs = []
         for res in seq.done:
             outputs.append(res.result())
+            
         if self.runner_return_path is not None:
             print("SAVING OUTPUT IN:", self.runner_return_path)
-            with open(self.runner_return_path, "a") as out_file:
+            with open(self.runner_return_path, "w") as out_file:
+                out_file.write(self.runner_return_headder+'\n')
                 for output in outputs:
-                    out_file.write(str(output) + "\n\n")
+                    out_file.write(str(output)+"\n")
         print("Finished sequential runs")
         return outputs
     

@@ -4,6 +4,7 @@ from scipy.stats import multivariate_normal
 from .base import Runner
 import warnings
 import re
+import os
 
 from dask.distributed import print
 
@@ -32,8 +33,14 @@ class MMMGrunner(Runner):
         
         if run_dir != None:
             warnings.warn('''
-                             The MMMGrunner does not read or write to file, yet a run_dir was passed. This will not be used. 
-                             ''') 
+                             The MMMGrunner does not need to read or write to file, yet a run_dir was passed. 
+                             ''')
+            function_out_file_path = os.join(run_dir, 'function_out.txt')
+            #Just make a file like a real simulation would. For testing purposes
+            with open(function_out_file_path, 'w') as file:
+                file.write('THIS IS WHERE THE SIMULATION WOULD PUT SOME OUTPUT')
+                
+                    
         def find_first_int(string):
             return int(re.search(r'\d+',string).group())
         
