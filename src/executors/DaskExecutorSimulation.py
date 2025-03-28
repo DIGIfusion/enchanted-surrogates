@@ -47,11 +47,11 @@ class DaskExecutorSimulation():
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
-        self.runner_return_path = kwargs.get("runner_return_path", os.path.join(self.base_run_dir,'runner_return.txt'))
+        self.runner_return_path = kwargs.get("runner_return_path")
         self.runner_return_headder = kwargs.get("runner_return_headder", f'{__class__}: no runner_return_headder, was provided in configs file')
         if self.base_run_dir==None and self.runner_return_path==None:
             warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
-        elif self.last_runner_return_path==None and self.base_run_dir!=None:
+        elif self.runner_return_path==None and self.base_run_dir!=None:
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
     def clean(self):

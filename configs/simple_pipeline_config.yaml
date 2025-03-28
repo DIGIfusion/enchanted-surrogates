@@ -6,7 +6,7 @@ sampler:
 
 executor:
   type: DaskExecutorSimulationPipeline
-  dynamic_clusters: True
+  dynamic_clusters: False
   base_run_dir: /project/project_462000451/test-enchanted/simpleSimulationPipeline/
   runner_return_path: /project/project_462000451/test-enchanted/simpleSimulationPipeline/last_runner_out
   status_report_dir: /project/project_462000451/test-enchanted/simpleSimulationPipeline/pipeline_status_report/

@@ -88,9 +88,13 @@ class DaskExecutorSimulationPipeline():
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
         self.status_report_dir = kwargs.get("status_report_dir", self.base_run_dir)
-        os.system(f'mkdir {self.status_report_dir} -p')
+        
         if self.status_report_dir==None:
             warnings.warn('self.status_report_dir IS None')
+        else:
+            os.system(f'mkdir {self.status_report_dir} -p')
+            self.completed_report_path = os.path.join(self.status_report_dir, 'completed_report.txt')
+            self.results_report_path = os.path.join(self.status_report_dir, 'results_report.txt')
         # self.runner = getattr(parsers, runner_args["type"])(**runner_args)
         
         # Status Tracking
@@ -153,6 +157,8 @@ class DaskExecutorSimulationPipeline():
         
         if self.dynamic_clusters:
             self.executors[-1].client.shutdown()
+        
+        print('SEE STATUS REPORTS AT:\n',self.completed_report_path,'\n', self.results_report_path)
         
         return outputs
     
@@ -263,7 +269,7 @@ class DaskExecutorSimulationPipeline():
             print('MAKING STATUS REPORTS, CONCURRENTLY, IN DIR:', status_report_dir)
             for future in as_completed(all_futures):
                 # Making status reports
-                with open(os.path.join(status_report_dir, 'completed_report'), 'w') as file:
+                with open(self.completed_report_path, 'w') as file:
                     headder = f"run_id,{','.join(self.execution_order)}\n"
                     file.write(headder)
                     for run_id in run_ids:
@@ -271,7 +277,7 @@ class DaskExecutorSimulationPipeline():
                         file.write(line)
                 
                 if not self.dynamic_clusters:
-                    with open(os.path.join(status_report_dir, 'results_report'), 'w') as file:
+                    with open(self.results_report_path, 'w') as file:
                         headder = f"run_id,{','.join(self.execution_order)}\n"
                         file.write(headder)
                         for run_id in run_ids:
