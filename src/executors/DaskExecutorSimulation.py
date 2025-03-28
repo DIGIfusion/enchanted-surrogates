@@ -84,12 +84,29 @@ class DaskExecutorSimulation():
         print('MAKING CLUSTER')
         self.initialize_client()
         
-        futures = []
+
         print("GENERATING INITIAL SAMPLES:")
-        samples = self.sampler.get_initial_parameters()
+        params = self.sampler.get_initial_parameters()
+        futures = self.submit_batch_of_params(params, self.base_run_dir)
         
-        run_dirs = [None]*len(samples)
-        if self.base_run_dir==None:
+        print("DASK FUTURES SUBMITTED, WAITING FOR THEM TO COMPLETE")
+        seq = wait(futures)
+        outputs = []
+        for res in seq.done:
+            outputs.append(res.result())
+        if self.runner_return_path is not None:
+            print("SAVING OUTPUT IN:", self.runner_return_path)
+            with open(self.runner_return_path, "a") as out_file:
+                for output in outputs:
+                    out_file.write(str(output) + "\n\n")
+        print("Finished sequential runs")
+        return outputs
+    
+    def submit_batch_of_params(self, params: dict, base_run_dir:str=None):
+        run_dirs = [None]*len(params)
+        if base_run_dir==None:
+            base_run_dir = self.base_run_dir
+        if base_run_dir==None:
             warnings.warn('''
                             No base_run_dir has been provided. It is now assumed that the runner being used does not need a run_dir and will be passed None.
                             This could be true if the runner is executing a python function and not a simulation.
@@ -104,30 +121,19 @@ class DaskExecutorSimulation():
                         ''')
         else: # Make run_dirs
             print("MAKING RUN DIRECTORIES")
-            for index, sample in enumerate(samples):
+            for index, sample in enumerate(params):
                 random_run_id = str(uuid.uuid4())
                 run_dir = os.path.join(self.base_run_dir, random_run_id)
                 os.system(f'mkdir {run_dir} -p')
                 run_dirs[index] = run_dir
                      
-        print("MAKING AND SUBMITTING DASK FUTURES")         
-        for index, sample in enumerate(samples):
+        print("MAKING AND SUBMITTING DASK FUTURES")      
+        futures = []   
+        for index, sample in enumerate(params):
             new_future = self.client.submit(
                 run_simulation_task, self.runner, run_dirs[index], sample 
             )
             futures.append(new_future)
+        return futures
         
-        print("DASK FUTURES SUBMITTED, WAITING FOR THEM TO COMPLETE")
-        seq = wait(futures)
-        outputs = []
-        for res in seq.done:
-            outputs.append(res.result())
-        if self.runner_return_path is not None:
-            print("SAVING OUTPUT IN:", self.runner_return_path)
-            with open(self.runner_return_path, "a") as out_file:
-                for output in outputs:
-                    out_file.write(str(output) + "\n\n")
-        print("Finished sequential runs")
-        return outputs
-
     
