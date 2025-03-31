@@ -116,7 +116,7 @@ class GENEparser(Parser):
             /
             '''
 
-    def write_input_file(self, params: dict, run_dir: str, out_dir:str, base_params_file_path: str):
+    def write_input_file(self, params: dict, run_dir: str, base_params_file_path: str):
         if base_params_file_path != None:
             namelist = f90nml.read(base_params_file_path)
             namelist_string = str(namelist)
@@ -138,7 +138,7 @@ class GENEparser(Parser):
             group, var = key
             patch[group] = {var:value}
             # patch = {group: {var: value}}
-        patch['in_out'] = {'diagdir':out_dir}
+        patch['in_out'] = {'diagdir':run_dir}
         
         namelist.patch(patch)        
         f90nml.write(namelist, parameters_path)

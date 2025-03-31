@@ -42,7 +42,7 @@ class GENErunner(Runner):
         
         
 
-    def single_code_run(self, run_dir: str, out_dir:str, params:dict=None):
+    def single_code_run(self, run_dir: str, params:dict=None):
         """
         Runs a single GENE code simulation.
 
@@ -55,11 +55,11 @@ class GENErunner(Runner):
             (str): Containing comma seperated values of interest parsed from the GENE output 
         """        
         # Edit the parameters file with the passed sample params
-        self.parser.write_input_file(params, run_dir, out_dir, self.base_parameters_file_path)
+        self.parser.write_input_file(params, run_dir, self.base_parameters_file_path)
         
         # Move to run directory for executing the commands
         print('RUNNING GENE IN RUN DIR:',run_dir)
-        run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output=std_out.txt --error=err_out.txt -l -K -n 128 {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
+        run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output=std_out.txt --error=err_out.txt -l -K -n $SLURM_NTASKS {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
         result = subprocess.run(run_command, shell=True, capture_output=False, text=True)
         # out = result.stdout
         # err = result.stderr
@@ -74,7 +74,7 @@ class GENErunner(Runner):
             sleep(5)
         
         # read relevant output values
-        output = self.parser.read_output(out_dir)
+        output = self.parser.read_output(run_dir)
         output = [str(v) for v in output]
         params_list = [str(v) for k,v in params.items()]
         return_list = params_list + output
