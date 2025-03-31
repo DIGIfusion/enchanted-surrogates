@@ -7,7 +7,6 @@ sampler:
 executor:
   type: DaskExecutorSimulation
   base_run_dir: /project/project_462000451/test-enchanted/trial-dask
-  base_out_dir: None
   runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/simple_test/runner_return
 
   runner:

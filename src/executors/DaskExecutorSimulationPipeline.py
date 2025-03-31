@@ -83,7 +83,6 @@ class DaskExecutorSimulationPipeline():
                              ...
                              ...
                              ''')
-        self.base_out_dir = kwargs.get("base_out_dir")
         # self.runner = getattr(parsers, runner_args["type"])(**runner_args)
         
         # Status Tracking
@@ -133,7 +132,6 @@ class DaskExecutorSimulationPipeline():
         run_ids = [str(uuid.uuid4()) for sample in samples]
         run_sample_dict = {run_id:sample for run_id, sample in zip(run_ids, samples)}
         run_dict_s = []
-        out_dict_s = []
         
         # Status tracking
         run_id_futures = {run_id:[] for run_id in run_ids}
@@ -149,20 +147,6 @@ class DaskExecutorSimulationPipeline():
             for run_dir in run_dirs:
                 os.system(f'mkdir {run_dir} -p')
         
-        # if base_out_dir is in configs file for the pipeline executor then we will make out_dirs other wise we set it to be the same as the run_dir
-        if self.base_out_dir!=None:
-            print('BASE OUT DIR IS SPECIFIED SO MAKING OUT DIRS')
-            for index, executor in enumerate(self.executors):
-                base_out_dir_simulation = os.path.join(self.base_out_dir,executor.runner.__class__.__name__+f'_{index}')
-                out_dirs = [os.path.join(base_out_dir_simulation, run_id) for run_id in run_ids]
-                out_dict = {run_id:os.path.join(base_out_dir_simulation, run_id) for run_id in run_ids}
-                out_dict_s.append(out_dict)
-                for out_dir in out_dirs:
-                    os.system(f'mkdir {out_dir} -p')
-        else:
-            print('BASE OUT DIR IS NOT SPECIFIED SO SETTING TO RUN DIRs')
-            out_dict_s = run_dict_s          
-        
         print('PERFORMING FIRST SIMULATION')
         executor = self.executors[0]
 
@@ -170,15 +154,14 @@ class DaskExecutorSimulationPipeline():
             print(f'0: DYNAMICALLY INITALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
             executor.initialize_client() 
         run_dict = run_dict_s[0]
-        out_dict = out_dict_s[0]
         
-        if executor.base_run_dir != None or executor.base_out_dir != None:
+        if executor.base_run_dir != None:
             warnings.warn(f'''
                           The run and out directories are being handeled by the Pipeline Executor.
-                          This means that the Simulation Executor run and out directories are being ignored:
-                          run: {executor.base_run_dir} out:{executor.base_out_dir}
+                          This means that the Simulation Executor run directories are being ignored:
+                          run: {executor.base_run_dir}
                           The ExecutorSimulationPileline base run and out directories are being used:
-                          run: {self.base_run_dir}, out:{self.base_out_dir}
+                          run: {self.base_run_dir}
                           ''')         
         
         parse_futures_s = [] #each item will be a list of parse futures for one simulation
@@ -187,13 +170,12 @@ class DaskExecutorSimulationPipeline():
             sample=run_sample_dict[run_id]
             run_dir=run_dict[run_id]
             next_run_dir=run_dict_s[1][run_id] 
-            out_dir=out_dict[run_id]
             # This sends the run_simulation_task to be ran on a worker as soon as possible
-            run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)                    
+            run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, sample)                    
             run_id_futures[run_id].append(run_future)
             all_futures.append(run_future)
             #Make future for parsing
-            new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[0], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
+            new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[0], last_run_dir=run_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
             run_id_futures[run_id].append(new_parse_future)
             all_futures.append(new_parse_future)
             parse_futures.append(new_parse_future)
@@ -202,7 +184,7 @@ class DaskExecutorSimulationPipeline():
         print('FUTURES FOR FIRST SIMULATION SENT, SENDING THE REST')
         executing_last_simulation=False
         last_futures=[]
-        for index, executor, run_dict, out_dict in zip(range(1,len(self.executors)) ,self.executors[1:], run_dict_s[1:], out_dict_s[1:]):
+        for index, executor, run_dict in zip(range(1,len(self.executors)) ,self.executors[1:], run_dict_s[1:]):
             if self.dynamic_clusters:
                 print(f'{index}: DYNAMICALLY INITIALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
                 executor.initialize_client()
@@ -216,9 +198,8 @@ class DaskExecutorSimulationPipeline():
             for future in as_completed(parse_futures_s[index-1]):
                 _, _, run_id = future.result()
                 run_dir = run_dict[run_id]
-                out_dir = out_dict[run_id]
                 sample = None
-                run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, out_dir, sample)
+                run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, sample)
                 run_id_futures[run_id].append(run_future)
                 run_futures.append(run_future)
                 all_futures.append(run_future)
@@ -230,8 +211,8 @@ class DaskExecutorSimulationPipeline():
                 if executing_last_simulation:
                     last_futures.append(run_future)
                 if not executing_last_simulation:
-                    next_run_dir = out_dict_s[index+1][run_id]
-                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_out_dir=out_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
+                    next_run_dir = run_dict_s[index+1][run_id]
+                    new_parse_future = executor.client.submit(print_error_wrapper,self.pipeline_parser_functions[index], last_run_dir=run_dir, next_run_dir=next_run_dir, run_id=run_id, future=run_future)
                     run_id_futures[run_id].append(new_parse_future)
                     all_futures.append(new_parse_future)
                     parse_futures.append(new_parse_future)
@@ -245,7 +226,7 @@ class DaskExecutorSimulationPipeline():
                 return None
         
         if self.status_report_dir != None:
-            print('MAKING STATUS REPORTS, CONCURRENTLY')
+            print('MAKING STATUS REPORTS, CONCURRENTLY, IN DIR:', self.status_report_dir)
             for future in as_completed(all_futures):
                 # Making status reports
                 with open(os.path.join(self.status_report_dir, 'completed_report'), 'w') as file:

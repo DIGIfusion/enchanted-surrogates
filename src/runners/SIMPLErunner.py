@@ -46,7 +46,7 @@ class SIMPLErunner(Runner):
     def parse_params(self, params:dict, run_dir:str):
         self.parser.write_input_file(params, run_dir)
     
-    def single_code_run(self, run_dir: str, out_dir:str, params=None):
+    def single_code_run(self, run_dir: str, params=None):
         # time.sleep(randint(2,10))
         """
         Runs a simple test program like a bash script.
@@ -68,4 +68,4 @@ class SIMPLErunner(Runner):
         # command to run the code in the terminal which will be carried out on the workers
         subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
         res = self.parser.read_output_file(run_dir)
-        return res, run_dir, out_dir
+        return res, run_dir
