@@ -9,6 +9,8 @@ class SpatiallyAdaptiveSparseGrids:
         self.sampler_interface = S.ACTIVE
         self.bounds = bounds
         self.parameters = parameters
+        if type(parameters[0]) == type([]):
+            self.parameters = [tuple(pa) for pa in parameters]
         self.poly_basis_degree= poly_basis_degree
         self.initial_level = initial_level
         

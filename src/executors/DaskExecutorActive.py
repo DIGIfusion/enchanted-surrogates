@@ -32,6 +32,8 @@ class DaskExecutorActive():
                             time_limit, in seconds''')
         self.total_budget = total_budget
         self.max_cycles = max_cycles
+        if self.max_cycles<=1:
+            raise ValueError('Max cycles must be above 1. The initial samples are counted as one of the cycles.')
         self.time_limit = time_limit
         
         # This control will be needed by the pipeline and active learning.

@@ -6,3 +6,4 @@ from .sobel_sequence import SobelSequence
 from .gene_ky import GENEky
 from .hypercube import HypercubeSampler
 from .sobel_sequence import SobelSequence
+from .spatially_adaptive_sparse_grids import SpatiallyAdaptiveSparseGrids

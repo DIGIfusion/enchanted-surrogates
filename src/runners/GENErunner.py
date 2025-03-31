@@ -27,18 +27,19 @@ class GENErunner(Runner):
 
     """
 
-    def __init__(self, executable_path:str, pre_run_commands:list=None, *args, **kwargs):
+    def __init__(self, executable_path:str, return_mode='deeplasma', *args, **kwargs):
         """
         Initializes the GENErunner object.
 
         Args:
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
-
+            return_mode (str): Either 'deeplasma' or 'growthrate'. This changes what will be returned.
         """
         self.executable_path = executable_path
         self.base_parameters_file_path = kwargs.get('base_parameters_file_path', None)
         self.parser = GENEparser()
+        self.return_mode = return_mode
         
         
 
@@ -74,8 +75,13 @@ class GENErunner(Runner):
             sleep(5)
         
         # read relevant output values
-        output = self.parser.read_output(run_dir)
-        output = [str(v) for v in output]
+        if self.return_mode=='deeplasma':
+            output = self.parser.read_output(run_dir)
+            output = [str(v) for v in output]
+        elif self.return_mode=='growthrate':
+            ky, growthrate, frequency = self.parser.read_omega(run_dir)
+            output = [str(growthrate)]
+            
         params_list = [str(v) for k,v in params.items()]
         return_list = params_list + output
         return ','.join(return_list)

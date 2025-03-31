@@ -143,11 +143,11 @@ class GENEparser(Parser):
         namelist.patch(patch)        
         f90nml.write(namelist, parameters_path)
     
-    def calculate_kperp(self, out_dir):
+    def calculate_kperp(self, run_dir):
         current_dir = os.getcwd()
-        os.chdir(out_dir)
+        os.chdir(run_dir)
         pars = init_read_parameters_file('.dat')
-        field_path = GFF(out_dir).find_files('field')[0]
+        field_path = GFF(run_dir).find_files('field')[0]
         field = GF(field_path)
         field_dict = field.field_filepath_to_dict(time_criteria='last')
         zgrid = field_dict['zgrid']
@@ -164,9 +164,9 @@ class GENEparser(Parser):
         
         return avg_kperp_squared_phi, avg_kperp_squared_A
     
-    def calculate_fingerprints(self, out_dir):
+    def calculate_fingerprints(self, run_dir):
         current_dir = os.getcwd()
-        os.chdir(out_dir)
+        os.chdir(run_dir)
         pars = init_read_parameters_file('.dat')
         time, nrg1, nrg2 = get_nrg0('.dat', nspec=2)
         
@@ -196,8 +196,8 @@ class GENEparser(Parser):
         os.chdir(current_dir)
         return fingerprints
     
-    def read_omega(self, out_dir):
-        omega_path = os.path.join(out_dir,'omega.dat')
+    def read_omega(self, run_dir):
+        omega_path = os.path.join(run_dir,'omega.dat')
         with open(omega_path, 'r') as file:
             line = file.read()
             vars = line.split(' ')
@@ -206,14 +206,14 @@ class GENEparser(Parser):
             ky, growthrate, frequency = vars
         return ky, growthrate, frequency
     
-    def read_output(self, out_dir):
-        avg_kperp_squared_phi, avg_kperp_squared_A = self.calculate_kperp(out_dir)
-        ky, growthrate, frequency = self.read_omega(out_dir)
+    def read_output(self, run_dir):
+        avg_kperp_squared_phi, avg_kperp_squared_A = self.calculate_kperp(run_dir)
+        ky, growthrate, frequency = self.read_omega(run_dir)
         
         mixing_length_phi = growthrate / avg_kperp_squared_phi
         mixing_length_A = growthrate / avg_kperp_squared_A
 
-        fingerprints = self.calculate_fingerprints(out_dir)
+        fingerprints = self.calculate_fingerprints(run_dir)
         
         return mixing_length_phi, mixing_length_A, *fingerprints, growthrate, frequency
 
