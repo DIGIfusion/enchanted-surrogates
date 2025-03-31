@@ -6,9 +6,9 @@ sampler:
 
 executor:
   type: DaskExecutorSimulationPipeline
-  dynamic_clusters: True
+  dynamic_clusters: False
   base_run_dir: /project/project_462000451/test-enchanted/simpleSimulationPipeline/
-  last_runner_return_path: /project/project_462000451/test-enchanted/simpleSimulationPipeline/last_runner_out
+  runner_return_path: /project/project_462000451/test-enchanted/simpleSimulationPipeline/last_runner_out
   status_report_dir: /project/project_462000451/test-enchanted/simpleSimulationPipeline/pipeline_status_report/
   # base_out_dir:
   # This must have 'executor' in the key_name and an integer that corresponds to the order in the pipeline.
