@@ -26,7 +26,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         git -c http.extraheader="AUTHORIZATION: Bearer ${{ secrets.DANIEL_TOKEN }}" submodule init
-        git -c http.extraheader="AUTHORIZATION: Bearer ${{ secrets.DANIEL_TOKEN }}" submodule init submodule update
+        git -c http.extraheader="AUTHORIZATION: Bearer ${{ secrets.DANIEL_TOKEN }}" submodule update
     - name: Running pytest
       run: |
         coverage run -m pytest tests/automated_tests_no_HPC -v -s        
