@@ -19,25 +19,27 @@ class SpatiallyAdaptiveSparseGrids:
         
         self.dim=len(parameters)
     
-    def point_transform_unit2box(self, unit_point):
-        # min max normalisation
-        box_point = tuple()
-        for i, uco in enumerate(unit_point):
-            min = self.bounds[i][0]
-            max = self.bounds[i][1]
-            bco = (uco - min) / (max - min)
-            box_point = box_point + (bco,)
-        return box_point
-
     def point_transform_box2unit(self, box_point):
         # min max normalisation
         unit_point = tuple()
         for i, bco in enumerate(box_point):
             min = self.bounds[i][0]
             max = self.bounds[i][1]
-            uco = bco*(max - min) + min
+            assert max > min
+            uco = (bco - min) / (max - min)
             unit_point = unit_point + (uco,)
         return unit_point
+
+    def point_transform_unit2box(self, unit_point):
+        # min max normalisation
+        box_point = tuple()
+        for i, uco in enumerate(unit_point):
+            min = self.bounds[i][0]
+            max = self.bounds[i][1]
+            assert max > min
+            bco = uco*(max - min) + min
+            box_point = box_point + (bco,)
+        return box_point
     
     def get_initial_parameters(self):
         # returns the initial set of parameters for initial trianing of surrogate model
@@ -79,6 +81,14 @@ class SpatiallyAdaptiveSparseGrids:
             for j in range(self.dim):
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
             box_point = self.point_transform_unit2box(unit_point) 
+            
+            print('='*100)
+            print('i',i)
+            print('len train', len(train))
+            print('box_point', box_point)
+            print('train.keys',list(train.keys()))
+            print('in', box_point in train.keys())
+            
             self.alpha[i] = train[box_point]
         
         
@@ -98,11 +108,11 @@ class SpatiallyAdaptiveSparseGrids:
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
             
             box_point = self.point_transform_unit2box(unit_point)
-            
+
             if box_point not in train.keys():
                 param_dict = {}
                 for j, param in enumerate(self.parameters):
-                    param_dict[param]=gp.getStandardCoordinate(j)
+                    param_dict[param]=box_point[j]
                 batch_samples.append(param_dict)
                 
         return batch_samples
