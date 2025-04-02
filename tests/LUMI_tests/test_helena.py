@@ -113,9 +113,9 @@ def test_helena_runner():
         "only_generate_files": False,
         "input_parameter_type": 7,
         "beta_iteration": 1,
-        "input_value_1": 0.0,
-        "input_value_2": 10.0,
-        "beta_iterations_afp": False,
+        "input_value_1": 0.1,
+        "input_value_2": 6.0,
+        "beta_iterations_afp": True,
         "beta_tolerance": 0.01, # changed to absolute tolerence
         "max_beta_iterations": 5,
         "beta_N_target": 2.555 #

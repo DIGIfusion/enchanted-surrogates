@@ -592,7 +592,7 @@ class HELENArunner(Runner):
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
         
         with open('beta_iteration_results', 'a') as file:
-            file.write(f"BETA ITERATION {0.0}: input_value={self.input_value_1}, target={beta_target}, current={beta_n0}\n")
+            file.write(f"BETA ITERATION {0.0}: afp?{self.beta_iterations_afp}: input_value={self.input_value_1}, beta_target={beta_target}, beta_current={beta_n0}\n")
         
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", self.input_value_2)
@@ -608,7 +608,7 @@ class HELENArunner(Runner):
         print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
         
         with open('beta_iteration_results', 'a') as file:
-            file.write(f"BETA ITERATION {0.1}: input_value={self.input_value_2}, target={beta_target}, current={beta_n01}\n")
+            file.write(f"BETA ITERATION {0.1}: afp?{self.beta_iterations_afp}: input_value={self.input_value_2}, beta_target={beta_target}, beta_current={beta_n01}\n")
     
         if self.beta_iterations_afp:
             # apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
@@ -635,10 +635,10 @@ class HELENArunner(Runner):
         output_vars = self.parser.get_real_world_geometry_factors_from_f20("fort.20")
         beta_n = 1e2 * output_vars["BETAN"]
 
-        print(f"BETA ITERATION {0.2}: input_value={guess}, target={beta_target}, current={beta_n}, previous={beta_n01}")
+        print(f"BETA ITERATION {0.2}: input_value={guess}, beta_target={beta_target}, beta_current={beta_n}, previous={beta_n01}")
 
         with open('beta_iteration_results', 'a') as file:
-            file.write(f"BETA ITERATION {0.2}: input_value={guess}, target={beta_target}, current={beta_n}\n")
+            file.write(f"BETA ITERATION {0.2}: input_value={guess}, beta_target={beta_target}, beta_current={beta_n}\n")
         
         n_beta_iteration = 0
         while (
@@ -679,7 +679,7 @@ class HELENArunner(Runner):
                 print('NEW PREDICTED AT1:', guess)
                 self.parser.update_at1('fort.10', guess)
             
-            print(f"BETA ITERATION {n_beta_iteration}: input_value={previous_guess}, target={beta_target}, current={beta_n}, guess_input_for_next={guess}\n")
+            print(f"BETA ITERATION {n_beta_iteration}: input_value={previous_guess}, beta_target={beta_target}, beta_current={beta_n}, guess_input_for_next={guess}\n")
             with open('beta_iteration_results', 'a') as file:
                 file.write(f"BETA ITERATION {n_beta_iteration}: input_value={previous_guess}, target={beta_target}, current={beta_n}, guess_input_for_next={guess}\n")
             
