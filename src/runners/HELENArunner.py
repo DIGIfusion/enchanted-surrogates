@@ -597,7 +597,7 @@ class HELENArunner(Runner):
         if self.beta_iterations_afp:
             self.parser.modify_fast_ion_pressure("fort.10", self.input_value_2)
         else:
-            self.parser.update_at1("fort.10", 1.0)
+            self.parser.update_at1("fort.10", self.input_value_2)
         subprocess.call([self.executable_path])
         shutil.copy('fort.10','fort.10_2')
         shutil.copy('fort.20','fort.20_2')
