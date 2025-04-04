@@ -106,9 +106,9 @@ class DaskExecutorSimulationPipeline():
                 self.execution_order.append(pipeline_parser_function_strings[i])
         print('EXECUTION ORDER', self.execution_order)
     
-    def initialise_client(self):
+    def initialise_client(self, slurm_out_dir):
         for executor in self.executors:
-            executor.initialize_client()
+            executor.initialize_client(slurm_out_dir)
         # print('SLEEPING 10 BEFORE PRINTING CLUSTER INFO')
         # time.sleep(10)
         # for executor in self.executors:
@@ -144,7 +144,7 @@ class DaskExecutorSimulationPipeline():
         print(100 * "=")
         if not self.dynamic_clusters:
             print('MAKING DASK CLUSTERS')
-            self.initialise_client()
+            self.initialise_client(slurm_out_dir=self.base_run_dir)
         
         print('MAKING INITIAL SAMPLES')
         params = self.sampler.get_initial_parameters()
@@ -299,6 +299,11 @@ class DaskExecutorSimulationPipeline():
         
         
         return last_futures
+    
+    def write_summary(self, directory):
+        for executor in self.executors:
+            if 'write_summary' in dir(self.executor.runner):
+                self.executor.runner.write_summary(directory)
 
         
             

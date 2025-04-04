@@ -40,9 +40,9 @@ class DaskExecutorSimulation():
                                     output_dir: /path/to/base/out
                             ''')
         self.runner = getattr(runners, runner_args["type"])(**runner_args)
-        self.worker_args: dict = kwargs.get("worker_args")
-        self.n_jobs: int = kwargs.get("n_jobs", 1)
         
+        self.worker_args: dict = kwargs["worker_args"]
+        self.n_jobs: int = kwargs.get("n_jobs", 1)
         if self.n_jobs == 1:
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
@@ -53,18 +53,20 @@ class DaskExecutorSimulation():
             warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
         elif self.runner_return_path==None and self.base_run_dir!=None:
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
-            
+        
         
     def clean(self):
         self.client.shutdown()
 
-    def initialize_client(self):
+    def initialize_client(self, slurm_out_dir=None):
         """
         Initializes the client
         Args:
             worker_args (dict): Dictionary of arguments for configuring worker nodes.
             **kwargs: Additional keyword arguments.
         """
+        if slurm_out_dir != None:
+            self.worker_args['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
         print("Initializing DASK client")
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
@@ -93,7 +95,7 @@ class DaskExecutorSimulation():
         print(f"STARTING RUNS FOR RUNNER {self.runner.__class__.__name__}, FROM WITHIN A {__class__}")
         
         print('MAKING CLUSTER')
-        self.initialize_client()
+        self.initialize_client(slurm_out_dir=self.base_run_dir)
         
 
         print("GENERATING INITIAL SAMPLES:")
@@ -151,5 +153,9 @@ class DaskExecutorSimulation():
             )
             futures.append(new_future)
         return futures
+    
+    def write_summary(self, directory):
+        if 'write_summary' in dir(self.runner):
+            self.runner.write_summary(directory)
         
     

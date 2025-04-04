@@ -5,7 +5,10 @@ sampler:
   bounds: [[4,6.7], [2.1,3.5], [0.16,2.9]]
   parameters: [['_grp_species_0','omt'],['_grp_species_1','omt'],['species','omn']]
   initial_level: 1
-
+  check_sampler:
+    type: sobel_sequence
+    num_samples: 1e6
+      
 
 executor:
   type: DaskExecutorActive

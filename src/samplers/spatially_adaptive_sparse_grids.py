@@ -19,17 +19,24 @@ class SpatiallyAdaptiveSparseGrids:
         self.initial_level = initial_level
         
         self.custom_limit = np.inf
-        self.custom_limit_value=0 
-        
+        self.custom_limit_value = 0
         self.dim=len(parameters)
         
         # The test sampler is used to fill the space and run the surrogate model so that we can calcualte the integral and sobel indicies to check for convergence in UQ situations.
-        check_sampler_kwargs = kwargs['test_sampler']
+        check_sampler_kwargs = kwargs['check_sampler']
+        check_sampler_kwargs['parameters'] = self.parameters
+        check_sampler_kwargs['bounds'] = self.bounds
         self.check_sampler = getattr(samplers, check_sampler_kwargs['type'])(**check_sampler_kwargs)
         self.old_check_predictions = None
         self.num_active_cycles = 0
-        self.all_cycle_info = []
         self.num_samples_by_cycle = []
+        
+        # Specific to UQ samplers
+        self.expectation_by_cycle, self.double_sigma_by_cycle, self.sobol_first_order_by_cycle= [],[],[]
+        self.sobol_total_order_by_cycle, self.entropy_diff_by_cycle = [],[]
+        
+        
+        self.all_cycle_info = []
         # make uniform distributions for each input, this is used later to calculate sobel indicies for UQ
         self.dists = []
         for b in self.bounds:
@@ -79,7 +86,6 @@ class SpatiallyAdaptiveSparseGrids:
             for j, param in enumerate(self.parameters):
                 param_dict[param]=box_point[j]
             batch_samples.append(param_dict)
-        self.num_samples_by_cycle.append(self.gridStorage.getSize())
         return batch_samples
     
     def get_next_parameters(
@@ -148,17 +154,44 @@ class SpatiallyAdaptiveSparseGrids:
         integral_estimate = np.mean(function_values) * space_volume
         return integral_estimate
     
-    def expectation_2sigma_approx(self, function_values):
-        expectation_estimate = np.mean(function_values)
-        double_sigma_estimate = 2*np.sqrt(np.mean(function_values**2) - np.mean(function_values)**2)
-        return expectation_estimate, double_sigma_estimate
+    # Assumes the inputs used to get the function values were sampled from their uncertainty distributions.
+    def expectation_approx(self, function_values, num_bins=200):
+        heights, edges = np.histogram(function_values, bins=num_bins)
+        weights = heights/sum(heights)
+        centers = (edges[:-1] + edges[1:]) / 2
+        expectation = np.average(centers,weights=weights)
+        return expectation
+    
+    def confidance_interval(self, function_values, percentage, num_bins=200):
+        decimal = percentage/100
+        heights, edges = np.histogram(function_values, bins=num_bins, density=True)
+        width = edges[1]-edges[0]
+        centers = (edges[:-1] + edges[1:]) / 2
+        area = 0
+        area_limit = (1-decimal)/2
+        i = 0
+        while area<area_limit:
+            area += heights[i]*width
+            i+=1
+        lower_interval = centers[i]
+        
+        i = 0
+        while area<area_limit:
+            area += heights[-i]*width
+            i+=1
+        upper_interval = centers[-i]
+        return lower_interval, upper_interval
+        
+    def double_sigma_approx(self, function_values):
+        double_sigma_estimate = 2*(np.sqrt(self.expectation_approx(function_values**2) - self.expectation_approx(function_values)**2))
+        return double_sigma_estimate
     
     def sobel_indicies_approx(self):
         func = lambda positions: self.surrogate_predict(positions.T)
         sobol = sobol_indices(func=func,  n=2**np.log2(self.check_sampler.num_samples), dists=self.dists)
         return sobol.first_order, sobol.total_order
     
-    def relative_entropy(samples_p, samples_q, num_bins):
+    def relative_entropy(self, samples_p, samples_q, num_bins=200):
         """
         Calculate the relative entropy (Kullback-Leibler divergence) between two distributions.
 
@@ -169,7 +202,7 @@ class SpatiallyAdaptiveSparseGrids:
         Returns:
         float: The relative entropy between the two distributions.
         """
-        if type(samples_p) == None or type(samples_q) == None:
+        if type(samples_p) == type(None) or type(samples_q) == type(None):
             return np.nan
         # Convert samples to numpy arrays
         samples_p = np.array(samples_p)
@@ -191,14 +224,17 @@ class SpatiallyAdaptiveSparseGrids:
             with open(cycle_info_path, 'w') as file:
                 file.write(headder)
         predictions = self.surrogate_predict(self.check_sampler.samples)
-        expectation, double_sigma = self.expectation_2sigma_approx(predictions)
-        sobol_first_order, sobol_total_order = self.sobel_indicies_approx(predictions)
-        entropy_diff = self.relative_entropy(self.old_check_predictions, predictions)
+        expectation = self.expectation_approx(predictions)
+        double_sigma = self.double_sigma_approx(predictions)
+        sobol_first_order, sobol_total_order = self.sobel_indicies_approx()
+        entropy_diff = self.relative_entropy(self.old_check_predictions, predictions, num_bins=200)
         self.old_check_predictions=predictions
         cycle_info = f"{expectation},{double_sigma},{sobol_first_order},{sobol_total_order},{entropy_diff},{self.num_samples_by_cycle[-1]}"
         with open(cycle_info_path, 'a') as file:
             file.write(cycle_info)
-        self.all_cycle_info.append(cycle_info)
+
+        self.expectation_by_cycle.append(expectation), self.double_sigma_by_cycle.append(double_sigma), self.sobol_first_order_by_cycle.append(sobol_first_order)
+        self.sobol_total_order_by_cycle.append(sobol_total_order), self.entropy_diff_by_cycle.append(entropy_diff)
     
     def write_summary(self, base_dir):
         with open(os.path.join(base_dir, 'all_sampler_cycle_info'), 'w') as file:
@@ -208,31 +244,47 @@ class SpatiallyAdaptiveSparseGrids:
         predictions = self.surrogate_predict(self.check_sampler.samples)
         fig = plt.figure()
         bars = plt.hist(predictions, bins=200, density=True)
-        heights, widths = bars[0], bars[1]
+        heights, edges = bars[0], bars[1]
         plt.vlines([np.percentile(predictions,2.5),np.mean(predictions), np.percentile(predictions,97.5)],0, max(heights),color='red', label=r'mean and 95% confidance interval')
+        lower_interval, upper_interval = self.confidance_interval(percentage=95)
+        plt.hlines(0, lower_interval, upper_interval, color='red')
         plt.xlabel('function output')
         plt.ylabel('probability density')
         plt.title(f'Output Distribution, {self.check_sampler.num_samples} samples')
+        plt.legend()
         fig.savefig(os.path.join(base_dir, 'output_distribution'), dpi=400)
         
-        approx_expectation, approx_2sigma, approx_sobol_1st_order, approx_sobol_total_order, approx_entropy_diff = [],[],[],[],[]
-        for cycle_info in self.all_cycle_info:
-            approx_expectation_, approx_2sigma_, approx_sobol_1st_order_, approx_sobol_total_order_, approx_entropy_diff_ = cycle_info.split(',')
-            approx_expectation.append(approx_expectation_), approx_2sigma.append(approx_2sigma_), approx_sobol_1st_order.append(approx_sobol_1st_order_), approx_sobol_total_order.append(approx_sobol_total_order_), approx_entropy_diff.append(approx_entropy_diff_)
         fig = plt.figure()
-        plt.plot(self.num_samples_by_cycle, approx_expectation)
-        plt.fill_between(self.num_samples_by_cycle, np.array(approx_expectation)-np.array(approx_2sigma),np.array(approx_expectation)+np.array(approx_2sigma), color='grey', label='2sigma')
+        plt.plot(np.array(self.num_samples_by_cycle), np.array(self.expectation_by_cycle))
+        plt.fill_between(self.num_samples_by_cycle, np.array(self.expectation_by_cycle)-np.array(self.double_sigma_by_cycle),np.array(self.expectation_by_cycle)+np.array(self.double_sigma_by_cycle), color='grey', label='2sigma')
         plt.ylabel('approx_expectation')
         plt.xlabel('Number of samples in cycle')
         plt.legend()
         fig.savefig(os.path.join(base_dir,'approx_expectation'), dpi=300)
-        cycle_attributes = [approx_sobol_1st_order, approx_sobol_total_order, approx_entropy_diff]
-        for att in cycle_attributes:
-            fig = plt.figure()
-            plt.ylabel(att.__qualname__)
-            plt.xlabel('Number of samples in cycle')
-            fig.savefig(os.path.join(base_dir, att.__qualname__),dpi=300)
         
+        fig = plt.figure()
+        self.sobol_first_order_by_cycle = np.array(self.sobol_first_order_by_cycle)
+        for dimension in self.sobol_first_order_by_cycle.T:
+            plt.plot(self.num_samples_by_cycle, dimension)
+            plt.ylabel('First order sobol indicie')
+            plt.xlabel('Number of samples in cycle')
+            fig.savefig(os.path.join(base_dir, 'approx_sobol_first_order'),dpi=300)
+        
+        fig = plt.figure()
+        self.sobol_total_order_by_cycle = np.array(self.sobol_total_order_by_cycle)
+        for dimension in self.sobol_total_order_by_cycle.T:
+            plt.plot(self.num_samples_by_cycle, dimension)
+            plt.ylabel('Total order sobol indicie')
+            plt.xlabel('Number of samples in cycle')
+            fig.savefig(os.path.join(base_dir, 'approx_sobol_total_order'),dpi=300)
+        
+        fig = plt.figure()
+        self.entropy_diff_by_cycle = np.array(self.entropy_diff_by_cycle)
+        plt.plot(self.num_samples_by_cycle, self.entropy_diff_by_cycle)
+        plt.ylabel('Total order sobol indicie')
+        plt.xlabel('Number of samples in cycle')
+        fig.savefig(os.path.join(base_dir, 'approx_entropy_diff'),dpi=300)
+                
     def check_UQ_convergence():
         None
 # # import pysgpp library

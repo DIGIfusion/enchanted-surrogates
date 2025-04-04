@@ -53,7 +53,12 @@ class MMMGrunner(Runner):
         params_values = ','.join([str(v) for v in params.values()])
         return params_values + ',' + str(self.mmg.evaluate(pos))
         
-
+    def write_summary(self, dir):
+        fig = self.mmg.plot_matrix_contour()
+        fig.savefig(os.path.join(dir, 'mmmg_matrix_contour'), dpi=300)
+        fig = self.mmg.plot_slices()
+        fig.savefig(os.path.join(dir, 'mmmg_slices'), dpi=300)
+        
 class MaxOfManyGaussians():
     def __init__(self, num_dim, bounds):
         self.num_dim = num_dim
@@ -65,7 +70,6 @@ class MaxOfManyGaussians():
         stds = np.array(stds)
         self.gaussians = []
         for mean, std in zip(means, stds):
-            print('debug tuple', type(np.array(std)**2))
             cov = np.diag(np.array(std)**2)
             self.gaussians.append(multivariate_normal(mean, cov))   
 
@@ -121,7 +125,6 @@ class MaxOfManyGaussians():
         return Zmax
     
     def plot_slices(self, grid_size=200, nominals=None, not_vectorised=False):
-        print('PLOT SLICES')
         if type(nominals) == type(None):
             nominals = [np.mean(b) for b in self.bounds]
         
@@ -132,13 +135,11 @@ class MaxOfManyGaussians():
         fig, AX = plt.subplots(r,c,figsize=(w*c, h*r), dpi = 200)
         for i, b in enumerate(self.bounds):
             p = np.stack([nominals for i in range(grid_size)])
-            print('d', p.shape)
             x = np.linspace(b[0],b[1], grid_size)
             p[:,i] = x
             if not_vectorised:
                 y_true = []
                 for pi in p:
-                    print('DEBUG',pi)
                     y_true.append(self.evaluate(pi))
             else:
                 y_true = self.evaluate(p)
@@ -148,6 +149,7 @@ class MaxOfManyGaussians():
             AX[i].set_ylabel('function value')
             fig.tight_layout()
             fig.show()
+        return fig
 
     def plot_matrix_contour(self):
         w=2
@@ -165,6 +167,7 @@ class MaxOfManyGaussians():
                     if i==self.num_dim-1:
                         AX[i,j].set_xlabel(f'{j}')
         figure.show()
+        return figure
 
         
     def plot_2D_of_many(self, which2, extra=0, plot_bounds=None, nominals=None, grid_size=100, style='3D', ax=None):
