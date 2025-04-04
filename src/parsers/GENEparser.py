@@ -61,6 +61,7 @@ class GENEparser(Parser):
             /
 
             &general
+                perf_vec = 2, 1, 2, 2, 1, 2, 2, 1, 2
                 nblocks = 16
                 f_version = .false.
                 nonlinear = .false.

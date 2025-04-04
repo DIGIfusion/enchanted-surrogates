@@ -9,8 +9,7 @@ sampler:
 
 executor:
   type: DaskExecutorSimulation
-  base_run_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
-  runner_return_path: /scratch/project_462000451/gene_out/enchanted_out/gene_test/runner_return
+  base_run_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test2/
   runner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, electron_heat_diffusivity_ratio, chi_i/chi_e, D_e/chi_e, growthrate, frequency'
   runner:
     type: GENErunner
@@ -30,8 +29,8 @@ executor:
       - "--partition standard"
       - "--account project_462000451"
       - "--ntasks 128"
-      - '-o /scratch/project_462000451/gene_out/enchanted_out/gene_test/%x.%j.out'
-      - '-e /scratch/project_462000451/gene_out/enchanted_out/gene_test/%x.%j.err'
+      - '-o /scratch/project_462000451/gene_out/enchanted_out/gene_test2/%x.%j.out'
+      - '-e /scratch/project_462000451/gene_out/enchanted_out/gene_test2/%x.%j.err'
     interface: "nmn0"
     # The job script prologue is ran on every worker at start up
     job_script_prologue: # this is possibly dependent on which code you want

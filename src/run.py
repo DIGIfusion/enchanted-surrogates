@@ -1,39 +1,11 @@
 # run.py
-from dask.distributed import Client, print
-import dask.distributed as dd
-import sys
-
-class Tee:
-    def __init__(self, *files):
-        self.files = files
-
-    def write(self, obj):
-        for f in self.files:
-            f.write(obj)
-
-    def flush(self):
-        for f in self.files:
-            f.flush()
-            
-file = open('output2.txt', 'w')
-# Create a Tee object that writes to both stdout and the file
-tee = Tee(sys.stdout, file)
-# Redirect print output to the Tee object
-print('Hello, World!', file=tee)
-
-# out_file = open('output.txt', 'w')
-# # Redirect print output to the file
-# print('Hello, World!', file=out_file)
-def print(*args, **kwargs):
-    dd.print(*args, file=tee, **kwargs)
-
+from dask.distributed import print
 print('PERFORMING IMPORTS')
 import yaml
 import samplers
 
 import executors
 import argparse
-
 
 
 
@@ -73,7 +45,6 @@ def main(args: argparse.Namespace):
     executor.start_runs()
     print("SHUTTING DOWN SCHEDULER AND WORKERS")
     executor.clean()
-    return sampler, executor
 
 
 if __name__ == "__main__":

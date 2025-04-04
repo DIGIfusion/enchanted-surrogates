@@ -128,6 +128,17 @@ class DaskExecutorSimulationPipeline():
             executor.clean()
     
     def start_runs(self):
+        if self.base_run_dir==None:
+            raise ValueError('When executing start_runs of {__class__} a self.base_run_dir must be specified.')
+        else:
+            if not os.path.exists(self.base_run_dir):
+                os.mkdir(self.base_run_dir)
+    
+        if os.path.exists(os.path.join(self.base_run_dir, 'FINNISHED')):
+            raise FileExistsError(f'''The file: {self.base_run_dir}/FINNISHED, exists.
+                                  This signifies that there is already data in this folder. 
+                                  Aborting to avoid accidental data mixing.''' )
+
         print(100 * "=")
         print('STARTING PIPELINE')
         print(100 * "=")
@@ -159,7 +170,8 @@ class DaskExecutorSimulationPipeline():
             self.executors[-1].client.shutdown()
         
         print('SEE STATUS REPORTS AT:\n',self.completed_report_path,'\n', self.results_report_path)
-        
+        with open(os.path.join(self.base_run_dir,'FINNISHED'), 'w') as file:
+            file.write(f'FINNISHED, {__class__}')
         return outputs
     
     
@@ -283,6 +295,7 @@ class DaskExecutorSimulationPipeline():
                         for run_id in run_ids:
                             line = f"{run_id}," + ','.join([str(result_if_ready(future)) for future in run_id_futures[run_id]]) + '\n'
                             file.write(line)
+        
         
         
         return last_futures

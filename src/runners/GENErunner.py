@@ -60,7 +60,12 @@ class GENErunner(Runner):
         
         # Move to run directory for executing the commands
         print('RUNNING GENE IN RUN DIR:',run_dir)
-        run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output=std_out.txt --error=err_out.txt -l -K -n $SLURM_NTASKS {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
+        print('slurm n tasks',os.getenv('SLURM_NTASKS'))
+        print('mem _per_core',os.getenv('MEMORY_PER_CORE'))
+        print('omp_num_threads',os.getenv('OMP_NUM_THREADS'))
+        print('mem_per_node', os.getenv('SLURM_MEM_PER_NODE'))
+        run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output={os.path.join(run_dir,'std_out.txt')} --error={os.path.join(run_dir,'err_out.txt')} -l -K -n $SLURM_NTASKS {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
+        # && export MEMORY_PER_CORE=1800
         result = subprocess.run(run_command, shell=True, capture_output=False, text=True)
         # out = result.stdout
         # err = result.stderr

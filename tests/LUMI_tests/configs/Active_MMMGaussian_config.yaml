@@ -1,13 +1,13 @@
 sampler:
   type: SpatiallyAdaptiveSparseGrids
-  bounds: [[0,1], [0,1], [0,1]]
-  parameters: ['x0', 'x1', 'x2']
-  initial_level: 3
+  bounds: [[0,0.5], [2.5,6]] #, [-5,-4]]
+  parameters: ['x0', 'x1'] #, 'x2']
+  initial_level: 1
 
 
 executor:
   type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG_6 # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: 'x0,x1,x2,MMMG'
   max_cycles: 3
@@ -16,12 +16,12 @@ executor:
     type: DaskExecutorSimulation
     runner:
       type: MMMGrunner
-      num_dim: 3 #Necessary
-      bounds: [[0,1], [0,1], [0,1]] # Necessary
+      num_dim: 2 #Necessary
+      bounds: [[0,0.5], [2.5,6]] #, [0,1]] # Necessary
       random_gaussians:
         num_gaussians: 3 #Necessary
-        mean_bounds: [[0,1], [0,1], [0,1]] # Defaults to bounds
-        std_bounds: [[0,1], [0,1], [0,1]] # Defaults to bounds
+        # mean_bounds: [[0,1], [0,1], [0,1]] # Defaults to bounds
+        # std_bounds: [[0,1], [0,1], [0,1]] # Defaults to bounds
         seed: 42 # Defaults to None
       # specify_gaussians:
       #   means: [[0.25,0.25,0.25], [0.75,0.75,0.75]] #Necessary
@@ -44,6 +44,6 @@ executor:
         - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NB: to use the enchanted-surrogate library
       # These are appended to the sbatch that requestes the resources for each worker.
       job_extra_directives:
-        - '-o /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.out'
-        - '-e /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.err'
+        - '-o /scratch/project_462000451/gene_out/enchanted_test_out/MMMG_6/%x.%j.out'
+        - '-e /scratch/project_462000451/gene_out/enchanted_test_out/MMMG_6/%x.%j.err'
     n_jobs: 5

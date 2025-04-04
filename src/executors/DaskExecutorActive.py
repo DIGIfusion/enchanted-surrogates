@@ -110,6 +110,7 @@ class DaskExecutorActive():
         
         train={}
         runner_return=[]
+        print('INITIAL FUTURES SUBMITTED WAITING FOR THEM TO COMPLETE')
         seq=wait(initial_futures)
         for future in seq.done:
             out = future.result()
@@ -132,15 +133,17 @@ class DaskExecutorActive():
         num_cycles = 1
         num_samples = len(initial_params)
         time_now=time.time()
+        old_train = train.copy()
         while num_samples<self.total_budget and \
             time_start-time_now<self.time_limit and \
             num_cycles < self.max_cycles and \
             self.sampler.custom_limit_value<self.sampler.custom_limit:
             #---------------------------------------------------------
-            print(f'SUBMITTING FUTURES FOR ACTIVE LEARNING CYCLE {num_cycles}')
             cycle_dir = os.path.join(self.base_run_dir, f'active_cycle_{num_cycles}')
             os.system(f'mkdir {cycle_dir} -p')
+            print(f'SUBMITTING FUTURES FOR ACTIVE LEARNING CYCLE {num_cycles}')
             futures = self.static_executor.submit_batch_of_params(batch_params, cycle_dir)
+            print(f'FUTURES SUBMITTED FOR ACTIVE LEARNING CYCLE {num_cycles}, WAITING FOR THEM TO COMPLETE')
             
             time_start = time.time()
             runner_return=[]
@@ -165,6 +168,7 @@ class DaskExecutorActive():
 
             # Update stopping variables
             self.sampler.update_custom_limit_value()
+            self.sampler.write_cycle_info(cycle_dir)
             num_samples+=len(batch_params)
             time_now = time.time()
             num_cycles+=1
@@ -187,7 +191,10 @@ class DaskExecutorActive():
             file.write(self.runner_return_headder+'\n')
             for coordinate, label in train.items():
                 file.write(f"{','.join([str(co) for co in coordinate])},{label}\n")
-                
+        
+        print("WRITING THE SAMPLER SUMMARY FILE")
+        self.sampler.write_summary()
+          
         print('ACTIVE CYCLES FINISHED')
         print('num_samples:',num_samples)
         print('num_cycles:',num_cycles)

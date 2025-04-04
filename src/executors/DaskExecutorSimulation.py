@@ -53,6 +53,7 @@ class DaskExecutorSimulation():
             warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
         elif self.runner_return_path==None and self.base_run_dir!=None:
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
+            
         
     def clean(self):
         self.client.shutdown()
@@ -79,6 +80,16 @@ class DaskExecutorSimulation():
         self.client = Client(self.cluster ,timeout=180)
             
     def start_runs(self):
+        if self.base_run_dir==None:
+            raise ValueError('When executing start_runs of {__class__} a self.base_run_dir must be specified.')
+        else:
+            if not os.path.exists(self.base_run_dir):
+                os.mkdir(self.base_run_dir)
+    
+        if os.path.exists(os.path.join(self.base_run_dir, 'FINNISHED')):
+            raise FileExistsError(f'''The file: {self.base_run_dir}/FINNISHED, exists.
+                                  This signifies that there is already data in this folder. 
+                                  Aborting to avoid accidental data mixing.''' )
         print(f"STARTING RUNS FOR RUNNER {self.runner.__class__.__name__}, FROM WITHIN A {__class__}")
         
         print('MAKING CLUSTER')
@@ -102,6 +113,8 @@ class DaskExecutorSimulation():
                 for output in outputs:
                     out_file.write(str(output)+"\n")
         print("Finished sequential runs")
+        with open(os.path.join(self.base_run_dir,'FINNISHED'), 'w') as file:
+            file.write(f'FINNISHED, {__class__}')
         return outputs
     
     def submit_batch_of_params(self, params: dict, base_run_dir:str=None):
@@ -131,6 +144,7 @@ class DaskExecutorSimulation():
                      
         print("MAKING AND SUBMITTING DASK FUTURES")      
         futures = []   
+        n_samples = len(params)
         for index, sample in enumerate(params):
             new_future = self.client.submit(
                 run_simulation_task, self.runner, run_dirs[index], sample 
