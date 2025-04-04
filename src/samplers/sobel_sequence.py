@@ -29,7 +29,7 @@ class SobelSequence(Sampler):
 
     sampler_interface = S.SEQUENTIAL
 
-    def __init__(self, bounds, num_samples, parameters):
+    def __init__(self, bounds, num_samples, parameters, *args, **kwargs):
         """
         Initializes the Grid sampler.
 
