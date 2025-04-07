@@ -10,7 +10,9 @@ from dask.distributed import Client, as_completed, wait
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
-from .base import Executor, run_simulation_task
+import uuid
+from .base import Executor
+from .tasks import run_simulation_task
 import os
 
 
@@ -106,9 +108,11 @@ class DaskExecutor(Executor):
         """
         futures = []
         print(param_list)
+        run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
+        os.mkdir(run_dir)
         for params in param_list:
             new_future = self.simulator_client.submit(
-                run_simulation_task, self.runner_args, params, self.base_run_dir
+                run_simulation_task, self.runner, run_dir, params, 
             )
             futures.append(new_future)
         print(futures)
