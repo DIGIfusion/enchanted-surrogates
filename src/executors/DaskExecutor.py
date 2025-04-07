@@ -111,8 +111,9 @@ class DaskExecutor(Executor):
         run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
         os.mkdir(run_dir)
         for params in param_list:
+            
             new_future = self.simulator_client.submit(
-                run_simulation_task, self.runner, run_dir, params, 
+                run_simulation_task, self.runner, run_dir=run_dir, params=params, 
             )
             futures.append(new_future)
         print(futures)
@@ -162,24 +163,20 @@ class DaskExecutor(Executor):
                 seq = wait(
                     futures
                 )  # outputs should be a list of tuples we ignore in this case
-
                 # NOTE: ------ Collect outputs ------
                 outputs = []
                 for res in seq.done:
                     outputs.append(res.result())
                 outputs = self.sampler.collect_batch_results(outputs)
-
                 # NOTE: ------ Check if out of budget ------
                 completed += len(outputs)
                 if completed > self.sampler.total_budget:
                     break
-
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
                 print(self.sampler.parser.print_dset_sizes())
-
                 # NOTE: Collect next data for training
-
+                
                 train, valid, test, pool = (
                     self.sampler.parser.get_unscaled_train_valid_test_pool_from_self()
                 )

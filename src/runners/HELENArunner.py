@@ -8,7 +8,7 @@ Defines the HELENArunner class for running HELENA simulations.
 import numpy as np
 from .base import Runner
 from runners.MISHKArunner import MISHKArunner
-from parsers import HELENAparser
+from parsers.HELENAparser import HELENAparser
 import subprocess
 import os
 

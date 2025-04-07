@@ -115,7 +115,7 @@ class DaskExecutorSimulation():
         print("MAKING AND SUBMITTING DASK FUTURES")         
         for index, sample in enumerate(samples):
             new_future = self.client.submit(
-                run_simulation_task, self.runner, run_dirs[index], sample 
+                run_simulation_task, runner=self.runner, run_dir=run_dirs[index], params=sample 
             )
             futures.append(new_future)
         
