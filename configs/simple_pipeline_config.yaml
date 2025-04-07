@@ -47,6 +47,7 @@ executor:
 
   #This must have the string pipeline_parser in the key and an integer that corresponds to the order in the pipeline.
   pipeline_parser_1:
+    type: SimplePipelineParser
     function: simple_out_to_simple_in
 
   executor_simulation_2:
@@ -84,6 +85,7 @@ executor:
 
     #This must have the string pipeline_parser in the key and an integer that corresponds to the order in the pipeline.
   pipeline_parser_2:
+    type: SimplePipelineParser
     function: simple_out_to_simple_in
 
   executor_simulation_3:
