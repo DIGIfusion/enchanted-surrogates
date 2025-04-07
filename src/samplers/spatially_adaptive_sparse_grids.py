@@ -7,16 +7,19 @@ import samplers
 from pysgpp import BoundingBox1D
 from scipy.stats import sobol_indices, uniform, entropy
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class SpatiallyAdaptiveSparseGrids:
-    def __init__(self, bounds, parameters, poly_basis_degree=3, initial_level=3, **kwargs):
+    def __init__(self, bounds, parameters, poly_basis_degree=3, initial_level=3, infer_bounds=False, infer_parents=False, **kwargs):
         self.sampler_interface = S.ACTIVE
-        self.bounds = bounds
+        self.bounds = np.array(bounds)
         self.parameters = parameters
         if type(parameters[0]) == type([]):
             self.parameters = [tuple(pa) for pa in parameters]
         self.poly_basis_degree= poly_basis_degree
         self.initial_level = initial_level
+        self.infer_bounds = infer_bounds
+        self.infer_parents = infer_parents
         
         self.custom_limit = np.inf
         self.custom_limit_value = 0
@@ -35,6 +38,8 @@ class SpatiallyAdaptiveSparseGrids:
         self.expectation_by_cycle, self.double_sigma_by_cycle, self.sobol_first_order_by_cycle= [],[],[]
         self.sobol_total_order_by_cycle, self.entropy_diff_by_cycle = [],[]
         
+        self.bounds_points = {}
+        self.parent_points = {}
         
         self.all_cycle_info = []
         # make uniform distributions for each input, this is used later to calculate sobel indicies for UQ
@@ -64,6 +69,13 @@ class SpatiallyAdaptiveSparseGrids:
             bco = uco*(max - min) + min
             box_point = box_point + (bco,)
         return box_point
+    
+    def points_transform_unit2box(self, unit_points):
+        unit_points = np.array(unit_points)
+        return unit_points * (self.bounds[:, 1] - self.bounds[:, 0]) + self.bounds[:, 0]
+    
+    def points_transform_box2unit(self, box_points):
+        return (box_points - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
     
     def get_initial_parameters(self):
         # returns the initial set of parameters for initial trianing of surrogate model
@@ -106,7 +118,12 @@ class SpatiallyAdaptiveSparseGrids:
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
             box_point = self.point_transform_unit2box(unit_point) 
                         
-            self.alpha[i] = train[box_point]
+            if box_point in train.keys():
+                self.alpha[i] = train[box_point]
+            elif box_point in self.bounds_points.keys():
+                self.alpha[i] = self.bounds_points[box_point]
+            elif box_point in self.parent_points.keys():
+                self.alpha[i] = self.parent_points[box_point] 
         
         
         pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(self.alpha)
@@ -130,19 +147,35 @@ class SpatiallyAdaptiveSparseGrids:
                 param_dict = {}
                 for j, param in enumerate(self.parameters):
                     param_dict[param]=box_point[j]
-                batch_samples.append(param_dict)
+                
+                
+                
+                if self.infer_bounds and self.is_boundary(unit_point) or self.infer_parents and not gp.isLeaf():
+                    if self.infer_parents and not gp.isLeaf():
+                        self.parent_points[box_point] = self.surrogate_predict([box_point])[0]
+                    elif self.infer_bounds and self.is_boundary(unit_point):
+                        print('bound point found:', box_point, unit_point)
+                        self.bounds_points[box_point] = self.surrogate_predict([box_point])[0]
+                else:
+                    batch_samples.append(param_dict)
+                    
         self.num_active_cycles += 1
         self.num_samples_by_cycle.append(len(train))
+        print('len batch_samples',len(batch_samples))
         return batch_samples
+    
+    def is_boundary(self, unit_point):
+        return np.isin(unit_point, [0, 1]).all()
     
     def update_custom_limit_value(self): # Necessary
         NotImplemented
     
-    def surrogate_predict(self, positions):
-        positions = np.array(positions)
-        positions_dm = pysgpp.DataMatrix(positions)
-        opEval = pysgpp.createOperationMultipleEval(self.grid, positions_dm)
-        results = pysgpp.DataVector(len(positions))
+    # currently only works with point in the unit cube.     
+    def surrogate_predict(self, box_points):
+        unit_points = self.points_transform_box2unit(np.array(box_points))
+        unit_points_dm = pysgpp.DataMatrix(unit_points)
+        opEval = pysgpp.createOperationMultipleEval(self.grid, unit_points_dm)
+        results = pysgpp.DataVector(len(unit_points))
         opEval.eval(self.alpha, results)
         ans = np.array(results.array()) # sometimes this line breaks python. 
         # ans = np.array([results.get(i) for i in range(len(positions))])
@@ -175,6 +208,7 @@ class SpatiallyAdaptiveSparseGrids:
             i+=1
         lower_interval = centers[i]
         
+        area = 0
         i = 0
         while area<area_limit:
             area += heights[-i]*width
@@ -218,20 +252,24 @@ class SpatiallyAdaptiveSparseGrids:
         return rel_entropy
     
     def write_cycle_info(self, cycle_dir): #Necessary
-        headder = "approx_expectation, approx_2sigma, approx_sobol_1st_order, approx_sobol_total_order, approx_entropy_diff, num_samples"
+        headder = "approx_expectation, approx_2sigma, approx_sobol_1st_order, approx_sobol_total_order, approx_entropy_diff, num_samples, num_parents, num_bounds"
         cycle_info_path = os.path.join(cycle_dir, 'sampler_cycle_info')
         if not os.path.exists(cycle_info_path):
             with open(cycle_info_path, 'w') as file:
-                file.write(headder)
+                file.write(headder+'\n')
         predictions = self.surrogate_predict(self.check_sampler.samples)
         expectation = self.expectation_approx(predictions)
         double_sigma = self.double_sigma_approx(predictions)
         sobol_first_order, sobol_total_order = self.sobel_indicies_approx()
         entropy_diff = self.relative_entropy(self.old_check_predictions, predictions, num_bins=200)
         self.old_check_predictions=predictions
-        cycle_info = f"{expectation},{double_sigma},{sobol_first_order},{sobol_total_order},{entropy_diff},{self.num_samples_by_cycle[-1]}"
+        cycle_info = f"{expectation},{double_sigma},{sobol_first_order},{sobol_total_order},{entropy_diff},{self.num_samples_by_cycle[-1]},{len(self.parent_points)},{len(self.bounds_points)}"
         with open(cycle_info_path, 'a') as file:
-            file.write(cycle_info)
+            file.write(cycle_info+'\n')
+        
+        print('+++ \n NUM INNER LEAF POINTS', self.num_samples_by_cycle[-1])            
+        print('+++ \n NUM PARENT POINTS', len(self.parent_points))
+        print('+++ \n NUM bounds POINTS', len(self.bounds_points))
 
         self.expectation_by_cycle.append(expectation), self.double_sigma_by_cycle.append(double_sigma), self.sobol_first_order_by_cycle.append(sobol_first_order)
         self.sobol_total_order_by_cycle.append(sobol_total_order), self.entropy_diff_by_cycle.append(entropy_diff)
@@ -245,14 +283,18 @@ class SpatiallyAdaptiveSparseGrids:
         fig = plt.figure()
         bars = plt.hist(predictions, bins=200, density=True)
         heights, edges = bars[0], bars[1]
-        plt.vlines([np.percentile(predictions,2.5),np.mean(predictions), np.percentile(predictions,97.5)],0, max(heights),color='red', label=r'mean and 95% confidance interval')
-        lower_interval, upper_interval = self.confidance_interval(percentage=95)
-        plt.hlines(0, lower_interval, upper_interval, color='red')
+        plt.vlines([self.expectation_approx(predictions)],0, max(heights),color='red', label=r'Expectation and 95% confidance interval')
+        lower_interval, upper_interval = self.confidance_interval(predictions,percentage=95)
+        plt.hlines(0, lower_interval, upper_interval, color='red', linewidth=3)
         plt.xlabel('function output')
         plt.ylabel('probability density')
         plt.title(f'Output Distribution, {self.check_sampler.num_samples} samples')
         plt.legend()
         fig.savefig(os.path.join(base_dir, 'output_distribution'), dpi=400)
+        hist_data_heights = pd.DataFrame({'heights': heights})
+        hist_data_heights.to_csv(os.path.join(base_dir, 'output_distribution_hist_data_heights.csv'), index=False)
+        hist_data_edges = pd.DataFrame({'edges': edges})
+        hist_data_edges.to_csv(os.path.join(base_dir, 'output_distribution_hist_data_edges.csv'), index=False)
         
         fig = plt.figure()
         plt.plot(np.array(self.num_samples_by_cycle), np.array(self.expectation_by_cycle))
@@ -261,29 +303,39 @@ class SpatiallyAdaptiveSparseGrids:
         plt.xlabel('Number of samples in cycle')
         plt.legend()
         fig.savefig(os.path.join(base_dir,'approx_expectation'), dpi=300)
+        expectation_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle, 'expectation': self.expectation_by_cycle, 'double_sigma': self.double_sigma_by_cycle})
+        expectation_data.to_csv(os.path.join(base_dir, 'approx_expectation_data.csv'), index=False)
         
         fig = plt.figure()
         self.sobol_first_order_by_cycle = np.array(self.sobol_first_order_by_cycle)
-        for dimension in self.sobol_first_order_by_cycle.T:
+        sobol_first_order_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle})
+        for i, dimension in enumerate(self.sobol_first_order_by_cycle.T):
+            sobol_first_order_data[f'sobol_first_order_{i}'] = dimension
             plt.plot(self.num_samples_by_cycle, dimension)
             plt.ylabel('First order sobol indicie')
             plt.xlabel('Number of samples in cycle')
             fig.savefig(os.path.join(base_dir, 'approx_sobol_first_order'),dpi=300)
+        sobol_first_order_data.to_csv(os.path.join(base_dir, 'approx_sobol_first_order_data.csv'), index=False)
         
         fig = plt.figure()
         self.sobol_total_order_by_cycle = np.array(self.sobol_total_order_by_cycle)
-        for dimension in self.sobol_total_order_by_cycle.T:
+        sobol_total_order_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle})
+        for i, dimension in enumerate(self.sobol_total_order_by_cycle.T):
+            sobol_total_order_data[f'sobol_total_order_{i}'] = dimension
             plt.plot(self.num_samples_by_cycle, dimension)
             plt.ylabel('Total order sobol indicie')
             plt.xlabel('Number of samples in cycle')
             fig.savefig(os.path.join(base_dir, 'approx_sobol_total_order'),dpi=300)
+        sobol_total_order_data.to_csv(os.path.join(base_dir, 'approx_sobol_total_order_data.csv'), index=False)
         
         fig = plt.figure()
         self.entropy_diff_by_cycle = np.array(self.entropy_diff_by_cycle)
+        entropy_diff_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle, 'entropy_diff': self.entropy_diff_by_cycle})
         plt.plot(self.num_samples_by_cycle, self.entropy_diff_by_cycle)
         plt.ylabel('Total order sobol indicie')
         plt.xlabel('Number of samples in cycle')
         fig.savefig(os.path.join(base_dir, 'approx_entropy_diff'),dpi=300)
+        entropy_diff_data.to_csv(os.path.join(base_dir, 'entropy_diff_data.csv'), index=False)
                 
     def check_UQ_convergence():
         None

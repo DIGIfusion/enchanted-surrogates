@@ -122,7 +122,7 @@ class DaskExecutorActive():
             label = float(out[-1])
             train[coordinate] = label
         runner_return_path = os.path.join(initial_dir,'runner_return.txt')
-        print('INITIAL FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)    
+        print(f'INITIAL FUTURES COMPLETE IN {time.time()-time_start}, WRITING runner_return.txt at:\n', runner_return_path)    
         with open(runner_return_path,'w')as out_file:
             out_file.write(self.runner_return_headder+'\n')
             for out in runner_return:
@@ -139,19 +139,21 @@ class DaskExecutorActive():
             num_cycles < self.max_cycles and \
             self.sampler.custom_limit_value<self.sampler.custom_limit:
             #---------------------------------------------------------
+            cycle_start = time.time()
             cycle_dir = os.path.join(self.base_run_dir, f'active_cycle_{num_cycles}')
             os.system(f'mkdir {cycle_dir} -p')
             futures = self.static_executor.submit_batch_of_params(batch_params, cycle_dir)
             print(f'FUTURES SUBMITTED FOR ACTIVE LEARNING CYCLE {num_cycles}')
             
             if 'write_cycle_info' in dir(self.sampler):
+                time_write = time.time()
                 if num_cycles == 1:
                     print('WRITING SAMPLER CYCLE INFO FOR INITIAL CYCLE')
                     self.sampler.write_cycle_info(initial_dir)
                 else:
                     print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
                     self.sampler.write_cycle_info(cycle_dir)
-            
+                print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
             print(f'WAITING FOR FUTURES FROM ACTIVE LEARNING CYCLE {num_cycles}')
             runner_return=[]
             seq = wait(futures)
@@ -167,12 +169,15 @@ class DaskExecutorActive():
                     print('COORDINATE',coordinate,'in train')
                 train[coordinate] = label
             runner_return_path = os.path.join(cycle_dir,'runner_return.txt')
-            print(f'CYCLE {num_cycles} FUTURES COMPLETE, WRITING runner_return.txt at:\n', runner_return_path)
+            print('FUTURES COMPLETE')
+            print(f'CYCLE {num_cycles} COMPLETE IN {time.time()-cycle_start}, WRITING runner_return.txt at:\n', runner_return_path)
+            
+            write_runner_start = time.time()
             with open(runner_return_path,'w')as out_file:
                 out_file.write(self.runner_return_headder+'\n')
                 for out in runner_return:
                     out_file.write(str(out)+'\n')
-
+            print(f'WRITING runner_return.txt TOOK {time.time()-write_runner_start} sec')
             batch_params = self.sampler.get_next_parameters(train)
                 
             # Update stopping variables
@@ -184,7 +189,9 @@ class DaskExecutorActive():
 
         if 'write_cycle_info' in dir(self.sampler):
             print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
+            write_cycle_info_start = time.time()
             self.sampler.write_cycle_info(cycle_dir)
+            print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-write_cycle_info_start} sec')
                     
         if num_samples>=self.total_budget:
             print('ACTIVE CYCLES FINISHED: num_samples HIT THE total_budget:', self.total_budget)

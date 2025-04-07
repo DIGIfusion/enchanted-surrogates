@@ -58,16 +58,18 @@ class MMMGrunner(Runner):
         fig.savefig(os.path.join(dir, 'mmmg_matrix_contour'), dpi=300)
         fig = self.mmg.plot_slices()
         fig.savefig(os.path.join(dir, 'mmmg_slices'), dpi=300)
-        
+        np.save(os.path.join(dir, 'gaussians_means'),self.mmg.all_means)
+        np.save(os.path.join(dir, 'gaussians_stds'), self.mmg.all_stds)
 class MaxOfManyGaussians():
     def __init__(self, num_dim, bounds):
         self.num_dim = num_dim
         self.bounds = bounds
-            
+        self.all_means = None
+        self.all_stds = None    
     def specify_gaussians(self, means, stds):
         print('SET GAUSSIANS HAVE-:\nMEANS OF:', means, '\n','STDs:', stds)
-        means = np.array(means)
-        stds = np.array(stds)
+        self.all_means = np.array(means)
+        self.all_stds = np.array(stds)
         self.gaussians = []
         for mean, std in zip(means, stds):
             cov = np.diag(np.array(std)**2)
@@ -91,7 +93,9 @@ class MaxOfManyGaussians():
     def generate_gaussians(self):
         gaussians = []
         # Generate multiple Gaussians
-        for _ in range(self.num_gaussians):
+        all_means = []
+        all_stds = []
+        for i, _ in enumerate(range(self.num_gaussians)):
             mean = []
             for b in self.mean_bounds:
                 mean.append(self.rg.uniform(*b, 1)[0])
@@ -102,7 +106,12 @@ class MaxOfManyGaussians():
             # cov = np.dot(cov, cov.T)  # Ensure the covariance matrix is positive semi-definite
             cov = np.diag(self.rg.uniform(*cov_bounds, (self.num_dim,self.num_dim)))
             gaussians.append(multivariate_normal(mean, cov))
-            print('RANDOM GAUSSIANS HAVE-:\nMEANS OF:', mean, '\n','STDs:', np.sqrt(np.diag(cov)))
+            print(f'RANDOM GAUSSIAN {i} HAS-:\nMEANS OF:', mean, '\n','STDs:', np.sqrt(cov))
+            all_means.append(mean)
+            all_stds.append(np.sqrt(cov))
+        self.all_means = np.array(all_means)
+        self.all_stds = np.array(all_stds)
+        print(f'RANDOM GAUSSIANS HAVE-:\nMEANS OF:', all_means, '\n','STDs:', all_stds)
         return gaussians
 
     def evaluate(self, pos):

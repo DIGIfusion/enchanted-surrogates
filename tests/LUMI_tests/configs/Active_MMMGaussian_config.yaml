@@ -3,13 +3,15 @@ sampler:
   bounds: [[0,1], [0,1], [0,1]]
   parameters: ['x0', 'x1', 'x2']
   initial_level: 1
+  infer_bounds: True
+  infer_parents: True
   check_sampler:
     type: SobelSequence
     num_samples: 1e6
 
 executor:
   type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG_6_UQplots # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/active_MMMG_infer_parents_bounds6 # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: 'x0,x1,x2,MMMG'
   max_cycles: 5
