@@ -32,14 +32,16 @@ def main(args: argparse.Namespace):
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
 
-    print("MAKING SAMPLER")
-    sampler_type = args.sampler.pop("type")
-    sampler = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)(**args.sampler) 
-    
+    if getattr(args, 'sampler', None) != None:
+        print("MAKING SAMPLER")
+        sampler_type = args.sampler.pop("type")
+        sampler = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)(**args.sampler) 
+        args.executor['sampler'] = sampler
+
     print('MAKING EXECUTOR')    
     # Legacy support for DaskExecutor, in DaskExecutorSimulation the runner should be defined within the executor.
     args.executor['runner_args'] = getattr(args, 'runner', None)
-    
+        
     executor_type = args.executor.pop("type")
     executor = getattr(importlib.import_module(f'executors.{executor_type}'),executor_type)(**args.executor) 
     print("STARTING RUNS")

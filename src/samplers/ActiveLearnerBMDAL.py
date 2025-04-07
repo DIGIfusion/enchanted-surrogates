@@ -28,7 +28,8 @@ import os
 import torch
 import numpy as np
 from common import S
-import parsers
+# import parsers
+import importlib
 from .base import Sampler
 import h5py 
 
@@ -94,7 +95,8 @@ class ActiveLearnerBMDAL(Sampler):
         self.train_kwargs          = train_kwargs
         self.metrics = []
 
-        self.parser                = getattr(parsers, parser_kwargs.pop('type'))(**parser_kwargs)
+        parser_type = parser_kwargs.pop('type')
+        self.parser = getattr(importlib.import_module(f'parsers.{parser_type}'),parser_type)(**parser_kwargs)
         # fmt: on
 
     def get_initial_parameters(self):
