@@ -46,6 +46,7 @@ def main(args: argparse.Namespace):
     executor.start_runs()
     print("SHUTTING DOWN SCHEDULER AND WORKERS")
     executor.clean()
+    return sampler, executor
 
 
 if __name__ == "__main__":
