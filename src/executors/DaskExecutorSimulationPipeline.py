@@ -5,9 +5,10 @@ Contains logic for executing surrogate workflow on Dask.
 
 import time
 import os
-import parsers
+import importlib
+# import parsers
 import uuid
-import executors
+# import executors
 import numpy as np
 import re
 from executors.tasks import run_simulation_task, print_error_wrapper
@@ -43,7 +44,7 @@ class DaskExecutorSimulationPipeline():
         executor_keys = [executor_keys[index] for index in executor_order_index]
         executor_types = [kwargs[key]['type'] for key in executor_keys]
         executor_args_s = [kwargs[key] for key in executor_keys]
-        self.executors = [getattr(executors, executor_type)(**executor_args) for executor_type, executor_args in zip(executor_types, executor_args_s)]
+        self.executors = [getattr(importlib.import_module(f'executors.{executor_type}'),executor_type)(**executor_args)  for executor_type, executor_args in zip(executor_types, executor_args_s)]
         self.num_sub_executors = len(self.executors)
         
         # Making a list of parser functions in the order of their intergers specified in their key, of config file        
@@ -52,7 +53,9 @@ class DaskExecutorSimulationPipeline():
         pipeline_parser_keys = [pipeline_parser_keys[index] for index in pipeline_parser_order_index]
         # pipeline_parser_types = [kwargs[key]['type'] for key in pipeline_parser_keys]
         pipeline_parser_function_strings = [kwargs[key]['function'] for key in pipeline_parser_keys]
-        self.pipeline_parser_functions = [getattr(parsers, function_string) for function_string in pipeline_parser_function_strings]
+        pipeline_parser_type_strings = [kwargs[key]['type'] for key in pipeline_parser_keys]
+        
+        self.pipeline_parser_functions = [getattr(importlib.import_module(f'parsers.{parser_type}'),function_string) for parser_type, function_string in zip(pipeline_parser_type_strings,pipeline_parser_function_strings)]
         
         # self.pipeline_parser_functions = [getattr(pipeline_parser, function_string) for pipeline_parser,function_string in zip(pipeline_parsers, pipeline_parser_function_strings)]
         

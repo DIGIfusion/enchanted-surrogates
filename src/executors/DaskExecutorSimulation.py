@@ -8,7 +8,8 @@ from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 import uuid
 from common import S
-import runners
+import importlib
+# import runners
 import os
 import traceback
 from .tasks import run_simulation_task
@@ -39,7 +40,8 @@ class DaskExecutorSimulation():
                                     base_run_dir: /path/to/base/run
                                     output_dir: /path/to/base/out
                             ''')
-        self.runner = getattr(runners, runner_args["type"])(**runner_args)
+        runner_type = runner_args["type"]
+        self.runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**runner_args) 
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
