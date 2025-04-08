@@ -53,13 +53,16 @@ class MMMGrunner(Runner):
         params_values = ','.join([str(v) for v in params.values()])
         return params_values + ',' + str(self.mmg.evaluate(pos))
         
-    def write_summary(self, dir):
-        fig = self.mmg.plot_matrix_contour()
+    def write_summary(self, dir, points=None):
+        points = np.array(points)
+        fig = self.mmg.plot_matrix_contour(points)
         fig.savefig(os.path.join(dir, 'mmmg_matrix_contour'), dpi=300)
         fig = self.mmg.plot_slices()
         fig.savefig(os.path.join(dir, 'mmmg_slices'), dpi=300)
-        np.save(os.path.join(dir, 'gaussians_means'),self.mmg.all_means)
-        np.save(os.path.join(dir, 'gaussians_stds'), self.mmg.all_stds)
+        np.save(os.path.join(dir, 'gaussians_means.npy'),self.mmg.all_means)
+        np.save(os.path.join(dir, 'gaussians_stds.npy'), self.mmg.all_stds)
+        np.save(os.path.join(dir, 'training_points.npy'), points)
+        
 class MaxOfManyGaussians():
     def __init__(self, num_dim, bounds):
         self.num_dim = num_dim
@@ -160,7 +163,7 @@ class MaxOfManyGaussians():
             fig.show()
         return fig
 
-    def plot_matrix_contour(self):
+    def plot_matrix_contour(self, points=None):
         w=2
         h=2
         figure, AX = plt.subplots(self.num_dim, self.num_dim, figsize=(w*self.num_dim, h*self.num_dim), sharex=True, sharey=True)
@@ -170,7 +173,7 @@ class MaxOfManyGaussians():
                     figure.delaxes(AX[i,j])
                     # break
                 else:
-                    self.plot_2D_of_many(which2=(j,i),ax=AX[i,j], style='contour', grid_size=50)
+                    self.plot_2D_of_many(which2=(j,i), points=points ,ax=AX[i,j], style='contour', grid_size=50)
                     if j==0:
                         AX[i,j].set_ylabel(f'{i}')
                     if i==self.num_dim-1:
@@ -179,8 +182,12 @@ class MaxOfManyGaussians():
         return figure
 
         
-    def plot_2D_of_many(self, which2, extra=0, plot_bounds=None, nominals=None, grid_size=100, style='3D', ax=None):
+    def plot_2D_of_many(self, which2, points=None, extra=0, plot_bounds=None, nominals=None, grid_size=100, style='3D', ax=None):
         # which2 is a sequence that specifies which dimensions to plot, the rest are kept nominal, example which2 = (0,2) to plot the 1st and 3rd dimensions. 
+        if type(points)!=type(None):
+            points = np.array(points) # assumes shape num_points,num_dim
+            points_2d = np.array([points.T[which2[0]],points.T[which2[1]]])
+            
         if plot_bounds == None:
             plot_bounds = self.bounds
         if type(nominals) == type(None):
@@ -218,6 +225,7 @@ class MaxOfManyGaussians():
                 fig = plt.figure(figsize=(2,2), dpi=200)
                 ax = fig.add_subplot(111)
             ax.contour(X,Y,Z, cmap='viridis')
+            ax.scatter(points_2d[0], points_2d[1], marker='+', color='black')
         
         if type(ax) == type(None):
             ax.set_xlabel(f'{which2[0]}')

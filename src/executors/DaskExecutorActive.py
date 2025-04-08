@@ -85,7 +85,7 @@ class DaskExecutorActive():
         
         print('MAKING CLUSTERS')
         self.initialize_client()
-        
+                
         print("GENERATING INITIAL SAMPLES:")
         initial_params = self.sampler.get_initial_parameters()    
         
@@ -102,10 +102,9 @@ class DaskExecutorActive():
                             ...
                             ...
                         ''')
-                     
-        print("MAKING AND SUBMITING DASK FUTURES FOR INITIAL RUNS")
         initial_dir = os.path.join(self.base_run_dir, 'initial_runs')
-        os.system(f'mkdir {initial_dir} -p')
+        os.system(f'mkdir {initial_dir} -p')          
+        print("MAKING AND SUBMITING DASK FUTURES FOR INITIAL RUNS")
         initial_futures = self.static_executor.submit_batch_of_params(initial_params, initial_dir)
         
         train={}
@@ -127,13 +126,19 @@ class DaskExecutorActive():
             out_file.write(self.runner_return_headder+'\n')
             for out in runner_return:
                 out_file.write(str(out)+'\n')
-                
-        batch_params = self.sampler.get_next_parameters(train)
+        
+        # if 'write_cycle_info' in dir(self.sampler):
+        #     time_write = time.time()
+        #     print('\nWRITING SAMPLER CYCLE INFO FOR INITIAL CYCLE')
+        #     self.sampler.write_cycle_info(initial_dir)
+        #     print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
+        
+        batch_params = self.sampler.get_next_parameters(train, initial_dir)
             
         num_cycles = 1
         num_samples = len(initial_params)
         time_now=time.time()
-        old_train = train.copy()
+        # old_train = train.copy()
         while num_samples<self.total_budget and \
             time_start-time_now<self.time_limit and \
             num_cycles < self.max_cycles and \
@@ -145,15 +150,12 @@ class DaskExecutorActive():
             futures = self.static_executor.submit_batch_of_params(batch_params, cycle_dir)
             print(f'FUTURES SUBMITTED FOR ACTIVE LEARNING CYCLE {num_cycles}')
             
-            if 'write_cycle_info' in dir(self.sampler):
-                time_write = time.time()
-                if num_cycles == 1:
-                    print('WRITING SAMPLER CYCLE INFO FOR INITIAL CYCLE')
-                    self.sampler.write_cycle_info(initial_dir)
-                else:
-                    print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
-                    self.sampler.write_cycle_info(cycle_dir)
-                print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
+            # if 'write_cycle_info' in dir(self.sampler) and num_cycles>1:
+            #     time_write = time.time()
+            #     print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
+            #     self.sampler.write_cycle_info(cycle_dir)
+            #     print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
+            
             print(f'WAITING FOR FUTURES FROM ACTIVE LEARNING CYCLE {num_cycles}')
             runner_return=[]
             seq = wait(futures)
@@ -178,7 +180,7 @@ class DaskExecutorActive():
                 for out in runner_return:
                     out_file.write(str(out)+'\n')
             print(f'WRITING runner_return.txt TOOK {time.time()-write_runner_start} sec')
-            batch_params = self.sampler.get_next_parameters(train)
+            batch_params = self.sampler.get_next_parameters(train, cycle_dir)
                 
             # Update stopping variables
             self.sampler.update_custom_limit_value()            
@@ -216,7 +218,7 @@ class DaskExecutorActive():
         
         if 'write_summary' in dir(self.static_executor):
             print("WRITING THE STATIC EXECUTOR SUMMARY FILES IN:", self.base_run_dir)
-            self.static_executor.write_summary(self.base_run_dir)
+            self.static_executor.write_summary(self.base_run_dir, points=np.array(list(train.keys())))
           
         print('ACTIVE CYCLES FINISHED')
         print('num_samples:',num_samples)

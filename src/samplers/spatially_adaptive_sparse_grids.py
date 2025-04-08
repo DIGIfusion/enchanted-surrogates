@@ -9,6 +9,8 @@ from scipy.stats import sobol_indices, uniform, entropy
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from runners.MMMGrunner import MaxOfManyGaussians
+
 class SpatiallyAdaptiveSparseGrids:
     def __init__(self, bounds, parameters, poly_basis_degree=3, initial_level=3, infer_bounds=False, infer_parents=False, **kwargs):
         self.sampler_interface = S.ACTIVE
@@ -20,6 +22,11 @@ class SpatiallyAdaptiveSparseGrids:
         self.initial_level = initial_level
         self.infer_bounds = infer_bounds
         self.infer_parents = infer_parents
+        
+        if len(bounds)==2:
+            self.mmg = MaxOfManyGaussians(2, bounds)
+            std=0.5
+            self.mmg.specify_gaussians(means=np.array([[0.25,0.25], [0.75,0.75]]), stds = np.array([[std,std],[std,std]]))
         
         self.custom_limit = np.inf
         self.custom_limit_value = 0
@@ -97,12 +104,17 @@ class SpatiallyAdaptiveSparseGrids:
             param_dict = {}
             for j, param in enumerate(self.parameters):
                 param_dict[param]=box_point[j]
+        
+        
             batch_samples.append(param_dict)
+            
+        self.num_samples_by_cycle.append(len(batch_samples))        
         return batch_samples
     
     def get_next_parameters(
         self,
         train: dict,
+        cycle_dir:str=None,
         *args,
         **kwargs) -> list[dict[str, float]]:
         # returns a list of parameters that are the next batch to be labeled, based on the training samples, models used and selection criteria.
@@ -127,6 +139,11 @@ class SpatiallyAdaptiveSparseGrids:
         
         
         pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(self.alpha)
+        # Now the surrogate is trained we can write cycle info
+        if cycle_dir!=None:
+            print('WRITING CYCLE INFO')
+            self.write_cycle_info(cycle_dir)
+        
         number_of_points_to_refine = 1
         print('grid size before refinement:', self.gridStorage.getSize())
         self.gridGen.refine(pysgpp.SurplusRefinementFunctor(self.alpha, number_of_points_to_refine))
@@ -143,29 +160,32 @@ class SpatiallyAdaptiveSparseGrids:
             
             box_point = self.point_transform_unit2box(unit_point)
 
-            if box_point not in train.keys():
+            if box_point not in train.keys() and box_point not in self.bounds_points and box_point not in self.parent_points:
+                print('NEW POINT',box_point, unit_point)
+                print('IS BOUNDARY', not gp.isInnerPoint())
+                print('is parent', not gp.isLeaf())
+                
                 param_dict = {}
                 for j, param in enumerate(self.parameters):
                     param_dict[param]=box_point[j]
                 
-                
-                
-                if self.infer_bounds and self.is_boundary(unit_point) or self.infer_parents and not gp.isLeaf():
-                    if self.infer_parents and not gp.isLeaf():
-                        self.parent_points[box_point] = self.surrogate_predict([box_point])[0]
-                    elif self.infer_bounds and self.is_boundary(unit_point):
-                        print('bound point found:', box_point, unit_point)
+                if self.infer_bounds and not gp.isInnerPoint() or self.infer_parents and not gp.isLeaf():
+                    # If it is both then default to boundary point
+                    if self.infer_bounds and not gp.isInnerPoint():
+                        print('appending bounds points')
                         self.bounds_points[box_point] = self.surrogate_predict([box_point])[0]
+                    elif self.infer_parents and not gp.isLeaf():
+                        self.parent_points[box_point] = self.surrogate_predict([box_point])[0]
+                        print('appending parent points')
+
                 else:
+                    print('adding to batch samples')
                     batch_samples.append(param_dict)
-                    
+        
         self.num_active_cycles += 1
-        self.num_samples_by_cycle.append(len(train))
+        self.num_samples_by_cycle.append(len(train)+len(batch_samples))
         print('len batch_samples',len(batch_samples))
         return batch_samples
-    
-    def is_boundary(self, unit_point):
-        return np.isin(unit_point, [0, 1]).all()
     
     def update_custom_limit_value(self): # Necessary
         NotImplemented
@@ -252,33 +272,59 @@ class SpatiallyAdaptiveSparseGrids:
         return rel_entropy
     
     def write_cycle_info(self, cycle_dir): #Necessary
-        headder = "approx_expectation, approx_2sigma, approx_sobol_1st_order, approx_sobol_total_order, approx_entropy_diff, num_samples, num_parents, num_bounds"
-        cycle_info_path = os.path.join(cycle_dir, 'sampler_cycle_info')
-        if not os.path.exists(cycle_info_path):
-            with open(cycle_info_path, 'w') as file:
-                file.write(headder+'\n')
+        print(f'+++ \n Write ACTIVE CYCLE: {self.num_active_cycles}')
+        print('+++ \n NUM INNER LEAF POINTS', self.num_samples_by_cycle[-1])            
+        print('+++ \n NUM PARENT POINTS', len(self.parent_points))
+        print('+++ \n NUM bounds POINTS', len(self.bounds_points))
+        
         predictions = self.surrogate_predict(self.check_sampler.samples)
         expectation = self.expectation_approx(predictions)
         double_sigma = self.double_sigma_approx(predictions)
         sobol_first_order, sobol_total_order = self.sobel_indicies_approx()
         entropy_diff = self.relative_entropy(self.old_check_predictions, predictions, num_bins=200)
         self.old_check_predictions=predictions
-        cycle_info = f"{expectation},{double_sigma},{sobol_first_order},{sobol_total_order},{entropy_diff},{self.num_samples_by_cycle[-1]},{len(self.parent_points)},{len(self.bounds_points)}"
-        with open(cycle_info_path, 'a') as file:
-            file.write(cycle_info+'\n')
         
-        print('+++ \n NUM INNER LEAF POINTS', self.num_samples_by_cycle[-1])            
-        print('+++ \n NUM PARENT POINTS', len(self.parent_points))
-        print('+++ \n NUM bounds POINTS', len(self.bounds_points))
-
+        df = pd.DataFrame({"approx_expectation":[expectation], "approx_2sigma":[double_sigma], "approx_entropy_diff":[entropy_diff], "num_samples":[self.num_samples_by_cycle[-1]], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)]})
+        for d, sfo in enumerate(sobol_first_order):
+            df[f'sobol_first_order_{d}'] = [sfo]
+        for d, sto in enumerate(sobol_total_order):
+            df[f'sobol_total_order_{d}']= [sto]
+        df.to_csv(os.path.join(cycle_dir,'cycle_info.csv'))
+        
+        self.all_cycle_info.append(df)  
+        
         self.expectation_by_cycle.append(expectation), self.double_sigma_by_cycle.append(double_sigma), self.sobol_first_order_by_cycle.append(sobol_first_order)
         self.sobol_total_order_by_cycle.append(sobol_total_order), self.entropy_diff_by_cycle.append(entropy_diff)
+        del predictions
     
     def write_summary(self, base_dir):
-        with open(os.path.join(base_dir, 'all_sampler_cycle_info'), 'w') as file:
-            for cycle_info in self.all_cycle_info:
-                file.write(cycle_info)
+        if len(self.bounds) == 2:
+            x0 = []
+            x1 = []
+            x0_inner = []
+            x1_inner = []
+            for i in range(self.gridStorage.getSize()):
+                gp = self.gridStorage.getPoint(i)
                 
+                if gp.isInnerPoint():
+                    x0_inner.append(gp.getStandardCoordinate(0))
+                    x1_inner.append(gp.getStandardCoordinate(1))
+                
+                x0.append(gp.getStandardCoordinate(0))
+                x1.append(gp.getStandardCoordinate(1))    
+            fig, ax = plt.subplots(1,1, figsize=(9,9))
+            ax.set_aspect(1)
+            # self.mmg.plot_2d_gaussians(ax)
+            ax.scatter(x0, x1)
+            ax.scatter(x0_inner, x1_inner, color='black')
+            fig.savefig(fname=os.path.join(base_dir,'grid'), dpi=300)
+        
+        # with open(os.path.join(base_dir, 'all_sampler_cycle_info'), 'w') as file:
+        #     for cycle_info in self.all_cycle_info:
+        #         file.write(cycle_info)
+        df = pd.concat(self.all_cycle_info, ignore_index=True)
+        df.to_csv(os.path.join(base_dir, 'all_cycle_info.csv'))
+                        
         predictions = self.surrogate_predict(self.check_sampler.samples)
         fig = plt.figure()
         bars = plt.hist(predictions, bins=200, density=True)
@@ -300,7 +346,7 @@ class SpatiallyAdaptiveSparseGrids:
         plt.plot(np.array(self.num_samples_by_cycle), np.array(self.expectation_by_cycle))
         plt.fill_between(self.num_samples_by_cycle, np.array(self.expectation_by_cycle)-np.array(self.double_sigma_by_cycle),np.array(self.expectation_by_cycle)+np.array(self.double_sigma_by_cycle), color='grey', label='2sigma')
         plt.ylabel('approx_expectation')
-        plt.xlabel('Number of samples in cycle')
+        plt.xlabel('Number of Parent Function Evaluations')
         plt.legend()
         fig.savefig(os.path.join(base_dir,'approx_expectation'), dpi=300)
         expectation_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle, 'expectation': self.expectation_by_cycle, 'double_sigma': self.double_sigma_by_cycle})
@@ -313,7 +359,7 @@ class SpatiallyAdaptiveSparseGrids:
             sobol_first_order_data[f'sobol_first_order_{i}'] = dimension
             plt.plot(self.num_samples_by_cycle, dimension)
             plt.ylabel('First order sobol indicie')
-            plt.xlabel('Number of samples in cycle')
+            plt.xlabel('Number of Parent Function Evaluations')
             fig.savefig(os.path.join(base_dir, 'approx_sobol_first_order'),dpi=300)
         sobol_first_order_data.to_csv(os.path.join(base_dir, 'approx_sobol_first_order_data.csv'), index=False)
         
@@ -324,7 +370,7 @@ class SpatiallyAdaptiveSparseGrids:
             sobol_total_order_data[f'sobol_total_order_{i}'] = dimension
             plt.plot(self.num_samples_by_cycle, dimension)
             plt.ylabel('Total order sobol indicie')
-            plt.xlabel('Number of samples in cycle')
+            plt.xlabel('Number of Parent Function Evaluations')
             fig.savefig(os.path.join(base_dir, 'approx_sobol_total_order'),dpi=300)
         sobol_total_order_data.to_csv(os.path.join(base_dir, 'approx_sobol_total_order_data.csv'), index=False)
         
@@ -332,10 +378,10 @@ class SpatiallyAdaptiveSparseGrids:
         self.entropy_diff_by_cycle = np.array(self.entropy_diff_by_cycle)
         entropy_diff_data = pd.DataFrame({'num_samples': self.num_samples_by_cycle, 'entropy_diff': self.entropy_diff_by_cycle})
         plt.plot(self.num_samples_by_cycle, self.entropy_diff_by_cycle)
-        plt.ylabel('Total order sobol indicie')
-        plt.xlabel('Number of samples in cycle')
+        plt.ylabel('Entropy Difference')
+        plt.xlabel('Number of Parent Function Evaluations')
         fig.savefig(os.path.join(base_dir, 'approx_entropy_diff'),dpi=300)
-        entropy_diff_data.to_csv(os.path.join(base_dir, 'entropy_diff_data.csv'), index=False)
+        entropy_diff_data.to_csv(os.path.join(base_dir, 'approx_entropy_diff_data.csv'), index=False)
                 
     def check_UQ_convergence():
         None
@@ -428,3 +474,55 @@ class SpatiallyAdaptiveSparseGrids:
 #     print("refinement step {}, new grid size: {}".format(refnum+1, gridStorage.getSize()))    
 #     alpha.resizeZero(gridStorage.getSize())
     
+
+
+
+##!!!!!!!!!!!EVALUATING AN INTEGRAL USING ANALYTICALLY CALCULATED COEFFICIENTS THAT ASSUME THE HEIRACIAL BASIS FUNCTION IS AN ACCURATE INTERPOLATOR!!!!!!!!!!!
+
+# import pysgpp
+# from pysgpp import Grid, DataVector, DataMatrix
+
+# # Define the dimensionality of the problem
+# dim = 2
+
+# # Create a piecewise linear grid
+# grid = Grid.createLinearGrid(dim)
+# grid_gen = grid.getGenerator()
+# level = 3
+# grid_gen.regular(level)
+
+# # Get the grid points
+# grid_storage = grid.getStorage()
+# num_points = grid_storage.getSize()
+
+# # Create a DataVector to store the function values at the grid points
+# alpha = DataVector(num_points)
+
+# # Define a function to integrate
+# def f(x):
+#     return x[0] * x[1]
+
+# # Evaluate the function at the grid points
+# for i in range(num_points):
+#     gp = grid_storage.getPoint(i)
+#     coords = [gp.getStandardCoordinate(d) for d in range(dim)]
+#     alpha[i] = f(coords)
+
+# # Create an operation to compute the quadrature weights
+# op_quad = pysgpp.createOperationQuadrature(grid)
+
+# # Compute the integral (quadrature)
+# integral = op_quad.doQuadrature(alpha)
+
+# # Print the result
+# print("Integral:", integral)
+
+# # To get the quadrature weights for each point, you can use the following:
+# weights = DataVector(num_points)
+# op_quad.getQuadratureWeights(weights)
+
+# # Print the quadrature weights
+# for i in range(num_points):
+#     gp = grid_storage.getPoint(i)
+#     coords = [gp.getStandardCoordinate(d) for d in range(dim)]
+#     print(f"Point: {coords}, Weight: {weights[i]}")

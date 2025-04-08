@@ -66,7 +66,11 @@ class DaskExecutorSimulation():
             **kwargs: Additional keyword arguments.
         """
         if slurm_out_dir != None:
-            self.worker_args['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+            jed = self.worker_args.get('job_extra_directives')
+            if type(jed) == type(None):
+                self.worker_args['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+            else:
+                self.worker_args['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
         print("Initializing DASK client")
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
@@ -154,8 +158,8 @@ class DaskExecutorSimulation():
             futures.append(new_future)
         return futures
     
-    def write_summary(self, directory):
+    def write_summary(self, directory, *args, **kwargs):
         if 'write_summary' in dir(self.runner):
-            self.runner.write_summary(directory)
+            self.runner.write_summary(directory, *args, **kwargs)
         
     
