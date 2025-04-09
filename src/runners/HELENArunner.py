@@ -88,8 +88,16 @@ class HELENArunner(Runner):
                     beta_iterations_apf:
                         True: change apf in each iteration
                         False: change at1 in each iteration
+                    beta_iteration_starting_value_1:
+                        float: determines the first value inputed into helena for linear prediction of the value requred for target beta
+                    beta_iteration_starting_value_2:
+                        float: determines the second value inputed into helena for linear prediction of the value requred for target beta
                 2: Calculate at1 (from Europed)
 
+            beta_N_target: float
+                The target beta_N that is to be reached via various itteration methods. If it is not specified then the
+                params passed to single_code_run will be checked for a "beta_N" parameter and this will be the target. 
+            
             beta_tolerance: float
                 (Only relevant when beta_iteration is True.)
                 Tolerance criteria for calculated betan vs target betan.
@@ -115,7 +123,8 @@ class HELENArunner(Runner):
                 'teped_multip'
                 2: using a scaling law for changing ATE and CTE, requires input parameter
                 "scaling_factor"
-                7: noKBM, used for the DEEPlasma workflow where all mtanh parameters for profiles are specified.  
+                7: noKBM, used for the DEEPlasma pedestal workflow where all mtanh parameters for profiles are specified 
+                    and the core parameters need to be modified to achieve the correct Beta.  
 
             run_mishka: bool
                 Flag for running MISHKA after the HELENA run. If run_mishka is True
@@ -140,22 +149,22 @@ class HELENArunner(Runner):
             else other_params["beta_iteration"]
         )
         
-        if self.beta_iteration != 1 and ('input_value_1' in other_params or 'input_value_2' in other_params):
+        if self.beta_iteration != 1 and ('beta_iteration_starting_value_1' in other_params or 'beta_iteration_starting_value_2' in other_params):
             warnings.warn('''
-                          Parameters: input_value_1 and input_value_2 are only relevant if beta_iteration=1
+                          Parameters: beta_iteration_starting_value_1 and beta_iteration_starting_value_2 are only relevant if beta_iteration=1
                           Since beta_iteration does not equal 1 these parameters are being ignored. 
                           ''')
             
         # Only relevant if beta_iteration = 1
-        self.input_value_1 = (
+        self.beta_iteration_starting_value_1 = (
             0.0
-            if "input_value_1" not in other_params
-            else other_params["input_value_1"]
+            if "beta_iteration_starting_value_1" not in other_params
+            else other_params["beta_iteration_starting_value_1"]
         )
-        self.input_value_2 = (
+        self.beta_iteration_starting_value_2 = (
             1.0
-            if "input_value_2" not in other_params
-            else other_params["input_value_2"]
+            if "beta_iteration_starting_value_2" not in other_params
+            else other_params["beta_iteration_starting_value_2"]
         )
         
         self.beta_N_target = (
@@ -576,9 +585,9 @@ class HELENArunner(Runner):
         print(f"BETA ITERATION STARTED. Target betaN = {beta_target}\n")
 
         if self.beta_iterations_afp:
-            self.parser.modify_fast_ion_pressure("fort.10", self.input_value_1)
+            self.parser.modify_fast_ion_pressure("fort.10", self.beta_iteration_starting_value_1)
         else:
-            self.parser.update_at1("fort.10", self.input_value_1)
+            self.parser.update_at1("fort.10", self.beta_iteration_starting_value_1)
         
         
         subprocess.call([self.executable_path])
@@ -592,12 +601,12 @@ class HELENArunner(Runner):
         print(f"BETA ITERATION {0.0}: target={beta_target}, current={beta_n0}")
         
         with open('beta_iteration_results', 'a') as file:
-            file.write(f"BETA ITERATION {0.0}: afp?{self.beta_iterations_afp}: input_value={self.input_value_1}, beta_target={beta_target}, beta_current={beta_n0}\n")
+            file.write(f"BETA ITERATION {0.0}: afp?{self.beta_iterations_afp}: input_value={self.beta_iteration_starting_value_1}, beta_target={beta_target}, beta_current={beta_n0}\n")
         
         if self.beta_iterations_afp:
-            self.parser.modify_fast_ion_pressure("fort.10", self.input_value_2)
+            self.parser.modify_fast_ion_pressure("fort.10", self.beta_iteration_starting_value_2)
         else:
-            self.parser.update_at1("fort.10", self.input_value_2)
+            self.parser.update_at1("fort.10", self.beta_iteration_starting_value_2)
         subprocess.call([self.executable_path])
         shutil.copy('fort.10','fort.10_2')
         shutil.copy('fort.20','fort.20_2')
@@ -608,19 +617,19 @@ class HELENArunner(Runner):
         print(f"BETA ITERATION {0.1}: target={beta_target}, current={beta_n01}")
         
         with open('beta_iteration_results', 'a') as file:
-            file.write(f"BETA ITERATION {0.1}: afp?{self.beta_iterations_afp}: input_value={self.input_value_2}, beta_target={beta_target}, beta_current={beta_n01}\n")
+            file.write(f"BETA ITERATION {0.1}: afp?{self.beta_iterations_afp}: input_value={self.beta_iteration_starting_value_2}, beta_target={beta_target}, beta_current={beta_n01}\n")
     
         if self.beta_iterations_afp:
             # apftarg = (beta_target - beta_n0) * 0.1 / (beta_n01 - beta_n0)
             # self.parser.modify_fast_ion_pressure("fort.10", apftarg)
-            data_point_1 = beta_n0, self.input_value_1
-            data_point_2 = beta_n01, self.input_value_2
+            data_point_1 = beta_n0, self.beta_iteration_starting_value_1
+            data_point_2 = beta_n01, self.beta_iteration_starting_value_2
             guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
             self.parser.modify_fast_ion_pressure("fort.10", guess)
             
         else:
-            data_point_1 = beta_n0, self.input_value_1
-            data_point_2 = beta_n01, self.input_value_2
+            data_point_1 = beta_n0, self.beta_iteration_starting_value_1
+            data_point_2 = beta_n01, self.beta_iteration_starting_value_2
             # at1_mult_targ = (beta_target - beta_n0) / (beta_n01 - beta_n0)
             # self.parser.modify_at1("fort.10", at1_mult_targ)
             guess = self.linear_pred(*data_point_1, *data_point_2, x=beta_target)
