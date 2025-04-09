@@ -113,7 +113,7 @@ class DaskExecutor(Executor):
         for params in param_list:
             
             new_future = self.simulator_client.submit(
-                run_simulation_task, self.runner, run_dir=run_dir, params=params, 
+                run_simulation_task, self.runner_args, run_dir=run_dir, params=params, 
             )
             futures.append(new_future)
         print(futures)

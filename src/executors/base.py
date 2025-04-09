@@ -91,8 +91,6 @@ class Executor(ABC):
         print("Starting Setup")
         self.sampler = sampler  # kwargs.get('sampler')
         self.runner_args = runner_args  # kwargs.get('runner_args')
-        runner_type = runner_args['type']
-        self.runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**self.runner_args)
         self.base_run_dir = base_run_dir  # , kwargs.get('base_run_dir')
         self.output_dir = output_dir
         # self.max_samples = self.sampler.total_budget

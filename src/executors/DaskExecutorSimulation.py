@@ -40,8 +40,6 @@ class DaskExecutorSimulation():
                                     base_run_dir: /path/to/base/run
                                     output_dir: /path/to/base/out
                             ''')
-        runner_type = runner_args["type"]
-        self.runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**runner_args) 
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
@@ -115,7 +113,7 @@ class DaskExecutorSimulation():
         print("MAKING AND SUBMITTING DASK FUTURES")         
         for index, sample in enumerate(samples):
             new_future = self.client.submit(
-                run_simulation_task, runner=self.runner, run_dir=run_dirs[index], params=sample 
+                run_simulation_task, runner=self.runner_args, run_dir=run_dirs[index], params=sample 
             )
             futures.append(new_future)
         

@@ -174,7 +174,7 @@ class DaskExecutorSimulationPipeline():
             run_dir=run_dict[run_id]
             next_run_dir=run_dict_s[1][run_id] 
             # This sends the run_simulation_task to be ran on a worker as soon as possible
-            run_future = executor.client.submit(run_simulation_task, runner=executor.runner, run_dir=run_dir, params=sample)                    
+            run_future = executor.client.submit(run_simulation_task, runner_args=executor.runner_args, run_dir=run_dir, params=sample)                    
             run_id_futures[run_id].append(run_future)
             all_futures.append(run_future)
             #Make future for parsing
@@ -202,7 +202,7 @@ class DaskExecutorSimulationPipeline():
                 _, _, run_id = future.result()
                 run_dir = run_dict[run_id]
                 sample = None
-                run_future = executor.client.submit(run_simulation_task, runner=executor.runner, run_dir=run_dir, params=sample)
+                run_future = executor.client.submit(run_simulation_task, runner_args=executor.runner_args, run_dir=run_dir, params=sample)
                 run_id_futures[run_id].append(run_future)
                 run_futures.append(run_future)
                 all_futures.append(run_future)
