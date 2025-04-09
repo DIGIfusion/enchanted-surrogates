@@ -92,7 +92,7 @@ class DaskExecutorSimulationPipeline():
         # Order of Execution
         self.execution_order = []
         for i, executor in enumerate(self.executors):
-            self.execution_order.append(executor.runner.__class__.__name__)
+            self.execution_order.append(executor.runner_args['type'])
             if i != len(self.executors)-1:
                 self.execution_order.append(pipeline_parser_function_strings[i])
         print('EXECUTION ORDER', self.execution_order)
@@ -143,7 +143,7 @@ class DaskExecutorSimulationPipeline():
         
         print('MAKING ALL NECESSARY DIRECTORIES')
         for index, executor in enumerate(self.executors):
-            base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner.__class__.__name__+f'_{index}')
+            base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner_args['type']+f'_{index}')
             run_dirs = [os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids]
             run_dict = {run_id:os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids}
             run_dict_s.append(run_dict)
@@ -154,7 +154,7 @@ class DaskExecutorSimulationPipeline():
         executor = self.executors[0]
 
         if self.dynamic_clusters:
-            print(f'0: DYNAMICALLY INITALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
+            print(f"0: DYNAMICALLY INITALIZING CLUSTER FOR {executor.runner_args['type']}")
             executor.initialize_client() 
         run_dict = run_dict_s[0]
         
@@ -189,7 +189,7 @@ class DaskExecutorSimulationPipeline():
         last_futures=[]
         for index, executor, run_dict in zip(range(1,len(self.executors)) ,self.executors[1:], run_dict_s[1:]):
             if self.dynamic_clusters:
-                print(f'{index}: DYNAMICALLY INITIALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
+                print(f"{index}: DYNAMICALLY INITIALIZING CLUSTER FOR {executor.runner_args['type']}")
                 executor.initialize_client()
             
             if index==len(self.executors)-1:
@@ -209,7 +209,7 @@ class DaskExecutorSimulationPipeline():
                 if self.dynamic_clusters and len(run_futures) == len(parse_futures_s[index-1]):
                         #we need the previous cluster to provide the future.result()
                         # Once all the new futures are made we can shut down the previous cluster
-                        print(f'{index-1}: DYNAMICALLY SHUTTING DOWN CLUSTER FOR {self.executors[index-1].runner.__class__.__name__}')
+                        print(f"{index-1}: DYNAMICALLY SHUTTING DOWN CLUSTER FOR {self.executors[index-1].runner_args['type']}")
                         self.executors[index-1].client.shutdown()
                 if executing_last_simulation:
                     last_futures.append(run_future)
