@@ -107,7 +107,7 @@ class DaskExecutorActive():
         print("MAKING AND SUBMITING DASK FUTURES FOR INITIAL RUNS")
         initial_futures = self.static_executor.submit_batch_of_params(initial_params, initial_dir)
         
-        train={}
+        # train={}
         runner_return=[]
         print('INITIAL FUTURES SUBMITTED WAITING FOR THEM TO COMPLETE')
         seq=wait(initial_futures)
@@ -119,7 +119,7 @@ class DaskExecutorActive():
             out = out.split(',')
             coordinate = tuple(float(out[i]) for i in range(len(self.sampler.parameters)))
             label = float(out[-1])
-            train[coordinate] = label
+            self.sampler.train[coordinate] = label
         runner_return_path = os.path.join(initial_dir,'runner_return.txt')
         print(f'INITIAL FUTURES COMPLETE IN {time.time()-time_start}, WRITING runner_return.txt at:\n', runner_return_path)    
         with open(runner_return_path,'w')as out_file:
@@ -133,7 +133,7 @@ class DaskExecutorActive():
         #     self.sampler.write_cycle_info(initial_dir)
         #     print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
         
-        batch_params = self.sampler.get_next_parameters(train, initial_dir)
+        batch_params = self.sampler.get_next_parameters(initial_dir)
             
         num_cycles = 1
         num_samples = len(initial_params)
@@ -147,6 +147,7 @@ class DaskExecutorActive():
             cycle_start = time.time()
             cycle_dir = os.path.join(self.base_run_dir, f'active_cycle_{num_cycles}')
             os.system(f'mkdir {cycle_dir} -p')
+            print('debug', '(0.8125, 0.5, 0.25)', batch_params)
             futures = self.static_executor.submit_batch_of_params(batch_params, cycle_dir)
             print(f'FUTURES SUBMITTED FOR ACTIVE LEARNING CYCLE {num_cycles}')
             
@@ -167,9 +168,9 @@ class DaskExecutorActive():
                 out = out.split(',')
                 coordinate = tuple(float(out[i]) for i in range(len(self.sampler.parameters)))
                 label = float(out[-1])
-                if coordinate in train.keys():
+                if coordinate in self.sampler.train.keys():
                     print('COORDINATE',coordinate,'in train')
-                train[coordinate] = label
+                self.sampler.train[coordinate] = label
             runner_return_path = os.path.join(cycle_dir,'runner_return.txt')
             print('FUTURES COMPLETE')
             print(f'CYCLE {num_cycles} COMPLETE IN {time.time()-cycle_start}, WRITING runner_return.txt at:\n', runner_return_path)
@@ -180,14 +181,19 @@ class DaskExecutorActive():
                 for out in runner_return:
                     out_file.write(str(out)+'\n')
             print(f'WRITING runner_return.txt TOOK {time.time()-write_runner_start} sec')
-            batch_params = self.sampler.get_next_parameters(train, cycle_dir)
-                
             # Update stopping variables
             self.sampler.update_custom_limit_value()            
             num_samples+=len(batch_params)
             time_now = time.time()
             num_cycles+=1
-            #--------------------------            
+            #--------------------------
+            if num_samples>=self.total_budget or \
+            time_start-time_now>=self.time_limit or \
+            num_cycles >= self.max_cycles or \
+            self.sampler.custom_limit_value>=self.sampler.custom_limit:
+                break # I can't run get_next_parameters or else parameters will be sampled that never get a label
+            #--------------------------
+            batch_params = self.sampler.get_next_parameters(cycle_dir)            
 
         if 'write_cycle_info' in dir(self.sampler):
             print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
@@ -209,7 +215,7 @@ class DaskExecutorActive():
         print("MAKING THE AN OUTPUT FILE CONTAINING ALL DATA:", self.runner_return_path)
         with open(self.runner_return_path, 'w') as file:
             file.write(self.runner_return_headder+'\n')
-            for coordinate, label in train.items():
+            for coordinate, label in self.sampler.train.items():
                 file.write(f"{','.join([str(co) for co in coordinate])},{label}\n")
         
         if 'write_summary' in dir(self.sampler):
@@ -218,7 +224,7 @@ class DaskExecutorActive():
         
         if 'write_summary' in dir(self.static_executor):
             print("WRITING THE STATIC EXECUTOR SUMMARY FILES IN:", self.base_run_dir)
-            self.static_executor.write_summary(self.base_run_dir, points=np.array(list(train.keys())))
+            self.static_executor.write_summary(self.base_run_dir, points=np.array(list(self.sampler.train.keys())))
           
         print('ACTIVE CYCLES FINISHED')
         print('num_samples:',num_samples)
