@@ -225,7 +225,8 @@ class MaxOfManyGaussians():
                 fig = plt.figure(figsize=(2,2), dpi=200)
                 ax = fig.add_subplot(111)
             ax.contour(X,Y,Z, cmap='viridis')
-            ax.scatter(points_2d[0], points_2d[1], marker='+', color='black')
+            if type(points)!=type(None):
+                ax.scatter(points_2d[0], points_2d[1], marker='+', color='black')
         
         if type(ax) == type(None):
             ax.set_xlabel(f'{which2[0]}')
