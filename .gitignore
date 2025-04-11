@@ -9,3 +9,6 @@ tglf_setup.sh
 __pycache__/
 .vscode/
 data_store/*
+deeplamsa_extra_requirements.txt
+*.log
+core
