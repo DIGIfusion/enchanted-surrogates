@@ -16,7 +16,7 @@ import os
 # import numpy as np
 from .base import Runner
 import subprocess
-from parsers import SIMPLEparser
+from parsers.SIMPLEparser import SIMPLEparser
 from dask.distributed import print
 from numpy.random import randint
 import time

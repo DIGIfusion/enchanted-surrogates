@@ -3,7 +3,8 @@ import os
 import sys
 
 sys.path.append(os.getcwd() + "/src")
-from samplers import RandSampler, RandBatchSampler
+from samplers.RandSampler import RandSampler
+from samplers.RandBatchSampler import RandBatchSampler
 import run
 
 

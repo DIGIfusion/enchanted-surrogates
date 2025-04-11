@@ -5,7 +5,7 @@
 import os
 import shutil
 import subprocess
-from parsers import MISHKAparser
+from parsers.MISHKAparser import MISHKAparser
 from .base import Runner
 from dask.distributed import print
 

@@ -4,7 +4,7 @@ import sys
 import numpy as np
 
 sys.path.append(os.getcwd() + "/src")
-from samplers import Grid
+from samplers.Grid import Grid
 import run
 
 
