@@ -84,9 +84,9 @@ class DaskExecutorSimulationPipeline():
                              ''')
 
         self.runner_return_path=kwargs.get("runner_return_path")
-        self.runner_return_headder = kwargs.get('runnner_return_headder', f'{__class__}: no runner_return_headder, was provided in configs file')
+        self.runner_return_headder = kwargs.get('runnner_return_headder', f'{self.__class__}: no runner_return_headder, was provided in configs file')
         if self.base_run_dir==None and self.runner_return_path==None:
-            warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {__class__}')
+            warnings.warn(f'NO base_run_dir or runner_return_path WAS DEFINED FOR {self.__class__}')
         elif self.runner_return_path==None and self.base_run_dir!=None:
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         

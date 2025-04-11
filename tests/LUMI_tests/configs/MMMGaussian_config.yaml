@@ -3,9 +3,7 @@ sampler:
   bounds: [[0,1], [0,1], [0,1]]
   num_samples: 100
   parameters: ['x0', 'x1', 'x2']
-  check_sampler:
-    type: sobel_sequence
-    num_samples: 1e6
+
 
 executor:
   type: DaskExecutorSimulation
