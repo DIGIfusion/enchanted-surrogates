@@ -8,9 +8,7 @@ from samplers.SobelSequence import SobolSequence
 import f90nml
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src/'))
 def test_gene_parser():
-    command = f"rm -r {os.path.join(os.path.dirname(__file__),'files','tmp')}/*"
-    print(command)
-    os.system(command)
+    os.system(f"rm -r {os.path.join(os.path.dirname(__file__),'files','tmp')}/*")
     sampler_args = {'type':'SobelSequence',
                     'bounds':[[0,1], [0,1], [0,1], [0,1], [0,1]],
                     'num_samples':10,
@@ -33,6 +31,7 @@ def test_gene_parser():
             group, var = parser.parameter_nml_map[p]
             file_value = namelist[group][var]
             assert sampled_value == file_value
+    os.system(f"rm -r {os.path.join(os.path.dirname(__file__),'files','tmp')}/*")
 
 if __name__ == '__main__':
     test_gene_parser()
