@@ -5,9 +5,10 @@ Contains logic for executing surrogate workflow on Dask.
 
 import time
 import os
-import parsers
+import importlib
+# import parsers
 import uuid
-import executors
+# import executors
 import numpy as np
 import re
 from executors.tasks import run_simulation_task, print_error_wrapper
@@ -45,7 +46,7 @@ class DaskExecutorSimulationPipeline():
         executor_keys = [executor_keys[index] for index in executor_order_index]
         executor_types = [kwargs[key]['type'] for key in executor_keys]
         executor_args_s = [kwargs[key] for key in executor_keys]
-        self.executors = [getattr(executors, executor_type)(**executor_args) for executor_type, executor_args in zip(executor_types, executor_args_s)]
+        self.executors = [getattr(importlib.import_module(f'executors.{executor_type}'),executor_type)(**executor_args)  for executor_type, executor_args in zip(executor_types, executor_args_s)]
         self.num_sub_executors = len(self.executors)
         
         # Making a list of parser functions in the order of their intergers specified in their key, of config file        
@@ -54,7 +55,9 @@ class DaskExecutorSimulationPipeline():
         pipeline_parser_keys = [pipeline_parser_keys[index] for index in pipeline_parser_order_index]
         # pipeline_parser_types = [kwargs[key]['type'] for key in pipeline_parser_keys]
         pipeline_parser_function_strings = [kwargs[key]['function'] for key in pipeline_parser_keys]
-        self.pipeline_parser_functions = [getattr(parsers, function_string) for function_string in pipeline_parser_function_strings]
+        pipeline_parser_type_strings = [kwargs[key]['type'] for key in pipeline_parser_keys]
+        
+        self.pipeline_parser_functions = [getattr(importlib.import_module(f'parsers.{parser_type}'),function_string) for parser_type, function_string in zip(pipeline_parser_type_strings,pipeline_parser_function_strings)]
         
         # self.pipeline_parser_functions = [getattr(pipeline_parser, function_string) for pipeline_parser,function_string in zip(pipeline_parsers, pipeline_parser_function_strings)]
         
@@ -101,7 +104,7 @@ class DaskExecutorSimulationPipeline():
         # Order of Execution
         self.execution_order = []
         for i, executor in enumerate(self.executors):
-            self.execution_order.append(executor.runner.__class__.__name__)
+            self.execution_order.append(executor.runner_args['type'])
             if i != len(self.executors)-1:
                 self.execution_order.append(pipeline_parser_function_strings[i])
         print('EXECUTION ORDER', self.execution_order)
@@ -192,7 +195,7 @@ class DaskExecutorSimulationPipeline():
                 
         print('MAKING ALL NECESSARY DIRECTORIES')
         for index, executor in enumerate(self.executors):
-            base_run_dir_simulation = os.path.join(base_run_dir,executor.runner.__class__.__name__+f'_{index}')
+            base_run_dir_simulation = os.path.join(self.base_run_dir,executor.runner_args['type']+f'_{index}')
             run_dirs = [os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids]
             run_dict = {run_id:os.path.join(base_run_dir_simulation, run_id) for run_id in run_ids}
             run_dict_s.append(run_dict)
@@ -203,7 +206,7 @@ class DaskExecutorSimulationPipeline():
         executor = self.executors[0]
 
         if self.dynamic_clusters:
-            print(f'0: DYNAMICALLY INITALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
+            print(f"0: DYNAMICALLY INITALIZING CLUSTER FOR {executor.runner_args['type']}")
             executor.initialize_client() 
         run_dict = run_dict_s[0]
         
@@ -223,7 +226,7 @@ class DaskExecutorSimulationPipeline():
             run_dir=run_dict[run_id]
             next_run_dir=run_dict_s[1][run_id] 
             # This sends the run_simulation_task to be ran on a worker as soon as possible
-            run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, sample)                    
+            run_future = executor.client.submit(run_simulation_task, runner_args=executor.runner_args, run_dir=run_dir, params=sample)                    
             run_id_futures[run_id].append(run_future)
             all_futures.append(run_future)
             #Make future for parsing
@@ -238,7 +241,7 @@ class DaskExecutorSimulationPipeline():
         last_futures=[]
         for index, executor, run_dict in zip(range(1,len(self.executors)) ,self.executors[1:], run_dict_s[1:]):
             if self.dynamic_clusters:
-                print(f'{index}: DYNAMICALLY INITIALIZING CLUSTER FOR {executor.runner.__class__.__name__}')
+                print(f"{index}: DYNAMICALLY INITIALIZING CLUSTER FOR {executor.runner_args['type']}")
                 executor.initialize_client()
             
             if index==len(self.executors)-1:
@@ -251,14 +254,14 @@ class DaskExecutorSimulationPipeline():
                 _, _, run_id = future.result()
                 run_dir = run_dict[run_id]
                 sample = None
-                run_future = executor.client.submit(run_simulation_task, executor.runner, run_dir, sample)
+                run_future = executor.client.submit(run_simulation_task, runner_args=executor.runner_args, run_dir=run_dir, params=sample)
                 run_id_futures[run_id].append(run_future)
                 run_futures.append(run_future)
                 all_futures.append(run_future)
                 if self.dynamic_clusters and len(run_futures) == len(parse_futures_s[index-1]):
                         #we need the previous cluster to provide the future.result()
                         # Once all the new futures are made we can shut down the previous cluster
-                        print(f'{index-1}: DYNAMICALLY SHUTTING DOWN CLUSTER FOR {self.executors[index-1].runner.__class__.__name__}')
+                        print(f"{index-1}: DYNAMICALLY SHUTTING DOWN CLUSTER FOR {self.executors[index-1].runner_args['type']}")
                         self.executors[index-1].client.shutdown()
                 if executing_last_simulation:
                     last_futures.append(run_future)

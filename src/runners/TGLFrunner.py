@@ -7,7 +7,7 @@ Defines the TGLFrunner class for running TGLF codes.
 
 # import numpy as np
 from .base import Runner
-from parsers import TGLFparser as tglfparser
+from parsers.TGLFparser import TGLFparser as tglfparser
 import subprocess
 
 
@@ -62,4 +62,4 @@ class TGLFrunner(Runner):
 
         # return fluxes
         output = self.parser.fluxes
-        return output
+        return {"input": params, "output": output}

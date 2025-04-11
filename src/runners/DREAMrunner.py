@@ -15,7 +15,7 @@ import os
 # import numpy as np
 from .base import Runner
 import subprocess
-from parsers import DREAMparser
+from parsers.DREAMparser import DREAMparser
 
 
 class DREAMrunner(Runner):

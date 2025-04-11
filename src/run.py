@@ -2,12 +2,9 @@
 from dask.distributed import print
 print('PERFORMING IMPORTS')
 import yaml
-import samplers
 
-import executors
 import argparse
-
-
+import importlib
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -34,13 +31,19 @@ def main(args: argparse.Namespace):
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
-    print("MAKING SAMPLER AND EXECUTOR")
-    sampler = getattr(samplers, args.sampler.pop("type"))(**args.sampler)
-    
+
+    if getattr(args, 'sampler', None) != None:
+        print("MAKING SAMPLER")
+        sampler_type = args.sampler.pop("type")
+        sampler = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)(**args.sampler) 
+        args.executor['sampler'] = sampler
+
+    print('MAKING EXECUTOR')    
     # Legacy support for DaskExecutor, in DaskExecutorSimulation the runner should be defined within the executor.
     args.executor['runner_args'] = getattr(args, 'runner', None)
-    
-    executor = getattr(executors, args.executor.pop("type"))(sampler = sampler, **args.executor)
+        
+    executor_type = args.executor.pop("type")
+    executor = getattr(importlib.import_module(f'executors.{executor_type}'),executor_type)(**args.executor) 
     print("STARTING RUNS")
     executor.start_runs()
     print("SHUTTING DOWN SCHEDULER AND WORKERS")

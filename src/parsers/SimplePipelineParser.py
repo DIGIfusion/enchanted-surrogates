@@ -1,4 +1,4 @@
-from parsers import SIMPLEparser
+from parsers.SIMPLEparser import SIMPLEparser
 
 simple_parser = SIMPLEparser()
 from dask.distributed import print
