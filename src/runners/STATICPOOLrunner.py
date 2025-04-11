@@ -39,5 +39,4 @@ class STATICPOOLrunner(Runner):
             None
 
         """
-        pass
-        return None
+        return {"input": params, "output": None}

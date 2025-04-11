@@ -8,7 +8,8 @@ from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 import uuid
 from common import S
-import runners
+import importlib
+# import runners
 import os
 import traceback
 from .tasks import run_simulation_task
@@ -24,8 +25,8 @@ class DaskExecutorSimulation():
     def __init__(self, sampler=None, **kwargs):
         # This control will be needed by the pipeline and active learning.
         self.sampler = sampler
-        runner_args = kwargs.get("runner")
-        if type(runner_args) == type(None):
+        self.runner_args = kwargs.get("runner")
+        if type(self.runner_args) == type(None):
             raise ValueError('''
                              Every ExecutorSimulation needs a runner. 
                              This class defines how the code/simulation should be ran.
@@ -39,7 +40,6 @@ class DaskExecutorSimulation():
                                     base_run_dir: /path/to/base/run
                                     output_dir: /path/to/base/out
                             ''')
-        self.runner = getattr(runners, runner_args["type"])(**runner_args)
         self.worker_args: dict = kwargs.get("worker_args")
         self.n_jobs: int = kwargs.get("n_jobs", 1)
         self.runner_return_path = kwargs.get("runner_return_path")
@@ -67,10 +67,10 @@ class DaskExecutorSimulation():
         print("Initializing DASK client")
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
-            print(f'MAKING A LOCAL CLUSTER FOR {self.runner.__class__.__name__}')
+            print(f"MAKING A LOCAL CLUSTER FOR {self.runner_args['type']}")
             self.cluster = LocalCluster(**self.worker_args)
         else:
-            print(f'MAKING A SLURM CLUSTER FOR {self.runner.__class__.__name__}')
+            print(f"MAKING A SLURM CLUSTER FOR {self.runner_args['type']}")
             self.cluster = SLURMCluster(**self.worker_args)
             self.cluster.scale(self.n_jobs)    
             print('THE JOB SCRIPT FOR A WORKER IS:')
@@ -79,7 +79,7 @@ class DaskExecutorSimulation():
         self.client = Client(self.cluster ,timeout=180)
             
     def start_runs(self):
-        print(f"STARTING RUNS FOR RUNNER {self.runner.__class__.__name__}, FROM WITHIN A {__class__}")
+        print(f"STARTING RUNS FOR RUNNER {self.runner_args['type']}, FROM WITHIN A {__class__}")
         
         print('MAKING CLUSTER')
         self.initialize_client()
@@ -113,7 +113,7 @@ class DaskExecutorSimulation():
         print("MAKING AND SUBMITTING DASK FUTURES")         
         for index, sample in enumerate(samples):
             new_future = self.client.submit(
-                run_simulation_task, self.runner, run_dirs[index], sample 
+                run_simulation_task, runner_args=self.runner_args, run_dir=run_dirs[index], params=sample 
             )
             futures.append(new_future)
         

@@ -10,7 +10,9 @@ from dask.distributed import Client, as_completed, wait
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
 from common import S
-from .base import Executor, run_simulation_task
+import uuid
+from .base import Executor
+from .tasks import run_simulation_task
 import os
 
 
@@ -106,9 +108,12 @@ class DaskExecutor(Executor):
         """
         futures = []
         print(param_list)
+        run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
+        os.mkdir(run_dir)
         for params in param_list:
+            
             new_future = self.simulator_client.submit(
-                run_simulation_task, self.runner_args, params, self.base_run_dir
+                run_simulation_task, runner_args=self.runner_args, run_dir=run_dir, params=params, 
             )
             futures.append(new_future)
         print(futures)
@@ -158,24 +163,20 @@ class DaskExecutor(Executor):
                 seq = wait(
                     futures
                 )  # outputs should be a list of tuples we ignore in this case
-
                 # NOTE: ------ Collect outputs ------
                 outputs = []
                 for res in seq.done:
                     outputs.append(res.result())
                 outputs = self.sampler.collect_batch_results(outputs)
-
                 # NOTE: ------ Check if out of budget ------
                 completed += len(outputs)
                 if completed > self.sampler.total_budget:
                     break
-
                 # NOTE: ------ Update the pool and training data from outputs ------
                 self.sampler.parser.update_pool_and_train(outputs)
                 print(self.sampler.parser.print_dset_sizes())
-
                 # NOTE: Collect next data for training
-
+                
                 train, valid, test, pool = (
                     self.sampler.parser.get_unscaled_train_valid_test_pool_from_self()
                 )
