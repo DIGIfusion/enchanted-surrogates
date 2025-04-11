@@ -1,0 +1,101 @@
+&parallelization
+    n_procs_s = 2
+    n_procs_v = 1
+    n_procs_w = 16
+    n_procs_x = 1
+    n_procs_y = 1
+    min_npz = 4
+    n_procs_z = 4
+/
+
+&box
+    n_spec = 2
+    nx0 = 15
+    nky0 = 1
+    nz0 = 24
+    nv0 = 48
+    nw0 = 16
+    x0 = 0.75
+    kymin = 0.1
+    n0_global = -1111
+    adapt_ly = .true.
+    lx = 125.628
+    lv = 3.0
+    lw = 9.0
+/
+
+&in_out
+    diagdir = '/scratch/project_FILL_IN/FILL_UID/AUGUQ/'
+    read_checkpoint = .false.
+    write_checkpoint = .true.
+    istep_field = 2000
+    istep_mom = 2000
+    istep_nrg = 2000
+    istep_energy = 2000
+    istep_vsp = 2000
+    istep_schpt = 2000
+/
+
+&general
+    omega_prec = 1e-06
+    nonlinear = .false.
+    calc_dt = .true.
+    dt_max = 0.0385
+    timelim = 33200
+    ntimesteps = 10000000
+    simtimelim = 26000
+    beta = 0.00054323796
+    debye2 = 0.0011889208
+    collision_op = 'landau'
+    coll = 0.0007544424
+    zeff = 1.6
+    hyp_z = -1
+    hyp_v = 0.0
+/
+
+&geometry
+    magn_geometry = 'miller'
+    trpeps = 0.25643
+    q0 = 2.2851
+    shat = 2.2142
+    amhd = 0.016535
+    drr = -0.14686
+    drz = -0.076232
+    kappa = 1.349
+    s_kappa = 0.23129
+    delta = 0.055595
+    s_delta = 0.14461
+    zeta = -0.012412
+    s_zeta = -0.063568
+    minor_r = 1
+    major_r = 3.1481
+    rhostar = -1
+/
+
+&species
+    name = 'ions'
+    omn = 1.5417906
+    omt = 2.795488
+    mass = 1.0
+    temp = 0.64656397
+    dens = 1.0
+    charge = 1
+/
+
+&species
+    name = 'electrons'
+    omn = 1.5417906
+    omt = 5.3871083
+    mass = 0.00027244
+    temp = 1.0
+    dens = 1.0
+    charge = -1
+/
+
+&units
+    lref = 0.51645
+    bref = 2.6172
+    tref = 0.60520329375
+    nref = 1.5256594374999999
+    mref = 1.999007501778479
+/
