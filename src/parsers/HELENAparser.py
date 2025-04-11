@@ -260,7 +260,7 @@ class HELENAparser(Parser):
         namelist["phys"]["gti"] = 0.0
         namelist["phys"]["hti"] = 0.0
 
-        f90nml.write(namelist, input_fpath)
+        f90nml.write(namelist, input_fpath, force=True)
         print(f"fort.10 written to: {input_fpath}")
         return
 
@@ -1563,7 +1563,7 @@ class HELENAparser(Parser):
             If the specified run directory is not found.
         """
         namelist = f90nml.read(namelist_path)
-        f90nml.write(namelist, f"{namelist_path}_{datetime.now():%Y%m%d_%H%M%S}")
+        f90nml.write(namelist, f"{namelist_path}_{datetime.now():%Y%m%d_%H%M%S}", force=True)
         try:
             shutil.copy(
                 namelist_path.replace("fort.10", "fort.20"),
