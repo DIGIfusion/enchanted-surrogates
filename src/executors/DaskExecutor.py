@@ -108,10 +108,8 @@ class DaskExecutor(Executor):
         """
         futures = []
         print(param_list)
-        run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))
-        os.mkdir(run_dir)
         for params in param_list:
-            
+            run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))    
             new_future = self.simulator_client.submit(
                 run_simulation_task, runner_args=self.runner_args, run_dir=run_dir, params=params, 
             )
