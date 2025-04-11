@@ -117,41 +117,54 @@ class GENEparser(Parser):
                 omegatorref = -1
             /
             '''
-
+        self.parameter_nml_map={
+            'kymin':('box','kymin'),
+            'omn1':('_grp_species_0','omn'),
+            'omn2':('_grp_species_1','omn'),
+            'omt1':('_grp_species_0','omt'),
+            'omt2':('_grp_species_1','omt'),
+            'coll':('general','coll')
+        }
+    
     def write_input_file(self, params: dict, run_dir: str, base_params_file_path: str):
         if base_params_file_path != None:
             namelist = f90nml.read(base_params_file_path)
             namelist_string = str(namelist)
+        
         elif self.base_params_nml_string != None:
             namelist = f90nml.reads(self.base_params_nml_string)
             namelist_string = self.base_params_nml_string
-            
-        parameters_path = os.path.join(run_dir, 'parameters')
-        # params example {('box','kymin'): 0.5}
+        
         #populate params: dict with all omn's required. Since each should be identical
-        if ('species','omn') in params:
+        if 'omn' in params:
             print('species omn is being handeled by making species 1 and 2 with the same omn')
             for i in range(namelist_string.count('&species')):
-                i=i+1
-                params[(f'_grp_species_{i}','omn')] = params[('species','omn')]
-            params.pop(('species','omn'))
+                i+=1
+                params[f'omn{i}'] = params['omn']
+            params.pop('omn')
+        
+        for p in params.keys():
+            if not p in self.parameter_nml_map.keys():
+                raise ValueError(f'THERE IS NO ENTRY FOR PARAMETER {p} IN THE parameter_nml_map:\n{self.parameter_nml_map}\n PLEASE ADD IT IN THE GENEparser')
+            
+        parameters_path = os.path.join(run_dir, 'parameters')
         
         patch = {}
         for key, value in params.items():
-            group, var = key
-            patch[group] = {var:value}
-            print('group var',group, var)
-            print('var value',var, value)
+            group, var = self.parameter_nml_map[key]
+            if group in patch.keys():
+                patch[group][var] = value
+            else:
+                patch[group] = {var:value}
             # patch = {group: {var: value}}
         patch['in_out'] = {'diagdir':run_dir}
         
         namelist.patch(patch)
-        print('check 0 omt',namelist['_grp_species_1']['omt'], params[('_grp_species_1','omt')])
-        print('check 1 omt',namelist['_grp_species_2']['omt'], params[('_grp_species_2','omt')])
-        print('check 0 omn',namelist['_grp_species_1']['omn'], params[('_grp_species_1','omn')])
-        print('check 1 omn',namelist['_grp_species_2']['omn'], params[('_grp_species_2','omn')])
-
-        print(namelist['_grp_species_1'])        
+        # print('check 0 omt',namelist['_grp_species_1']['omt'], params[('_grp_species_1','omt')])
+        # print('check 1 omt',namelist['_grp_species_2']['omt'], params[('_grp_species_2','omt')])
+        # print('check 0 omn',namelist['_grp_species_1']['omn'], params[('_grp_species_1','omn')])
+        # print('check 1 omn',namelist['_grp_species_2']['omn'], params[('_grp_species_2','omn')])
+        # print(namelist['_grp_species_1'])        
         f90nml.write(namelist, parameters_path)
     
     def calculate_kperp(self, run_dir):
