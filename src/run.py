@@ -1,6 +1,8 @@
 # run.py
 from dask.distributed import print
 print('PERFORMING IMPORTS')
+import os,sys
+sys.path.append(os.path.join(os.path.dirname(__file__),'..','src'))
 import yaml
 
 import argparse
