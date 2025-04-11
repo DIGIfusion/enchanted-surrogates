@@ -64,6 +64,13 @@ class GENErunner(Runner):
         print('mem _per_core',os.getenv('MEMORY_PER_CORE'))
         print('omp_num_threads',os.getenv('OMP_NUM_THREADS'))
         print('mem_per_node', os.getenv('SLURM_MEM_PER_NODE'))
+        
+        print('env OMPI_COMM_WORLD_SIZE:',os.getenv('OMPI_COMM_WORLD_SIZE'))
+        print('env SLURM_NTASKS:',os.getenv('SLURM_NTASKS'))
+        print('env MPI_NUM_PROCS:',os.getenv('MPI_NUM_PROCS'))
+        
+        
+        
         run_command = f"cd {run_dir} && export MEMORY_PER_CORE=1800 && export OMP_NUM_THREADS=1 && export HDF5_USE_FILE_LOCKING=FALSE && set -x && srun --output={os.path.join(run_dir,'std_out.txt')} --error={os.path.join(run_dir,'err_out.txt')} -l -K -n $SLURM_NTASKS {self.executable_path} && set +x"#"./scanscript --np $SLURM_NTASKS --ppn $SLURM_NTASKS_PER_NODE --mps 4 --syscall='srun -l -K -n $SLURM_NTASKS ./gene_lumi_csc'"
         # && export MEMORY_PER_CORE=1800
         result = subprocess.run(run_command, shell=True, capture_output=False, text=True)

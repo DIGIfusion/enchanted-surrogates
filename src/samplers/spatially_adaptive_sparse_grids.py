@@ -17,7 +17,9 @@ class SpatiallyAdaptiveSparseGrids:
         self.bounds = np.array(bounds)
         self.parameters = parameters
         if type(parameters[0]) == type([]):
+            print('CONVERTING LIST TO TUPLE')
             self.parameters = [tuple(pa) for pa in parameters]
+            print(self.parameters, type(self.parameters[0]))
         self.poly_basis_degree= poly_basis_degree
         self.initial_level = initial_level
         self.infer_bounds = infer_bounds
@@ -342,6 +344,7 @@ class SpatiallyAdaptiveSparseGrids:
             df["brute_expectation"]=[expectation]
             df["brute_double_sigma"]=[double_sigma]
             df["brute_entropy_diff"]=[entropy_diff]
+            del predictions
             
         if self.do_brute_force_sobol_indicies:
             print('doing brute sobol indicies')
@@ -353,8 +356,8 @@ class SpatiallyAdaptiveSparseGrids:
         df.to_csv(os.path.join(cycle_dir,'cycle_info.csv'))
         
         self.all_cycle_info.append(df)  
-        # del df        
-        del predictions
+        del df        
+        
     
     def write_summary(self, base_dir):
         df = pd.concat(self.all_cycle_info, ignore_index=True)

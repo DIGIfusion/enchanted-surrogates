@@ -9,8 +9,8 @@ sampler:
 
 executor:
   type: DaskExecutorSimulation
-  base_run_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test2/
-  runner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, electron_heat_diffusivity_ratio, chi_i/chi_e, D_e/chi_e, growthrate, frequency'
+  base_run_dir: /scratch/project_462000451/gene_out/enchanted_out/gene_test/
+  runner_return_headder: 'GENEky, mixing_length_phi, mixing_length_A, electron_heat_diffusivity_ratio, chi_i/chi_e, D_e/chi_e, growthrate, frequency'  
   runner:
     type: GENErunner
     executable_path: /scratch/project_462000451/gene_enchanted/enchanted_executable/gene_lumi_csc
@@ -21,6 +21,7 @@ executor:
     #base_parameters_file_path: /project/project_462000451/DEEPlasma/parameters_base_jet_97781
     
   worker_args: # to be specified for the SLURMCluster in DASK
+    name: GENEcluster
     cores: 1
     memory: "240GB" # Memory on a lumi cpu node 256GB
     walltime: "12:00:00" #Max time limit of entire cluster

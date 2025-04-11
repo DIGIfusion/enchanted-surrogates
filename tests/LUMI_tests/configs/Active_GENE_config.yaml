@@ -3,26 +3,24 @@ sampler:
   # parameters: [['box','kymin'],['box','x0']]
   # bounds: [[0.5,0.55],[0.9,0.91]]
   bounds: [[4,6.7], [2.1,3.5], [0.16,2.9]]
-  parameters: [['_grp_species_0','omt'],['_grp_species_1','omt'],['species','omn']]
-  initial_level: 1
-  check_sampler:
-    type: sobel_sequence
-    num_samples: 1e6
-      
+  parameters: [['_grp_species_1','omt'],['_grp_species_2','omt'],['species','omn']]
+  infer_bounds: False
+  infer_parents: False
+  initial_level: 1      
 
 executor:
   type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/sasg_GENE_UQ_2 # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/sasg_GENE_test7 # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: '_grp_species_0-omt,_grp_species_1-omt,species-omn,growthrate'
-  max_cycles: 5
+  max_cycles: 2
   static_executor:
     type: DaskExecutorSimulation
     runner:
       type: GENErunner
       executable_path: /scratch/project_462000451/gene_enchanted/enchanted_executable/gene_lumi_csc
       return_mode: growthrate
-      # base_parameters_file_path: /users/danieljordan/base_parameters/parameters_base_uq_highprec
+      base_parameters_file_path: /users/danieljordan/base_parameters/parameters_base_uq_highprec
     worker_args: # to be specified for the SLURMCluster in DASK
       cores: 1
       memory: "240GB" # Memory on a lumi cpu node 256GB
@@ -50,7 +48,7 @@ executor:
         # This command gives the worker access to the python within our container. 
         - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NB: to use the enchanted-surrogate library
       # These are appended to the sbatch that requestes the resources for each worker.
-    n_jobs: 20
+    n_jobs: 10
 
 # fatal: SLURM_MEM_PER_CPU, SLURM_MEM_PER_GPU, and SLURM_MEM_PER_NODE are mutually exclusive.
 

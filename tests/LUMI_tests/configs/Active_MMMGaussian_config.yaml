@@ -3,8 +3,8 @@ sampler:
   bounds: [[0,1], [0,1], [0,1]]
   parameters: ['x0', 'x1', 'x2']
   initial_level: 1
-  infer_bounds: False
-  infer_parents: False
+  infer_bounds: True
+  infer_parents: True
   # This is used for brute force approximation of integral/expectation/distribution
   # The nuver of samples needs to be large enought to fill the space and resolve function features. hard to say what it should be. 
   brute_check_sampler:
@@ -13,7 +13,7 @@ sampler:
   do_brute_force_sobol_indicies: True 
 executor:
   type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/MMMG_quad_sasg # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/MMMG_quad_sasg_infer_bounds_parents # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: 'x0,x1,MMMG'
   max_cycles: 30

@@ -2,6 +2,7 @@ import os, sys
 from .base import Parser
 import f90nml
 import numpy as np
+from dask.distributed import print
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'submodules', 'IFS_scripts'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'submodules'))
@@ -131,6 +132,7 @@ class GENEparser(Parser):
         if ('species','omn') in params:
             print('species omn is being handeled by making species 1 and 2 with the same omn')
             for i in range(namelist_string.count('&species')):
+                i=i+1
                 params[(f'_grp_species_{i}','omn')] = params[('species','omn')]
             params.pop(('species','omn'))
         
@@ -138,10 +140,18 @@ class GENEparser(Parser):
         for key, value in params.items():
             group, var = key
             patch[group] = {var:value}
+            print('group var',group, var)
+            print('var value',var, value)
             # patch = {group: {var: value}}
         patch['in_out'] = {'diagdir':run_dir}
         
-        namelist.patch(patch)        
+        namelist.patch(patch)
+        print('check 0 omt',namelist['_grp_species_1']['omt'], params[('_grp_species_1','omt')])
+        print('check 1 omt',namelist['_grp_species_2']['omt'], params[('_grp_species_2','omt')])
+        print('check 0 omn',namelist['_grp_species_1']['omn'], params[('_grp_species_1','omn')])
+        print('check 1 omn',namelist['_grp_species_2']['omn'], params[('_grp_species_2','omn')])
+
+        print(namelist['_grp_species_1'])        
         f90nml.write(namelist, parameters_path)
     
     def calculate_kperp(self, run_dir):
