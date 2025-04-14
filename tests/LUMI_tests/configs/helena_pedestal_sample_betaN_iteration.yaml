@@ -1,0 +1,53 @@
+sampler:
+  type: SobolSequence
+  bounds: [[1.0, 1.8], [3.0, 4.4], [0.05, 0.1], [0.5, 2.8]]
+  num_samples: 16
+  parameters: ['T_eped', 'n_eped', 'd_n_ped', 'n_esep']
+
+runner:
+  type: HELENArunner
+  executable_path: "/project/project_462000451/HELENA/bin/hel13_64"
+  other_params: {
+    # "namelist_path": "/project/project_462000451/jet_97781_data/97781_T029_fort.10",
+    "namelist_path": "/projappl/project_462000451/aarojarvinen/hel_test_runt/fort.10",
+    "only_generate_files": False,
+    "input_parameter_type": 7,
+    "beta_iteration_starting_value_1": 0.1,
+    "beta_iteration_starting_value_2": 6.0,
+    "beta_iteration": 1,
+    "beta_iterations_apf": False,
+    "beta_tolerance": 0.01,
+    # "beta_iterations_afp": True, # Having this causes a HELENA crash, not having it causes BETA to not change and we get a divide by zero error
+    "max_beta_iterations": 6,
+    "beta_N_target": 2.555}
+    #Computed using core temp and density with magnetic field strength computed by GENE.
+
+executor:
+  type: DaskExecutor
+  base_run_dir: /users/danieljordan/enchanted-surrogates2/tmp/helena_runner
+  worker_args: # to be specified for the SLURMCluster in DASK
+    # local: 'False'
+    account: "project_462000451"
+    queue: "small"
+    cores: 1 
+    memory: "1.5GB"
+    processes: 1
+    walltime: "01:00:00" # Adam: survival length of worker, so possibly just set to max in cluster
+    interface: "nmn0"
+    job_script_prologue: # this is possibly dependent on which code you want
+      - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
+      # /project/project_462000451/enchanted_container_lumi3/bin
+      # VERY IMPORTANT TO MAKE SURE THIS MATCHES THE ENCHANTED SURROGATES BEING RAN FROM
+      - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src/'
+      # /users/danieljordan/enchanted-surrogates2/src
+      - 'cd /users/danieljordan/enchanted-surrogates2/src/'
+      # - 'cd /project/project_462000451/enchanted-surrogates/'
+      # - 'export PYTHONPATH=$PYTHONPATH:/project/project_462000451/enchanted-surrogates/src' # NB: to use the enchanted-surrogate library
+    # job_extra_directives:
+    #   - '-o /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN/%x.%j.out'
+    #   - '-e /scratch/project_462000451/daniel/sprint_out/helena_noKBM_betaN/%x.%j.err'
+  n_jobs: 16
+
+# "ENCHANTED_ENV_PATH":"/project/project_462000451/enchanted_container_lumi3/bin", 
+#         "ENCHANTED_SRC_PATH":"/users/danieljordan/enchanted-surrogates2/src/",
+#         "TEST_TMP":"/users/danieljordan/enchanted-surrogates2/tests/LUMI_tests/files/tmp"

@@ -23,7 +23,7 @@ def run_simulation_task(runner_args:dict, run_dir:str, params: dict=None, future
             else:
                 if run_dir != None:
                     if not os.path.exists(run_dir):
-                        os.mkdir(run_dir)        
+                        os.makedirs(run_dir)        
                 runner_output = runner.single_code_run(run_dir=run_dir, params=params) 
             
         except Exception as exc:

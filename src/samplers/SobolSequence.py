@@ -1,5 +1,3 @@
-# sampler/grid.py
-
 from .base import Sampler
 import numpy as np
 from itertools import product
@@ -9,7 +7,7 @@ import numpy as np
 from scipy.stats.qmc import Sobol
 
 
-class SobelSequence(Sampler):
+class SobolSequence(Sampler):
     """
     Sudo random sampler that achieves low discrepancy from uniform with few data points. 
 

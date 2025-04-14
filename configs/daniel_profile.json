@@ -1,0 +1,7 @@
+{
+    "env":{
+        "ENCHANTED_ENV_PATH":"/project/project_462000451/enchanted_container_lumi3/bin", 
+        "ENCHANTED_SRC_PATH":"/users/danieljordan/enchanted-surrogates2/src/",
+        "TEST_TMP":"/users/danieljordan/enchanted-surrogates2/tests/LUMI_tests/files/tmp"
+    }
+}
