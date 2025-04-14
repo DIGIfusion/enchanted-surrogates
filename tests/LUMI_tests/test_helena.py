@@ -21,14 +21,13 @@ def test_helena_pedestal_sample_betaN_iteration():
     dirs = os.listdir(base_run_dir)
     run_dirs = [d for d in dirs if is_valid_uuid(d)]
     
-    
     beta_tolerance = args.runner['other_params']['beta_tolerance']
     beta_target = args.runner['other_params']['beta_N_target']
     parser = HELENAparser()
     
     for run_dir in run_dirs:
         success1, mercier_stable, ballooning_stable = parser.read_output_file(run_dir)
-        fort20 = os.path.join(run_dir, 'fort.20')
+        fort20 = os.path.join(base_run_dir, run_dir, 'fort.20')
         with open(fort20, 'r') as file:
             for line in file:
                 if 'NORM. BETA' in line:
