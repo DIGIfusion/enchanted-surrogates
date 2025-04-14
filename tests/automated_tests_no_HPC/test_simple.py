@@ -5,6 +5,17 @@ import sys
 sys.path.append(os.getcwd() + "/src/samplers/bmdal")
 sys.path.append(os.getcwd() + "/src")
 import run
+import re
+
+
+
+def is_valid_uuid(uuid_string):
+    # Define the regular expression pattern for a valid UUID
+    pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    # Use the re.match function to check if the uuid_string matches the pattern
+    match = re.match(pattern, uuid_string)
+    # Return True if the string matches the pattern, otherwise False
+    return bool(match)
 
 
 # def test_simple_initialization():
@@ -30,4 +41,13 @@ def test_example_configs(config_name):
         args.sampler["parser_kwargs"]["data_path"] = data_path
         args.executor['base_run_dir'] += '_simple'
     run.main(args)
-    assert True
+    
+def test_random_seq():
+    config_path = os.path.join(os.getcwd(), "tests/automated_tests_no_HPC/configs/random_seq.yaml")
+    args = run.load_configuration(config_path)
+    base_run_dir = args.executor['base_run_dir']
+    os.system(f'rm -r {base_run_dir}/*')
+    sampler, executor = run.main(args)
+    dirs = os.listdir(executor.base_run_dir)
+    dirs = [d for d in dirs if is_valid_uuid(d)]
+    assert len(dirs) == sampler.num_initial_points
