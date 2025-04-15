@@ -58,6 +58,7 @@ class CASTORparser(Parser):
         """
         success = False
         growthrate = (None, None)
+        iteration = -1
         filename = run_dir + "/fort.20"
         try:
             file = open(filename, "r")
@@ -67,15 +68,16 @@ class CASTORparser(Parser):
                     print(line)
                     spl = line.split()
                     iteration = int(spl[4])
-                    growthrate = (
-                        (0.0, 0.0)
-                        if iteration >= 20
-                        else (float(spl[5]), float(spl[6]))
-                    )
+                    # growthrate = (
+                    #     (0.0, 0.0)
+                    #     if iteration >= 40
+                    #     else (float(spl[5]), float(spl[6]))
+                    # )
+                    growthrate = (float(spl[5]), float(spl[6]))
                     success = True
         except FileNotFoundError as e:
             print(f"(read_output_fort20) FileNotFoundError: {e}")
-        return success, growthrate
+        return success, growthrate, iteration
 
     def read_output_fort22(self, run_dir: str):
         """
@@ -311,11 +313,12 @@ class CASTORparser(Parser):
         """
         file_name = os.path.join(run_dir, "summary.json")
         summary = {"run_dir": run_dir, "params": params}
-        success, growthrate = self.read_output_fort20(run_dir)
+        success, growthrate, iteration = self.read_output_fort20(run_dir)
         summary["success"] = success
         summary["mpol"] = mpol
         summary["ntor"] = params["ntor"]
         summary["growthrate"] = growthrate
+        summary["iteration"] = iteration
 
         if "helena_dir" in params:
             summary["helena_dir"] = params["helena_dir"]
