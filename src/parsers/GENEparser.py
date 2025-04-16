@@ -2,6 +2,7 @@ import os, sys
 from .base import Parser
 import f90nml
 import numpy as np
+import re
 from dask.distributed import print
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'submodules', 'IFS_scripts'))
@@ -25,8 +26,6 @@ class GENEparser(Parser):
                 n_procs_s = -1
                 n_procs_z = -1
                 n_procs_w = -1
-                min_npw = -1
-                max_npw = -1
                 n_procs_v = -1
                 n_procs_x = -1
                 n_procs_y = -1
@@ -126,9 +125,9 @@ class GENEparser(Parser):
             'coll':('general','coll')
         }
     
-    def write_input_file(self, params: dict, run_dir: str, base_params_file_path: str):
-        if base_params_file_path != None:
-            namelist = f90nml.read(base_params_file_path)
+    def write_input_file(self, params: dict, run_dir: str, base_parameters_file_path: str):
+        if base_parameters_file_path != None:
+            namelist = f90nml.read(base_parameters_file_path)
             namelist_string = str(namelist)
         
         elif self.base_params_nml_string != None:
@@ -167,10 +166,10 @@ class GENEparser(Parser):
         # print(namelist['_grp_species_1'])        
         f90nml.write(namelist, parameters_path)
     
-    def calculate_kperp(self, run_dir):
+    def calculate_kperp(self, run_dir, suffix='.dat'):
         current_dir = os.getcwd()
         os.chdir(run_dir)
-        pars = init_read_parameters_file('.dat')
+        pars = init_read_parameters_file(suffix)
         field_path = GFF(run_dir).find_files('field')[0]
         field = GF(field_path)
         field_dict = field.field_filepath_to_dict(time_criteria='last')
@@ -178,7 +177,7 @@ class GENEparser(Parser):
         apar = np.abs(field_dict['field_apar'][-1])
         phi = np.abs(field_dict['field_phi'][-1])
         
-        geom_type, geom_pars, geom_coeff = init_read_geometry_file('.dat',pars)
+        geom_type, geom_pars, geom_coeff = init_read_geometry_file(suffix,pars)
         kperp, omd_curv, omd_gradB = calc_kperp_omd(geom_type,geom_coeff,pars,False,False)
         
         avg_kperp_squared_phi = np.sum((phi/np.sum(phi)) * kperp**2)
@@ -188,7 +187,7 @@ class GENEparser(Parser):
         
         return avg_kperp_squared_phi, avg_kperp_squared_A
     
-    def calculate_fingerprints(self, run_dir):
+    def calculate_fingerprints(self, run_dir, suffix='.dat'):
         current_dir = os.getcwd()
         os.chdir(run_dir)
         pars = init_read_parameters_file('.dat')
@@ -220,8 +219,8 @@ class GENEparser(Parser):
         os.chdir(current_dir)
         return fingerprints
     
-    def read_omega(self, run_dir):
-        omega_path = os.path.join(run_dir,'omega.dat')
+    def read_omega(self, run_dir, suffix='.dat'):
+        omega_path = os.path.join(run_dir,'omega'+suffix)
         with open(omega_path, 'r') as file:
             line = file.read()
             vars = line.split(' ')
@@ -230,24 +229,182 @@ class GENEparser(Parser):
             ky, growthrate, frequency = vars
         return ky, growthrate, frequency
     
-    def read_output(self, run_dir):
-        avg_kperp_squared_phi, avg_kperp_squared_A = self.calculate_kperp(run_dir)
-        ky, growthrate, frequency = self.read_omega(run_dir)
-        
+    def read_output(self, run_dir, suffix='.dat', get_required_files=False):
+        if get_required_files:
+            return ['field','omega','nrg','parameters']
+        avg_kperp_squared_phi, avg_kperp_squared_A = self.calculate_kperp(run_dir, suffix)
+        ky, growthrate, frequency = self.read_omega(run_dir, suffix)
         mixing_length_phi = growthrate / avg_kperp_squared_phi
         mixing_length_A = growthrate / avg_kperp_squared_A
-
-        fingerprints = self.calculate_fingerprints(run_dir)
-        
+        fingerprints = self.calculate_fingerprints(run_dir, suffix)
         return mixing_length_phi, mixing_length_A, *fingerprints, growthrate, frequency
 
-    def print_default_nml_string(self, base_params_file_path):
+    def print_default_nml_string(self, base_parameters_file_path):
         #to prevent each worker needing to read the base parameters file
         # you can print the default namelist string and paste it into the parser.
-        nml = f90nml.read(base_params_file_path)
+        nml = f90nml.read(base_parameters_file_path)
         print("COPY AND PASTE THE STRING BELOW INTO, GENEparser --> __init__ --> self.base_params_nml_string, FOR OPTMAL PERFORMANCE")
         print(str(nml))
         return str(nml)
+    
+    # Scan Parser Functions_________________________
+    def latest_scanfiles_dir(self, run_dir):
+        dirs = os.listdir(run_dir)
+        scanfiles_number = [re.findall('scanfiles[0-9]{4}',sc_dir) for sc_dir in dirs]
+        scanfiles_number = [item for sublist in scanfiles_number for item in sublist]
+        scanfiles_number = [re.findall('[0-9]{4}',sn) for sn in scanfiles_number]
+        scanfiles_number = [item for sublist in scanfiles_number for item in sublist]
+        latest_scan_dir = os.path.join(run_dir,f'scanfiles{np.sort(np.array(scanfiles_number))[-1]}')
+        return latest_scan_dir
+    
+
+    def check_status(self,scanfiles_dir):
+        status_path = os.path.join(scanfiles_dir, 'in_par','gene_status')
+        with open(status_path, 'r') as status_file:
+            status = status_file.read()#.decode('utf8')
+            return status
+    
+    def write_scan_file(self, run_dir, params, base_parameters_file_path, n_jobs=1):            
+        parameters_path = os.path.join(run_dir,'parameters')
+        num_params = len(params)
+        def merge_dicts(dict_list):
+            keys = dict_list[0].keys()
+            return {key: [d[key] for d in dict_list] for key in keys}
+        params = merge_dicts(params)
+        
+        if base_parameters_file_path != None:
+            namelist = f90nml.read(base_parameters_file_path)
+            namelist_string = str(namelist)
+        
+        elif self.base_params_nml_string != None:
+            namelist = f90nml.reads(self.base_params_nml_string)
+            namelist_string = self.base_params_nml_string
+    
+        #populate params: dict with all omn's required. Since each should be identical
+        if 'omn' in params:
+            print('species omn is being handeled by making species 1 and 2 with the same omn')
+            for i in range(namelist_string.count('&species')):
+                i+=1
+                params[f'omn{i}'] = params['omn']
+            params.pop('omn')
+                
+        def find_nth_occurrence(string, sub_string, n):
+            start_index = string.find(sub_string)
+            while start_index >= 0 and n > 1:
+                start_index = string.find(sub_string, start_index + 1)
+                n -= 1
+            return start_index
+
+        # finds the string location at the end of the line for a variable, just before \n
+        def var_end_loc(namelist_string: str, param_key):
+            group_name, var_name = self.parameter_nml_map[param_key]
+            group_ordinal = 0 #0 is the 1st
+            if len(group_name.split('_'))>1:
+                # print('MORE THAN ONE GROUP OF SAME NAME')
+                _, _, group_name, group_ordinal = group_name.split('_')
+                group_ordinal = int(group_ordinal)+1
+
+            # print('GROUP NAME',group_name,'VAR NAME',var_name, 'ORDIANL',group_ordinal)
+
+            group_start = find_nth_occurrence(namelist_string, group_name, group_ordinal)
+            group_end = group_start+namelist_string[group_start:].find(f'/')
+            # print('GROUP',namelist_string[group_start:group_end])
+
+            var_start = group_start+namelist_string[group_start:group_end].find(var_name+' ') #space ensures it is not apart of another name. Only works if there is a space after every variable
+            var_end = var_start+namelist_string[var_start:group_end].find("\n")
+            # print('VARLOC',var_start,var_end)
+            # print('VAR',namelist_string[var_start:var_end])
+            # print('START',namelist_string[var_start],'END',namelist_string[var_end])
+            return var_end
+
+        def make_scanlist(values):
+        # Making scanlist
+            scanlist = f'      !scanlist: {values[0]}'
+            for v in values[1:]:
+                scanlist += f', {v}'
+            return scanlist
+        #----------------------
+        
+        #determines the ordinal position of the scanned paramters for var_name
+        def var_ordinal(param_key):
+            group, var_name = self.parameter_nml_map[param_key]
+            group_split = group.split('_')
+            if len(group_split)>1:
+                group_name = group_split[-2]
+                group_ord = int(group_split[-1])+1
+            else:
+                group_name = group
+                group_ord = 1
+
+            gloc = find_nth_occurrence(namelist_string, group_name, group_ord)
+            vloc = gloc + namelist_string[gloc:].find(var_name)
+            var_ordinal = namelist_string[:vloc].count('=')+1
+            return var_ordinal
+        
+        #check which parameter is the first to be scanned and make is a scanlist
+        ordinals = {k:var_ordinal(k) for k in params.keys()}
+        first_param = None
+        first_param_ord = np.inf
+        for k,ord in ordinals.items():
+            if ord < first_param_ord: 
+                first_param_ord = ord
+                first_param = k
+        
+        def make_scanwith(values):
+            scanwith = f'       !scanwith: 0, {values[0]}'
+            for v in values[1:]:
+                scanwith += f', {v}'
+            return scanwith
+
+        scanwith = {k:make_scanwith(values) for k,values in params.items()}
+        # Add scanwith to each variable with and scanlist to the first one
+        for param_key in list(params.keys()):
+            if param_key == first_param:
+                var_end = var_end_loc(namelist_string,param_key)
+                namelist_string = namelist_string[:var_end] + make_scanlist(params[param_key]) + namelist_string[var_end:]
+            else:
+                var_end = var_end_loc(namelist_string,param_key)
+                namelist_string = namelist_string[:var_end] + scanwith[param_key] + namelist_string[var_end:]
+        # placing in the remote save directory
+        lines = namelist_string.split('\n')
+        for line, i in zip(lines, np.arange(len(lines))):
+            if 'diagdir' in line: lines[i] = f"    diagdir = '{run_dir}'" 
+            if 'n_parallel_sims' in line: lines[i] = f"    n_parallel_sims = {n_jobs}" 
+        namelist_string = '\n'.join(lines)
+        #Writing the final namelist stirng to file. This is the scan parameters file.
+                # checking run dir exists and making Path for scan file
+        print('Writing to', parameters_path)
+        with open(parameters_path, 'w') as file:
+            file.write(namelist_string)  
+        return namelist_string
+    
+    def write_sbatch(self, run_dir, sbatch_string, wallseconds):
+        sbatch_path = os.path.join(run_dir,'submit.cmd')
+        continue_path = os.path.join(run_dir, 'continue.cmd')
+        print('WRITE SBATCH')
+        sbatch_lines = sbatch_string.splitlines()
+        wall_clock_limit = sec_to_time_format(wallseconds)
+        wall_loc = 0
+        for i in range(len(sbatch_lines)):
+            if '#SBATCH -t' in sbatch_lines[i]: 
+                wall_loc = i
+                break
+        sbatch_lines[wall_loc] = f"#SBATCH -t {wall_clock_limit}  ## wallclock limit, dd-hh:mm:ss\n"
+
+        sbatch = "".join(sbatch_lines)
+
+        with open(sbatch_path, 'w') as sbatch_file:
+            sbatch_file.write(sbatch)
+
+        # Make contiue scan script
+        for i, line in enumerate(sbatch_lines):
+            if "./scanscript" in line:
+                sbatch_lines[i] = line.replace("./scanscript", "./scanscript --continue_scan")
+
+        continue_str = "".join(sbatch_lines)
+        with open(sbatch_continue_path, "w") as continue_file:
+            continue_file.write(continue_str)
+        return sbatch
 
 def read_Gamma_Q(time,nrgs,print_val,setTime=-1):
      
@@ -275,5 +432,5 @@ def read_Gamma_Q(time,nrgs,print_val,setTime=-1):
        print ("Q_em = %12.4e" % Qheat_em)
 
     return Gamma_es, Gamma_em, Qheat_es, Qheat_em
-        
+
     

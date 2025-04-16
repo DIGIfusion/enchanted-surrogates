@@ -3,9 +3,8 @@
 from .base import Sampler
 import numpy as np
 from itertools import product
+import importlib
 from common import S
-
-import samplers
 
 class GENEky(Sampler):
     """
@@ -46,12 +45,12 @@ class GENEky(Sampler):
         
         sampler_type = self.sub_sampler_args.pop('type') 
         
-        self.sub_sampler_ions_class = getattr(samplers, sampler_type)
-        self.sub_sampler_electrons_class = getattr(samplers, sampler_type)
+        self.sub_sampler_ions_class = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)
+        self.sub_sampler_electrons_class = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)
         
         self.samples = self.generate_parameters()
         
-        self.parameters = [('box','kymin')]
+        self.parameters = ['kymin']
         self.num_samples = self.num_initial_points =  num_ion_scale_samples + num_electron_scale_samples
         self.current_index = 0
 
@@ -74,9 +73,9 @@ class GENEky(Sampler):
         Yields:
             list of float: The next parameter combination.
         """
-        self.sub_sampler_ions = self.sub_sampler_ions_class(parameters=[('box','kymin')], bounds=[self.ion_scale_bounds], 
+        self.sub_sampler_ions = self.sub_sampler_ions_class(parameters=['kymin'], bounds=[self.ion_scale_bounds], 
                                                             num_samples=self.num_ion_scale_samples, **self.sub_sampler_args)
-        self.sub_sampler_electrons = self.sub_sampler_electrons_class(parameters=[('box','kymin')], bounds=[self.electron_scale_bounds], 
+        self.sub_sampler_electrons = self.sub_sampler_electrons_class(parameters=['kymin'], bounds=[self.electron_scale_bounds], 
                                                                     num_samples=self.num_electron_scale_samples, **self.sub_sampler_args)
         return list(self.sub_sampler_ions.samples) + list(self.sub_sampler_electrons.samples)
     def get_next_parameter(self):

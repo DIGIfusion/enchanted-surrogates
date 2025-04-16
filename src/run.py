@@ -2,9 +2,26 @@
 from dask.distributed import print
 print('PERFORMING IMPORTS')
 import yaml
-
+import os
 import argparse
 import importlib
+
+
+import sys
+
+class Tee:
+    def __init__(self, file_path):
+        self.file = open(file_path, 'w')
+        self.terminal = sys.stdout
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.file.write(message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.file.flush()
+
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -44,6 +61,10 @@ def main(args: argparse.Namespace):
         
     executor_type = args.executor.pop("type")
     executor = getattr(importlib.import_module(f'executors.{executor_type}'),executor_type)(**args.executor) 
+    if not os.path.exists(executor.base_run_dir):
+        os.makedirs(executor.base_run_dir)
+    std_out_path = os.path.join(executor.base_run_dir, 'std_out.txt')
+    sys.stdout = Tee(std_out_path)
     print("STARTING RUNS")
     executor.start_runs()
     print("SHUTTING DOWN SCHEDULER AND WORKERS")

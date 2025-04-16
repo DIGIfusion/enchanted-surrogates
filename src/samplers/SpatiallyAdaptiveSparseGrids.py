@@ -3,8 +3,8 @@ import warnings
 import os
 from common import S
 import pysgpp
-import samplers
 from pysgpp import BoundingBox1D
+import importlib
 from scipy.stats import sobol_indices, uniform, entropy
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -48,7 +48,7 @@ class SpatiallyAdaptiveSparseGrids:
             self.do_brute_check=True
             brute_check_sampler_kwargs['parameters'] = self.parameters
             brute_check_sampler_kwargs['bounds'] = self.bounds
-            self.brute_check_sampler = getattr(samplers, brute_check_sampler_kwargs['type'])(**brute_check_sampler_kwargs)
+            self.brute_check_sampler = getattr(importlib.import_module(f"samplers.{brute_check_sampler_kwargs['type']}"),brute_check_sampler_kwargs['type'])(**brute_check_sampler_kwargs) 
             self.old_brute_check_predictions = None
         else:
             self.do_brute_check=False
@@ -355,11 +355,12 @@ class SpatiallyAdaptiveSparseGrids:
                 df[f'brute_sobol_total_order_{d}']= [sto]
         df.to_csv(os.path.join(cycle_dir,'cycle_info.csv'))
         
-        self.all_cycle_info.append(df)  
+        self.all_cycle_info.append(df)
+        
         del df        
         
     
-    def write_summary(self, base_dir):
+    def post_run(self, base_dir):
         df = pd.concat(self.all_cycle_info, ignore_index=True)
         df.to_csv(os.path.join(base_dir, 'all_cycle_info.csv'))
         

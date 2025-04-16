@@ -9,7 +9,9 @@ from dask_jobqueue import SLURMCluster
 import uuid
 from common import S
 import numpy as np
-import runners
+import importlib
+# import runners
+from executors.tasks import print_error_wrapper
 import os
 import traceback
 from .tasks import run_simulation_task
@@ -71,7 +73,7 @@ class DaskExecutorActive():
                 file.write(self.runner_return_headder+'\n')
         
         static_executor_kwargs = kwargs['static_executor']
-        self.static_executor = getattr(executors, static_executor_kwargs['type'])(**static_executor_kwargs)
+        self.static_executor = getattr(importlib.import_module(f"executors.{static_executor_kwargs['type']}"),static_executor_kwargs['type'])(**static_executor_kwargs) 
         
     def clean(self):
         self.static_executor.clean()
@@ -87,7 +89,10 @@ class DaskExecutorActive():
         self.initialize_client()
                 
         print("GENERATING INITIAL SAMPLES:")
-        initial_params = self.sampler.get_initial_parameters()    
+        initial_params = self.sampler.get_initial_parameters()
+        # initial_params_future = self.static_executor.client.submit(print_error_wrapper,self.sampler.get_initial_parameters)
+        # wait(initial_params_future)
+        # initial_params = initial_params_future.result()
         
         if self.base_run_dir==None:
             warnings.warn('''
@@ -134,6 +139,10 @@ class DaskExecutorActive():
         #     print(f'WRITING SAMPLER CYCLE INFO TOOK {time.time()-time_write} sec')
         
         batch_params = self.sampler.get_next_parameters(initial_dir)
+        # batch_params_future = self.static_executor.client.submit(print_error_wrapper,self.sampler.get_next_parameters)
+        # wait(batch_params_future)
+        # batch_params = batch_params_future.result()
+        
             
         num_cycles = 1
         num_samples = len(initial_params)
@@ -193,7 +202,11 @@ class DaskExecutorActive():
             self.sampler.custom_limit_value>=self.sampler.custom_limit:
                 break # I can't run get_next_parameters or else parameters will be sampled that never get a label
             #--------------------------
-            batch_params = self.sampler.get_next_parameters(cycle_dir)            
+            batch_params = self.sampler.get_next_parameters(cycle_dir)
+            # batch_params_future = self.static_executor.client.submit(print_error_wrapper,self.sampler.get_next_parameters)
+            # wait(batch_params_future)
+            # batch_params = batch_params_future.result()
+                    
 
         if 'write_cycle_info' in dir(self.sampler):
             print(f'WRITING SAMPLER CYCLE INFO FOR CYCLE {num_cycles-1}')
@@ -218,13 +231,13 @@ class DaskExecutorActive():
             for coordinate, label in self.sampler.train.items():
                 file.write(f"{','.join([str(co) for co in coordinate])},{label}\n")
         
-        if 'write_summary' in dir(self.sampler):
+        if 'post_run' in dir(self.sampler):
             print("WRITING THE SAMPLER SUMMARY FILES IN:", self.base_run_dir)
-            self.sampler.write_summary(self.base_run_dir)
+            self.sampler.post_run(self.base_run_dir)
         
-        if 'write_summary' in dir(self.static_executor):
+        if 'post_run' in dir(self.static_executor):
             print("WRITING THE STATIC EXECUTOR SUMMARY FILES IN:", self.base_run_dir)
-            self.static_executor.write_summary(self.base_run_dir, points=np.array(list(self.sampler.train.keys())))
+            self.static_executor.post_run(self.base_run_dir, points=np.array(list(self.sampler.train.keys())))
           
         print('ACTIVE CYCLES FINISHED')
         print('num_samples:',num_samples)

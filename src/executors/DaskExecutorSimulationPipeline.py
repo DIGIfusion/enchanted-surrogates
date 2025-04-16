@@ -303,10 +303,10 @@ class DaskExecutorSimulationPipeline():
         
         return last_futures
     
-    def write_summary(self, directory):
+    def post_run(self, directory):
         for executor in self.executors:
-            if 'write_summary' in dir(self.executor.runner):
-                self.executor.runner.write_summary(directory)
+            if 'post_run' in dir(self.executor.runner):
+                self.executor.runner.post_run(directory)
 
         
             

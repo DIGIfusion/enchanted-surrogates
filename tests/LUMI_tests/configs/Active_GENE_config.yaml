@@ -3,14 +3,14 @@ sampler:
   # parameters: [['box','kymin'],['box','x0']]
   # bounds: [[0.5,0.55],[0.9,0.91]]
   bounds: [[4,6.7], [2.1,3.5], [0.16,2.9]]
-  parameters: [['_grp_species_1','omt'],['_grp_species_2','omt'],['species','omn']]
+  parameters: ['omt1','omt2','omn']
   infer_bounds: False
   infer_parents: False
   initial_level: 1      
 
 executor:
   type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/sasg_GENE_test7 # Because the runner only executes a python function I do not need a run_base_dir
+  base_run_dir: /scratch/project_462000451/enchanted_test_out/sasg_GENE_test # Because the runner only executes a python function I do not need a run_base_dir
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
   runner_return_headder: '_grp_species_0-omt,_grp_species_1-omt,species-omn,growthrate'
   max_cycles: 2

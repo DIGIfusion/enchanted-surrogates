@@ -14,6 +14,7 @@ import os
 import traceback
 from .tasks import run_simulation_task
 import warnings
+import asyncio
 
 class DaskExecutorSimulation():
     """
@@ -51,6 +52,8 @@ class DaskExecutorSimulation():
             warnings.warn('n_jobs=1 this means there will only be one dask worker. If you want to run samples in paralell please change <executor: n_jobs:> in the config file to be greater than 1.')
         
         self.base_run_dir = kwargs.get("base_run_dir")
+        self.runner_args['base_run_dir'] = self.base_run_dir
+        
         self.runner_return_path = kwargs.get("runner_return_path")
         self.runner_return_headder = kwargs.get("runner_return_headder", f'{self.__class__}: no runner_return_headder, was provided in configs file')
         if self.base_run_dir==None and self.runner_return_path==None:
@@ -58,6 +61,7 @@ class DaskExecutorSimulation():
         elif self.runner_return_path==None and self.base_run_dir!=None:
             self.runner_return_path = os.path.join(self.base_run_dir, 'runner_return.txt')
         
+        self.scale_cluster_to_num_params = kwargs.get('scale_cluster_to_num_params', False)        
         
     def clean(self):
         self.client.shutdown()
@@ -88,7 +92,45 @@ class DaskExecutorSimulation():
             print(self.cluster.job_script())
             
         self.client = Client(self.cluster ,timeout=180)
-            
+        print('DASHBOARD LINK',self.client.dashboard_link)
+        # print('SLEEPING 15 TO ALLOW WORKERS TO START UP')
+        # sleep(15)
+        # print('CLIENT',self.client)
+        # workers_info = self.client.scheduler_info()['workers']
+        # for worker, info in workers_info.items():
+        #     print(f"Worker: {worker}")
+        #     print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
+        #     print(f"  Cores: {info['nthreads']}")
+        #     print(f"  Host: {info['host']}")
+        #     print(f"  Local Directory: {info['local_directory']}")
+        #     print('INFO KEYS',info.keys())
+        #     print('INFO',info)
+        #     print()
+        
+        # # Get worker status
+        # worker_status = self.client.run(lambda dask_worker: dask_worker.status)
+        # print("Worker Status:", worker_status)
+
+        # # Get worker resources
+        # worker_resources = self.client.run(lambda dask_worker: dask_worker.resources)
+        # print("Worker Resources:", worker_resources)
+
+        # # Get worker configuration
+        # worker_configuration = self.client.run(lambda dask_worker: dask_worker.worker_configuration)
+        # print("Worker Configuration:", worker_configuration)
+
+        # # Get worker memory usage
+        # worker_memory_limit = self.client.run(lambda dask_worker: dask_worker.memory_limit)
+        # print("Worker Memory Limit:", worker_memory_limit)
+
+        # # Get worker logs
+        # worker_logs = self.client.run(lambda dask_worker: dask_worker.log_event("info"))
+        # print("Worker Logs:", worker_logs)
+
+        # # Get worker IP address
+        # worker_ip = self.client.run(lambda dask_worker: dask_worker.ip)
+        # print("Worker IP Address:", worker_ip)
+
     def start_runs(self):
         if self.base_run_dir==None:
             raise ValueError('When executing start_runs of {__class__} a self.base_run_dir must be specified.')
@@ -96,8 +138,8 @@ class DaskExecutorSimulation():
             if not os.path.exists(self.base_run_dir):
                 os.mkdir(self.base_run_dir)
     
-        if os.path.exists(os.path.join(self.base_run_dir, 'FINNISHED')):
-            raise FileExistsError(f'''The file: {self.base_run_dir}/FINNISHED, exists.
+        if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINNISHED')):
+            raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINNISHED, exists.
                                   This signifies that there is already data in this folder. 
                                   Aborting to avoid accidental data mixing.''' )
         
@@ -124,11 +166,18 @@ class DaskExecutorSimulation():
                 for output in outputs:
                     out_file.write(str(output)+"\n")
         print("Finished sequential runs")
-        with open(os.path.join(self.base_run_dir,'FINNISHED'), 'w') as file:
-            file.write(f'FINNISHED, {__class__}')
+        
+        print("DOING POST RUN")
+        self.post_run(self.base_run_dir)
+        
+        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINNISHED'), 'w') as file:
+            file.write(f'ENCHANTED.FINNISHED, {__class__}')
         return outputs
     
-    def submit_batch_of_params(self, params: dict, base_run_dir:str=None):
+    def submit_batch_of_params(self, params: list, base_run_dir:str=None, *args, **kwargs):
+        if self.scale_cluster_to_num_params:
+            self.n_jobs = len(params)
+            self.cluster.scale(self.n_jobs)
         run_dirs = [None]*len(params)
         if base_run_dir==None:
             base_run_dir = self.base_run_dir
@@ -152,19 +201,38 @@ class DaskExecutorSimulation():
                 run_dir = os.path.join(base_run_dir, random_run_id)
                 os.system(f'mkdir {run_dir} -p')
                 run_dirs[index] = run_dir
-                     
+        
+        print('MAKING TEMPORARY RUNNER')
+        runner_type = self.runner_args['type']
+        runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**self.runner_args)
+        if 'pre_run' in dir(runner):
+            print('PRERUN IS IN RUNNER')
+            runner.pre_run(base_run_dir=self.base_run_dir, run_dirs=run_dirs, params=params, *args, **kwargs)
+            
         print("MAKING AND SUBMITTING DASK FUTURES")      
         futures = []   
-        n_samples = len(params)
+        i = 0
         for index, sample in enumerate(params):
             new_future = self.client.submit(
-                run_simulation_task, runner_args=self.runner_args, run_dir=run_dirs[index], params=sample 
+                run_simulation_task, runner_args=self.runner_args, 
+                run_dir=run_dirs[index], index=index, params=sample 
             )
             futures.append(new_future)
+            # Ensure they start in order, wait untill running to submit more.
+            status = new_future.status
+            while 'pending' == status:
+                status = new_future.status
+                sleep(0.1)
         return futures
     
-    def write_summary(self, directory, *args, **kwargs):
-        if 'write_summary' in dir(self.runner):
-            self.runner.write_summary(directory, *args, **kwargs)
-        
+    def post_run(self, directory, *args, **kwargs):
+        runner_type = self.runner_args['type']
+        runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**self.runner_args)    
+        if 'post_run' in dir(runner):
+            runner.post_run(directory, *args, **kwargs)
+
+async def wait_until_none_pending(futures):
+    status = [f.status for f in futures]
+    while 'pending' in status:
+        await asyncio.sleep(0.1)
     

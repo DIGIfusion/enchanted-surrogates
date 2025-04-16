@@ -53,7 +53,7 @@ class MMMGrunner(Runner):
         params_values = ','.join([str(v) for v in params.values()])
         return params_values + ',' + str(self.mmg.evaluate(pos))
         
-    def write_summary(self, dir, points=None):
+    def post_run(self, dir, points=None):
         points = np.array(points)
         fig = self.mmg.plot_matrix_contour(points)
         fig.savefig(os.path.join(dir, 'mmmg_matrix_contour'), dpi=300)

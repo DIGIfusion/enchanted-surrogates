@@ -4,7 +4,7 @@ if not src_path in sys.executable:
     sys.path.append(src_path)
     
 from parsers.GENEparser import GENEparser
-from samplers.SobelSequence import SobolSequence
+from samplers.SobolSequence import SobolSequence
 import f90nml
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src/'))
 def test_gene_parser():
