@@ -1,26 +1,29 @@
 sampler:
   type: BayesianOptimization
-  budget: 200
+  budget: 80
+  aquisition_batch_size: 20
   bounds: [[1.0e-6, 1.0e-2], [0.01, 30.0], [0.01, 30.0], [0.01, 20.0], [0.01,30.0]]
   parameters: ['dBB', 'alpha', 'beta', 'V_loop_wall', 'tau_V_loop']
+  dry_run: False
   observations: {'IP':'/scratch/project_2004389/aarojarvinen/JET_95135/experimental_data/Ip95135.h5',
                  'images':['/scratch/project_2004389/aarojarvinen/JET_95135/synchrotron_images/KLDT-E5WC-95135-7562.npz',
                            '/scratch/project_2004389/aarojarvinen/JET_95135/synchrotron_images/KLDT-E5WC-95135-7582.npz']}
+  parser: DREAMparser
 
 runner:
   type: DREAMrunner
-  executable_path: "/scratch/project_2004389/aarojarvinen/DREAM_OCT_2024/build/iface/dreami"
+  executable_path: "/scratch/project_2004389/aarojarvinen/DREAM_MAR_2025/DREAM/build/iface/dreami"
   other_params: {
     "base_input_file_path": "/scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test/dream_input.h5",
     "only_generate_files": False,
     "soft": {
       "run_soft": True,
       "type": SOFTrunner,
-      "executable_path": "/scratch/project_2004389/aarojarvinen/SOFT2/build/src/soft",
+      "executable_path": "/scratch/project_2004389/aarojarvinen/SOFT2NEW/build/src/soft",
       "other_params": {
         "only_generate_files": False,
         "time_idx": ["20", "47"],
-        "mag_field_path": ["/scratch/project_2004389/aarojarvinen/JET_95135/cont_simulation_short_radialdBB/mag_fields/Mag_field_SOFT_2_JET_95135_48.08.h5", "/scratch/project_2004389/aarojarvinen/JET_95135/cont_simulation_short_radialdBB/mag_fields/Mag_field_SOFT_2_JET_95135_48.08.h5"],
+        "mag_field_path": ["/scratch/project_2004389/aarojarvinen/JET_95135/mag_fields/Mag_field_SOFT_2_JET_95135_48.08.h5", "/scratch/project_2004389/aarojarvinen/JET_95135/mag_fields/Mag_field_SOFT_2_JET_95135_48.08.h5"],
         "number_of_mpi": 1,
       }
     }
@@ -30,8 +33,8 @@ executor:
   type: DaskExecutor
   base_run_dir: /scratch/project_2004389/aarojarvinen/JET_95135/DREAM_es_test2
   worker_args: 
-    local: 'False'
     adapt: 'True'
+    verbose: 'True'
     slurm_args:
       account: "project_2004389"
       queue: "small"
@@ -40,7 +43,7 @@ executor:
       processes: 1
       walltime: "6:00:00" 
       interface: "ib0"
-      local_directory: "SLURMlog_primary"
+      local_directory: "/scratch/project_2004389/aarojarvinen/JET_95135/ENCHSUR_RUN/SLURMlog_primary"
       job_script_prologue: 
         - 'export OMP_NUM_THREADS=1'
         - 'module load python-data'
@@ -48,23 +51,22 @@ executor:
         - 'module load hdf5'
         - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
         - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
-        - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
+        - 'cd /scratch/project_2004389/aarojarvinen/JET_95135/ENCHSUR_RUN'
     secondary_SLURM: 'True'
     secondary_slurm_args:
       account: "project_2004389"
       queue: "small"
       cores: 32 
-      memory: "32GB"
+      memory: "30GB"
       processes: 1
       walltime: "6:00:00" 
       interface: "ib0"
-      local_directory: "SLURMlog_secondary"
+      local_directory: "/scratch/project_2004389/aarojarvinen/JET_95135/ENCHSUR_RUN/SLURMlog_secondary"
       job_script_prologue: 
-        - 'export OMP_NUM_THREADS=32'
         - 'module load python-data'
         - 'module load gsl'
         - 'module load hdf5'
         - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
         - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
-        - 'cd /scratch/project_2004389/aarojarvinen/enchanted-surrogates'
-    num_workers: 32
+        #- 'cd /scratch/project_2004389/aarojarvinen/JET_95135/ENCHSUR_RUN'
+        - 'export OMP_NUM_THREADS=32'

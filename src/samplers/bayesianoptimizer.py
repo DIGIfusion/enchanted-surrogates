@@ -76,18 +76,24 @@ class BayesianOptimization(Sampler):
         self.bounds                = kwargs.get('bounds', [None])
         self.observations          = kwargs.get('observations', [None])
         self.result_dictionary     = kwargs.get('result_dictionary', [None])
+        self.result_dictionary_norm= kwargs.get('result_dictionary', [None])
         self.parameters            = kwargs.get('parameters', ['NA']*len(self.bounds))
         self.aquisition_batch_size = kwargs.get('aquisition_batch_size', 50)
         self.init_num_samples      = kwargs.get('num_initial_points', self.aquisition_batch_size)
+        self.dry_run               = kwargs.get('dry_run', 'False')
+        self.random_fraction       = kwargs.get('random_fraction', 0.5)
+        self.async_samp            = kwargs.get('async_samp', 'False')
         #self.selection_method      = kwargs.get('selection_method', 'random')
         #self.kernel_transform      = kwargs.get('kernel_transform', [('rp', [512])])
         #self.base_kernel           = kwargs.get('base_kernel', 'll')
-        #self.parser_kwargs         = parser_kwargs
+        self.parser_kwargs         = kwargs.get('parser_kwargs', [None])
         #self.model_kwargs          = model_kwargs
         #self.train_kwargs          = train_kwargs
         #self.metrics = []
-
-        self.parser                = getattr(parsers, parser_kwargs.pop('type'))(**parser_kwargs)
+        if self.parser_kwargs == [None]:
+            self.parser            = getattr(parsers, kwargs.pop('parser'))()
+        else:
+            self.parser            = getattr(parsers, kwargs.pop('parser'))(**self.parser_kwargs)
 
     def get_initial_parameters(self):
         """
@@ -108,114 +114,165 @@ class BayesianOptimization(Sampler):
             batch_samples.append(param_dict)
         return batch_samples
 
-    def get_next_parameter(
-        self,
-        model: torch.nn.Module,
-        train: torch.Tensor,
-        pool: torch.Tensor,
-        *args,
-        **kwargs,
-    ) -> list[dict[str, float]]:
+    def train_surrogate(self):
+        # Presently implemented as single objective model. Therefore,
+        # sum over the distances and normalize.
+        distances = torch.from_numpy(np.sum(self.result_dictionary_norm['distances'],axis=1))
+        distances = (distances - torch.mean(distances))/torch.std(distances)
+        distances = distances.unsqueeze(distances.ndim)
+
+        # Multiply by -1 the task to a maximization problem.
+        distances = -distances
+
+        gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
+            torch.from_numpy(self.result_dictionary_norm['inputs']), 
+            distances)
+        botorch.fit.fit_fully_bayesian_model_nuts(gp)
+        self.model = gp
+        self.best_f = torch.max(distances) 
+
+    def get_next_parameter(self):
         """
-        Generates the next parameter samples based on the model predictions given the train and pool.
-        NOTE: The train and pool are expected to be normalised, as model and BMDAL expect data to be normalized. 
+        Generates the next parameter samples based on the model and the acquisition function. 
 
         Args:
-            model (torch.nn.Module): PyTorch model.
-            train (torch.Tensor): 
-            pool (torch.Tensor):  
+            TBD 
 
         Returns:
             list: List of dictionaries containing next parameter samples.
 
         """
-        # train, pool = self.parser.train, self.parser.pool
-        new_idxs = self._get_new_idxs_from_pool(model, train, pool)
-        results = []
-        for idx in new_idxs:
-            results.append(
-                {
-                    "input": self.parser.pool[idx, self.parser.input_col_idxs],
-                    "output": None,
-                    "pool_idxs": idx,
-                }
-            )
-        # TODO: convert indicies to unscaled parameters
-        return results
+        EI = botorch.acquisition.qLogExpectedImprovement(model=self.model, best_f=self.best_f)
+        if self.async_samp == True:
+            if torch.rand(1) < self.random_fraction:
+                batch_samples = []
+                params = [
+                    torch.distributions.Uniform(lb, ub).sample().item()
+                    for (lb, ub) in self.bounds
+                ]
+                param_dict = dict(zip(self.parameters, params))
+                batch_samples.append(param_dict)
+                return batch_samples
+            else:
+                qval = 1
+        else:
+            batch_samples = []  
+            qval = int((1 - self.random_fraction)*self.aquisition_batch_size)
+            for _ in range(int(self.random_fraction*self.aquisition_batch_size)):
+                params = [
+                    torch.distributions.Uniform(lb, ub).sample().item()
+                    for (lb, ub) in self.bounds
+                ]
+                param_dict = dict(zip(self.parameters, params))
+                batch_samples.append(param_dict)
+        candidates, acq_values = botorch.optim.optimize_acqf(EI, 
+                                                             bounds=torch.FloatTensor(self.bounds).T,
+                                                             sequential=False, 
+                                                             q=qval,
+                                                             num_restarts=10,
+                                                             raw_samples=1024
+                                                             )
+        for index, _ in enumerate(range(candidates.size(dim=0))):
+            params_dict = dict(zip(self.parameters, candidates[index,:].numpy()))
+            batch_samples.append(params_dict)  
+        return batch_samples
     
-    def build_result_dictionary(self, base_run_directory: str): #-> torch.Tensor:
+    def build_result_dictionary(self, base_run_directory: str, normalize=True): 
         """
         This function can be used to build the result_dictionary based on the existing runs
         in the base_run_directory.
+        
+        Args:
+            base_run_directory (str): Path to the base run directory
+
+        Kwargs:
+            normalize: A Boolean flag to turn of normalization. This is True by default.
+
+        Returns:
+            This function does not return anything directly. However, the function 
+            establishes self.result_dictionary as well as self.result_dictionary_norm,
+            if normalize is set to True.         
+
         """
 
         # Make sure that result_dictionary does not exist in locals
         if 'result_dictionary' in locals():
             locals().pop('result_dictionary')
+        if 'result_dictionary_failed' in locals():
+            locals().pop('result_dictionary_failed')
 
         # Obtain a list of run_directories within the base_run_directory
         dirlist = os.listdir(base_run_directory)
-      
         # Loop over the established runs. This can be streamlined if needed.
         for dirname in dirlist:
             if 'CONFIG' in dirname:
                 continue
             else:
-                sample_dict = self.parser.collect_sample_information(os.path.join(base_run_directory, dirname), 
-                                                                     self.observations)
-            if 'result_dictionary' in locals():
-                for key in sample_dict.keys():
-                    # Append values to the lists corresponding to each key.
-                    result_dictionary[key] = np.concatenate((result_dictionary[key], [sample_dict[key]])) 
+                sample_dict = self.parser.collect_sample_information(os.path.join(base_run_directory, dirname), self.observations)
+            if sample_dict['failure'] == 0:
+                if 'result_dictionary' in locals():
+                    for key in sample_dict.keys():
+                        # Append values to the lists corresponding to each key.
+                        result_dictionary[key] = np.concatenate((result_dictionary[key], [sample_dict[key]])) 
+                else:
+                    result_dictionary = sample_dict
+                    for key in result_dictionary.keys():
+                        result_dictionary[key]=[result_dictionary[key]]
             else:
-                result_dictionary = sample_dict
-                for key in result_dictionary.keys():
-                    # Change to a list, such that results can be appended.
-                    #if len(result_dictionary[key]) < 2:
-                    #    result_dictionary[key] = [result_dictionary[key]]
-                    result_dictionary[key]=[result_dictionary[key]]
+                if 'result_dictionary_failed' in locals():
+                    for key in sample_dict.keys():
+                        # Append values to the lists corresponding to each key.
+                        result_dictionary_failed[key] = np.concatenate((result_dictionary_failed[key], [sample_dict[key]])) 
+                else:
+                    result_dictionary_failed = sample_dict
+                    for key in result_dictionary.keys():
+                        result_dictionary_failed[key]=[result_dictionary_failed[key]]
         if 'result_dictionary' in locals():
             self.result_dictionary = result_dictionary
         else:
-            self.result_dictionary = [None]                    
+            self.result_dictionary = [None]
+        if 'result_dictionary_failed' in locals():
+            self.result_dictionary_failed = result_dictionary_failed
+        else:
+            self.result_dictionary_failed = [None]
+        if normalize:
+            self.normalize_results()
 
-    def collect_batch_results(self, results: list[dict[str, dict]]) -> torch.Tensor:
-        """
-        Collects results from the batch.
+    def append_result_dictionary(self, run_dir, normalize=True):
+        sample_dict = self.parser.collect_sample_information(run_dir, self.observations)
+        if sample_dict['failure'] == 0:
+            for key in sample_dict.keys():
+                self.result_dictionary[key] = np.concatenate((self.result_dictionary[key], [sample_dict[key]]))
+            if normalize:
+                self.normalize_results()
+        else:
+            for key in sample_dict.keys():
+                if self.result_dictionary_failed == [None]:
+                    self.result_dictionary_failed[key] = [sample_dict[key]]
+                else:
+                    self.result_dictionary_failed[key] = np.concatenate((self.result_dictionary_failed[key], [sample_dict[key]]))     
 
-        Args:
-            results (list): List of dictionaries containing batch results.
+    def normalize_results(self):
+        # Scale input domain to [0,1]**d
+        if self.result_dictionary == [None]:
+            self.result_dicionary_norm = [None]
+        else:
+            inpmin = np.min(self.result_dictionary['inputs'], axis=0)
+            inpmax = np.max(self.result_dictionary['inputs'], axis=0)
+            inprang = inpmax - inpmin
+            input_scaled = (self.result_dictionary['inputs'] - inpmin)/inprang
+            # Scale output N(0, 1)
+            outputs = self.result_dictionary['distances']
+            means = np.mean(outputs, axis=0)
+            stds = np.std(outputs, axis=0)
+            output_scaled = (outputs - means)/stds
+            result_dictionary_norm = {'inputs':input_scaled, 'distances':output_scaled}
+            self.result_dictionary_norm = result_dictionary_norm
+                 
 
-        Returns:
-            torch.Tensor: Tensor containing batch results.
-
-        """
-        outputs_as_tensor = torch.empty(len(results), len(self.parser.keep_keys))
-        for n, result in enumerate(results):
-            x = result["inputs"]
-            y = result["output"]
-            outputs_as_tensor[n] = torch.cat((x, y))
-        return outputs_as_tensor
 
 
-    def dump_iteration_results(self, base_run_dir: str, iterations: int, trained_model_state_dict: dict):
-        """ 
-        iteration number, size of train set, and metrics get appened to the file 'final_metrics.txt'
-        while the current train set is saved  "train_{iterations}.pth" # TODO: update train set saving
-        model is saved every 5 iterations 
-        """
 
-        
-        train_fname = os.path.join(base_run_dir, f"train_{iterations}.pth")
-        torch.save(self.parser.train, train_fname)
-        
 
-        final_metric_file = os.path.join(base_run_dir, "final_metrics.txt")
-        with open(final_metric_file, "a") as f:
-            f.write(f"{iterations}, {len(self.parser.train)}, {self.metrics[-1]}\n")
-        
-        model_path = os.path.join(base_run_dir, f'model_{iterations}.pth')
-        if iterations % 5 == 0: 
-            torch.save(trained_model_state_dict, model_path)
 
 

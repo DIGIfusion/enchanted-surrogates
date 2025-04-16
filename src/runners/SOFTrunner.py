@@ -73,14 +73,14 @@ class SOFTrunner(Runner):
         print(f"single_code_run: {run_dir}", flush=True)
 
         self.parser.write_input_file(params, run_dir)
-
-        os.chdir(run_dir)
+        input_path = os.path.join(run_dir, 'soft_input')
+        #os.chdir(run_dir)
         # run code
         if not self.only_generate_files:
             if self.number_of_mpi > 1:
-                subprocess.call(['mpirun','-n',str(self.number_of_mpi),self.executable_path,'soft_input'])
+                subprocess.call(['mpirun','-n',str(self.number_of_mpi),self.executable_path, input_path])
             else:
-                subprocess.call([self.executable_path, 'soft_input'])
+                subprocess.call([self.executable_path, input_path])
 
         return True
   

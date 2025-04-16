@@ -67,9 +67,11 @@ class DREAMparser(Parser):
             input_path = os.path.join(run_dir, 'input.h5')
         else:
             raise FileNotFoundError(f"Couldnt find {run_dir}")
-
-        ds.output.setFilename('output.h5')
-
+        output_path = os.path.join(run_dir,'output.h5')
+        ds.output.setFilename(output_path)
+        ds.timestep.setTmax(24.0e-3)
+        ds.timestep.setNt(100)
+        ds.timestep.setNumberOfSaveSteps(47)
         # Anything that the user aims to sample, should be defined
         # here through options.           
         if 'V_loop_wall' in params and 'tau_V_loop' in params:
@@ -149,64 +151,72 @@ class DREAMparser(Parser):
         with open(os.path.join(run_dir, 'params.pkl'), 'rb') as paramsfile:
             inputs = pkl.load(paramsfile)
         
-        # This computes a distance metric for the current.
-        # Mean absolute error is chosen here.
-        outputdict = self.read_output_file(run_dir)
-        t = np.array(outputdict['output'].eqsys.grid.t[:])
-        ip = np.array(outputdict['output'].eqsys.I_p[:])
-        iptrace = h5py.File(observations['IP'])
-        tobs = iptrace['Ip_time'][:]-48.056
-        ipobs = np.abs(iptrace['Ip'])
-        func = interp1d(tobs, ipobs)
-        ipobs = func(t)
-        distance = mean_absolute_error(ip, ipobs)/np.max(ipobs)       
-        ipdistance = np.array([distance])
-        # This computes the distance metric for the synchrotron images.
-        # This implementation goes digging into the SOFT run directory, breaking the compartmentalization 
-        # a little. Future modications may change this to respect the interfaces more elegantly.
-        # However, it is all still contained within the DREAM run directory, as SOFT is essentially a 
-        # post processor.
-        images = []
-        for i in observations['images']:
-            image1 = np.load(i)
-            im1 = np.rot90(image1['data'][0].T)
-            # Crop the image. Not very elegant to be honest. However, the experimental image has 
-            # some optical features that are difficult to reproduce synthetically and 
-            # the most straight forward solution is to crop the image above these features.
-            im1 = im1[85:130, 30:110] 
-            images.append(im1)
-        images = np.array(images)
-        dirlist = os.listdir(run_dir)
-        time_idx_list = []
-        image_list = []
-        for i in dirlist:
-            if ('input' not in i) and ('output' not in i) and ('params' not in i):
-                finp = open(os.path.join(run_dir, i,'soft_input'),'r')
-                text = 'g'
-                while ' time ' not in text:
-                    text = finp.readline()
-                t1 = text.split()
-                time_idx = int(t1[2][:-1])
-                soft_ima = h5py.File(os.path.join(run_dir, i,'image_out.h5'))
-                soft_ima = np.rot90(soft_ima['image'])
-                soft_ima = transform.resize(soft_ima, (120,120))
-                time_idx_list.append(time_idx)
-                image_list.append(soft_ima)
-        time_idx_array = np.array(time_idx_list)
-        image_array = np.array(image_list)
-        idxorder = np.argsort(time_idx_array)
-        image_array = image_array[idxorder,:]
-        imagedists = []
-        for count, value in enumerate(images):
-            dist=np.max(feature.match_template(image_array[count,:], value, pad_input=True))
-            imagedists.append(dist)
-        imagedists = np.array(imagedists)
-        distances = np.concatenate((ipdistance, imagedists))
-        inputnd = []
-        for key in inputs:
-            inputnd.append(inputs[key])
-        inputnd = np.array(inputnd)
-        outputdict = {'inputs':inputnd, 'distances':distances}
+        try:
+            # This computes a distance metric for the current.
+            # Mean absolute error is chosen here.
+            outputdict = self.read_output_file(run_dir)
+            t = np.array(outputdict['output'].eqsys.grid.t[:])
+            ip = np.array(outputdict['output'].eqsys.I_p[:])
+            iptrace = h5py.File(observations['IP'])
+            tobs = iptrace['Ip_time'][:]-48.056
+            ipobs = np.abs(iptrace['Ip'])
+            func = interp1d(tobs, ipobs)
+            ipobs = func(t)
+            distance = mean_absolute_error(ip, ipobs)/np.max(ipobs)       
+            ipdistance = np.array([distance])
+            # This computes the distance metric for the synchrotron images.
+            # This implementation goes digging into the SOFT run directory, breaking the compartmentalization 
+            # a little. Future modications may change this to respect the interfaces more elegantly.
+            # However, it is all still contained within the DREAM run directory, as SOFT is essentially a 
+            # post processor.
+            images = []
+            for i in observations['images']:
+                image1 = np.load(i)
+                im1 = np.rot90(image1['data'][0].T)
+                # Crop the image. Not very elegant to be honest. However, the experimental image has 
+                # some optical features that are difficult to reproduce synthetically and 
+                # the most straight forward solution is to crop the image above these features.
+                im1 = im1[85:130, 30:110] 
+                images.append(im1)
+            images = np.array(images)
+            dirlist = os.listdir(run_dir)
+            time_idx_list = []
+            image_list = []
+            for i in dirlist:
+                if ('input' not in i) and ('output' not in i) and ('params' not in i):
+                    finp = open(os.path.join(run_dir, i,'soft_input'),'r')
+                    text = 'g'
+                    while ' time ' not in text:
+                        text = finp.readline()
+                    t1 = text.split()
+                    time_idx = int(t1[2][:-1])
+                    soft_ima = h5py.File(os.path.join(run_dir, i,'image_out.h5'))
+                    soft_ima = np.rot90(soft_ima['image'])
+                    soft_ima = transform.resize(soft_ima, (120,120))
+                    time_idx_list.append(time_idx)
+                    image_list.append(soft_ima)
+            time_idx_array = np.array(time_idx_list)
+            image_array = np.array(image_list)
+            idxorder = np.argsort(time_idx_array)
+            image_array = image_array[idxorder,:]
+            imagedists = []
+            for count, value in enumerate(images):
+                dist=np.max(feature.match_template(image_array[count,:], value, pad_input=True))
+                imagedists.append(dist)
+            imagedists = np.array(imagedists)
+            distances = np.concatenate((ipdistance, imagedists))
+            inputnd = []
+            for key in inputs:
+                inputnd.append(inputs[key])
+            inputnd = np.array(inputnd)
+            outputdict = {'inputs':inputnd, 'distances':distances, 'failure':0}
+        except:
+            distances = np.array[-1]
+            inputnd = []
+            for key in inputs:
+                inputnd.append(inputs[key])
+            inputnd = np.array(inputnd)
+            outputdict = {'inputs':inputnd, 'distances':distances, 'failure':1}
         # This is a plotting routine that can be used to visually inspect the agreement.
         if plot_comparison:
             fig, axs = plt.subplots(2,3)

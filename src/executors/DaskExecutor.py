@@ -7,6 +7,7 @@ Contains logic for executing surrogate workflow on Dask.
 
 import time
 import os
+import copy
 from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
@@ -52,7 +53,6 @@ class DaskExecutor(Executor):
             **kwargs: Additional keyword arguments.
         """
         sampler_type: S = self.sampler.sampler_interface
-
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
             #self.simulator_cluster = LocalCluster(**self.worker_args)
@@ -77,19 +77,21 @@ class DaskExecutor(Executor):
 
         elif sampler_type in [S.SEQUENTIAL, S.BATCH, S.BO]:
             if self.worker_args.get("secondary_SLURM", False):
-                if not os.path.isdir(self.worker_args['slurm_args']['local_directory'])
+                if not os.path.isdir(self.worker_args['slurm_args']['local_directory']):
+                    print('Creating primary SLURMarg')
                     os.mkdir(self.worker_args['slurm_args']['local_directory'])
-                if not os.path.isdir(self.worker_args['secondary_slurm_args']['local_directory'])
+                if not os.path.isdir(self.worker_args['secondary_slurm_args']['local_directory']):
+                    print('Creating secondary SLURMarg')
                     os.mkdir(self.worker_args['secondary_slurm_args']['local_directory'])
                 self.simulator_cluster_primary = SLURMCluster(**self.worker_args['slurm_args'])
-                self.simulator_cluster_primary.adapt(minumum_jobs=0, maximum_jobs=40) 
-                self.simulator_client = Client(self.simulator_cluster)
+                #self.simulator_cluster_primary.adapt(minimum_jobs=0, maximum_jobs=self.sampler.aquisition_batch_size) 
+                self.simulator_client_primary = Client(self.simulator_cluster_primary)
                 self.simulator_cluster_secondary = SLURMCluster(**self.worker_args['secondary_slurm_args'])
                 # Presently hard coded to minimum 0 and maximum 10 jobs.
                 # TODO: Allow setting the job min and max through the configuration
-                self.simulator_cluster_secondary.adapt(minimum_jobs=0, maximum_jobs=10)
+                #self.simulator_cluster_secondary.adapt(minimum_jobs=0, maximum_jobs=2*self.sampler.aquisition_batch_size)
                 self.simulator_client_secondary = Client(self.simulator_cluster_secondary)
-                self.clients = [self.client, self.simulator_client_secondary]
+                self.clients = [self.simulator_client_primary, self.simulator_client_secondary]
                 #self.clients = [self.simulator_client]
             else:
                 self.simulator_cluster = SLURMCluster(**self.worker_args)
@@ -134,21 +136,28 @@ class DaskExecutor(Executor):
         for params in param_list:
             new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
-            )
+                ) 
             futures.append(new_future)
         return futures
 
     def start_runs(self):
         sampler_interface: S = self.sampler.sampler_interface
         print(100 * "=")
+
+        # This part of the code is for generating the initial results
+        # With BO sampler the default option is to use the build_result_dictionary
+        # feature that assumes that some other sampler has been used to generate 
+        # initial data already. If this is not the case, random sampling is used.
         if sampler_interface in [S.BO]:
             print("Using the Bayesian Optimization sampler.")
+            submitted = 0
             if self.sampler.result_dictionary == [None]:
                 self.sampler.build_result_dictionary(self.base_run_dir)
-                if self.sampler_result_dictionary == [None]:
-                    initial_parameters = self.sampler.get_initial_parameters()
-                    futures = self.submit_batch_of_params(initial_parameters)
-                    submitted = len(futures)
+                if self.sampler.result_dictionary == [None]:
+                    if self.sampler.dry_run: 
+                        print("Dry run of BO sampler is useless without a result dictionary")
+                    else:
+                        initial_parameters = self.sampler.get_initial_parameters()
         else:
             print("Creating initial runs")
             initial_parameters = self.sampler.get_initial_parameters()
@@ -170,8 +179,9 @@ class DaskExecutor(Executor):
                              res['output']
                         )
                         sec_futures.append(sec_future)
-                    sec_seq = as_completed(sec_futures)
-                    for sec_f in sec_seq:
+                    #sec_seq = as_completed(sec_futures)
+                    wait(sec_futures)
+                    for sec_f in sec_futures:
                         sec_f.release()
                 completed += 1
                 # AEJ - February 14th 2025 - Use the number of submitted rather than completed to
@@ -193,11 +203,91 @@ class DaskExecutor(Executor):
                 print("BATCH SAMPLER", 20 * "=", completed, 20 * "=")
 
         elif sampler_interface in [S.BO]:
+            # Stop when the total budget has been reached.
             while submitted < self.sampler.total_budget:
-                param_list = self.sampler.get_next_parameter()
+                if self.sampler.result_dictionary != [None]:
+                    # Establish the GPR fit to the result dictionary
+                    self.sampler.train_surrogate()
+                
+                    # Get the list or parameters to run. 
+                    # The length of this is determined by the acquisition_batch_size
+                    # within the sampler.
+                    param_list = self.sampler.get_next_parameter()
+                else:
+                    param_list = initial_parameters
 
+                # If dry run, just print the parameter list
+                if self.sampler.dry_run:
+                    print('Parameters suggested by the sampler:')
+                    print(param_list)
+                    break
+                else:
+                    # Check if there is a secondary SLURM for post processing activities.
+                    if self.worker_args.get("secondary_SLURM", False):
+                        # Set the secondary cluster jobs=0
+                        self.simulator_cluster_secondary.scale(0)
 
+                        # Futures list
+                        futures = []
+              
+                        # To keep track of number of running cases
+                        njobs = 0
+                        njobs_sec_sub = 0
+                        njobs_sec_finished = 0
 
+                        # Submit cases on the primary and append to the futures list.
+                        njobs = len(param_list)
+                        self.simulator_cluster_primary.scale(jobs=njobs)
+                        # Give 10 seconds to get the workers running.
+                        time.sleep(10)
+                        for params in param_list:
+                            if self.worker_args.get("verbose", False):                            
+                                print('Submitting case with params ', params)
+                            new_future = self.simulator_client_primary.submit(
+                                run_simulation_task, 
+                                self.runner_args, 
+                                params, 
+                                self.base_run_dir
+                                )
+                            submitted += 1
+                            time.sleep(2)
+                            futures.append(new_future)
+                        wait(futures)
+                        print('Primary futures done')
+                        
+                        # List for secondary SLURM futures
+                        sec_futures = []
+                      
+                        if self.worker_args.get("secondary_SLURM", False):
+                            print('Starting secondary futures')
+                            self.simulator_cluster_secondary.scale(jobs=len(futures)*2)
+                        
+                        for future in futures:
+                            # Get copy of the run-directory.
+                            res = future.result()
+                            run_dir_loc = res['output']
+                            # Launch the secondary SLURM runs.
+                            if self.worker_args.get("secondary_SLURM", False):
+                                for idx in range(len(self.runner_args['other_params']['soft']['other_params']['time_idx'])):
+                                    sec_future = self.simulator_client_secondary.submit(
+                                        run_simulation_task, self.runner_args['other_params']['soft'], 
+                                        {'time_idx':self.runner_args['other_params']['soft']['other_params']['time_idx'][idx], 
+                                         'mag_field_path':self.runner_args['other_params']['soft']['other_params']['mag_field_path'][idx]}, 
+                                         run_dir_loc
+                                         )
+                                    sec_futures.append(sec_future)
+                                    time.sleep(2)
+
+                        wait(sec_futures)
+                        time.sleep(60)
+                        print('Batch completed')
+                    else:
+                        futures = self.submit_batch_of_params(param_list)
+                        wait(futures)
+
+                    self.sampler.build_result_dictionary(self.base_run_dir)
+                    
+                        
         elif sampler_interface in [S.ACTIVE, S.ACTIVEDB]:
             iterations = 0
             while True:

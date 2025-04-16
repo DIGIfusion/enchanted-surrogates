@@ -88,10 +88,10 @@ class DREAMrunner(Runner):
         """
         self.parser.write_input_file(params, run_dir, self.base_input_file_path)
 
-        os.chdir(run_dir)
+        input_path = os.path.join(run_dir, 'input.h5')
 
         if not self.only_generate_files:
-            subprocess.call([self.executable_path, 'input.h5'])
-
+            subprocess.call([self.executable_path, input_path])
+        
         return run_dir
 

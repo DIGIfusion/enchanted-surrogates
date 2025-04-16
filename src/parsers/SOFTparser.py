@@ -49,9 +49,12 @@ class SOFTparser(Parser):
             '    filename = "'+params['mag_field_path']+'";'+'\n'+
             '}'+'\n')
         f.write('@ParticleGenerator PGen {'+'\n'+
-            '    a  = 0.0, 1, 100; # (m)'+'\n'+
-            '    p  = 10, 100, 50; # p is normalized to particle rest mass'+'\n'+
-            '    ithetap = 0.02, 0.35, 40;'+'\n'+
+            #'    a  = 0.0, 1, 100; # (m)'+'\n'+
+            '    a  = 0.0, 1, 2; # (m)'+'\n'+
+            #'    p  = 10, 100, 50; # p is normalized to particle rest mass'+'\n'+
+            '    p  = 10, 100, 2; # p is normalized to particle rest mass'+'\n'+
+            #'    ithetap = 0.02, 0.35, 40;'+'\n'+
+            '    ithetap = 0.02, 0.35, 2;'+'\n'+
             '    progress = 100;'+'\n'+
             '}'+'\n')
         f.write('@ParticlePusher PPusher {'+'\n'+
@@ -59,7 +62,7 @@ class SOFTparser(Parser):
             '    force_numerical_jacobian = yes;' +'\n'+
             '}'+'\n')
         f.write('@DistributionFunction distFunc(dream) {'+'\n'+
-	    '    name = "../output.h5";'+'\n'+
+	    '    name = "'+run_dir+'/../output.h5";'+'\n'+
 	    '    flippitchsign = yes;'+'\n'+
 	    '    time = '+params['time_idx']+';'+'\n'+
             '}'+'\n')
@@ -69,11 +72,6 @@ class SOFTparser(Parser):
             '    ntoroidal   = 7000;' +'\n'+   
             '    model       = cone;' +'\n'+   
             '    output      = image;'+'\n'+ 
-            '}'+'\n')
-        f.write('@Orbits orbit {'+'\n'+
-            '    detector = det;'+'\n'+
-            '    ntoroidal   = 7000;'+'\n'+ 
-            '    output = "orbit_out.h5";'+'\n'+
             '}'+'\n')
         f.write('@Detector det {'+'\n'+
             '    aperture     = 1.4e-3;'+'\n'+
@@ -87,7 +85,7 @@ class SOFTparser(Parser):
             '}'+'\n')
         f.write('@RadiationOutput image (image) {'+'\n'+
             '    pixels = 600;'+'\n'+ 
-            '    output = "image_out.h5";'+'\n'+
+            '    output = "'+run_dir+'/image_out.h5";'+'\n'+
             '}'+'\n')
         f.close()
         print(f"SOFT input written to: {input_path}.")
