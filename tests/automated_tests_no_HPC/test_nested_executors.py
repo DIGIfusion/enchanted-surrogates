@@ -7,25 +7,19 @@ sys.path.append(os.getcwd() + "/src")
 import run
 
 
-config_filepath2 = os.path.join(
-    os.getcwd(), "tests/automated_tests_no_HPC/configs/active_learning_STATICPOOL_ex_dset.yaml"
-)
-
-config_filepath3 = os.path.join(
-    os.getcwd(), "tests/automated_tests_no_HPC/configs/ActiveExecutor_MMMG_maxU_gpr.yaml"
+config_filepath1 = os.path.join(
+    os.getcwd(), "tests/automated_tests_no_HPC/configs/Nested_SimulationExecutor_MMMGaussian.yaml"
 )
 
 data_path = os.path.join(os.getcwd(), "tests", "automated_tests_no_HPC", "train.csv")
 
 
-configs_to_test = [config_filepath2, config_filepath3]
+configs_to_test = [config_filepath1]
 
 
 @pytest.mark.parametrize("config_name", configs_to_test)
 def test_run_active_learning(config_name):
     args = run.load_configuration(config_name)
     args.executor["config_filepath"] = config_name
-    if "ActiveLearning" in args.sampler["type"]:
-        args.sampler["parser_kwargs"]["data_path"] = data_path
     run.main(args)
     assert True
