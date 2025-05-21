@@ -1,4 +1,4 @@
-from .base import Sampler
+# from .base import Sampler
 import numpy as np
 from itertools import product
 from common import S
@@ -7,7 +7,7 @@ import numpy as np
 from scipy.stats.qmc import Sobol
 
 
-class SobolSequence(Sampler):
+class SobolSequence():
     """
     Sudo random sampler that achieves low discrepancy from uniform with few data points. 
 
