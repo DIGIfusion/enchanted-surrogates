@@ -108,10 +108,9 @@ class DaskExecutor(Executor):
         """
         futures = []
         print(param_list)
-        for params in param_list:
-            run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))    
+        for params in param_list:  
             new_future = self.simulator_client.submit(
-                run_simulation_task, runner_args=self.runner_args, run_dir=run_dir, params=params, 
+                run_simulation_task, runner_args=self.runner_args, base_run_dir=self.base_run_dir, params=params, 
             )
             futures.append(new_future)
         print(futures)
@@ -132,7 +131,8 @@ class DaskExecutor(Executor):
             if self.output_dir is not None:
                 outputs = []
                 for res in seq.done:
-                    outputs.append(res.result())
+                    result, run_dir = res.result()
+                    outputs.append(result)
                 output_file_path = os.path.join(self.output_dir, "sequential")
                 print("SAVING OUTPUT IN:", output_file_path)
                 with open(output_file_path, "w") as out_file:
@@ -164,7 +164,8 @@ class DaskExecutor(Executor):
                 # NOTE: ------ Collect outputs ------
                 outputs = []
                 for res in seq.done:
-                    outputs.append(res.result())
+                    result, run_dir = res.result()
+                    outputs.append(result)
                 outputs = self.sampler.collect_batch_results(outputs)
                 # NOTE: ------ Check if out of budget ------
                 completed += len(outputs)

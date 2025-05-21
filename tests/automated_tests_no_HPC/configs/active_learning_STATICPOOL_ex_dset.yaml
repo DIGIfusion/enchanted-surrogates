@@ -7,7 +7,7 @@ sampler:
     - ['rp', [512]]
   parser_kwargs: 
     type: STATICPOOLparser
-    data_path: '/scratch/project_2007159/cursed-tglf/tests/train.csv'
+    data_path: tests/automated_tests_no_HPC/train.csv #'/scratch/project_2007159/cursed-tglf/tests/train.csv'
     inputs: 
       - 'peroxide'
       - 'MW'

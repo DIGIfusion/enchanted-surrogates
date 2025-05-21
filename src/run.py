@@ -57,7 +57,9 @@ def main(args: argparse.Namespace):
         sampler_type = args.sampler.pop("type")
         sampler = getattr(importlib.import_module(f'samplers.{sampler_type}'),sampler_type)(**args.sampler) 
         args.executor['sampler'] = sampler
-
+    else:
+        sampler = 'Sampler not defined, potentially defined in executor'
+        
     print('MAKING EXECUTOR')    
     # Legacy support for DaskExecutor, in DaskExecutorSimulation the runner should be defined within the executor.
     args.executor['runner_args'] = getattr(args, 'runner', None)
@@ -70,6 +72,7 @@ def main(args: argparse.Namespace):
     
     print("SHUTTING DOWN SCHEDULER AND WORKERS")
     executor.clean()
+    return sampler, executor
 
 
 if __name__ == "__main__":

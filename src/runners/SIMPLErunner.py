@@ -56,9 +56,9 @@ class SIMPLErunner(Runner):
         Returns:
             str: Result of running the test program.
         """
-        os.chdir(run_dir)
         if type(params) != type(None):
             print('SAMPLE PROVIDED TO SINGLE CODE RUN, MAKING INPUT FILE', 'sample:', params)
+            print('debug run_dir exists?', run_dir, os.path.exists(run_dir))
             self.parse_params(params, run_dir)
             #If we are after the first code run in a pipeline then the inputfile parsing
             # parsing will be handeled by the executor and no params will be provided
@@ -68,4 +68,4 @@ class SIMPLErunner(Runner):
         # command to run the code in the terminal which will be carried out on the workers
         subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
         res = self.parser.read_output_file(run_dir)
-        return res, run_dir
+        return res

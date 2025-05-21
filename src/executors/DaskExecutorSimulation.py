@@ -82,10 +82,15 @@ class DaskExecutorSimulation():
             else:
                 self.worker_args['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
         print("Initializing DASK client")
+        islocal = self.worker_args.get("local", False)
+        print('DEBGUG islocal', islocal)
         if self.worker_args.get("local", False):
             # TODO: Increase num parallel workers on local
             print(f"MAKING A LOCAL CLUSTER FOR {self.runner_args['type']}")
-            self.cluster = LocalCluster(**self.worker_args)
+            # Create a local cluster with 3 workers
+            self.cluster = LocalCluster(n_workers=self.n_jobs)
+            # Connect a client to the cluster
+            self.client = Client(self.cluster, timeout=60)
         else:
             print(f"MAKING A SLURM CLUSTER FOR {self.runner_args['type']}")
             # local_directory = os.path.join(self.base_run_dir, 'scheduler_local_dir')
@@ -235,26 +240,15 @@ class DaskExecutorSimulation():
         if self.scale_cluster_to_num_params:
             self.n_jobs = len(params)
             self.cluster.scale(self.n_jobs)
-        
-        print('MAKING TEMPORARY RUNNER')
-        runner_type = self.runner_args['type']
-        runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**self.runner_args)
-        if 'pre_run' in dir(runner):
-            print('PRERUN IS IN RUNNER')
-            runner.pre_run(base_run_dir=base_run_dir, params=params, *args, **kwargs)
-            
+                    
         print("MAKING AND SUBMITTING DASK FUTURES")      
         futures = []
         
-        for index, sample in enumerate(params):
-            if type(base_run_dir) == type([]):
-                brd = base_run_dir[index]
-            else:
-                brd = base_run_dir
-            print(index+1,'MAKING NEW FUTURE FOR:', self.runner_args['type'])
+        for sample in params:
+            print('MAKING NEW FUTURE FOR:', self.runner_args['type'], sample, base_run_dir)
             new_future = self.client.submit(
                 run_simulation_task, runner_args=self.runner_args, 
-                base_run_dir=brd, index=index, params=sample, future=None, *args, **kwargs
+                base_run_dir=base_run_dir, params=sample, future=None, *args, **kwargs
             )
             futures.append(new_future)
             

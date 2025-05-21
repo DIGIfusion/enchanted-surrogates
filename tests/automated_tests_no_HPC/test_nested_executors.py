@@ -21,5 +21,6 @@ configs_to_test = [config_filepath1]
 def test_run_active_learning(config_name):
     args = run.load_configuration(config_name)
     args.executor["config_filepath"] = config_name
+    os.system(f"rm -r {args.executor['base_run_dir']}")
     run.main(args)
     assert True
