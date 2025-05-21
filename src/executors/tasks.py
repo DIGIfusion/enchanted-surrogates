@@ -2,10 +2,12 @@ import os, sys
 import traceback
 from dask.distributed import print
 import importlib
+import uuid
+from run import load_configuration
 
 # when submitting functions to dask workers to be ran, they cannot be functions from a class. They must be defined in another file. This file
 
-def run_simulation_task(runner_args:dict, run_dir:str, params: dict=None, future=None) -> dict:
+def run_simulation_task(params: dict, base_run_dir:str, runner_args:dict, index=None, future=None, *args, **kwargs) -> dict:
         """
         Runs a single simulation task using the specified runner and parameters.
         Args:
@@ -13,24 +15,40 @@ def run_simulation_task(runner_args:dict, run_dir:str, params: dict=None, future
         Returns:
         Raises:
         """
+        print('RUNNING SIMULATION TASK')
+        print("MAKING RUN DIRECTORY")
+        
+        try:
+            # This is set in the run.py and is inherited by the workers
+            config_path = os.environ.get('ENCHANTED_CONFIG_PATH')
+            # The downside of this is that the full config file path needs to be passed for the worker to find it. 
+            config = load_configuration(config_path) 
+            naming_convention = config.general['run_dir_naming_convention']
+        except:
+            naming_convention = 'uuid'
+            
+        if naming_convention == 'uuid':
+            run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
+        if naming_convention == 'params':
+            run_dir = os.path.join(base_run_dir, '-'.join([str(k)+'-'+str(v) for k,v in params.items()]))
+        
+        if not os.path.exists(run_dir):
+            os.makedirs(run_dir)
+
         runner_type = runner_args['type']
         runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**runner_args)
         try:            
-            if type(params) == type(None):
-            #we are not given sampled parameters so we assume the run directories have already been set up
-            # and we can simply run the code. This will happen if the executor calling this function is second (or third etc) in a pipeline
-                runner_output = runner.single_code_run(run_dir)
-            else:
-                if run_dir != None:
-                    if not os.path.exists(run_dir):
-                        os.mkdir(run_dir)        
-                runner_output = runner.single_code_run(run_dir=run_dir, params=params) 
-            
+            if run_dir != None:
+                if not os.path.exists(run_dir):
+                    os.mkdir(run_dir)        
+            runner_output = runner.single_code_run(run_dir=run_dir, params=params, index=index, *args, **kwargs)     
         except Exception as exc:
             print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
             #print the whole traceback and not just the last error
             runner_output = None
-        return runner_output
+        if run_dir == None:
+            raise ValueError('run_simulation_task must have a run_dir')
+        return runner_output, run_dir
     
 def print_error_wrapper(function, *args, **kwargs):
     try:
