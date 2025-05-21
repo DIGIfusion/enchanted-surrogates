@@ -2,13 +2,10 @@ import numpy as np
 import warnings
 import os
 from common import S
-import pysgpp
-from pysgpp import BoundingBox1D
 import importlib
 from scipy.stats import sobol_indices, uniform, entropy
 import matplotlib.pyplot as plt
 import pandas as pd
-import pickle
 # from .base import Sampler
 from runners.MMMGrunner import MaxOfManyGaussians
 from GPy.models import GPRegression
