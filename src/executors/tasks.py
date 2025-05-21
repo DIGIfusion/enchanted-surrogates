@@ -38,7 +38,7 @@ def run_simulation_task(params: dict, base_run_dir:str, runner_args:dict, future
         print('debug A 1 exists', run_dir, os.path.exists(run_dir))
         if not os.path.exists(run_dir):
             os.makedirs(run_dir)
-        print('debug A 2 exists', run_dir, os.path.exists(run_dir))
+        print('debug A 2 exists', run_dir, os.path.exists(run_dir), os.path.dirname(run_dir))
 
         runner_type = runner_args['type']
         runner = getattr(importlib.import_module(f'runners.{runner_type}'),runner_type)(**runner_args)

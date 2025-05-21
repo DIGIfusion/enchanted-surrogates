@@ -66,6 +66,10 @@ class SIMPLErunner(Runner):
             print('SAMPLE NOT PROVIDED TO SINGLE CODE RUN, IPUT FILE, in.json, SHOULD ALREADY BE PRESENT IN', run_dir)
         params = self.parser.read_input_file(run_dir)
         # command to run the code in the terminal which will be carried out on the workers
-        subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"])
+        print('debug ls run_dir',run_dir)
+        os.system(f'ls {run_dir}')
+        result = subprocess.run(["bash", self.executable_path, f"{params}", f"{run_dir}"], capture_output=True)
+        print('DEBUG simple out',result.stdout)
+        print('DEBUG simple err',result.stderr)
         res = self.parser.read_output_file(run_dir)
         return res
