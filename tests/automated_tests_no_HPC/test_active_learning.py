@@ -33,7 +33,7 @@ def test_run_active_learning(config_name):
 configs_to_test2 = [config_filepath2]
 
 @pytest.mark.parametrize("config_name", configs_to_test2)
-def test_run_active_learning(config_name):
+def test_run_DaskExecutorActive(config_name):
     args = run.load_configuration(config_name)
     args.executor["config_filepath"] = config_name
     os.system(f"rm -r {args.executor['base_run_dir']}")
