@@ -1,54 +1,82 @@
 general:
-  run_dir_naming_convention: 'params'
+  #options are params and uuid. uuid id default if not present. 
+  #The run_dir is where the parameters file for a run is made and the output of the run is stored. 
+  run_dir_naming_convention: 'params' 
 
-sampler:
-  type: ActiveMaxGprUncertaintySampler
-  bounds: [[0,1], [0,1]]
-  parameters: ['x0', 'x1']
-  initial_sampler: 
-    type: SobolSequence
-    num_samples: 20
-  pool_sampler:
+# The sampler is responsible for generating parameter combinations for that will be ran in the code. 
+# They are general in that they can be applied to any simulation code.
+# This is an active sampler, which means it has a function get_next_parameters that uses the data in train:dict
+# to suggest the most informative samples to run through the simulation code.
+sampler: # The sampler can be defined here or inside the executor
+  type: ActiveMaxGprUncertaintySampler # You can find this under src/samplers/ActiveMaxGprUncertaintySampler
+  bounds: [[0,1], [0,1]] # The searchable bounds of the parameters, in the same order as in parameters
+  parameters: ['x0', 'x1'] # Usually given the same naming convention as in the simulations parameters file
+  initial_sampler: # This creates the initial data used to inform the first active cycle
+    type: SobolSequence # aims to uniformly sample the space and can achieve low discrepancy to uniform with few samples
+    num_samples: 20 # Must be a power of 2, if not then the closest power of 2 that is lower will be selected
+  pool_sampler:  # This selects the samples that will be the pool of possible options for the get_next_parameters to choose from.
+    # Number of samples can be quite large here as they are all only ever infered by a fast surrogate model. 
     type: SobolSequence
     num_samples: 500
-  num_samples_per_batch: 10
+  num_samples_per_batch: 10 # How many samples should get_next_parameters return every active cycle? (achieved by splitting training data into this many sets)
+# The sampler does not make parameters files, that is handeled by a parser which is triggered by the runner. 
+# in this example the 'simulation' is a dummy python function so no parser is needed.
 
+# The executor is responsible for triggering the sampler to provide the samples and updating the samplers train:dict each active cycle
+# The executor is responsible for requesting resouces to run many simulations and signalling for single_code_run of the runner to be ran
+# on the resouces for each sample provided by the sampler
+# Currently we only have DASK samplers that use the dask python library to create a cluster of workers 
+# where each worker has enough resources to run one simulation
 executor:
-  type: DaskExecutorActive
-  base_run_dir: /scratch/project_462000451/enchanted_test_out/mmmg_maxU_gpr_test # Because the runner only executes a python function I do not need a run_base_dir
+  type: DaskExecutorActive # This is the newest active executor, so use this one. 
+  base_run_dir: data_store/mmmg_maxU_gpr_test # All run_dir will be within the base_run_dir as well as any other files made by enchanted surrogates 
   # runner_return_path: /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/runner_return
-  runner_return_headder: 'x0, x1, MaxManyGaussians'
-  max_cycles: 2
+  runner_return_headder: 'x0, x1, MaxManyGaussians' 
+  # files will be made called runner_return where each line is what a runner returned from single_code_run, this headder will be added to the top of the file
+  # runner_return is usually csv format and in the Active learning case it must be csv format.
+  
+  # Only one of the limits needs to be set
+  max_cycles: 2 # number of active cycles to run before stopping. 1 would just be the initial samples and so no active learning, 2 is initial set + 1 active cycle
+  # total_budget: 1e6 # Max number of simulations before terminating the active cycles
+  # time_limit: 1e6 # Max number of seconds before terminating the active cycles
 
+  # It is also possible to set a critera of stopping in the sampler with sampler.update_custom_limit_value(), this has not yet been fully implimented
+  
+  # DaskExecutorSimulation is a static executor which means it does not do any Active Learning but itself but is nested with an ActiveExecutor for this purpose
+  # The submit_batch_of_params function is used from DaskExecutorSimulation 
   static_executor:
     type: DaskExecutorSimulation
+
+    # The runner contains the function single_code_run which is executed on a dask worker and runs the simulation
+    # this usually involves parsing the sample into a parameters file, running an executable, waiting for the code to finish and parsing the results
+    # This example uses a simple python function max of many multivariate gaussians and so it simply runs that and returns the result
+    # For this Active Executor single_code_runner MUST return a string in the form 'parameter1, parameter2 ... parameterN, simulation_output'
+    # Where simulation output is a scalar that is the quantity of interest for the active learning. eg 'x1, x2, x3, 4.556'
     runner:
-      type: MMMGrunner
-      num_dim: 2 #Necessary
-      bounds: [[0,1], [0,1]] # Necessary
+      type: MMMGrunner # you can find it at src/runners/MMMGrunner.py
+      num_dim: 2 #Necessary, should be the same as the number of parameters
+      bounds: [[0,1], [0,1]] # Necessary, the bounds within the random gaussians will be generated
       random_gaussians:
         num_gaussians: 3 #Necessary
-        mean_bounds: [[0,1], [0,1]] # Defaults to bounds
-        std_bounds: [[0,1], [0,1]] # Defaults to bounds
-        seed: 42 # Defaults to None
+        mean_bounds: [[0,1], [0,1]] # Defaults to bounds, allows the means to be sampled within different bounds do the standard deviations
+        std_bounds: [[0,1], [0,1]] # Defaults to bounds, if you want the gaussians all have narrow std compared to the bounds you can make this narrower e.g.[[0.4,0.5].[0.4,0.5]]
+        seed: 42 # Defaults to None, set for repeatability
   
     worker_args: # to be specified for the SLURMCluster in DASK
-      account: "project_462000451"
-      queue: "small"
-      cores: 1
-      memory: "2GB"
+      account: "project_462000451" # slurm account id
+      queue: "small" # partition on your cluster, on lumi the options are small or standard
+      cores: 1 # This should stay as 1 unless running a simulation that uses OpenMP, this actually threads per process. 
+      memory: "2GB" # amount of memory one worker needs to run one simulation
       #Set the walltime for entire cluster to be able to run everything set in the sampler, taking into account the number of workers. 
       walltime: "00:10:00"
-      interface: "nmn0"
+      interface: "nmn0" # This is different for every cluster, if you don't know try this and it should suggest alternatives to try in the error
       # The job script prologue is ran on every worker at start up
-      job_script_prologue: # this is possibly dependent on which code you want
-        - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"'
+      job_script_prologue:
+        # this command is used for people on my lumi project to load the python envioment. replace this with whatever command you use to load the python enviroment
+        - 'export PATH="/project/project_462000451/enchanted_container_lumi3/bin:$PATH"' # NEEDS REPLACED
         # Change this for your own personal enchanted surrogates clone
-        - 'cd /users/danieljordan/enchanted-surrogates2/'
-        # This command gives the worker access to the python within our container. 
-        - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NB: to use the enchanted-surrogate library
+        - 'cd /users/danieljordan/enchanted-surrogates2/' # NEEDS REPLACED
+        # This command gives the worker access to the python within our container, CHANGE THE DIRECOTRY TO YOUR OWN enchanted_surrogates/src
+        - 'export PYTHONPATH=$PYTHONPATH:/users/danieljordan/enchanted-surrogates2/src' # NEEDS REPLACED
       # These are appended to the sbatch that requestes the resources for each worker.
-      job_extra_directives:
-        - '-o /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.out'
-        - '-e /scratch/project_462000451/gene_out/enchanted_test_out/MMMG/%x.%j.err'
-    n_jobs: 10
+    n_jobs: 10 # This is the number of dask workers that will run the simulations, each worker requires 1 slurm job which is submitted with sbatch.
