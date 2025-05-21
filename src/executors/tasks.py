@@ -26,7 +26,8 @@ def run_simulation_task(params: dict, base_run_dir:str, runner_args:dict, index=
             naming_convention = config.general['run_dir_naming_convention']
         except:
             naming_convention = 'uuid'
-            
+        
+        run_dir=None # needed to get pas pylint it thinks run_dir is referenced before assignment
         if naming_convention == 'uuid':
             run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))
         if naming_convention == 'params':

@@ -1,3 +1,11 @@
 [submodule "bmdal"]
 	path = src/samplers/bmdal
 	url = https://github.com/lorenzozanisi/black_box_AL
+[submodule "src/parsers/submodules/IFS_scripts"]
+	path = src/parsers/submodules/IFS_scripts
+	url = git@github.com:drdrhatch/IFS_scripts.git
+	update = none
+[submodule "src/parsers/submodules/TPED"]
+	path = src/parsers/submodules/TPED
+	url = git@github.com:drdrhatch/TPED.git
+	update = none

@@ -98,10 +98,7 @@ class DaskExecutorActive():
                             ...
                         ''')
         print("MAKING AND SUBMITING DASK FUTURES FOR INITIAL RUNS")
-        sub_executors = [self.static_executor] # TODO: make it work for nested executors too
-        batch_ids = {sub_ex.runner_args['type']:0 for sub_ex in sub_executors}
-        initial_futures = self.static_executor.submit_batch_of_params(params=initial_params, base_run_dir=initial_dir, batch_id=batch_ids[self.static_executor.runner_args['type']])
-        batch_ids[self.static_executor.runner_args['type']]+=1
+        initial_futures = self.static_executor.submit_batch_of_params(params=initial_params, base_run_dir=initial_dir)
         
         runner_return=[]
         print('INITIAL FUTURES SUBMITTED WAITING FOR THEM TO COMPLETE')
@@ -127,6 +124,7 @@ class DaskExecutorActive():
         num_samples = len(initial_params)
         time_now=time.time()
         # old_train = train.copy()
+        batch_params=None # Not a necessar line to run but needed to get past pylint. It thinks it is referenced before assignment
         while num_samples<self.total_budget and \
             time_start-time_now<self.time_limit and \
             num_cycles < self.max_cycles and \
@@ -137,9 +135,8 @@ class DaskExecutorActive():
                 cycle_dir = os.path.join(self.base_run_dir, f'active_cycle_{num_cycles}')
                 os.system(f'mkdir {cycle_dir} -p')
                 batch_params = self.sampler.get_next_parameters(cycle_dir)
-            futures = self.static_executor.submit_batch_of_params(params=batch_params, base_run_dir=cycle_dir, batch_id=batch_ids[self.static_executor.runner_args['type']])
-            batch_ids[self.static_executor.runner_args['type']]+=1        
-        
+            futures = self.static_executor.submit_batch_of_params(params=batch_params, base_run_dir=cycle_dir)
+            
             print(f'FUTURES SUBMITTED FOR ACTIVE LEARNING CYCLE {num_cycles}')
             
             # if 'write_cycle_info' in dir(self.sampler) and num_cycles>1:
