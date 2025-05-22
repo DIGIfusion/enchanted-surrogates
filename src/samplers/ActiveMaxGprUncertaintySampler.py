@@ -25,7 +25,7 @@ class ActiveMaxGprUncertaintySampler():
             self.parameters = [tuple(pa) for pa in parameters]
             print(self.parameters, type(self.parameters[0]))
         
-        self.custom_limit = np.inf
+        self.custom_limit = kwargs.get('custom_limit',np.inf)
         self.custom_limit_value = 0
         self.dim=len(parameters)
 
