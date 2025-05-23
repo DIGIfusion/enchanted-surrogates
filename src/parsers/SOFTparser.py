@@ -49,12 +49,12 @@ class SOFTparser(Parser):
             '    filename = "'+params['mag_field_path']+'";'+'\n'+
             '}'+'\n')
         f.write('@ParticleGenerator PGen {'+'\n'+
-            #'    a  = 0.0, 1, 100; # (m)'+'\n'+
-            '    a  = 0.0, 1, 2; # (m)'+'\n'+
-            #'    p  = 10, 100, 50; # p is normalized to particle rest mass'+'\n'+
-            '    p  = 10, 100, 2; # p is normalized to particle rest mass'+'\n'+
-            #'    ithetap = 0.02, 0.35, 40;'+'\n'+
-            '    ithetap = 0.02, 0.35, 2;'+'\n'+
+            '    a  = 0.0, 1, 100; # (m)'+'\n'+
+            #'    a  = 0.0, 1, 2; # (m)'+'\n'+
+            '    p  = 10, 100, 50; # p is normalized to particle rest mass'+'\n'+
+            #'    p  = 10, 100, 2; # p is normalized to particle rest mass'+'\n'+
+            '    ithetap = 0.02, 0.35, 40;'+'\n'+
+            #'    ithetap = 0.02, 0.35, 2;'+'\n'+
             '    progress = 100;'+'\n'+
             '}'+'\n')
         f.write('@ParticlePusher PPusher {'+'\n'+

@@ -8,6 +8,7 @@ Text to describe the sampler.
 import os
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 from common import S
 import parsers
 from .base import Sampler
@@ -116,8 +117,8 @@ class BayesianOptimization(Sampler):
 
     def train_surrogate(self):
         # Presently implemented as single objective model. Therefore,
-        # sum over the distances and normalize.
-        distances = torch.from_numpy(np.sum(self.result_dictionary_norm['distances'],axis=1))
+        # sum over the distances and norm
+        distances = torch.from_numpy(np.sum(self.result_dictionary_norm['distances'][:],axis=1))
         distances = (distances - torch.mean(distances))/torch.std(distances)
         distances = distances.unsqueeze(distances.ndim)
 
@@ -125,11 +126,17 @@ class BayesianOptimization(Sampler):
         distances = -distances
 
         gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
-            torch.from_numpy(self.result_dictionary_norm['inputs']), 
+            torch.from_numpy(self.result_dictionary_norm['inputs'][:]), 
             distances)
         botorch.fit.fit_fully_bayesian_model_nuts(gp)
         self.model = gp
-        self.best_f = torch.max(distances) 
+        self.best_f = torch.max(distances)
+        #if self.result_dictionary_failed != [None]:
+        #    gp_failed = botorch.models.SingleTaskGP(torch.from_numpy(self.result_dictionary_failed['inputs'][:]),
+        #                                            torch.from_numpy(self.result_dictionary_failed['failure'][:].astype(float)).unsqueeze(0)
+        #                                            )
+        #    self.model_failed = gp_failed
+         
 
     def get_next_parameter(self):
         """
@@ -225,7 +232,7 @@ class BayesianOptimization(Sampler):
                         result_dictionary_failed[key] = np.concatenate((result_dictionary_failed[key], [sample_dict[key]])) 
                 else:
                     result_dictionary_failed = sample_dict
-                    for key in result_dictionary.keys():
+                    for key in result_dictionary_failed.keys():
                         result_dictionary_failed[key]=[result_dictionary_failed[key]]
         if 'result_dictionary' in locals():
             self.result_dictionary = result_dictionary
@@ -265,10 +272,45 @@ class BayesianOptimization(Sampler):
             outputs = self.result_dictionary['distances']
             means = np.mean(outputs, axis=0)
             stds = np.std(outputs, axis=0)
-            output_scaled = (outputs - means)/stds
+            if np.min(stds) > 0:
+                output_scaled = (outputs - means)/stds
+            else:
+                output_scaled = outputs - means
             result_dictionary_norm = {'inputs':input_scaled, 'distances':output_scaled}
             self.result_dictionary_norm = result_dictionary_norm
-                 
+
+    def plot_distances(self):
+        """
+        This is a helper function for plotting the sample distributions.
+        The coding is not particularly elegant and can certainly be improved.
+        """
+        numdist = np.shape(self.result_dictionary['distances'])[1]
+        numinp = np.shape(self.result_dictionary['inputs'])[1]
+        ncols = int(numinp)
+        nrows = int(numdist)
+        if ncols == 1:
+            if nrows == 1:
+                plt.plot(self.result_dictionary['inputs'][:], self.result_dictionary['distances'][:],'ko')
+                plt.xlabel(self.parameters[0])
+            else:
+                fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='col')
+                for i in range(numdist):
+                    axs[int(i)].plot(self.result_dictionary['inputs'][:], self.result_dictionary['distances'][:,i],'ko')
+                    if i == numdist - 1:
+                        axs[int(i)].set_xlabel(self.parameters[0])
+        elif nrows == 1:
+            fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharey='row')
+            for j in range(numinp):
+                axs[int(j)].plot(self.result_dictionary['inputs'][:,j], self.result_dictionary['distances'][:],'ko')
+                axs[int(j)].set_xlabel(self.parameters[j])
+        else:
+            fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='col', sharey='row')
+            for i in range(numdist):
+                for j in range(numinp):
+                    axs[int(i), int(j)].plot(self.result_dictionary['inputs'][:,j], self.result_dictionary['distances'][:,i], 'ko')
+                    if i == numdist - 1:
+                        axs[int(i), int(j)].set_xlabel(self.parameters[j])
+        plt.show()
 
 
 

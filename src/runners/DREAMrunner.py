@@ -58,21 +58,36 @@ class DREAMrunner(Runner):
         """
         self.parser = DREAMparser()
         self.executable_path = executable_path
-        self.base_input_file_path = other_params['base_input_file_path']
+        
         self.only_generate_files = other_params['only_generate_files']
-        #if 'soft' in other_params:
-        #    soft_params = other_params['soft']
-        #    self.run_soft = (
-        #        False
-        #        if "run_soft" not in soft_params
-        #        else soft_params['run_soft']
-        #    )
-        #    if self.run_soft:
-        #        self.soft_parser = SOFTparser()
-        #        self.soft_runner = SOFTrunner(
-        #            soft_params['executable_path'],
-        #            other_params=soft_params['other_params'],
-        #        )
+        if "base_input_file_path" in other_params:
+            self.base_input_file_path = other_params['base_input_file_path']
+        else:
+            self.base_input_file_path = ' '
+        if "nt" in other_params:
+            self.nt = other_params['nt']
+        else:
+            self.nt = nt = 800
+        if "non_lin_solve" in other_params:
+            self.non_lin_solve = other_params['non_lin_solve']
+        else:
+            self.non_lin_solve = True
+        if "CQ" in other_params:
+            self.CQ = True
+        else:
+            self.CQ = False
+        if "exp_file_path" in other_params:
+            self.exp_file_path = other_params['exp_file_path']
+        else:
+            self.exp_file_path = 'None'
+        if "re_grid" in other_params:
+            self.re_grid = other_params['re_grid']
+        else:
+            self.re_grid = False
+        if "F0" in other_params:
+            self.F0 = other_params['F0']
+        else:
+            self.F0 = True
 
     def single_code_run(self, params: dict, run_dir: str):
         """
@@ -86,7 +101,16 @@ class DREAMrunner(Runner):
             str: Result of running the test program.
 
         """
-        self.parser.write_input_file(params, run_dir, self.base_input_file_path)
+        self.parser.write_input_file(params, 
+                                     run_dir, 
+                                     base_input_file_path = self.base_input_file_path,
+                                     nt = self.nt, 
+                                     non_lin_solve = self.non_lin_solve,
+                                     CQ = self.CQ,
+                                     exp_file_path = self.exp_file_path,
+                                     re_grid = self.re_grid,
+                                     F0 = self.F0,
+                                     )
 
         input_path = os.path.join(run_dir, 'input.h5')
 

@@ -8,6 +8,7 @@ Contains logic for executing surrogate workflow on Dask.
 import time
 import os
 import copy
+import numpy as np
 from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask_jobqueue import SLURMCluster
 from nn.networks import load_saved_model, run_train_model
@@ -134,6 +135,7 @@ class DaskExecutor(Executor):
         """
         futures = []
         for params in param_list:
+            print('Submitting case with params ', params)
             new_future = self.simulator_client.submit(
                 run_simulation_task, self.runner_args, params, self.base_run_dir
                 ) 
@@ -208,7 +210,7 @@ class DaskExecutor(Executor):
                 if self.sampler.result_dictionary != [None]:
                     # Establish the GPR fit to the result dictionary
                     self.sampler.train_surrogate()
-                
+                    print('Best distance obtained so far is ', np.min(np.sum(np.exp(self.sampler.result_dictionary['distances']),axis=1)))
                     # Get the list or parameters to run. 
                     # The length of this is determined by the acquisition_batch_size
                     # within the sampler.
@@ -237,7 +239,7 @@ class DaskExecutor(Executor):
 
                         # Submit cases on the primary and append to the futures list.
                         njobs = len(param_list)
-                        self.simulator_cluster_primary.scale(jobs=njobs)
+                        self.simulator_cluster_primary.scale(jobs=2)
                         # Give 10 seconds to get the workers running.
                         time.sleep(10)
                         for params in param_list:
@@ -250,22 +252,29 @@ class DaskExecutor(Executor):
                                 self.base_run_dir
                                 )
                             submitted += 1
-                            time.sleep(2)
                             futures.append(new_future)
                         wait(futures)
                         print('Primary futures done')
                         
+                        #seq = as_completed(futures)                        
+
                         # List for secondary SLURM futures
                         sec_futures = []
                       
                         if self.worker_args.get("secondary_SLURM", False):
                             print('Starting secondary futures')
-                            self.simulator_cluster_secondary.scale(jobs=len(futures)*2)
+                            self.simulator_cluster_secondary.scale(jobs=4)
+                            self.simulator_cluster_secondary.wait_for_workers(4)
+                            # Give time for the workers to start.
+                            #time.sleep(60)
                         
+                        run_dir_list = []
                         for future in futures:
-                            # Get copy of the run-directory.
-                            res = future.result()
-                            run_dir_loc = res['output']
+                            run_dir_list.append(future.result()['output'])
+                        for run_dir_loc in run_dir_list:
+                        #for future in seq:
+                            #run_dir_loc = future.result()['output']
+                            #self.simuator_cluster_secondary.scale(jobs=4)
                             # Launch the secondary SLURM runs.
                             if self.worker_args.get("secondary_SLURM", False):
                                 for idx in range(len(self.runner_args['other_params']['soft']['other_params']['time_idx'])):
@@ -276,15 +285,33 @@ class DaskExecutor(Executor):
                                          run_dir_loc
                                          )
                                     sec_futures.append(sec_future)
-                                    time.sleep(2)
+                                    time.sleep(5)
+                            print('Case submitted at ', run_dir_loc)
 
                         wait(sec_futures)
-                        time.sleep(60)
+                        # Just in case there is still something to finish with data transfer.
+                        time.sleep(30)
                         print('Batch completed')
+                        for future in sec_futures:
+                            future.release()
                     else:
+                        self.simulator_cluster.scale(jobs=len(param_list))
                         futures = self.submit_batch_of_params(param_list)
-                        wait(futures)
-
+             #           try:
+             #               timeout = self.runner.maximum_run_time
+             #           except:
+             #               timeout = -1
+            #            if timeout > 0:
+                        try:
+                            wait(futures, timeout=1800)
+                        except:
+                            print('Timeout')
+                        #else:
+                        #    wait(futures, time)
+                        print('Batch completed')
+                        for future in futures:
+                            future.release()
+                    print('Building result dictionary')
                     self.sampler.build_result_dictionary(self.base_run_dir)
                     
                         
