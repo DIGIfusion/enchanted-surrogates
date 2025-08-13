@@ -70,6 +70,8 @@ class LabelledPoolParser(Parser):
         self.train, self.valid, self.test, self.pool = data_split(
             self.data, **self.data_args
         )
+        print('valid data, ', self.valid)
+        print('valid data sampled, ', self.valid.sample(100))
         self.train = torch.tensor(self.train.values)
         self.valid = torch.tensor(self.valid.values)
         self.test = torch.tensor(self.test.values)
@@ -329,7 +331,8 @@ class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMoc
         #     self.mapping_column_indices[col_idx] for col_idx in self.meta_keys
         # ]                        
         self.train, self.valid, self.test, self.pool = self._get_tensors(train,valid,test,pool)
-        print('INSIDE INIT', self.print_dset_sizes())
+
+
         self.campaign_id +=1
         self.init_pool_size = len(self.pool)
 
@@ -360,7 +363,6 @@ class StreamingLabelledLumpedPoolParserJETMock(StreamingLabelledPoolParserJETMoc
         )        
         if len(pool)>self.MAX_POOL_SIZE_PER_CAMPAIGN:
             pool = pool.sample(self.MAX_POOL_SIZE_PER_CAMPAIGN)
-        
         return train, valid, test, pool
 
     # def filter_campaigns(self, data, campaign_id):

@@ -108,6 +108,7 @@ class ActiveLearnerBMDAL(Sampler):
         self.from_scratch          = kwargs.get("from_scratch",False) # allows to decouple saving CL results and retraining model from scratch vs warm-starting
 
         self.parser                = getattr(parsers, parser_kwargs["type"])(**parser_kwargs)
+        self.has_improved         = True
         # fmt: on
 
     def get_initial_parameters(self):
@@ -238,6 +239,15 @@ class ActiveLearnerBMDAL(Sampler):
             outputs_as_tensor[n] = torch.cat((x, y))
         return outputs_as_tensor
 
+    # def meets_stopping_criterion(self):
+    #     # TODO: library of stopping criteria
+    #     has_exhausted_pool = len(self.pool)==0
+    #     has_improved_this_time =  self.metrics["val_losses"][-2] - self.metrics["val_losses"][-1] > 0.05 * (self.metrics["val_losses"][-2])
+    #     self.has_improved = has_improved_this_time and self.has_improved
+    #     if not self.has_improved and self.parser.acquisition_number==self.parser.num_acquisitions # it hasn't improved for the past 5 acquisitions
+        
+    #     return has_improved or ha
+    
     def update_pool_and_train(self):
         """
         """

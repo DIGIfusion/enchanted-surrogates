@@ -42,6 +42,7 @@ def main(cfg: str, n_repeats: int=1):
         print(20*"=", f"\n \t Running with {args}, repeat number {i}\n", 20*"=")
         filename_save = f"results_{i}"
         args.sampler["filename_save"] = filename_save
+        args.sampler["save_dir"] = args.sampler["save_dir"].format(seed=seed)
         np.random.seed(seed)
         sampler = getattr(samplers, args.sampler["type"])(**args.sampler)
         executor = getattr(executors, args.executor["type"])(
