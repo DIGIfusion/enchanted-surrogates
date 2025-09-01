@@ -10,7 +10,7 @@ import shutil
 
 """
 # https://docs.pytest.org/en/stable/how-to/tmp_path.html
-def test_full_workflow(tmp_path): 
+def test_full_workflow_local(tmp_path): 
     config = {}
     # -- sampler 
     # TODO: test different samplers
