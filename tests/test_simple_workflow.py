@@ -5,12 +5,12 @@ import glob
 import os 
 import shutil
 
+
 """ 
 
 """
-# TODO: build and destroy test 
-
-def test_full_workflow(): 
+# https://docs.pytest.org/en/stable/how-to/tmp_path.html
+def test_full_workflow(tmp_path): 
     config = {}
     # -- sampler 
     # TODO: test different samplers
@@ -24,21 +24,14 @@ def test_full_workflow():
         'type': 'ExampleRunner'
     }
 
-    # --- other 
-
-    # TODO: some other file 
-    # __file__ + './test_full_workflow'
-    
-    base_run_dir = f"{os.path.dirname(__file__)}/example"
-
+    base_run_dir = tmp_path # f"{os.path.dirname(__file__)}/example"
     # create the executor 
     executor = LocalExecutor(sampler=sampler, runner_args=runner_args, base_run_dir=base_run_dir, **config)
     executor.start_runs() 
     # This should create {total_budget} folders with ??? inside 
 
     assert len(glob.glob(os.path.join(base_run_dir, "*"))) == total_budget
-
     executor.clean() 
 
-    # TODO clean up test
-    shutil.rmtree(base_run_dir)
+
+
