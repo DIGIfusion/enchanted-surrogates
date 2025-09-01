@@ -13,9 +13,11 @@ def run_simulation_task(runner_args:dict, run_dir:str, params: dict=None, future
     runner_type = runner_args['type']
     runner = getattr(importlib.import_module(f'enchanted_surrogates.runners.{runner_type}'), runner_type)(**runner_args)
     try:            
-        runner_output = runner.single_code_run(run_dir=run_dir, params=params) 
+        runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
+        
     except Exception as exc:
         print("="*100,f"\nThere was a Python ERROR on a DASK worker when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
         #print the whole traceback and not just the last error
-        runner_output = None # TODO: something other than None 
+        runner_output = {"success": False} 
+    runner_output["sample_params"] = params
     return runner_output

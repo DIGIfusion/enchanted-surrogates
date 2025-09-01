@@ -7,7 +7,6 @@ import uuid
 class LocalExecutor(Executor):
     
     def start_runs(self):
-        # initial_samples: list[dict] = self.sampler.get_next_samples()
         while self.sampler.has_budget: 
             samples: list[dict] = self.sampler.get_next_samples()
 
@@ -17,5 +16,5 @@ class LocalExecutor(Executor):
                 self.sampler.register_future(new_future)
 
     def clean(self):
-        # Implementation for cleaning up local resources
-        return 
+        print('Local runner doesn\'t clean up any resources')
+        return
