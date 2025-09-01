@@ -1,0 +1,43 @@
+from abc import ABC, abstractmethod
+
+class Sampler(ABC): 
+    _budget: int = 100
+    _submitted: int = 0 
+    def __init__(self, ):
+        pass 
+
+    @abstractmethod
+    def get_next_samples(self) -> list[dict]:
+        """ 
+        Should increment SUBMITTED and return a list of new samples to be run.
+        """
+        raise NotImplementedError("get_next_samples method not implemented.")
+    
+    @abstractmethod
+    def register_future(self, future):
+        """
+        Should register a future from a submitted sample.
+        """
+        raise NotImplementedError("register_future method not implemented.")
+
+    @property 
+    def has_budget(self) -> bool:
+        return self.submitted < self.budget
+
+    @property
+    def submitted(self) -> int:
+        return self._submitted
+
+    @submitted.setter
+    def submitted(self, value):
+        self._submitted = value
+
+    @property
+    def budget(self) -> int:
+        return self._budget
+    
+    @budget.setter
+    def budget(self, value): 
+        self._budget = value
+
+    
