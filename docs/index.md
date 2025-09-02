@@ -105,6 +105,6 @@ Note that the repository name should follow the format `enchanted-plugin-codenam
    - Set up a GitHub Actions workflow to automate testing and deployment.
 
 
-## Existig plugins
+## Existing plugins
 
 - HELENA: [enchanted-plugin-helena](https://github.com/DIGIfusion/enchanted-plugin-helena)
