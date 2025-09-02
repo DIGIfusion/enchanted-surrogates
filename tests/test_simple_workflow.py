@@ -1,6 +1,6 @@
 import pytest 
 from enchanted_surrogates.executors import LocalExecutor
-from enchanted_surrogates.samplers.random_sampler import RandomSampler 
+from enchanted_surrogates.samplers.RandomSampler import RandomSampler 
 import glob 
 import os 
 import shutil

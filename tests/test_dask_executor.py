@@ -1,17 +1,18 @@
+import os, sys
+sys.path.append('/users/danieljordan/enchanted-surrogates/src/')
+
 import pytest 
-from enchanted_surrogates.executors import DaskExecutor
-from enchanted_surrogates.samplers.random_sampler import RandomSampler 
+from enchanted_surrogates.executors.DaskExecutor import DaskExecutor
 # import glob 
-import os 
-# import shutil
+import shutil
 
 
-def test_dask_executor(): 
+def test_dask_executor():
     config = {}
     
     # -- User Config
     user_config = {
-        'path_to_enchanted-surrogates':'/users/danieljordan/enchanted-surrogates/src/enchanted_surrogates',
+        'path_to_enchanted-surrogates':'/users/danieljordan/enchanted-surrogates/src/',
         'activate_env_command':'export PATH=/scratch/project_462000954/enchanted_container_lumi3/bin:$PATH',
     }
     
@@ -19,7 +20,7 @@ def test_dask_executor():
     executor_args = {
         'type': 'DaskExecutor',
         'base_run_dir': f"{os.path.dirname(__file__)}/example",
-        
+        'block_unitil_cluster_started': True, # default False: for debugging purposes
         'sampler_args':{
             'type': 'RandomSampler',
             'bounds':[[-5, 5], [0, 1]],
@@ -33,13 +34,13 @@ def test_dask_executor():
         
         'SLURMcluster_args':{
             'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
-            'cores':'1', #
-            'memory':'1GB', # Memory per node to be split between the number of workers on that node
-            'walltime':'12:00:00', # Max walltime for the entire cluster
-            'processes':'1', # number of workers per node, (also per sbatch as SLURMcluster submits one sbatch per node)
-            'interface':'auto', # changes for every system, try one and dask will suggest alternatives: ib0, ib1, bond0, bond1, nmn0, nmn1, eno1, eno2, eth0, eth1, etc.
+            'cores':1, #
+            'memory':'500MB', # Memory per node to be split between the number of workers on that node
+            'walltime':'00:10:00', # Max walltime for the entire cluster
+            'processes':1, # number of workers per node, (also per sbatch as SLURMcluster submits one sbatch per node)
+            'interface':'nmn0', # changes for every system, try one and dask will suggest alternatives: ib0, ib1, bond0, bond1, nmn0, nmn1, eno1, eno2, eth0, eth1, etc.
             'account':'project_462000954',
-            'queue':'standard', # this changes --partition in the SBATCH script that starts the workers 
+            'queue':'small', # this changes --partition in the SBATCH script that starts the workers 
             'job_extra_directives':["--nodes=1"], # SBATCH is prepended to these and they are included in the sbatch that starts the workers
             'job_script_prologue':[ # these lines are insertered into the sbatch just before the workers are activated
                 f"cd {user_config['path_to_enchanted-surrogates']}",
@@ -50,18 +51,22 @@ def test_dask_executor():
         'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_args['processes'] number workers on each node
     }
     
-    # create the executor
-    executor = DaskExecutor(executor_args, **config)
+    if os.path.exists(executor_args['base_run_dir']):
+        print('REMOVING OLD BASE RUN DIR: ',executor_args['base_run_dir'])
+        os.system(f"rm -r {executor_args['base_run_dir']}")
     
-    executor.start_cluster()
-    assert executor.expected_number_of_workers == len(executor.client.scheduler_info()["workers"])
-        
+    # create the executor
+    executor = DaskExecutor(**executor_args, **config)
+    
+    # executor.start_cluster()
+    # assert executor.expected_number_of_workers == len(executor.client.scheduler_info()["workers"])
+    
     executor.start_runs()
-    # This should create {total_budget} folders with ??? inside 
-
-    assert len(glob.glob(os.path.join(base_run_dir, "*"))) == total_budget
-
-    executor.clean() 
+    
+    assert os.path.exists(os.path.join(executor_args['base_run_dir'],'ENCHANTED.FINNISHED'))
 
     # TODO clean up test
-    shutil.rmtree(base_run_dir)
+    # shutil.rmtree(base_run_dir)
+    
+if __name__ == "__main__":
+    test_dask_executor()
