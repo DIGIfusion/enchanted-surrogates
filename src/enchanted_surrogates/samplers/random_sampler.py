@@ -24,3 +24,6 @@ class RandomSampler(Sampler):
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """
         return None
+    
+    def register_futures(self, futures):
+        return None  
