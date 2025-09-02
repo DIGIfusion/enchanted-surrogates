@@ -43,10 +43,10 @@ Note that the repository name should follow the format `enchanted-plugin-codenam
      ```bash
      mkdir enchanted-plugin-codename
      cd enchanted-plugin-codename
-     mkdir -p src/enchanted_plugin_codename tests
-     touch src/enchanted_plugin_codename/__init__.py
-     touch src/enchanted_plugin_codename/codename_parser.py
-     touch src/enchanted_plugin_codename/codename_runner.py
+     git init  # Initialize a git repository here
+     mkdir src tests
+     cd src
+     mkdir enchanted_plugin_codename
      ```
    - Inside this directory, create the necessary files and folders as shown in the project structure above.
 3. **Dependencies and entrypoints**
@@ -108,3 +108,5 @@ Note that the repository name should follow the format `enchanted-plugin-codenam
 ## Existing plugins
 
 - HELENA: [enchanted-plugin-helena](https://github.com/DIGIfusion/enchanted-plugin-helena)
+- MISHKA: [enchanted-plugin-mishka](https://github.com/DIGIfusion/enchanted-plugin-mishka)
+  
