@@ -11,8 +11,11 @@ class ExampleRunner(Runner):
         # --- create the run directory 
         # --- via parser, write some input files there 
         # --- run the code 
-        # --- return  outputs
-
+        # --- return outputs
+        #       - 'output' should be the most important output used in active learning methods, it should be a single float, integer or class
+        #       - 'success' indicates if the run sucessfully created output or if it crashed etc
+        #       - Any other code outputs of interest can be places in the returned dictionary. They will be collected and available in enchanted surrogates created datasets.
+        #       - for the datasets to be created properly the return dictionary values should not be iterables, only base types such as int, float, string, boolean...
         os.makedirs(run_dir, exist_ok=True)
 
 
@@ -33,4 +36,4 @@ class ExampleRunner(Runner):
         with open(outfile, 'r') as f:
             output = float(f.read().strip())
 
-        return {"output": output, "success": True}
+        return {"output": output, "success": True, 'other_code_output':'something_from_code'}
