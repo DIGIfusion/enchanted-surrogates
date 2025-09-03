@@ -32,23 +32,11 @@ def test_dask_executor():
             'type': 'ExampleRunner'
         },
         
-        'SLURMcluster_args':{
-            'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
-            'cores':1, #
-            'memory':'500MB', # Memory per node to be split between the number of workers on that node
-            'walltime':'00:10:00', # Max walltime for the entire cluster
-            'processes':1, # number of workers per node, (also per sbatch as SLURMcluster submits one sbatch per node)
-            'interface':'nmn0', # changes for every system, try one and dask will suggest alternatives: ib0, ib1, bond0, bond1, nmn0, nmn1, eno1, eno2, eth0, eth1, etc.
-            'account':'project_462000954',
-            'queue':'small', # this changes --partition in the SBATCH script that starts the workers 
-            'job_extra_directives':["--nodes=1"], # SBATCH is prepended to these and they are included in the sbatch that starts the workers
-            'job_script_prologue':[ # these lines are insertered into the sbatch just before the workers are activated
-                f"cd {user_config['path_to_enchanted-surrogates']}",
-                user_config['activate_env_command'],
-                f"export PYTHONPATH={user_config['path_to_enchanted-surrogates']}:$PYTHONPATH"
-            ]
-        },
-        'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_args['processes'] number workers on each node
+        'LocalCluster_args':{
+            'name':'es-dask_cluster', 
+            'n_workers':5,
+            'threads_per_worker':1
+        }       
     }
     
     if os.path.exists(executor_args['base_run_dir']):

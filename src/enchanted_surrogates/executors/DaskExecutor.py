@@ -2,6 +2,7 @@ import os
 from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster, print
 from dask_jobqueue import SLURMCluster
+from dask.distributed import LocalCluster
 import subprocess
 import time
 
@@ -29,6 +30,7 @@ class DaskExecutor(Executor):
         self.base_run_dir=base_run_dir
         self.scale_n_jobs = kwargs.get('scale_n_jobs',1)
         self.SLURMcluster_args = kwargs.get('SLURMcluster_args')
+        self.LocalCluster_args = kwargs.get('LocalCluster_args')
         sampler_type = sampler_args.pop("type")
         self.sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers.{sampler_type}'),sampler_type)(**sampler_args)
         self.block_unitil_cluster_started = kwargs.get('block_unitil_cluster_started', False) # for debugging purposes only
@@ -38,10 +40,12 @@ class DaskExecutor(Executor):
         self.expected_number_of_workers = None
         
         
-    def start_cluster(self, slurm_out_dir=None):
+    def start_cluster(self):
         print('MAKING CLUSTER')
-        if not slurm_out_dir:
+        worker_logs_dir = None
+        if self.SLURMcluster_args:
             slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
+            worker_logs_dir = slurm_out_dir
             if not os.path.exists(slurm_out_dir):
                 os.makedirs(slurm_out_dir)
             jed = self.SLURMcluster_args.get('job_extra_directives')
@@ -49,23 +53,30 @@ class DaskExecutor(Executor):
                 self.SLURMcluster_args['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
             else:
                 self.SLURMcluster_args['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
-        print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
-        self.cluster = SLURMCluster(**self.SLURMcluster_args)
-        self.cluster.scale(self.scale_n_jobs)
-        print('THE JOB SCRIPT FOR A WORKER IS:')
-        print(self.cluster.job_script())
-        
-        self.client = Client(self.cluster ,timeout=180)
-        print('SCHEDULER ADDRESS',self.cluster.scheduler_address)
-        print('DASHBOARD LINK',self.client.dashboard_link)        
-        
+            print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
+            self.cluster = SLURMCluster(**self.SLURMcluster_args)
+            self.cluster.scale(self.scale_n_jobs)
+            print('THE JOB SCRIPT FOR A WORKER IS:')
+            print(self.cluster.job_script())
+            
+            self.client = Client(self.cluster ,timeout=180)
+            print('SCHEDULER ADDRESS',self.cluster.scheduler_address)
+            print('DASHBOARD LINK',self.client.dashboard_link)        
+            
+            if self.block_unitil_cluster_started:
+                print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
+                self.wait_for_all_dask_jobs_running()
+                
+                self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_args.get('processes',1))
+                
+        elif self.LocalCluster_args:
+            self.cluster = LocalCluster(**self.LocalCluster_args)
+            self.client = Client(self.cluster)
+            self.expected_number_of_workers = self.LocalCluster_args['n_workers']
+            
         if self.block_unitil_cluster_started:
-            print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
-            self.wait_for_all_dask_jobs_running()
-            
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_args.get('processes',1))
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
-            
+                
             workers = self.client.scheduler_info()["workers"]
             for _ in range(self.expected_number_of_workers+120):
                 print(f"Connected to {len(workers)} workers out of expected {self.expected_number_of_workers}.\n")
@@ -76,12 +87,12 @@ class DaskExecutor(Executor):
                     warnings.warn(f"More workers ({len(workers)}) than expected ({self.expected_number_of_workers})")
                     break
                 time.sleep(1)
-                
+            
             if len(workers) == 0:
                 raise ValueError(f'NO WORKERS SUCCEDED TO START, PLEASE CHECK WORKER SLURM OUT AT: {slurm_out_dir}')
             
-            if len(workers) != self.expected_number_of_workers:
-                warnings.warn(f'ONLY {len(workers)} out of {self.expected_number_of_workers} EXPECTED WORKERS STARTED. PLEASE CHECK WORKER SLURM OUT AT: {slurm_out_dir}')
+            if len(workers) < self.expected_number_of_workers:
+                warnings.warn(f'ONLY {len(workers)} out of {self.expected_number_of_workers} EXPECTED WORKERS STARTED. PLEASE CHECK WORKER LOGS AT: {worker_logs_dir}')
             
             print('WORKER INFORMATION:')
             for addr, info in workers.items():
@@ -89,7 +100,6 @@ class DaskExecutor(Executor):
                 print(f"  CPUs: {info['nthreads']}")
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
-    
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         print("Waiting for all Dask jobs to enter RUNNING state...")
