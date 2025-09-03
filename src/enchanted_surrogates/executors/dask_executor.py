@@ -75,16 +75,8 @@ class DaskExecutor(Executor):
             self.expected_number_of_workers = self.LocalCluster_args['n_workers']
             
         if self.block_unitil_cluster_started:
-<<<<<<< HEAD:src/enchanted_surrogates/executors/DaskExecutor.py
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
                 
-=======
-            print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
-            self.wait_for_all_dask_jobs_running()
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_args.get('processes',1))
-            print(f"Waiting for {self.expected_number_of_workers} workers to start...")
-
->>>>>>> b16b1bd659efb28467c9f941f815b20e16d99863:src/enchanted_surrogates/executors/dask_executor.py
             workers = self.client.scheduler_info()["workers"]
             for _ in range(self.expected_number_of_workers+120):
                 print(f"Connected to {len(workers)} workers out of expected {self.expected_number_of_workers}.\n")
@@ -95,33 +87,19 @@ class DaskExecutor(Executor):
                     warnings.warn(f"More workers ({len(workers)}) than expected ({self.expected_number_of_workers})")
                     break
                 time.sleep(1)
-<<<<<<< HEAD:src/enchanted_surrogates/executors/DaskExecutor.py
             
             if len(workers) == 0:
-                raise ValueError(f'NO WORKERS SUCCEDED TO START, PLEASE CHECK WORKER SLURM OUT AT: {slurm_out_dir}')
+                raise ValueError(f'NO WORKERS SUCCEDED TO START, PLEASE CHECK WORKER SLURM OUT AT: {worker_logs_dir}')
             
             if len(workers) < self.expected_number_of_workers:
                 warnings.warn(f'ONLY {len(workers)} out of {self.expected_number_of_workers} EXPECTED WORKERS STARTED. PLEASE CHECK WORKER LOGS AT: {worker_logs_dir}')
             
-=======
-
-            if len(workers) == 0:
-                raise ValueError(f'NO WORKERS SUCCEDED TO START, PLEASE CHECK WORKER SLURM OUT AT: {slurm_out_dir}')
-
-            if len(workers) != self.expected_number_of_workers:
-                warnings.warn(f'ONLY {len(workers)} out of {self.expected_number_of_workers} EXPECTED WORKERS STARTED. PLEASE CHECK WORKER SLURM OUT AT: {slurm_out_dir}')
-
->>>>>>> b16b1bd659efb28467c9f941f815b20e16d99863:src/enchanted_surrogates/executors/dask_executor.py
             print('WORKER INFORMATION:')
             for addr, info in workers.items():
                 print(f"Worker {addr}:")
                 print(f"  CPUs: {info['nthreads']}")
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
-<<<<<<< HEAD:src/enchanted_surrogates/executors/DaskExecutor.py
-=======
-
->>>>>>> b16b1bd659efb28467c9f941f815b20e16d99863:src/enchanted_surrogates/executors/dask_executor.py
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """ TODO: Docstring """
