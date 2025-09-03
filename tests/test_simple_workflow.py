@@ -1,6 +1,6 @@
 import pytest 
 from enchanted_surrogates.executors import LocalExecutor
-from enchanted_surrogates.samplers.RandomSampler import RandomSampler 
+from enchanted_surrogates.samplers import RandomSampler
 import glob 
 import os 
 import shutil
@@ -24,21 +24,21 @@ def test_full_workflow():
         'type': 'ExampleRunner'
     }
 
-    # --- other 
+    # --- other
 
-    # TODO: some other file 
+    # TODO: some other file
     # __file__ + './test_full_workflow'
     
     base_run_dir = f"{os.path.dirname(__file__)}/example"
 
-    # create the executor 
+    # create the executor
     executor = LocalExecutor(sampler=sampler, runner_args=runner_args, base_run_dir=base_run_dir, **config)
-    executor.start_runs() 
-    # This should create {total_budget} folders with ??? inside 
+    executor.start_runs()
+    # This should create {total_budget} folders with ??? inside
 
     assert len(glob.glob(os.path.join(base_run_dir, "*"))) == total_budget
 
-    executor.clean() 
+    executor.clean()
 
     # TODO clean up test
     shutil.rmtree(base_run_dir)

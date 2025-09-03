@@ -2,20 +2,20 @@ import os, sys
 sys.path.append('/users/danieljordan/enchanted-surrogates/src/')
 
 import pytest 
-from enchanted_surrogates.executors.DaskExecutor import DaskExecutor
+from enchanted_surrogates.executors import DaskExecutor
 # import glob 
 import shutil
 
 
 def test_dask_executor():
     config = {}
-    
+
     # -- User Config
     user_config = {
-        'path_to_enchanted-surrogates':'/users/danieljordan/enchanted-surrogates/src/',
-        'activate_env_command':'export PATH=/scratch/project_462000954/enchanted_container_lumi3/bin:$PATH',
+        'path_to_enchanted-surrogates':'/path/to/enchanted-surrogates/src',
+        'activate_env_command':'export PATH=/path/to/.venv/bin:$PATH',
     }
-    
+
     # -- Executor
     executor_args = {
         'type': 'DaskExecutor',
@@ -27,19 +27,17 @@ def test_dask_executor():
             'parameters':['c1', 'c2'],
             'total_budget':50
         },
-        
         'runner_args':{
             'type': 'ExampleRunner'
         },
-        
         'SLURMcluster_args':{
             'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
             'cores':1, #
             'memory':'500MB', # Memory per node to be split between the number of workers on that node
             'walltime':'00:10:00', # Max walltime for the entire cluster
             'processes':1, # number of workers per node, (also per sbatch as SLURMcluster submits one sbatch per node)
-            'interface':'nmn0', # changes for every system, try one and dask will suggest alternatives: ib0, ib1, bond0, bond1, nmn0, nmn1, eno1, eno2, eth0, eth1, etc.
-            'account':'project_462000954',
+            'interface':'ib0', # changes for every system, try one and dask will suggest alternatives: ib0, ib1, bond0, bond1, nmn0, nmn1, eno1, eno2, eth0, eth1, etc.
+            'account':'project_XXXX',
             'queue':'small', # this changes --partition in the SBATCH script that starts the workers 
             'job_extra_directives':["--nodes=1"], # SBATCH is prepended to these and they are included in the sbatch that starts the workers
             'job_script_prologue':[ # these lines are insertered into the sbatch just before the workers are activated
@@ -50,23 +48,23 @@ def test_dask_executor():
         },
         'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_args['processes'] number workers on each node
     }
-    
+
     if os.path.exists(executor_args['base_run_dir']):
         print('REMOVING OLD BASE RUN DIR: ',executor_args['base_run_dir'])
         os.system(f"rm -r {executor_args['base_run_dir']}")
-    
+
     # create the executor
     executor = DaskExecutor(**executor_args, **config)
-    
+
     # executor.start_cluster()
     # assert executor.expected_number_of_workers == len(executor.client.scheduler_info()["workers"])
-    
+
     executor.start_runs()
-    
+
     assert os.path.exists(os.path.join(executor_args['base_run_dir'],'ENCHANTED.FINNISHED'))
 
     # TODO clean up test
     # shutil.rmtree(base_run_dir)
-    
+
 if __name__ == "__main__":
     test_dask_executor()
