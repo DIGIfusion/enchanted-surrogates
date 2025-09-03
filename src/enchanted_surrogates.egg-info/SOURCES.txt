@@ -1,7 +1,0 @@
-LICENSE
-README.md
-pyproject.toml
-src/enchanted_surrogates.egg-info/PKG-INFO
-src/enchanted_surrogates.egg-info/SOURCES.txt
-src/enchanted_surrogates.egg-info/dependency_links.txt
-src/enchanted_surrogates.egg-info/top_level.txt
