@@ -1,1 +1,2 @@
 from .local_executor import LocalExecutor
+from .dask_executor import DaskExecutor

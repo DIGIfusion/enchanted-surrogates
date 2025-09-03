@@ -2,14 +2,14 @@ import os, sys
 sys.path.append('/users/danieljordan/enchanted-surrogates/src/')
 
 import pytest 
-from enchanted_surrogates.executors.DaskExecutor import DaskExecutor
+from enchanted_surrogates.executors import DaskExecutor
 # import glob 
 import shutil
 import json
 
 def test_dask_executor():
     config = {}
-    
+
     # -- User Config
     # Load JSON file into a Python dict
     with open(os.path.join(os.path.dirname(__file__),"user_config.json"), "r") as file:
@@ -30,11 +30,9 @@ def test_dask_executor():
             'parameters':['c1', 'c2'],
             'total_budget':50
         },
-        
         'runner_args':{
             'type': 'ExampleRunner'
         },
-        
         'SLURMcluster_args':{
             'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
             'cores':1, #
@@ -53,20 +51,20 @@ def test_dask_executor():
         },
         'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_args['processes'] number workers on each node
     }
-    
+
     if os.path.exists(executor_args['base_run_dir']):
         print('REMOVING OLD BASE RUN DIR: ',executor_args['base_run_dir'])
         os.system(f"rm -r {executor_args['base_run_dir']}")
-    
+
     # create the executor
     executor = DaskExecutor(**executor_args, **config)
     
     executor.start_runs()
-    
+
     assert os.path.exists(os.path.join(executor_args['base_run_dir'],'ENCHANTED.FINNISHED'))
 
     # TODO clean up test
     # shutil.rmtree(base_run_dir)
-    
+
 if __name__ == "__main__":
     test_dask_executor()
