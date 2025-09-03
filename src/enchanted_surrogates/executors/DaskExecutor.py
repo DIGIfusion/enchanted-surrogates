@@ -4,19 +4,19 @@ from dask.distributed import Client, as_completed, wait, LocalCluster, print
 from dask_jobqueue import SLURMCluster
 import subprocess
 import time
-
-import time
 import warnings
 from .simulation_task import run_simulation_task as run_simulation_task_origional
 import importlib
 import uuid
 import pandas as pd
 
+
 def run_simulation_task_monkey_patch(*args, **kwargs):
-    from dask.distributed import print
+    """ """
     return run_simulation_task_origional(*args, **kwargs)
 
 run_simulation_task = run_simulation_task_monkey_patch
+
 
 class DaskExecutor(Executor):
     """
