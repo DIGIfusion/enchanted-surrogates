@@ -13,11 +13,14 @@ import pandas as pd
 
 
 def run_simulation_task_monkey_patch(*args, **kwargs):
-    """ TODO: Docstring """
+    """
+    Monkey simulation_task.run_simulation_task to import dask.distribted.print
+
+    This allows the prints in this function to show on the std output stream and not only in the dask worker log files.
+    This is important as there is as there is a print to show the traceback of errors happening on the dask workers.
+    """
+    from dask.distributed import print
     return run_simulation_task_origional(*args, **kwargs)
-
-run_simulation_task = run_simulation_task_monkey_patch
-
 
 class DaskExecutor(Executor):
     """
