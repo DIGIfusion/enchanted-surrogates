@@ -16,7 +16,7 @@ class Executor(ABC):
         self.base_run_dir     = base_run_dir
         self.output_dir       = output_dir # TODO rename 
         
-    def create_run_dir(self, base_run_dir, config_filepath):
+    def create_base_run_dir(self, base_run_dir, config_filepath):
         print(
             f"Making directory of simulations at: {base_run_dir}, and copying {config_filepath} to CONFIG.yaml"
         )
