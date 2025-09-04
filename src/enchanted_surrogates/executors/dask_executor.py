@@ -22,6 +22,8 @@ def run_simulation_task_monkey_patch(*args, **kwargs):
     from dask.distributed import print
     return run_simulation_task_origional(*args, **kwargs)
 
+run_simulation_task = run_simulation_task_monkey_patch
+
 class DaskExecutor(Executor):
     """
     Handles execution of surrogate workflow on Dask.
