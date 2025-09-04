@@ -8,14 +8,6 @@ import shutil
 
 
 def test_dask_executor():
-    config = {}
-
-    # -- User Config
-    user_config = {
-        'path_to_enchanted-surrogates':'/users/danieljordan/enchanted-surrogates/src/',
-        'activate_env_command':'export PATH=/scratch/project_462000954/enchanted_container_lumi3/bin:$PATH',
-    }
-
     # -- Executor
     executor_args = {
         'type': 'DaskExecutor',
