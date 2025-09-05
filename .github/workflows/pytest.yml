@@ -29,7 +29,7 @@ jobs:
         git submodule update
     - name: Running pytest
       run: |
-        coverage run -m pytest tests/automated_tests_no_HPC -v -s        
+        coverage run -m pytest tests/ -v -s        
     - name: Generate Coverage Report  
       run: |  
         coverage report -m
