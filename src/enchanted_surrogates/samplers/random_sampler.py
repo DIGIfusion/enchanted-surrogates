@@ -1,6 +1,6 @@
-from .base_sampler import Sampler
-
 import numpy as np
+from enchanted_surrogates.samplers.base_sampler import Sampler
+
 
 class RandomSampler(Sampler):
     BATCH_SAMPLE_SIZE = 1

@@ -10,7 +10,9 @@ dependencies = [
     "pytest",
     "dask[complete]",
     "dask-jobqueue",
-    "pandas"
+    "pandas",
+    "pylint",
+    "coverage",
 ]
 
 [tool.setuptools]
