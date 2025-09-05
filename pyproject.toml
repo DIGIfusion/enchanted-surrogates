@@ -11,6 +11,8 @@ dependencies = [
     "joblib",
     "numpy",
     "pytest",
+    "pylint",
+    "coverage",
 ]
 
 [tool.setuptools]
