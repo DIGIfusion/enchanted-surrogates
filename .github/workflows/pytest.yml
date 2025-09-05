@@ -29,7 +29,7 @@ jobs:
         git submodule update
     - name: Running pytest
       run: |
-        coverage run -m pytest tests/ -v -s        
+        coverage run -m pytest tests/ -v -s --ignore=tests/LUMI_tests
     - name: Generate Coverage Report  
       run: |  
         coverage report -m
