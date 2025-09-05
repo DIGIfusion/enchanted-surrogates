@@ -5,14 +5,20 @@ This sampler Class uses Bayesian Optimization techniques to data efficiently
 sampler through the search space to yield optimial information gain as specified 
 by the acquisition strategy.
 """
+from enchanted_surrogates.samplers.base_sampler import Sampler
+import numpy as np
+import pickle as pkl
+import os
+import matplotlib.pyplot as plt
 
 try:
-    import botorch, gpytorch
+    import botorch, gpytorch, torch
 except:
     print(
         "import botorch, gpytorch failed.",
         "Please make sure that you have botorch and gpytorch installed",
     )
+
 
 class BayesianOptimization(Sampler):
     """
@@ -41,7 +47,6 @@ class BayesianOptimization(Sampler):
         self.acquisition_function   = kwargs.get('acquisition_function', 'qEI')
         self.random_fraction        = kwargs.get('random_fraction', 0.2)  
         self.failure_prob_filter    = kwargs.get('failure_prob_filter', 'False')
-
 
     def get_next_parameter(self):
         """
@@ -222,8 +227,8 @@ class BayesianOptimization(Sampler):
             else:
                 try:
                     if 'result_dictionary' in locals():
-                        if os.path.join(base_run_directory, dirname) in \ 
-                           result_dictionary['run_dir']:
+                        if (os.path.join(base_run_directory, dirname) in
+                            result_dictionary['run_dir']):
                             continue
                         else:
                             sample_dict = self.parser.collect_sample_information(
@@ -359,7 +364,7 @@ class BayesianOptimization(Sampler):
         """
         if base_point == 0:
             idx = np.where(
-               self.result_dictionary['distances'] == \ 
+               self.result_dictionary['distances'] ==
                np.min(self.result_dictionary['distances']))
             idx = idx[0]
             base_point = self.result_dictionary['inputs'][idx]
@@ -475,8 +480,3 @@ class BayesianOptimization(Sampler):
         output_value = normal.cdf(internal_value)
         return output_value
 
-
-
-
- 
-        
