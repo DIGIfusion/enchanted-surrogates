@@ -1,3 +1,7 @@
+import os, sys
+project_root = os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted-surrogates")+1])
+sys.path.append(os.path.join(project_root, 'src'))
+
 import re
 import importlib
 def detect_case_style(s):
