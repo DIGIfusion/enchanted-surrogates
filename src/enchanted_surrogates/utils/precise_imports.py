@@ -85,6 +85,8 @@ def get_snake_and_pascal(string):
     elif string_case == 'PascalCase':
         string_snake = camel_or_pascal_to_snake(string)
         string_pascal = string
+    else:
+        raise ValueError(f"Unsupported string format: {string}. Only snake_case and PascalCase are supported.")
     return string_snake, string_pascal
 
 def import_sampler(type, sampler_kwargs):
@@ -136,5 +138,4 @@ def import_runner(type, runner_kwargs):
     type_snake, type_pascal = get_snake_and_pascal(type)
     sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
     return sampler
-    
-    
+
