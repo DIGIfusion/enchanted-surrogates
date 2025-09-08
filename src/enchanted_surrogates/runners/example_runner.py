@@ -1,4 +1,4 @@
-from enchanted_surrogates.runners.base_runner import Runner
+from .base_runner import Runner
 
 import os
 
