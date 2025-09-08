@@ -1,5 +1,4 @@
 import os, sys
-import os
 project_root = os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted-surrogates")+1])
 sys.path.append(os.path.join(project_root, 'src'))
 
