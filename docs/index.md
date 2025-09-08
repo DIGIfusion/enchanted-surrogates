@@ -31,3 +31,5 @@ enchanted-surrogates run.py -cf path/to/config/file
 ```
 
 Make sure to replace `path/to/config/file` with the actual path to your configuration file.
+
+## Code structure
