@@ -1,5 +1,5 @@
 from importlib.metadata import entry_points
-import os
+
 
 def load_plugins():
     """Load all plugins registered under the 'enchanted_surrogates' entry points."""

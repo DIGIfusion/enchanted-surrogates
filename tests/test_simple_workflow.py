@@ -47,8 +47,8 @@ def test_full_workflow_joblib(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     total_budget = 50
-    sampler = RandomSampler(bounds, total_budget, parameters)
-
+    sampler = import_sampler(type='random_sampler', sampler_kwargs={'bounds':bounds, 'total_budget':total_budget,'parameters':parameters})
+    
     # -- runner args
     runner_args = {
         'type': 'ExampleRunner'
