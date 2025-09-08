@@ -5,16 +5,12 @@ The csc approved way is to use containerised python enviroments, see: https://do
 
 You need to have a cloned version of the enchanted surrogates repo, see: https://github.com/DIGIfusion/enchanted-surrogates
 
-You then need to edit the user_config.json found in tests/LUMI_tests/user_config.json
+You then need to make a copy of the user_config_<your-lumi-username>.json found in tests/LUMI_tests/user_config_<your-lumi-username>.json
 
-An example is shown below:  
-´´´
-{
-    "path_to_enchanted-surrogates": "/users/your_user/enchanted-surrogates/src/",
-    "activate_env_command": "export PATH=/scratch/project_XXXXXXXXX/your_container_folder/bin:$PATH"
-    "project":'project_XXXXXXXXX'
-}
-´´´
+Rename your copied file to have your lumi username in the indicated position.
+
+Place *<your-lumi-username>* into your cd .git/info/exclude file so any personal files named with your username cannot be committed and pushed online. (It may be difficult to find on vs studio, try using a terminal based editor)
+
 You can then run the LUMI_tests by:  
  - activating your python enviroment  
 ´export PATH=/scratch/project_XXXXXXXXX/your_container_folder/bin:$PATH´
@@ -24,6 +20,4 @@ You can then run the LUMI_tests by:
 
  - Running pytest from the cloned enchanted surrogates repo  
 ´python3 -m pytest tests/LUMI_tests´
-
-Please do not commit or push personal user_config.json files
   
