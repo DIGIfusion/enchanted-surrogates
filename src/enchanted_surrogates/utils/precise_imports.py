@@ -109,7 +109,7 @@ def import_sampler(type, sampler_kwargs):
         If the module or class cannot be found.
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
-    sampler = getattr(importlib.import_module(f'parsers.{type_snake}'),type_pascal)(**sampler_kwargs)
+    sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers.{type_snake}'),type_pascal)(**sampler_kwargs)
     return sampler
     
     
