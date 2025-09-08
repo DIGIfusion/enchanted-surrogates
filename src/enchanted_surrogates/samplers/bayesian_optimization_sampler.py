@@ -20,7 +20,7 @@ except:
     )
 
 
-class BayesianOptimization(Sampler):
+class BayesianOptimizationSampler(Sampler):
     """
     Bayesian Optimization sampler using the BoTorch library.
 
