@@ -40,7 +40,7 @@ core
 *.png
 *.jpg
 *out*
-*example*
+*example/
 tests/example/
 
 # Byte-compiled / optimized / DLL files
