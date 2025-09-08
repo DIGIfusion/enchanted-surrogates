@@ -1,8 +1,6 @@
 import os, sys
-project_root = os.path.dirname(os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates")+1]))
-sys.path.append(project_root)
-
-import pytest 
+from ..utils.append_es_to_path import append_es_to_path
+append_es_to_path()
 from enchanted_surrogates.executors import DaskExecutor
 # import glob 
 import shutil
