@@ -21,7 +21,7 @@ def test_dask_executor():
     executor_kwargs = {
         'type': 'DaskExecutor',
         'base_run_dir': f"{os.path.dirname(__file__)}/example_base_run_dir",
- _      'block_unitil_cluster_started': True, # default False: for debugging purposes
+        'block_unitil_cluster_started': True, # default False: for debugging purposes
         'sampler_kwargs':{
             'type': 'RandomSampler',
             'bounds':[[-5, 5], [0, 1]],
