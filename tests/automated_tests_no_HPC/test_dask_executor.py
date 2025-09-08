@@ -1,7 +1,6 @@
 import os, sys
-print('debug file_path:',os.path.normpath(__file__))
-project_root = os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted-surrogates")+1])
-sys.path.append(os.path.join(project_root, 'src'))
+project_root = os.path.dirname(os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates")+1]))
+sys.path.append(project_root)
 
 from enchanted_surrogates.executors.dask_executor import DaskExecutor
 # import glob 
