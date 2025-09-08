@@ -40,8 +40,8 @@ core
 *.png
 *.jpg
 *out*
-*example*
 tests/example/
+*example_base_run_dir*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
