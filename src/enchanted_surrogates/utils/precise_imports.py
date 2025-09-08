@@ -1,5 +1,8 @@
 import re
 import importlib
+import os, sys
+src_dir = os.path.dirname(os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates") + 1]))
+sys.path.append(src_dir)
 def detect_case_style(s):
     """
     Detects the naming convention of a given string.
@@ -137,4 +140,5 @@ def import_runner(type, runner_kwargs):
     sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
     return sampler
     
-    
+if __name__ == "__main__":
+    print(src_dir)
