@@ -25,10 +25,19 @@ class BayesianOptimization(Sampler):
     Bayesian Optimization sampler using the BoTorch library.
 
     Attributes:
-        initial_points (int): Number of initial samples that is needed to exist
-                              in the dictionary of runs to start active sampling
-        
-
+        initial_samples (int): Number of initial samples required.
+        verbose (bool): Whether to print verbose output.
+        fully_bayesian (bool): Whether to use fully Bayesian models.
+        acquisition_batch_size (int): Number of samples in each acquisition batch.
+        observations (list): List of observations.
+        bounds (list): Bounds for the search space.
+        acquisition_function (str): Acquisition function to use.
+        random_fraction (float): Fraction of random samples.
+        failure_prob_filter (bool): Whether to filter based on failure probability.
+        ucb_beta (float): Beta parameter for UCB acquisition function.
+        async_samp (bool): Whether to use asynchronous sampling.
+        parameters (list): List of parameter names.
+        parser (object): Parser object for collecting sample information.
     """
 
     def __init__(
@@ -37,16 +46,21 @@ class BayesianOptimization(Sampler):
         **kwargs,
     ):
         """
+        Initializes the BayesianOptimization sampler with the given parameters.
         """
-        self.initial_samples        = kwargs.get('initial_samples', 50)
-        self.verbose                = kwargs.get('verbose', 'False')
-        self.fully_bayesian         = kwargs.get('fully_bayesian', 'False')
+        self.initial_samples = kwargs.get('initial_samples', 50)
+        self.verbose = kwargs.get('verbose', False)
+        self.fully_bayesian = kwargs.get('fully_bayesian', False)
         self.acquisition_batch_size = kwargs.get('acquisition_batch_size', 20)
-        self.observations           = kwargs.get('observations', [None])
-        self.bounds                 = kwargs.get('bounds', [None])
-        self.acquisition_function   = kwargs.get('acquisition_function', 'qEI')
-        self.random_fraction        = kwargs.get('random_fraction', 0.2)  
-        self.failure_prob_filter    = kwargs.get('failure_prob_filter', 'False')
+        self.observations = kwargs.get('observations', [None])
+        self.bounds = kwargs.get('bounds', [None])
+        self.acquisition_function = kwargs.get('acquisition_function', 'qEI')
+        self.random_fraction = kwargs.get('random_fraction', 0.2)
+        self.failure_prob_filter = kwargs.get('failure_prob_filter', False)
+        self.ucb_beta = kwargs.get('ucb_beta', 2.0)  # Default value for UCB beta
+        self.async_samp = kwargs.get('async_samp', False)  # Default value for async sampling
+        self.parameters = kwargs.get('parameters', [])  # List of parameter names
+        self.parser = kwargs.get('parser', None)  # Parser object for sample information
 
     def get_next_parameter(self):
         """
@@ -57,24 +71,28 @@ class BayesianOptimization(Sampler):
             list: List of dictionaries containing next parameter samples.
 
         """
+        acq = None  # Initialize acq to avoid possibly-used-before-assignment error
         if self.acquisition_function == 'qLEI':
             acq = botorch.acquisition.qLogExpectedImprovement(
                 model=self.model, 
                 best_f=self.best_f)
-        if self.acquisition_function == 'qUCB':
+        elif self.acquisition_function == 'qUCB':
             acq = botorch.acquisition.qUpperConfidenceBound(
                 model=self.model, 
                 beta=self.ucb_beta)
-        if self.acquisition_function == 'qEI':
+        elif self.acquisition_function == 'qEI':
             acq = botorch.acquisition.qExpectedImprovement(
                 model=self.model, 
                 best_f=self.best_f)
-        if self.acquisition_function == 'qPI':
+        elif self.acquisition_function == 'qPI':
             acq = botorch.acquisition.qProbabilityOfImprovement(
                 model=self.model, 
                 best_f=self.best_f)
+        if acq is None:
+            raise ValueError(f"Unsupported acquisition function: {self.acquisition_function}")
+
         batch_samples = []
-        if self.async_samp == True:
+        if self.async_samp:
             if torch.rand(1) < self.random_fraction:
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
@@ -86,8 +104,8 @@ class BayesianOptimization(Sampler):
             else:
                 qval = 1
         else:  
-            qval = int((1 - self.random_fraction)*self.aquisition_batch_size)
-            for _ in range(int(self.random_fraction*self.aquisition_batch_size)):
+            qval = int((1 - self.random_fraction)*self.acquisition_batch_size)
+            for _ in range(int(self.random_fraction*self.acquisition_batch_size)):
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
                     for (lb, ub) in self.bounds
@@ -199,6 +217,7 @@ class BayesianOptimization(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
+        result_dictionary = {}  # Initialize result_dictionary to avoid used-before-assignment error
 
         # Make sure that result_dictionary does not exist in locals
         if 'result_dictionary' in locals():
