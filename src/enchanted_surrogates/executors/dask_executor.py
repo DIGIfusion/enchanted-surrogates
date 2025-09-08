@@ -39,21 +39,21 @@ class DaskExecutor(Executor):
             **kwargs: Additional keyword arguments, including:
                 - type (str): Type of executor.
                 - scale_n_jobs (int): Number of jobs to scale the cluster to.
-                - SLURMcluster_args (dict): Arguments for SLURMCluster.
-                - LocalCluster_args (dict): Arguments for LocalCluster.
+                - SLURMcluster_kwargs (dict): Arguments for SLURMCluster.
+                - LocalCluster_kwargs (dict): Arguments for LocalCluster.
                 - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
         """
         print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
         self.scale_n_jobs = kwargs.get('scale_n_jobs',1)
-        self.SLURMcluster_args = kwargs.get('SLURMcluster_args')
-        self.LocalCluster_args = kwargs.get('LocalCluster_args')
+        self.SLURMcluster_kwargs = kwargs.get('SLURMcluster_kwargs')
+        self.LocalCluster_kwargs = kwargs.get('LocalCluster_kwargs')
         sampler_type = sampler_kwargs.pop("type")
-        self.sampler = import_sampler(type=sampler_type, sampler_kwargs=sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_args)
+        self.sampler = import_sampler(type=sampler_type, sampler_kwargs=sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
         
         self.block_unitil_cluster_started = kwargs.get('block_unitil_cluster_started', False) # for debugging purposes only
-        self.runner_args = runner_kwargs
+        self.runner_kwargs = runner_kwargs
         self.cluster=None
         self.client=None
         self.expected_number_of_workers = None
@@ -74,18 +74,18 @@ class DaskExecutor(Executor):
         """
         print('MAKING CLUSTER')
         worker_logs_dir = None
-        if self.SLURMcluster_args:
+        if self.SLURMcluster_kwargs:
             slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
             worker_logs_dir = slurm_out_dir
             if not os.path.exists(slurm_out_dir):
                 os.makedirs(slurm_out_dir)
-            jed = self.SLURMcluster_args.get('job_extra_directives')
+            jed = self.SLURMcluster_kwargs.get('job_extra_directives')
             if not jed:
-                self.SLURMcluster_args['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+                self.SLURMcluster_kwargs['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
             else:
-                self.SLURMcluster_args['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
+                self.SLURMcluster_kwargs['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
             print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
-            self.cluster = SLURMCluster(**self.SLURMcluster_args)
+            self.cluster = SLURMCluster(**self.SLURMcluster_kwargs)
             self.cluster.scale(self.scale_n_jobs)
             print('THE JOB SCRIPT FOR A WORKER IS:')
             print(self.cluster.job_script())
@@ -98,12 +98,12 @@ class DaskExecutor(Executor):
                 print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
                 self.wait_for_all_dask_jobs_running()
                 
-                self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_args.get('processes',1))
+                self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_kwargs.get('processes',1))
                 
-        elif self.LocalCluster_args:
-            self.cluster = LocalCluster(**self.LocalCluster_args)
+        elif self.LocalCluster_kwargs:
+            self.cluster = LocalCluster(**self.LocalCluster_kwargs)
             self.client = Client(self.cluster)
-            self.expected_number_of_workers = self.LocalCluster_args['n_workers']
+            self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
             
         if self.block_unitil_cluster_started:
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
@@ -226,7 +226,7 @@ class DaskExecutor(Executor):
                                   This signifies that there is already data in this folder. 
                                   Aborting to avoid accidental data mixing.''' )
 
-        print(f"STARTING RUNS FOR RUNNER {self.runner_args['type']}, FROM WITHIN A {__class__}")
+        print(f"STARTING RUNS FOR RUNNER {self.runner_kwargs['type']}, FROM WITHIN A {__class__}")
 
         if not self.client:
             self.start_cluster()
@@ -278,7 +278,7 @@ class DaskExecutor(Executor):
         for sample_params in samples:
             sample_run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
             new_future = self.client.submit(
-                run_simulation_task, self.runner_args, sample_run_dir, sample_params
+                run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
             )
             futures.append(new_future)
         return futures

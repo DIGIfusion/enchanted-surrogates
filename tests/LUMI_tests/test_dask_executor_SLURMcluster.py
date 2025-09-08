@@ -13,7 +13,11 @@ def test_dask_executor():
 
     # -- User Config
     # Load JSON file into a Python dict
-    with open(os.path.join(os.path.dirname(__file__),"user_config.json"), "r") as file:
+    if os.path.exists(os.path.join(os.path.dirname(__file__),f"user_config_{os.environ['USER']}.json")):
+        user_config_file = os.path.join(os.path.dirname(__file__),f"user_config_{os.environ['USER']}.json")
+    else:
+        raise FileNotFoundError('PLEASE MAKE A USER CONFIG FILE FOR THE LUMI TESTS CALLED user_config_<your-lumi-username>.json')
+    with open(user_config_file, "r") as file:
         user_config = json.load(file)
     
     assert user_config['path_to_enchanted-surrogates']
@@ -21,20 +25,20 @@ def test_dask_executor():
     assert user_config['project']
     
     # -- Executor
-    executor_args = {
+    executor_kwargs = {
         'type': 'DaskExecutor',
         'base_run_dir': f"{os.path.dirname(__file__)}/example",
         'block_unitil_cluster_started': True, # default False: for debugging purposes
-        'sampler_args':{
+        'sampler_kwargs':{
             'type': 'RandomSampler',
             'bounds':[[-5, 5], [0, 1]],
             'parameters':['c1', 'c2'],
             'total_budget':50
         },
-        'runner_args':{
+        'runner_kwargs':{
             'type': 'ExampleRunner'
         },
-        'SLURMcluster_args':{
+        'SLURMcluster_kwargs':{
             'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
             'cores':1, #
             'memory':'500MB', # Memory per node to be split between the number of workers on that node
@@ -50,19 +54,19 @@ def test_dask_executor():
                 f"export PYTHONPATH={user_config['path_to_enchanted-surrogates']}:$PYTHONPATH"
             ]
         },
-        'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_args['processes'] number workers on each node
+        'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_kwargs['processes'] number workers on each node
     }
 
-    if os.path.exists(executor_args['base_run_dir']):
-        print('REMOVING OLD BASE RUN DIR: ',executor_args['base_run_dir'])
-        os.system(f"rm -r {executor_args['base_run_dir']}")
+    if os.path.exists(executor_kwargs['base_run_dir']):
+        print('REMOVING OLD BASE RUN DIR: ',executor_kwargs['base_run_dir'])
+        os.system(f"rm -r {executor_kwargs['base_run_dir']}")
 
     # create the executor
-    executor = DaskExecutor(**executor_args, **config)
+    executor = DaskExecutor(**executor_kwargs, **config)
     
     executor.start_runs()
 
-    assert os.path.exists(os.path.join(executor_args['base_run_dir'],'ENCHANTED.FINNISHED'))
+    assert os.path.exists(os.path.join(executor_kwargs['base_run_dir'],'ENCHANTED.FINNISHED'))
 
     # TODO clean up test
     # shutil.rmtree(base_run_dir)
