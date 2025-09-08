@@ -1,5 +1,6 @@
 import importlib 
-import traceback 
+import traceback
+from enchanted_surrogates.utils.precise_imports import import_runner
 import os 
 
 def run_simulation_task(runner_kwargs:dict, run_dir:str, params: dict=None, future=None) -> dict:
@@ -11,7 +12,7 @@ def run_simulation_task(runner_kwargs:dict, run_dir:str, params: dict=None, futu
     Raises:
     """
     runner_type = runner_kwargs['type']
-    runner = getattr(importlib.import_module(f'enchanted_surrogates.runners.{runner_type}'), runner_type)(**runner_kwargs)
+    runner = import_runner(type=runner_type, runner_kwargs=runner_kwargs)
     try:            
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
         

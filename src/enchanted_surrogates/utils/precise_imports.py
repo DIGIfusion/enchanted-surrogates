@@ -111,5 +111,30 @@ def import_sampler(type, sampler_kwargs):
     type_snake, type_pascal = get_snake_and_pascal(type)
     sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers.{type_snake}'),type_pascal)(**sampler_kwargs)
     return sampler
+
+def import_runner(type, runner_kwargs):
+    """
+    Dynamically imports and instantiates a runner class based on naming convention.
+
+    Parameters
+    ----------
+    type : str
+        The name of the sampler (in snake_case or PascalCase).
+    sampler_kwargs : dict
+        Keyword arguments to pass to the sampler constructor.
+
+    Returns
+    -------
+    object
+        An instance of the sampler class.
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    type_snake, type_pascal = get_snake_and_pascal(type)
+    sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
+    return sampler
     
     
