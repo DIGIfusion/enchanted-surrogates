@@ -1,5 +1,28 @@
 # Enchanted surrogates
 
+## How to install
+
+Make sure you have a clean virtual environment with Python 3.10 or higher.
+Then clone the repository and install the package with pip:
+
+```bash
+git clone ...
+pip install enchanted-surrogates
+```
+
+This will install the core package and its dependencies.
+In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well.
+
+
+## How to run
+
+After installing the package and any desired plugins, you can use the command line interface to run simulations.
+For example, to run a simulation with the example runner and parser, you can use the following command:
+
+```bash
+enchanted-surrogates run.py -cf path/to/config/file
+```
+
 
 ## How to develop plugins
 
