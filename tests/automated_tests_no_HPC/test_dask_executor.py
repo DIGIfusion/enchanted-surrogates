@@ -1,6 +1,13 @@
 import os, sys
-project_root = os.path.dirname(os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates")+1]))
-sys.path.append(project_root)
+from ..utils.append_es_to_path import append_es_to_path
+append_es_to_path()
+# Dynamically calculate the path to the 'src' directory
+current_file = os.path.abspath(__file__)
+tests_dir = os.path.dirname(
+    os.sep.join(os.path.normpath(current_file).split(os.sep)[:current_file.split(os.sep).index("tests") + 1])
+)
+src_path = os.path.join(os.path.dirname(tests_dir), "src")
+sys.path.append(src_path)
 
 from enchanted_surrogates.executors.dask_executor import DaskExecutor
 # import glob 
