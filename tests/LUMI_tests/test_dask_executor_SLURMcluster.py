@@ -1,5 +1,6 @@
 import os, sys
-sys.path.append('/users/danieljordan/enchanted-surrogates/src/')
+project_root = os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted-surrogates")+1])
+sys.path.append(os.path.join(project_root, 'src'))
 
 import pytest 
 from enchanted_surrogates.executors import DaskExecutor

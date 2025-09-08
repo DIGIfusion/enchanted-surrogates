@@ -1,5 +1,5 @@
 from enchanted_surrogates.executors import LocalExecutor, JoblibExecutor
-from enchanted_surrogates.samplers.random_sampler import RandomSampler
+from enchanted_surrogates.utils.precise_imports import import_sampler
 import glob
 import os
 import shutil
@@ -18,8 +18,8 @@ def test_full_workflow_local(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     total_budget = 10
-    sampler = RandomSampler(bounds, total_budget, parameters)
-
+    sampler = import_sampler(type='random_sampler', sampler_kwargs={'bounds':bounds, 'total_budget':total_budget,'parameters':parameters})
+    
     # -- runner args
     runner_args = {
         'type': 'ExampleRunner'

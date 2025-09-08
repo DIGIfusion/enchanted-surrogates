@@ -1,46 +1,77 @@
 import os
 from .base_executor import Executor
-from dask.distributed import Client, as_completed, wait, LocalCluster, print
+from dask.distributed import Client, as_completed, wait, LocalCluster
+from dask.distributed import print as dask_print
+from enchanted_surrogates.executors import simulation_task
+# Patch print inside the module if it uses bare `print()` calls
+simulation_task.print = dask_print
+# Override local print
+print = dask_print
+# Alias the task function
+run_simulation_task = simulation_task.run_simulation_task
+
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
+from enchanted_surrogates.utils.precise_imports import import_sampler
 import subprocess
 import time
 import warnings
-from .simulation_task import run_simulation_task as run_simulation_task_origional
 import importlib
 import uuid
 import pandas as pd
 
-
-def run_simulation_task_monkey_patch(*args, **kwargs):
-    """ TODO: Docstring """
-    return run_simulation_task_origional(*args, **kwargs)
-
-run_simulation_task = run_simulation_task_monkey_patch
-
-
 class DaskExecutor(Executor):
     """
     Handles execution of surrogate workflow on Dask.
+    Supports both SLURMCluster and LocalCluster for distributed task execution.
     SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
     """
 
-    def __init__(self, base_run_dir, sampler_args, runner_args, *args, **kwargs):
+    def __init__(self, base_run_dir, sampler_kwargs, runner_kwargs, *args, **kwargs):
+        """
+        Initializes the DaskExecutor.
+
+        Args:
+            base_run_dir (str): Base directory for storing run outputs.
+            sampler_kwargs (dict): Arguments for the sampler, including its type.
+            runner_kwargs (dict): Arguments for the runner.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments, including:
+                - type (str): Type of executor.
+                - scale_n_jobs (int): Number of jobs to scale the cluster to.
+                - SLURMcluster_args (dict): Arguments for SLURMCluster.
+                - LocalCluster_args (dict): Arguments for LocalCluster.
+                - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
+        """
+        print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
         self.scale_n_jobs = kwargs.get('scale_n_jobs',1)
         self.SLURMcluster_args = kwargs.get('SLURMcluster_args')
         self.LocalCluster_args = kwargs.get('LocalCluster_args')
-        sampler_type = sampler_args.pop("type")
-        self.sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_args)
+        sampler_type = sampler_kwargs.pop("type")
+        self.sampler = import_sampler(type=sampler_type, sampler_kwargs=sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_args)
+        
         self.block_unitil_cluster_started = kwargs.get('block_unitil_cluster_started', False) # for debugging purposes only
-        self.runner_args = runner_args
+        self.runner_args = runner_kwargs
         self.cluster=None
         self.client=None
         self.expected_number_of_workers = None
 
     def start_cluster(self, slurm_out_dir=None):
-        """ TODO: Docstring """
+        """
+        Starts a Dask cluster using either SLURMCluster or LocalCluster.
+
+        If SLURMCluster is used, it sets up SLURM-specific configurations, including output directories
+        for worker logs. If LocalCluster is used, it initializes a local Dask cluster.
+
+        Args:
+            slurm_out_dir (str, optional): Directory for SLURM output logs. Defaults to None.
+
+        Raises:
+            ValueError: If no workers are successfully started.
+            Warning: If fewer workers than expected are started.
+        """
         print('MAKING CLUSTER')
         worker_logs_dir = None
         if self.SLURMcluster_args:
@@ -79,8 +110,8 @@ class DaskExecutor(Executor):
                 
             workers = self.client.scheduler_info()["workers"]
             for _ in range(self.expected_number_of_workers+120):
-                print(f"Connected to {len(workers)} workers out of expected {self.expected_number_of_workers}.\n")
                 workers = self.client.scheduler_info()["workers"]
+                print(f"Connected to {len(workers)} workers out of expected {self.expected_number_of_workers}.\n")
                 if len(workers) == self.expected_number_of_workers:
                     break
                 if len(workers) > self.expected_number_of_workers:
@@ -102,7 +133,18 @@ class DaskExecutor(Executor):
                 print(f"  Resources: {info.get('resources', {})}\n")
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
-        """ TODO: Docstring """
+        """
+        Waits for all Dask jobs submitted to SLURM to reach the RUNNING state.
+
+        This method repeatedly checks the SLURM job queue for jobs with the prefix 'dask-wor'.
+        If any job is not in the RUNNING state, it waits and retries until all jobs are running.
+
+        Args:
+            poll_interval (int, optional): Time interval (in seconds) between checks. Defaults to 1.
+
+        Raises:
+            Exception: If an error occurs while checking the SLURM queue.
+        """
         print("Waiting for all Dask jobs to enter RUNNING state...")
 
         while True:
@@ -145,16 +187,34 @@ class DaskExecutor(Executor):
                 time.sleep(poll_interval)
 
     def clean(self):
+        """
+        Cleans up resources by shutting down the Dask cluster.
+
+        This method is intended to be called when the executor is no longer needed.
+        """
         self.shutdown_cluster()
 
     def shutdown_cluster(self):
         """
-        This will also shut down the scheduler which may not be desired if the scheduler is controlling other clusters
-        to only shutdown the workers see shutdown_workers
+        Shuts down the Dask cluster, including the scheduler and workers.
+
+        Note:
+            This will also shut down the scheduler, which may not be desired if the scheduler
+            is controlling other clusters. To only shut down the workers, use a different method.
         """
         self.client.shutdown()
 
     def start_runs(self):
+        """
+        Starts the execution of simulation tasks using the configured Dask cluster.
+
+        This method initializes the base run directory, checks for existing data to avoid overwrites,
+        and submits tasks to the Dask cluster in batches. It collects results from completed tasks
+        and writes them to a CSV file.
+
+        Raises:
+            FileExistsError: If the base run directory contains a file indicating a completed run.
+        """
         start = time.time()
         print('BASE RUN DIR:', self.base_run_dir)
         if not os.path.exists(self.base_run_dir):
@@ -170,20 +230,25 @@ class DaskExecutor(Executor):
 
         if not self.client:
             self.start_cluster()
-
+        print('CLUSTER STARTED')
         all_futures = []
 
         while self.sampler.has_budget:
             samples = self.sampler.get_next_samples()
             futures = self.submit_batch(samples)
             all_futures.extend(futures)
-
+        print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
         dfs = []
-        for future in as_completed(all_futures):
+        num_success = 0
+        for i, future in enumerate(as_completed(all_futures)):
             result = future.result()
-            print('FUTURE RESULT',result, type(result))
+            if result['success'] == True:
+                num_success += 1
+            # print('FUTURE RESULT',result, type(result))
             result = {k:[v] for k,v in result.items()}
             dfs.append(pd.DataFrame(result))
+            print(f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
+            print('_'*100)
         df_dataset = pd.concat(dfs)
         df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
 
@@ -197,7 +262,18 @@ class DaskExecutor(Executor):
 
 
     def submit_batch(self, samples):
-        """ TODO: Docstring """
+        """
+        Submits a batch of simulation tasks to the Dask cluster.
+
+        Each task is submitted with its own unique run directory. The tasks are executed
+        asynchronously, and their futures are returned for tracking.
+
+        Args:
+            samples (list): List of sample parameters for the simulation tasks.
+
+        Returns:
+            list: List of futures representing the submitted tasks.
+        """
         futures = []
         for sample_params in samples:
             sample_run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
