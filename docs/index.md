@@ -32,4 +32,23 @@ enchanted-surrogates run.py -cf path/to/config/file
 
 Make sure to replace `path/to/config/file` with the actual path to your configuration file.
 
+
+
+
 ## Code structure
+
+### Samplers
+Modules for generating samples according to some rule set. 
+
+### Executors
+Modules for distributing and executing the runs. 
+ 
+### Runners
+Code specifiic modules for executing the code in question. Commonly paired with a code specific parser. 
+
+### Parsers
+Code specific modules for reading and writing files produced by the code. 
+ 
+
+ 
+
