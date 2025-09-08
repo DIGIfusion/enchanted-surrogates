@@ -9,6 +9,7 @@ on:
       - 'dev**'
   pull_request:
     types: [opened, reopened]
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -17,11 +18,12 @@ jobs:
         python-version: ["3.10"]
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up Python ${{ matrix.python-version }}
-      working-directory: enchanted_surrogates
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
       working-directory: enchanted_surrogates
       run: |
@@ -29,10 +31,12 @@ jobs:
         pip install .
         git submodule init
         git submodule update
+
     - name: Running pytest
       working-directory: enchanted_surrogates
       run: |
         coverage run -m pytest tests/automated_tests_no_HPC/ -v -s
+
     - name: Generate Coverage Report  
       working-directory: enchanted_surrogates
       run: |  
