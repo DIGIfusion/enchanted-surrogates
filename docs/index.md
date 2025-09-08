@@ -37,6 +37,8 @@ Make sure to replace `path/to/config/file` with the actual path to your configur
 
 ## Code structure
 
+See specific sections for detailed intormation about the different options. 
+
 ### Samplers
 Modules for generating samples according to some rule set. 
 
@@ -48,7 +50,9 @@ Code specifiic modules for executing the code in question. Commonly paired with 
 
 ### Parsers
 Code specific modules for reading and writing files produced by the code. 
- 
 
- 
+
+The executor initalizes a sampler and fetches samples from it. The executor initialized some cluster or job queue or similar. 
+The sampler generates a batch of samples. A sample is sent to the Runner. 
+The Runner initalizes and uses a Parser for writing input files based on the sample parameters and postprocessing output files. 
 
