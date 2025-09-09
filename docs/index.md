@@ -1,112 +1,58 @@
+---
+layout: default
+title: Start
+nav_order: 1
+has_children: true
+---
+
 # Enchanted surrogates
 
+## How to install
 
-## How to develop plugins
+Make sure you have a clean virtual environment with Python 3.10 or higher.
+Then clone the repository and install the package with pip:
 
-### 📂 Project Structure
-
-```
-enchanted-plugin-codename/
-├── src/
-│  └── enchanted_plugin_codename/
-│    ├── init.py # Package initializer (can be empty)
-│    ├── codename_parser.py
-│    └── codename_runner.py
-├── tests/
-│    └── test_plugin.py # Unit tests for the plugin
-├── README.md
-├── pyproject.toml
+```bash
+git clone https://github.com/DIGIfusion/enchanted-surrogates.git
+pip install -e enchanted-surrogates/
 ```
 
-Note that the repository name should follow the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin. The package name inside `src/` should match this name but with **underscores** between the words instead of hyphens.
+This will install the core package and its dependencies.
+In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well.
 
 
-### 🛠️ Development Steps
+## How to run
 
-1. **Set Up Your Environment**:
-   - Create a virtual environment and activate it:
-     ```bash
-     python -m venv .venv
-     source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-     ```
-   - Clone the `enchanted-surrogates` repository to have access to the core package:
-     ```bash
-     git clone  --single-branch --branch develop-helena-plugin https://github.com/DIGIfusion/enchanted-surrogates.git
-     cd enchanted-surrogates
-     pip install -e .
-     cd ..
-     ```
-     (Currnetly using a specific branch for HELENA plugin development, since the plugin support is not yet merged to main.)
+After installing the package and any desired plugins, you can use the command line interface to run simulations.
+For example, to run a simulation with the example runner and parser, you can use the following command:
 
-2. **Create the Plugin Structure**:
-   - Create a new directory for your plugin, e.g., `enchanted-plugin-codename`.
-     ```bash
-     mkdir enchanted-plugin-codename
-     cd enchanted-plugin-codename
-     git init  # Initialize a git repository here
-     mkdir src tests
-     cd src
-     mkdir enchanted_plugin_codename
-     ```
-   - Inside this directory, create the necessary files and folders as shown in the project structure above.
-3. **Dependencies and entrypoints**
-    - Create a `pyproject.toml` file in the root of your plugin directory to manage dependencies and define entry points. Here is a basic example:
-      ```toml
-      [tool.poetry]
-      name = "enchanted-plugin-codename"
-      version = "0.1.0"
-      description = "A plugin for enchanted-surrogates to support Codename simulations."
-      readme = "README.md"
-      authors = [
-        {name = "", email = ""
-        },
-      ]
-      license = {text = "MIT"}
-      dependencies = [
-        "enchanted_surrogates",
-        "f90nml==1.4.4",
-        "numpy",
-        "fortranformat",
-        "scipy",]
-      requires-python = ">=3.11"
+```bash
+enchanted-surrogates run.py -cf path/to/config/file
+```
 
-      [tool.setuptools.packages.find]
-      where = ["src"]
-      ```
-
-   - Define entry points in `pyproject.toml` to register your parser and runner with the `enchanted-surrogates` framework. For example:
-     ```toml
-     [tool.poetry.plugins."enchanted_surrogates.parsers"]
-     codename_parser = "enchanted_plugin_codename.helena_parser:CodenameParser"
-
-     [tool.poetry.plugins."enchanted_surrogates.runners"]
-     codename_runner = "enchanted_plugin_codename.helena_runner:CodenameRunner"
-     ```
-     These will allow the main package to discover and utilize your plugin seamlessly.
-
-4. **Implement the Plugin**:
-   - In `codename_parser.py`, implement the class CodenameParser with logic to read and write input/output files.
-   - In `codename_runner.py`, implement the class CodenameRunner with logic to execute simulations.
-   - Ensure your code adheres to the interfaces defined in the `enchanted-surrogates` package.
-   - When the entrypoints and the logic is implemented, you can install your plugin in editable mode for development:
-     ```bash
-     cd enchanted-plugin-codename
-     pip install -e .
-     ```
-     after which you can use your plugin with `enchanted-surrogates`.
-
-5. **Testing**:
-   - Write unit tests in `test_plugin.py` to validate the functionality of your parser and runner.
-   - Use `pytest` to run your tests:
-     ```bash
-     pytest tests/
-     ```
-6. **Github Actions**:
-   - Set up a GitHub Actions workflow to automate testing and deployment.
+Make sure to replace `path/to/config/file` with the actual path to your configuration file.
 
 
-## Existing plugins
 
-- HELENA: [enchanted-plugin-helena](https://github.com/DIGIfusion/enchanted-plugin-helena)
-- MISHKA: [enchanted-plugin-mishka](https://github.com/DIGIfusion/enchanted-plugin-mishka)
-  
+
+## Code structure
+
+See specific sections for detailed intormation about the different options. 
+
+### Samplers
+Modules for generating samples according to some rule set. 
+
+### Executors
+Modules for distributing and executing the runs. 
+ 
+### Runners
+Code specifiic modules for executing the code in question. Commonly paired with a code specific parser. 
+
+### Parsers
+Code specific modules for reading and writing files produced by the code. 
+
+
+The executor initalizes a sampler and fetches samples from it. The executor initialized some cluster or job queue or similar. 
+The sampler generates a batch of samples. A sample is sent to the Runner. 
+The Runner initalizes and uses a Parser for writing input files based on the sample parameters and postprocessing output files. 
+

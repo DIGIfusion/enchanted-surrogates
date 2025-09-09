@@ -1,3 +1,10 @@
+---
+layout: default
+title: HELENA
+nav_order: 4
+parent: Plugins
+---
+
 # HELENA plugin
 
 Mandatory fields in the configuration file for using the HELENA plugin:
