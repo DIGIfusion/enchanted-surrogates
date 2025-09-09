@@ -1,8 +1,10 @@
 import re
 import importlib
 import os, sys
+from enchanted_surrogates import load_plugins
 src_dir = os.path.dirname(os.sep.join(os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates") + 1]))
 sys.path.append(src_dir)
+
 def detect_case_style(s):
     """
     Detects the naming convention of a given string.
@@ -114,7 +116,12 @@ def import_sampler(type, sampler_kwargs):
         If the module or class cannot be found.
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
-    sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers.{type_snake}'),type_pascal)(**sampler_kwargs)
+    eps = load_plugins()
+
+    if type_snake in eps:
+        sampler = eps[type_snake](**sampler_kwargs)
+    else:
+        sampler = getattr(importlib.import_module(f'enchanted_surrogates.samplers.{type_snake}'),type_pascal)(**sampler_kwargs)
     return sampler
 
 def import_runner(type, runner_kwargs):
@@ -139,7 +146,12 @@ def import_runner(type, runner_kwargs):
         If the module or class cannot be found.
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
-    sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
+    eps = load_plugins()
+
+    if type_snake in eps:
+        sampler = eps[type_snake](**runner_kwargs)
+    else:
+        sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
     return sampler
     
 if __name__ == "__main__":
