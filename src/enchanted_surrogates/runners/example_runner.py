@@ -7,7 +7,6 @@ class ExampleRunner(Runner):
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         # Implementation for the example runner
         # Logic should follow something like
-        # - create the run directory
         # - via parser, write some input files there
         # - run the code
         # - return outputs
@@ -18,7 +17,6 @@ class ExampleRunner(Runner):
         #     will be collected and available in enchanted surrogates created datasets.
         #   - for the datasets to be created properly the return dictionary values should not be
         #     iterables, only base types such as int, float, string, boolean...
-        os.makedirs(run_dir, exist_ok=True)
 
         # TODO make example parser
         # parser.write_input(run_dir, params)

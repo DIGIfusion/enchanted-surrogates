@@ -11,6 +11,7 @@ def run_simulation_task(runner_kwargs:dict, run_dir:str, params: dict=None, futu
     Returns:
     Raises:
     """
+    os.makedirs(run_dir, exist_ok=True)
     runner_type = runner_kwargs['type']
     runner = import_runner(type=runner_type, runner_kwargs=runner_kwargs)
     try:            
