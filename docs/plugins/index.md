@@ -11,11 +11,11 @@ Plugins extend the functionality of the `enchanted-surrogates` package by adding
 
 ## How to install plugins
 
-To install a plugin, you need to clone its repository and install it using pip. For example, to install the HELENA plugin, you can use the following commands:
+To install a plugin, you need to clone its repository and install it using pip. For example, you can use the following commands:
 
 ```bash
-git clone ...
-pip install -e enchanted-plugin-helena
+git clone https://github.com/DIGIfusion/enchanted-plugin-codename.git
+pip install -e enchanted-plugin-codename/
 ```
 
 

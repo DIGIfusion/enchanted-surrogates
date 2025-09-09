@@ -13,8 +13,8 @@ Make sure you have a clean virtual environment with Python 3.10 or higher.
 Then clone the repository and install the package with pip:
 
 ```bash
-git clone ...
-pip install enchanted-surrogates
+git clone https://github.com/DIGIfusion/enchanted-surrogates.git
+pip install -e enchanted-surrogates/
 ```
 
 This will install the core package and its dependencies.
