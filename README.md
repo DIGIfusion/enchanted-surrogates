@@ -77,8 +77,11 @@ If on HPC you must be using an interactive session with roughly 4 cores and at l
 ### Linting Tests
 A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
 To check the linting locally and get a full overview of all possible issues, run:
+For single file check:
+    pylint /path/to/file.py --disable=R,C,W,E0401
 
-    pylint /path/to/file.py  
+For all python files in $PWD:
+    pylint $(find $PWD -name "*.py") --disable=R,C,W,E0401
 
 
 ### Machine Specific Tests

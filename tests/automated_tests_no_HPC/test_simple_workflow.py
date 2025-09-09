@@ -1,7 +1,10 @@
+import os, sys
+from ..utils.append_es_to_path import append_es_to_path
+append_es_to_path()
+
 from enchanted_surrogates.executors import LocalExecutor, JoblibExecutor
-from enchanted_surrogates.samplers.random_sampler import RandomSampler
+from enchanted_surrogates.utils.precise_imports import import_sampler
 import glob
-import os
 import shutil
 
 
@@ -18,10 +21,10 @@ def test_full_workflow_local(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     total_budget = 10
-    sampler = RandomSampler(bounds, total_budget, parameters)
-
+    sampler = import_sampler(type='random_sampler', sampler_kwargs={'bounds':bounds, 'total_budget':total_budget,'parameters':parameters})
+    
     # -- runner args
-    runner_args = {
+    runner_kwargs = {
         'type': 'ExampleRunner'
     }
 
@@ -29,7 +32,7 @@ def test_full_workflow_local(tmp_path):
     # create the executor
 
     executor = LocalExecutor(
-        sampler=sampler, runner_args=runner_args, base_run_dir=base_run_dir, **config)
+        sampler=sampler, runner_kwargs=runner_kwargs, base_run_dir=base_run_dir, **config)
     executor.start_runs()
     # This should create {total_budget} folders with ??? inside
 
@@ -47,17 +50,17 @@ def test_full_workflow_joblib(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     total_budget = 50
-    sampler = RandomSampler(bounds, total_budget, parameters)
-
+    sampler = import_sampler(type='random_sampler', sampler_kwargs={'bounds':bounds, 'total_budget':total_budget,'parameters':parameters})
+    
     # -- runner args
-    runner_args = {
+    runner_kwargs = {
         'type': 'ExampleRunner'
     }
 
     base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
     # create the executor
     executor = JoblibExecutor(
-        sampler=sampler, runner_args=runner_args, base_run_dir=base_run_dir, **config)
+        sampler=sampler, runner_kwargs=runner_kwargs, base_run_dir=base_run_dir, **config)
     executor.start_runs() 
     # This should create {total_budget} folders with ??? inside
 

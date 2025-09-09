@@ -6,7 +6,6 @@ class ExampleRunner(Runner):
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         # Implementation for the example runner
-
         # Logic should follow something like
         # - create the run directory
         # - via parser, write some input files there
@@ -34,6 +33,7 @@ class ExampleRunner(Runner):
 
         # TODO read output
         # parser.read_output(run_dir)
+
 
         with open(outfile, 'r') as f:
             output = float(f.read().strip())

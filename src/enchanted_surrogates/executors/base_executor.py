@@ -7,12 +7,12 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class Executor(ABC):
     def __init__(
-        self, sampler: Sampler, runner_args, base_run_dir, output_dir=None, *args, **kwargs
+        self, sampler: Sampler, runner_kwargs, base_run_dir, output_dir=None, *args, **kwargs
     ):
         
         print("Starting Setup")
         self.sampler: Sampler = sampler
-        self.runner_args      = runner_args
+        self.runner_kwargs      = runner_kwargs
         self.base_run_dir     = base_run_dir
         self.output_dir       = output_dir # TODO rename 
         

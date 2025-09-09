@@ -1,0 +1,6 @@
+{
+    "path_to_enchanted-surrogates": "/users/<your-lumi-username>/path/to/enchanted-surrogates/src/",
+    "activate_env_command": "export PATH=/scratch/project_462000954/<your-enchanted-container>/bin:$PATH",
+    "project": "project_XXXXXXXXX"
+}
+  
