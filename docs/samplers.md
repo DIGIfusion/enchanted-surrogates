@@ -4,6 +4,23 @@ Description of different samplers available in the enchanted-surrogates package 
 
 ## Random sampler
 
+The random sampler generates samples randomly within the specified bounds for each parameter.
+To use the random sampler, you need to specify it in the configuration file as follows:
+
+```yaml
+sampler:
+  type: RandomSampler
+  parameters: ['x', 'y']
+  bounds: [[1, 10], [0, 1]]
+  num_samples: 100
+```
+
+where
+- parameters (list of str): The names of the parameters.
+- bounds (list of tuple of float): The bounds of each parameter.
+- num_samples (int): The number of samples.
+
+
 ## Grid sampler
 
 The grid sampler generates samples on a grid defined by the number of samples per parameter and the parameter bounds.
