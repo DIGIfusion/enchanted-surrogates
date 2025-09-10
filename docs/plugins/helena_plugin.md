@@ -21,3 +21,13 @@ runner:
 ```
 
 
+## Input parameter types
+
+The HELENA plugin supports multiple different input parameter settings, which determine how the input files are generated based on the sample parameters. The supported types are:
+
+- Type 1: Standard input parameters. The sample parameters directly correspond to the input parameters in the HELENA namelist.
+TODO: Add more.
+
+
+## Example configuration
+
