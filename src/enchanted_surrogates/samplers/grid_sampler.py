@@ -63,18 +63,6 @@ class GridSampler(Sampler):
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
-    def get_initial_parameters(
-        self,
-    ):
-        """
-        Gets the initial parameters.
-
-        Returns:
-            list[dict[str, float]]: The initial parameters.
-        """
-        # self.samples[:self.num_initial_points]
-        return [self.get_next_parameter() for _ in range(self.num_initial_points)]
-
     def generate_parameters(self):
         """
         Generates the parameter combinations.
