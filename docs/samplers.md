@@ -33,7 +33,6 @@ sampler:
   parameters: ['x', 'y']
   bounds: [[1, 10], [0, 1]]
   num_samples: [4, 3]
-
 ```
 where 
 - parameters (list of str): The names of the parameters.
@@ -44,3 +43,22 @@ In the above example, the grid sampler will generate a grid of 4 samples for par
 
 ## Array sampler
 
+The array sampler will generate samples by taking the Cartesian product of the provided discrete values for each parameter.
+
+For example:
+```yaml
+    sampler:
+        type: ArraySampler
+        parameters: ['x', 'y']
+        bounds: [[0, 7, 100], ['a', 'b']]
+        num_samples: [3, 2]
+```
+where
+- parameters (list of str): The names of the parameters.
+- bounds (list of list of ...): The discrete values for each parameter.
+- num_samples (list of int): The number of samples for each parameter. This can be left empty for the array sampler, as the number of samples is determined by the length of the bounds.
+  
+The example above would create the following sample space:
+```python
+    [[0, 'a'], [0, 'b'], [7, 'a'], [7, 'b'], [100, 'a'], [100, 'b']]
+``` 
