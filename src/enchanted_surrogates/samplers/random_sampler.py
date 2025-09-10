@@ -4,11 +4,11 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class RandomSampler(Sampler):
     BATCH_SAMPLE_SIZE = 1
+
     def __init__(self, bounds, total_budget, parameters, **kwargs):
         self.budget = total_budget
         self.bounds = bounds
         self.parameters = parameters
-
 
     def get_next_samples(self) -> list[dict]:
         # TODO not use uniform?
@@ -24,6 +24,6 @@ class RandomSampler(Sampler):
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """
         return None
-    
+
     def register_futures(self, futures):
-        return None  
+        return None

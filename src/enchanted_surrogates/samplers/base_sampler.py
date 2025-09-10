@@ -1,18 +1,20 @@
 from abc import ABC, abstractmethod
 
-class Sampler(ABC): 
+
+class Sampler(ABC):
     _budget: int = 100
-    _submitted: int = 0 
+    _submitted: int = 0
+
     def __init__(self, ):
-        pass 
+        pass
 
     @abstractmethod
     def get_next_samples(self) -> list[dict]:
-        """ 
+        """
         Should increment SUBMITTED and return a list of new samples to be run.
         """
         raise NotImplementedError("get_next_samples method not implemented.")
-    
+
     @abstractmethod
     def register_future(self, future):
         """
@@ -20,7 +22,7 @@ class Sampler(ABC):
         """
         raise NotImplementedError("register_future method not implemented.")
 
-    @property 
+    @property
     def has_budget(self) -> bool:
         return self.submitted < self.budget
 
@@ -35,9 +37,7 @@ class Sampler(ABC):
     @property
     def budget(self) -> int:
         return self._budget
-    
-    @budget.setter
-    def budget(self, value): 
-        self._budget = value
 
-    
+    @budget.setter
+    def budget(self, value):
+        self._budget = value
