@@ -1,79 +1,91 @@
-# samplers/array_sampler.py
+# samplers/grid_sampler.py
 
 import numpy as np
 from itertools import product
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
 
-class ArraySampler(Sampler):
+class GridSampler(Sampler):
     """
-    Creates combinations of the given samples.
-
-    The samples are directly specified in 'bounds' in the config file.
+    Creates a grid of equidistant points that spans bounds and num samples.
+    i.e., (num_samples)**(len(parameters))
 
     Attributes:
-        bounds (list of list of float or int): The bounds of each parameter.
+        bounds (list of tuple of float): The bounds of each parameter.
         num_samples (list of int): The number of samples for each parameter.
         parameters (list of str): The names of the parameters.
         total_budget (int): The total number of parameter combinations.
         num_initial_points (int): The number of initial points in the sample space.
-        samples (list of list of float or int): The generated parameter combinations.
+        samples (list of list of float): The generated parameter combinations.
         current_index (int): The index of the current parameter combination.
-
-    For example:
-        sampler:
-          type: Array
-          bounds: [[5, 7, 77, 199], [0.02, 0.2]]
-          num_samples: [4, 2]
-          parameters: ['a', 'b']
-
-    would create the following sample space:
-        [[5, 0.02], [5, 0.2], [7, 0.02], [7, 0.2], [77, 0.02],
-        [77, 0.2], [199, 0.02], [199, 0.2]]
+        sampler_interface (S): The type of sampler interface.
 
     This throws errors if you are asking for something insane,
-        e.g., 10 parameters  for 10 samples each -> 10 billion
+        e.g., 10 parameters for 10 samples each -> 10 billion
         so hard limit at 100.000
 
     Methods:
+        get_initial_parameters: Gets the initial parameters.
         generate_parameters: Generates the parameter combinations.
         get_next_parameter: Gets the next parameter combination.
-
     """
+
     BATCH_SAMPLE_SIZE = 1
 
-    def __init__(self, bounds, total_budget, parameters, **kwargs):
+    def __init__(self, bounds, num_samples, parameters):
         """
-        Initializes the ArraySampler.
+        Initializes the Grid sampler.
 
         Args:
-            bounds (list of list of float or int): The bounds of each parameter.
+            bounds (list of tuple of float): The bounds of each parameter.
             num_samples (list of int): The number of samples for each parameter.
             parameters (list of str): The names of the parameters.
         """
+        super().__init__()
+
+        if isinstance(num_samples, int):
+            num_samples = [num_samples] * len(parameters)
 
         self.parameters = parameters
         self.bounds = bounds
-        self.total_budget = np.prod(np.array([len(b) for b in bounds]))
-        if self.total_budget > 100000:
+        self.num_samples = num_samples
+
+        # check for stupidity
+        self.budget = np.prod(np.array(num_samples))
+        if self.budget > 100000:
             raise Exception(
                 (
-                    "Can not do array sampling on more than 10000 samples, ",
-                    f"you requested {self.total_budget}",
+                    "Can not do grid search on more than 10000 samples, ",
+                    f"you requested {self.budget}",
                 )
             )
 
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
+    def get_initial_parameters(
+        self,
+    ):
+        """
+        Gets the initial parameters.
+
+        Returns:
+            list[dict[str, float]]: The initial parameters.
+        """
+        # self.samples[:self.num_initial_points]
+        return [self.get_next_parameter() for _ in range(self.num_initial_points)]
+
     def generate_parameters(self):
         """
         Generates the parameter combinations.
 
         Yields:
-            list of float or int: The next parameter combination.
+            list of float: The next parameter combination.
         """
-        samples = self.bounds
+        samples = [
+            np.linspace(self.bounds[i][0], self.bounds[i][1], self.num_samples[i])
+            for i in range(len(self.bounds))
+        ]
         # Use itertools.product to create a Cartesian product of sample
         # points, representing the hypercube
         for params_tuple in product(*samples):
@@ -85,8 +97,7 @@ class ArraySampler(Sampler):
         Gets the next batch of parameter combinations.
 
         Returns:
-            list[dict]: List of parameter dicts for the batch,
-                        or empty list if no samples remain.
+            list[dict]: A batch of parameter combinations.
         """
         list_param_dicts = []
 
@@ -95,14 +106,14 @@ class ArraySampler(Sampler):
                 break
             params = self.samples[self.current_index]
             self.current_index += 1
-            param_dict = {key: value for key, value in zip(self.parameters, params)}
+            param_dict = {k: v for k, v in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
-        self.submitted += len(list_param_dicts)
 
+        self.submitted += len(list_param_dicts)
         return list_param_dicts
 
     def register_future(self, future):
-        """ Doesn't matter for random sampler TODO: Probably? """
+        """Doesn't matter for grid sampler."""
         return None
 
     def register_futures(self, futures):
