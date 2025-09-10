@@ -79,28 +79,8 @@ class ArraySampler(Sampler):
         for params_tuple in product(*samples):
             # Convert tuples to list to ensure serializability
             yield list(params_tuple)
-    
-    # def get_next_samples(self) -> list[dict]:
-    #     """
-    #     Gets the next parameter combination.
 
-    #     Returns:
-    #         dict or None: The next parameter combination,
-    # or None if all combinations have been used.
-    #     """
-    #     list_param_dicts = []
-
-    #     samples = self.generate_parameters()
-
-    #     if self.current_index < len(samples):
-    #         params = samples[self.current_index]
-    #         self.current_index += 1
-    #         param_dict = {key: value for key, value in zip(self.parameters, params)}
-    #         return param_dict
-    #     else:
-    #         return None  # TODO: implement when done iterating!
-
-    def get_next_samples(self) -> list[dict]:        
+    def get_next_samples(self) -> list[dict]:
         """
         Gets the next batch of parameter combinations.
 
