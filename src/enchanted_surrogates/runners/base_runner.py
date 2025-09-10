@@ -5,5 +5,5 @@ class Runner(ABC):
         pass 
     
     @abstractmethod
-    def single_code_run(self, run_dir: str, params: dict = None):
+    def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         raise NotImplementedError("Subclasses must implement this method")
