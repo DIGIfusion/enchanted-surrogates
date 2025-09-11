@@ -18,7 +18,10 @@ def run_simulation_task(runner_kwargs:dict, run_dir:str, params: dict=None, futu
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
         
     except Exception as exc:
-        print("="*100,f"\nThere was a Python ERROR on when running a simulation task:\n{exc}\n",traceback.format_exc(), flush=True)
+        print("="*100,f"\nThere was a Python ERROR on when running a simulation task:\n{exc}\n",
+              "PARAMS:", params, "\n",
+              "RUN_DIR:", run_dir, "\n",
+              traceback.format_exc(), flush=True)
         #print the whole traceback and not just the last error
         runner_output = {"success": False} 
     if not 'success' in runner_output:

@@ -117,7 +117,8 @@ def import_sampler(type, sampler_kwargs):
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
     eps = load_plugins()
-
+    if 'type' in sampler_kwargs:
+        sampler_kwargs.pop('type')
     if type_snake in eps:
         sampler = eps[type_snake](**sampler_kwargs)
     else:
@@ -149,10 +150,41 @@ def import_runner(type, runner_kwargs):
     eps = load_plugins()
 
     if type_snake in eps:
-        sampler = eps[type_snake](**runner_kwargs)
+        runner = eps[type_snake](**runner_kwargs)
     else:
-        sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
-    return sampler
+        runner = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
+    return runner
+
+def import_executor(type, executor_kwargs):
+    """
+    Dynamically imports and instantiates an executor class based on naming convention.
+
+    Parameters
+    ----------
+    type : str
+        The name of the sampler (in snake_case or PascalCase).
+    sampler_kwargs : dict
+        Keyword arguments to pass to the sampler constructor.
+
+    Returns
+    -------
+    object
+        An instance of the sampler class.
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    type_snake, type_pascal = get_snake_and_pascal(type)
+    eps = load_plugins()
+
+    if type_snake in eps:
+        executor = eps[type_snake](**executor_kwargs)
+    else:
+        executor = getattr(importlib.import_module(f'enchanted_surrogates.executors.{type_snake}'),type_pascal)(**executor_kwargs)
+    return executor
+
     
 if __name__ == "__main__":
     print(src_dir)

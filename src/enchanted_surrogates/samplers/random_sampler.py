@@ -3,13 +3,12 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 
 class RandomSampler(Sampler):
-    BATCH_SAMPLE_SIZE = 1
-
+    
     def __init__(self, bounds, total_budget, parameters, **kwargs):
         self.budget = total_budget
         self.bounds = bounds
         self.parameters = parameters
-
+        self.batch_size = kwargs.get("batch_size", self.budget)
     def get_next_samples(self) -> list[dict]:
         # TODO not use uniform?
         # TODO batch samples

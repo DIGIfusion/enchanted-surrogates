@@ -40,7 +40,6 @@ class ArraySampler(Sampler):
         get_next_parameter: Gets the next parameter combination.
 
     """
-    BATCH_SAMPLE_SIZE = 1
 
     def __init__(self, bounds, total_budget, parameters, **kwargs):
         """
@@ -62,7 +61,7 @@ class ArraySampler(Sampler):
                     f"you requested {self.total_budget}",
                 )
             )
-
+        self.batch_size = kwargs.get("batch_size", self.total_budget)
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 

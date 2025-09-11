@@ -6,7 +6,7 @@ from enchanted_surrogates.executors import simulation_task
 # Patch print inside the module if it uses bare `print()` calls
 simulation_task.print = dask_print
 # Override local print
-print = dask_print
+from dask.distributed import print
 # Alias the task function
 run_simulation_task = simulation_task.run_simulation_task
 
@@ -16,7 +16,6 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 import subprocess
 import time
 import warnings
-import importlib
 import uuid
 import pandas as pd
 
@@ -27,7 +26,7 @@ class DaskExecutor(Executor):
     SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
     """
 
-    def __init__(self, base_run_dir, sampler_kwargs, runner_kwargs, *args, **kwargs):
+    def __init__(self, runner_kwargs, *args, **kwargs):
         """
         Initializes the DaskExecutor.
 
@@ -45,14 +44,17 @@ class DaskExecutor(Executor):
         """
         print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
-        self.base_run_dir=base_run_dir
+        self.base_run_dir=kwargs.get('base_run_dir')
+        self.sampler_kwargs = kwargs.get('sampler_kwargs')
+        if self.sampler_kwargs:
+            sampler_type = self.sampler_kwargs.pop("type")
+            self.sampler = import_sampler(type=sampler_type, sampler_kwargs=self.sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
+       
         self.scale_n_jobs = kwargs.get('scale_n_jobs',1)
         self.SLURMcluster_kwargs = kwargs.get('SLURMcluster_kwargs')
         self.LocalCluster_kwargs = kwargs.get('LocalCluster_kwargs')
-        sampler_type = sampler_kwargs.pop("type")
-        self.sampler = import_sampler(type=sampler_type, sampler_kwargs=sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
         
-        self.block_unitil_cluster_started = kwargs.get('block_unitil_cluster_started', False) # for debugging purposes only
+        self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False) # for debugging purposes only
         self.runner_kwargs = runner_kwargs
         self.cluster=None
         self.client=None
@@ -94,7 +96,7 @@ class DaskExecutor(Executor):
             print('SCHEDULER ADDRESS',self.cluster.scheduler_address)
             print('DASHBOARD LINK',self.client.dashboard_link)        
             
-            if self.block_unitil_cluster_started:
+            if self.block_until_cluster_started:
                 print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
                 self.wait_for_all_dask_jobs_running()
                 
@@ -105,7 +107,7 @@ class DaskExecutor(Executor):
             self.client = Client(self.cluster)
             self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
             
-        if self.block_unitil_cluster_started:
+        if self.block_until_cluster_started:
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
                 
             workers = self.client.scheduler_info()["workers"]
@@ -216,6 +218,8 @@ class DaskExecutor(Executor):
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
         start = time.time()
+        assert self.base_run_dir
+        assert self.sampler
         print('BASE RUN DIR:', self.base_run_dir)
         if not os.path.exists(self.base_run_dir):
             print('MAKING BASE RUN DIR:',self.base_run_dir)
@@ -261,7 +265,7 @@ class DaskExecutor(Executor):
         self.shutdown_cluster()
 
 
-    def submit_batch(self, samples):
+    def submit_batch(self, samples, base_run_dir=None):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
@@ -274,9 +278,13 @@ class DaskExecutor(Executor):
         Returns:
             list: List of futures representing the submitted tasks.
         """
+        if not base_run_dir:
+            base_run_dir = self.base_run_dir
+        assert base_run_dir
+        
         futures = []
         for sample_params in samples:
-            sample_run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
+            sample_run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
             new_future = self.client.submit(
                 run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
             )

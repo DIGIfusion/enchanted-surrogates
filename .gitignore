@@ -42,6 +42,7 @@ core
 *out*
 tests/example/
 *example_base_run_dir*
+*example_nested_base_run_dir*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

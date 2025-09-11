@@ -1,8 +1,11 @@
 import os
 from .base_runner import Runner
-
+from time import sleep
 
 class ExampleRunner(Runner):
+    
+    def __init__(self, *args, **kwargs):
+        self.parameter_mode = kwargs.get('parameter_mode', 0)
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         # Implementation for the example runner
@@ -18,22 +21,42 @@ class ExampleRunner(Runner):
         #   - for the datasets to be created properly the return dictionary values should not be
         #     iterables, only base types such as int, float, string, boolean...
 
+        outfile = os.path.join(run_dir, "output.txt")
+
         # TODO make example parser
         # parser.write_input(run_dir, params)
-        c1 = params["c1"]
-        c2 = params["c2"]
-        outfile = os.path.join(run_dir, "output.txt")
+        if self.parameter_mode==0:
+            c1 = params["c1"]
+            c2 = params["c2"]
+            os.system(f"python3 -c 'print({c1} + {c2})' >> {outfile}")
+            
+            with open(outfile, 'r') as f:
+                output = float(f.read().strip())
+            sleep(0.5)
+            result = {"output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
+            
+        if self.parameter_mode==1:
+            c3 = params["c3"]
+            c4 = params["c4"]
+            os.system(f"python3 -c 'print({c3} + {c4})' >> {outfile}")
+            with open(outfile, 'r') as f:
+                output = float(f.read().strip())
+            sleep(0.5)
+            result = {"output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
+        
+        if self.parameter_mode==2:
+            c5 = params["c5"]
+            c6 = params["c6"]
+            os.system(f"python3 -c 'print({c5} + {c6})' >> {outfile}")
+            with open(outfile, 'r') as f:
+                output = float(f.read().strip())
+            sleep(0.5)
+            result = {"output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
 
         # TODO execute some code actually
         # for now, just sum the two parameters
 
-        os.system(f"python3 -c 'print({c1} + {c2})' >> {outfile}")
-
         # TODO read output
         # parser.read_output(run_dir)
 
-
-        with open(outfile, 'r') as f:
-            output = float(f.read().strip())
-
-        return {"output": output, "success": True, 'other_code_output': 'something_from_code'}
+        return result 
