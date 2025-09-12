@@ -70,6 +70,7 @@ def test_get_next_samples_respects_batch_size():
     assert len(batch2) == 1
     assert batch3 == []
     assert sampler.submitted == 3  # total budget consumed
+    assert not sampler.has_budget
 
 
 def test_generate_parameters_is_repeatable():
