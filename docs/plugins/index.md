@@ -28,20 +28,28 @@ Once you have installed a plugin, you can use it with the `enchanted-surrogates`
 
 ### 📂 Project Structure
 
+Go to [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template) and click "Use this template" to create a new repository for your plugin. 
+
+Note that the repository name should follow the format `enchanted-plugin-template`, where `template` is a unique identifier for your plugin. The package name inside `src/` should match this name but with **underscores** between the words instead of hyphens.
+
+The basic structure of the plugin should look like this:
+
 ```
-enchanted-plugin-codename/
+enchanted-plugin-template/
 ├── src/
-│  └── enchanted_plugin_codename/
-│    ├── init.py # Package initializer (can be empty)
-│    ├── codename_parser.py
-│    └── codename_runner.py
+│  └── enchanted_plugin_template/
+│    ├── __init__.py
+│    ├── template_parser.py
+│    └── template_runner.py
 ├── tests/
-│    └── test_plugin.py # Unit tests for the plugin
+│    └── test_plugin.py
+│    └── ...
 ├── README.md
 ├── pyproject.toml
 ```
 
-Note that the repository name should follow the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin. The package name inside `src/` should match this name but with **underscores** between the words instead of hyphens.
+
+The template contains basic units tests and a GitHub Actions workflow. Change the names and contents of the files to match your plugin.
 
 
 ### 🛠️ Development Steps
@@ -54,24 +62,20 @@ Note that the repository name should follow the format `enchanted-plugin-codenam
      ```
    - Clone the `enchanted-surrogates` repository to have access to the core package:
      ```bash
-     git clone  --single-branch --branch develop-helena-plugin https://github.com/DIGIfusion/enchanted-surrogates.git
-     cd enchanted-surrogates
-     pip install -e .
-     cd ..
+     git clone  --single-branch --branch develop https://github.com/DIGIfusion/enchanted-surrogates.git
+     pip install -e enchanted-surrogates/
      ```
-     (Currnetly using a specific branch for HELENA plugin development, since the plugin support is not yet merged to main.)
+     (Currnetly using a specific branch for plugin development, since the plugin support is not yet merged to main.)
 
-2. **Create the Plugin Structure**:
-   - Create a new directory for your plugin, e.g., `enchanted-plugin-codename`.
+2. **Create the Plugin Repository**:
+   - Go to [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template) and click "Use this template" to create a new repository for your plugin. Name it following the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin.
+   - Clone your new repository and install it in editable mode:
      ```bash
-     mkdir enchanted-plugin-codename
-     cd enchanted-plugin-codename
-     git init  # Initialize a git repository here
-     mkdir src tests
-     cd src
-     mkdir enchanted_plugin_codename
+     git clone https://github.com/DIGIfusion/enchanted-plugin-codename.git
+     pip install -e enchanted-plugin-codename/
      ```
-   - Inside this directory, create the necessary files and folders as shown in the project structure above.
+   - Inside this directory, create/edit the necessary files.
+  
 3. **Dependencies and entrypoints**
     - Create a `pyproject.toml` file in the root of your plugin directory to manage dependencies and define entry points. Here is a basic example:
       ```toml
@@ -130,6 +134,13 @@ Note that the repository name should follow the format `enchanted-plugin-codenam
 
 ## Existing plugins
 
+The template for creating new plugins is publicly available at [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template).
+
+The existing plugins are private repositories, but you can request access by contacting DIGIfusion. The currently available plugins are:
+
 - HELENA: [enchanted-plugin-helena](https://github.com/DIGIfusion/enchanted-plugin-helena)
 - MISHKA: [enchanted-plugin-mishka](https://github.com/DIGIfusion/enchanted-plugin-mishka)
+- CASTOR: [enchanted-plugin-castor](https://github.com/DIGIfusion/enchanted-plugin-castor)
+- DREAM+SOFT: [enchanted-plugin-dream](https://github.com/DIGIfusion/enchanted-plugin-dream)
+- GENE: [enchanted-plugin-gene](https://github.com/DIGIfusion/enchanted-plugin-gene)
   
