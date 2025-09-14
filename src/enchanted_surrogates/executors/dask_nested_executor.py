@@ -34,11 +34,13 @@ class DaskNestedExecutor(Executor):
         self.executors = []
         self.reuse_bool = []
         self.reuse_index = []
+        self.keep_alive = []
         # take into account reusing executors feature might be in place
         for exe_type, exe_kwargs in zip(self.executor_types, self.executors_kwargs):
             if exe_type in self.executor_names:
                 exe = import_executor(executors[exe_type]['type'], executors[exe_type])
                 index = self.executor_names.index(exe_type)
+                self.keep_alive.append(index)
                 self.reuse_bool.append(True)
                 self.reuse_index.append(index)
                 if index > len(self.executors):
@@ -212,7 +214,7 @@ class DaskNestedExecutor(Executor):
                       f"\n| NUM COMPLETED: {completed}/{len(futures)}",
                       f"| NUM SUCCEDED: {succeded}/{len(futures)}")
             if self.shutdown_finished_clusters:
-                if all(future.done() for future in futures):
+                if all(future.done() for future in futures) and not i in self.keep_alive:
                     print('CLOSING WORKERS FOR EXECUTOR:', i)
                     executor.clean()
         print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')

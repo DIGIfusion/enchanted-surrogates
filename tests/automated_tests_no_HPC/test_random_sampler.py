@@ -8,7 +8,7 @@ from enchanted_surrogates.samplers.random_sampler import RandomSampler
 def test_get_next_samples_returns_dicts_within_bounds():
     bounds = [(0, 1), (10, 20)]
     params = ["x", "y"]
-    sampler = RandomSampler(bounds=bounds, total_budget=10, parameters=params)
+    sampler = RandomSampler(bounds=bounds, total_budget=10, parameters=params, batch_size=1)
     sampler.submitted = 0  # ensure counter exists
 
     samples = sampler.get_next_samples()
