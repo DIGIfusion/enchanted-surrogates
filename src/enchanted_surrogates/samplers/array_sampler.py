@@ -89,7 +89,7 @@ class ArraySampler(Sampler):
         """
         list_param_dicts = []
 
-        for _ in range(self.BATCH_SAMPLE_SIZE):
+        for _ in range(self.batch_size):
             if self.current_index >= len(self.samples):
                 break
             params = self.samples[self.current_index]

@@ -34,8 +34,7 @@ class ExampleRunner(Runner):
                 output = float(f.read().strip())
             sleep(0.5)
             result = {"output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
-            
-        if self.parameter_mode==1:
+        elif self.parameter_mode==1:
             c3 = params["c3"]
             c4 = params["c4"]
             os.system(f"python3 -c 'print({c3} + {c4})' >> {outfile}")
@@ -43,8 +42,7 @@ class ExampleRunner(Runner):
                 output = float(f.read().strip())
             sleep(0.5)
             result = {"output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
-        
-        if self.parameter_mode==2:
+        elif self.parameter_mode==2:
             c5 = params["c5"]
             c6 = params["c6"]
             os.system(f"python3 -c 'print({c5} + {c6})' >> {outfile}")
@@ -52,7 +50,8 @@ class ExampleRunner(Runner):
                 output = float(f.read().strip())
             sleep(0.5)
             result = {"output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
-
+        else:
+            raise ValueError('THE SET PARAMETER MODE DOES NOT MATCH ANY KNOWN PARAMETER MODE FOR EXAMPLE RUNNER')
         # TODO execute some code actually
         # for now, just sum the two parameters
 

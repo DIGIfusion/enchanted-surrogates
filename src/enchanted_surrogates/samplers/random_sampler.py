@@ -13,7 +13,7 @@ class RandomSampler(Sampler):
         # TODO not use uniform?
         # TODO batch samples
         list_param_dicts = []
-        for _ in range(self.BATCH_SAMPLE_SIZE):
+        for _ in range(self.batch_size):
             params = [np.random.uniform(low, high) for low, high in self.bounds]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
