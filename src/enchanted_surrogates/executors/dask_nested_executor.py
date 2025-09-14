@@ -6,6 +6,7 @@ import subprocess
 import time
 import warnings
 import uuid
+import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_executor
 from dask.distributed import print, as_completed, wait
@@ -23,10 +24,35 @@ class DaskNestedExecutor(Executor):
         print('INITIALISING NESTED EXECUTOR')
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
+        self.executor_names = list(executors.keys())
         self.executors_kwargs = list(executors.values())
+        self.executor_types = [exe_kwargs['type'] for exe_kwargs in self.executors_kwargs]
+        self.runner_types = [executor_kwargs['runner_kwargs']['type'] for executor_kwargs in self.executors_kwargs]
+        self.dask_worker_std_out_dirs = [os.path.join(self.base_run_dir, f'worker_out_{self.runner_types[i]}_{i}') for i in range(len(executors))]
         print('THE EXECUTORS WILL BE RAN WITH THESE CODES IN THE FOLLOWING ORDER:\n',
-              [executor_kwargs['runner_kwargs']['type'] for executor_kwargs in self.executors_kwargs])
-        self.executors = [import_executor(executor_kwargs['type'],executor_kwargs) for executor_kwargs in self.executors_kwargs]
+              self.runner_types)
+        self.executors = []
+        self.reuse_bool = []
+        self.reuse_index = []
+        # take into account reusing executors feature might be in place
+        for exe_type, exe_kwargs in zip(self.executor_types, self.executors_kwargs):
+            if exe_type in self.executor_names:
+                exe = import_executor(executors[exe_type]['type'], executors[exe_type])
+                index = self.executor_names.index(exe_type)
+                self.reuse_bool.append(True)
+                self.reuse_index.append(index)
+                if index > len(self.executors):
+                    raise RuntimeError('YOU ARE TRYING TO REUSE AN EXECUTOR THAT HAS NOT YET BEEN CREATED, YOU CAN ONLY REUSE ALREADY MADE EXECUTORS')
+                exe.runner_kwargs = exe_kwargs['runner_kwargs']
+                self.executors.append(exe)
+                
+            else:
+                self.reuse_bool.append(False)
+                self.reuse_index.append(None)
+                self.executors.append(import_executor(exe_type,exe_kwargs))
+
+        print('debug re u ind', self.reuse_index)
+        
         self.sampler_kwargs = sampler_kwargs#kwargs.get('sampler_kwargs')
         sampler_type = self.sampler_kwargs.pop("type")
         self.sampler = import_sampler(type=sampler_type, sampler_kwargs=self.sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
@@ -76,10 +102,10 @@ class DaskNestedExecutor(Executor):
         print('TOTAL NUMBER OF SAMPLES TO BE RAN:', len(self.current_samples_df))
         sampler_cumulative_params = []
         for i, executor in enumerate(self.executors):
-            dask_worker_std_out_dir = os.path.join(self.base_run_dir, f'worker_out_sub_executor_{i}')
+            
             if i == 0:
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
-                executor.start_cluster(slurm_out_dir=dask_worker_std_out_dir)
+                executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
                 sampler_i_params = self.sampler.all_samplers[i].parameters
                 sampler_cumulative_params += sampler_i_params
                 unique_df = self.current_samples_df.drop_duplicates(subset=sampler_i_params)
@@ -92,11 +118,26 @@ class DaskNestedExecutor(Executor):
                 if self.start_cluster_when_needed:
                     # This will wait untill atleast one future is finished of the first sub executor
                     ac = as_completed(all_futures[i-1])
-                    print('WAITING FOR ONE FUTURE TO COMPLETE FOR EXECUTOR:',i-1)
-                    next(ac)
-                    print('ONE FUTURE HAS COMPLETED FOR FUTURE',i-1)
+                    previous_success = False
+                    print(f'WAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}')
+                    for i_fut in range(len(all_futures[i-1])):
+                        future = next(ac)
+                        result = future.result()
+                        if result['success']:
+                            previous_success = True
+                            break
+                    if previous_success:
+                        print('ONE FUTURE HAS COMPLETED WITH SUCCESS FOR FUTURE',i-1)
+                    else:
+                        raise RuntimeError(f'THERE HAS NOT BEEN A SINGLE SUCCESS FROM RUNNER: {self.runner_types[i-1]}. CHECK LOGS AT {self.dask_worker_std_out_dirs[i-1]}')
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
-                executor.start_cluster(slurm_out_dir=dask_worker_std_out_dir)
+                # start cluster or assign client when reusing
+                if self.reuse_bool[i]:
+                    executor.client = self.executors[self.reuse_index[i]].client
+                    executor.cluster = self.executors[self.reuse_index[i]].cluster
+                else:
+                    executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
+
                 for future in as_completed(all_futures[i-1]):
                     result = future.result()
                     run_dir = result['run_dir']

@@ -77,7 +77,8 @@ class DaskExecutor(Executor):
         print('MAKING CLUSTER')
         worker_logs_dir = None
         if self.SLURMcluster_kwargs:
-            slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
+            if not slurm_out_dir:
+                slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
             worker_logs_dir = slurm_out_dir
             if not os.path.exists(slurm_out_dir):
                 os.makedirs(slurm_out_dir)
@@ -109,25 +110,20 @@ class DaskExecutor(Executor):
             
         if self.block_until_cluster_started:
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
+            for i in range(1,self.expected_number_of_workers+2):
+                if i == self.expected_number_of_workers+1:
+                    timeout_ = 3
+                    try:
+                        self.client.wait_for_workers(i, timeout=timeout_)
+                        warnings.warn(f'MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}')
+                    except:
+                        print(f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n")
+                else:
+                    self.client.wait_for_workers(i, timeout=self.expected_number_of_workers+120)
+                    print(f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n")
                 
-            workers = self.client.scheduler_info()["workers"]
-            for _ in range(self.expected_number_of_workers+120):
-                workers = self.client.scheduler_info()["workers"]
-                print(f"Connected to {len(workers)} workers out of expected {self.expected_number_of_workers}.\n")
-                if len(workers) == self.expected_number_of_workers:
-                    break
-                if len(workers) > self.expected_number_of_workers:
-                    warnings.warn(f"More workers ({len(workers)}) than expected ({self.expected_number_of_workers})")
-                    break
-                time.sleep(1)
-            
-            if len(workers) == 0:
-                raise ValueError(f'NO WORKERS SUCCEDED TO START, PLEASE CHECK WORKER SLURM OUT AT: {worker_logs_dir}')
-            
-            if len(workers) < self.expected_number_of_workers:
-                warnings.warn(f'ONLY {len(workers)} out of {self.expected_number_of_workers} EXPECTED WORKERS STARTED. PLEASE CHECK WORKER LOGS AT: {worker_logs_dir}')
-            
-            print('WORKER INFORMATION:')
+            workers = self.client.scheduler_info()["workers"]            
+            print('SOME WORKER INFORMATION:')
             for addr, info in workers.items():
                 print(f"Worker {addr}:")
                 print(f"  CPUs: {info['nthreads']}")
@@ -283,10 +279,14 @@ class DaskExecutor(Executor):
         assert base_run_dir
         
         futures = []
+        run_dirs = []
         for sample_params in samples:
             sample_run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
+            run_dirs.append(sample_run_dir)
             new_future = self.client.submit(
                 run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
             )
             futures.append(new_future)
+        p_info = [str(sample_params)+f'| {rd}' for sample_params,rd in zip(samples,run_dirs)]
+        print(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_kwargs['type']} \n",'\n'.join(p_info))
         return futures

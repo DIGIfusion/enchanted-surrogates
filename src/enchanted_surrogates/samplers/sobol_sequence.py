@@ -5,15 +5,19 @@ from scipy.stats.qmc import Sobol
 
 
 class SobolSequence(Sampler):
-    def __init__(self, bounds, total_budget, parameters, **kwargs):
-        self.budget = total_budget
+    def __init__(self, bounds, budget, parameters, **kwargs):
+        self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
         self.scramble = kwargs.get("scramble", True)
-        self.samples = self.generate_samples()
         self.batch_number = 0
-
+        self.seed = kwargs.get("seed", 42)
+        
+        
+        # must be last
+        self.samples = self.generate_samples()
+        
     def get_next_samples(self) -> list[dict]:
         # TODO not use uniform?
         # TODO batch samples
@@ -31,9 +35,12 @@ class SobolSequence(Sampler):
         upper_bounds = np.array(self.bounds).T[1]
 
         # Create a Sobol sequence generator
-        sobol = Sobol(d=dim, scramble=self.scramble)
-
-        power = int(np.log2(self.total_budget))
+        try:
+            sobol = Sobol(d=dim, scramble=self.scramble, rng=self.seed)
+        except AttributeError:
+            sobol = Sobol(d=dim, scramble=self.scramble, seed=self.seed)
+        
+        power = int(np.log2(self.budget))
         self.num_samples = 2**power
         print(f'''
               GENERATING SOBOL SEQUENCE SAMPLES, NUM SAMPLES REQUESTED: {self.num_samples}, NUM SAMPLES: {2**power}\n
