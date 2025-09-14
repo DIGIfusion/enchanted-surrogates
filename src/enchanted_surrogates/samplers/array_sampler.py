@@ -41,7 +41,7 @@ class ArraySampler(Sampler):
 
     """
 
-    def __init__(self, bounds, total_budget, parameters, **kwargs):
+    def __init__(self, bounds, parameters, **kwargs):
         """
         Initializes the ArraySampler.
 

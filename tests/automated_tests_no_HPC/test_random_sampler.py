@@ -32,7 +32,7 @@ def test_batch_sample_size(monkeypatch):
     bounds = [(0, 1), (10, 20)]
     params = ["x", "y"]
     sampler = RandomSampler(bounds=bounds, total_budget=10, parameters=params)
-    sampler.BATCH_SAMPLE_SIZE = 3
+    sampler.batch_size = 3
     sampler.submitted = 0
 
     samples = sampler.get_next_samples()
