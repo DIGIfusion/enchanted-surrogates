@@ -186,5 +186,35 @@ def import_executor(type, executor_kwargs):
     return executor
 
     
-if __name__ == "__main__":
-    print(src_dir)
+    
+def import_executor(type, executor_kwargs):
+    """
+    Dynamically imports and instantiates a executor class based on naming convention.
+
+    Parameters
+    ----------
+    type : str
+        The name of the executor (in snake_case or PascalCase).
+    executor_kwargs : dict
+        Keyword arguments to pass to the executor constructor.
+
+    Returns
+    -------
+    object
+        An instance of the executor class.
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    type_snake, type_pascal = get_snake_and_pascal(type)
+    eps = load_plugins()
+
+    if type_snake in eps:
+        cls = eps[type_snake](**executor_kwargs)
+    else:
+        cls = getattr(
+            importlib.import_module(
+                f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_kwargs)
+    return cls
