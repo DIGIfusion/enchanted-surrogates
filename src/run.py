@@ -1,7 +1,7 @@
 # run.py
 import yaml
 import argparse
-import importlib
+from datetime import datetime
 from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 
@@ -32,7 +32,6 @@ def main(args: argparse.Namespace):
     """
 
     args.executor['runner_args'] = getattr(args, 'runner', None)
-    print(args)
     executor_type = args.executor.pop("type")
     executor = import_executor(type=executor_type, executor_kwargs=args.executor)
     print("Starting runs...")
@@ -43,7 +42,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    print('Starting Enchanted surrogates...')
+    print(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
         "-cf",
@@ -55,4 +54,4 @@ if __name__ == "__main__":
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
     main(args)
-    print('Finished Enchanted surrogates.')
+    print(f'{datetime.now()} - Enchanted surrogates finished.')
