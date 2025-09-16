@@ -51,7 +51,7 @@ def test_dask_executor():
 
     executor.start_runs()
 
-    assert os.path.exists(os.path.join(executor_kwargs['base_run_dir'], 'ENCHANTED.FINNISHED'))
+    assert os.path.exists(os.path.join(executor_kwargs['base_run_dir'], 'ENCHANTED.FINISHED'))
 
     # TODO clean up test
     shutil.rmtree(executor_kwargs['base_run_dir'])

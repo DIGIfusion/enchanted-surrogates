@@ -221,8 +221,8 @@ class DaskExecutor(Executor):
             print('MAKING BASE RUN DIR:',self.base_run_dir)
             os.makedirs(self.base_run_dir)
 
-        if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINNISHED')):
-            raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINNISHED, exists.
+        if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
+            raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
                                   This signifies that there is already data in this folder. 
                                   Aborting to avoid accidental data mixing.''' )
 
@@ -254,9 +254,9 @@ class DaskExecutor(Executor):
 
         print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
         print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        print('WRITTING ENCHANTED.FINNISHED FILE, SEE base_run_dir:',self.base_run_dir)
-        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINNISHED'), 'w') as file:
-            file.write(f'ENCHANTED.FINNISHED, {__class__}')
+        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
+        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
+            file.write(f'ENCHANTED.FINISHED, {__class__}')
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
 
