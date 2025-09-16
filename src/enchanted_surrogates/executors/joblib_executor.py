@@ -4,11 +4,14 @@ import uuid
 import joblib
 from .base_executor import Executor
 from .simulation_task import run_simulation_task
+from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
 class JoblibExecutor(Executor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.sampler = import_sampler(
+            type=self.sampler_kwargs.pop("type"), sampler_kwargs=self.sampler_kwargs)
 
     def start_runs(self):
         while self.sampler.has_budget:

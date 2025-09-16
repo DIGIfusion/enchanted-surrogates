@@ -27,7 +27,7 @@ def test_dask_executor():
             'type': 'RandomSampler',
             'bounds': [[-5, 5], [0, 1]],
             'parameters': ['c1', 'c2'],
-            'total_budget': 10
+            'budget': 10
         },
         'runner_kwargs': {
             'type': 'ExampleRunner'

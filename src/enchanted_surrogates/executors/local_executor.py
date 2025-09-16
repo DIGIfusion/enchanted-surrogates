@@ -2,12 +2,15 @@ import os
 import uuid
 from .base_executor import Executor
 from .simulation_task import run_simulation_task
+from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
 class LocalExecutor(Executor):
 
     def start_runs(self):
-        while self.sampler.has_budget: 
+        self.sampler = import_sampler(
+            type=self.sampler_kwargs.pop("type"), sampler_kwargs=self.sampler_kwargs)
+        while self.sampler.has_budget:
             samples: list[dict] = self.sampler.get_next_samples()
 
             for sample in samples:
