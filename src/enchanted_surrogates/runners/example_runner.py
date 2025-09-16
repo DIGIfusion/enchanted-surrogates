@@ -1,4 +1,5 @@
 import os
+import sys
 from .base_runner import Runner
 
 
@@ -27,11 +28,11 @@ class ExampleRunner(Runner):
         # TODO execute some code actually
         # for now, just sum the two parameters
 
-        os.system(f"python3 -c 'print({c1} + {c2})' >> {outfile}")
+        cmd = f'{sys.executable} -c "print({c1} + {c2})" >> "{outfile}"'
+        os.system(cmd)
 
         # TODO read output
         # parser.read_output(run_dir)
-
 
         with open(outfile, 'r') as f:
             output = float(f.read().strip())

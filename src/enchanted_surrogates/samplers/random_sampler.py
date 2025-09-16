@@ -5,8 +5,8 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 class RandomSampler(Sampler):
     BATCH_SAMPLE_SIZE = 1
 
-    def __init__(self, bounds, total_budget, parameters, **kwargs):
-        self.budget = total_budget
+    def __init__(self, bounds, budget, parameters, **kwargs):
+        self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
 
