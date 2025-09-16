@@ -55,7 +55,3 @@ def test_dask_executor():
 
     # TODO clean up test
     shutil.rmtree(executor_kwargs['base_run_dir'])
-
-
-if __name__ == "__main__":
-    test_dask_executor()
