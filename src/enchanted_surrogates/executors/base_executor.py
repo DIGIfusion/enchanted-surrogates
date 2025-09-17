@@ -1,24 +1,22 @@
-from abc import ABC, abstractmethod
 
 import os
 import shutil
-from enchanted_surrogates.samplers.base_sampler import Sampler
+from abc import ABC, abstractmethod
 
 
 class Executor(ABC):
     def __init__(
-        self, sampler: Sampler, runner_kwargs, base_run_dir, output_dir=None, *args, **kwargs
+        self, sampler_kwargs, runner_kwargs, base_run_dir, output_dir=None, *args, **kwargs
     ):
-        
-        print("Starting Setup")
-        self.sampler: Sampler = sampler
-        self.runner_kwargs      = runner_kwargs
-        self.base_run_dir     = base_run_dir
-        self.output_dir       = output_dir # TODO rename 
-        
+        self.sampler_kwargs = sampler_kwargs
+        self.runner_kwargs = runner_kwargs
+        self.base_run_dir = base_run_dir
+        self.output_dir = output_dir  # TODO rename
+
     def create_base_run_dir(self, base_run_dir, config_filepath):
         print(
-            f"Making directory of simulations at: {base_run_dir}, and copying {config_filepath} to CONFIG.yaml"
+            f"Making directory of simulations at: {base_run_dir}.",
+            "Copying {config_filepath} to CONFIG.yaml."
         )
 
         os.makedirs(base_run_dir, exist_ok=True)

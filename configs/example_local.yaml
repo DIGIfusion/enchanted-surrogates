@@ -1,0 +1,11 @@
+executor:
+  type: LocalExecutor
+  base_run_dir: "data_dir"
+  sampler_kwargs:
+    type: RandomSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 4
+    parameters: ['c1', 'c2']
+  runner_kwargs:
+    type: ExampleRunner
+    other_params: {}
