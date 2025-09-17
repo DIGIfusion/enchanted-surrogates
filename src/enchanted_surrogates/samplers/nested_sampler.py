@@ -31,8 +31,7 @@ class NestedSampler(Sampler):
         initial_parameters = []
         for sampler in self.all_samplers:
             initial_parameters.append(sampler.get_next_samples())
-        
-        from itertools import product
+
         # Cartesian product of all sublists
         combinations = product(*initial_parameters)
         # Merge each tuple of dicts into a single dict
