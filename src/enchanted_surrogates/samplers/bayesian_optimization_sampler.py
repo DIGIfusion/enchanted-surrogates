@@ -257,13 +257,10 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
-        print('Building result dictionary')
-        # Make sure that result_dictionary does not exist in locals
-        if 'result_dictionary' in locals():
-            locals().pop('result_dictionary')
-        if 'result_dictionary_failed' in locals():
-            locals().pop('result_dictionary_failed')
-        
+		result_dictionary = {}
+		result_dictionary_failed = {}
+        print('Building result dictionary')    
+    
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 'result_dictionary.pkl')):
             resdict = open(os.path.join(base_run_directory,  
@@ -288,7 +285,7 @@ class BayesianOptimizationSampler(Sampler):
                 continue
             else:
                 try:
-                    if 'result_dictionary' in locals():
+                    if bool(result_dictionary):
                         if (os.path.join(base_run_directory, dirname) in
                             result_dictionary['run_dir']):
                             continue
@@ -303,7 +300,7 @@ class BayesianOptimizationSampler(Sampler):
                 except:
                     continue
             if sample_dict['failure'] == 0:
-                if 'result_dictionary' in locals():
+                if bool(result_dictionary):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary[key] = np.concatenate(
@@ -314,7 +311,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in result_dictionary.keys():
                         result_dictionary[key]=[result_dictionary[key]]
             else:
-                if 'result_dictionary_failed' in locals():
+                if bool(result_dictionary_failed):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary_failed[key] = np.concatenate(
@@ -324,17 +321,17 @@ class BayesianOptimizationSampler(Sampler):
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
                         result_dictionary_failed[key]=[result_dictionary_failed[key]]
-        if 'result_dictionary' in locals():
+        if bool(result_dictionary):
             self.result_dictionary = result_dictionary
         else:
             self.result_dictionary = [None]
-        if 'result_dictionary_failed' in locals():
+        if bool(result_dictionary_failed):
             self.result_dictionary_failed = result_dictionary_failed
         else:
             self.result_dictionary_failed = [None]
         if normalize:
             self.normalize_results()
-        if 'result_dictionary' in locals():
+        if bool(result_dictionary):
             res_dict_dump = {'result_dictionary':result_dictionary}
             resdict = open(
                 os.path.join(base_run_directory, 
