@@ -44,20 +44,20 @@ class DaskExecutor(Executor):
         """
         print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
-        self.base_run_dir=kwargs.get('base_run_dir')
+        self.base_run_dir = kwargs.get('base_run_dir')
         self.sampler_kwargs = kwargs.get('sampler_kwargs')
         if self.sampler_kwargs:
-            sampler_type = self.sampler_kwargs.pop("type")
-            self.sampler = import_sampler(type=sampler_type, sampler_kwargs=self.sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
-       
-        self.scale_n_jobs = kwargs.get('scale_n_jobs',1)
+            self.sampler_type = self.sampler_kwargs.pop("type")
+            self.sampler = import_sampler(
+                type=self.sampler_type, sampler_kwargs=self.sampler_kwargs)
+        self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
         self.SLURMcluster_kwargs = kwargs.get('SLURMcluster_kwargs')
         self.LocalCluster_kwargs = kwargs.get('LocalCluster_kwargs')
-        self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False) # for debugging purposes only
+        self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)  # for debugging purposes only
         self.runner_kwargs = runner_kwargs
-        self.cluster=None
-        self.client=None
+        self.cluster = None
+        self.client = None
         self.expected_number_of_workers = None
 
     def start_cluster(self, slurm_out_dir=None):
