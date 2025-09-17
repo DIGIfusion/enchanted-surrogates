@@ -153,7 +153,8 @@ def import_runner(type, runner_kwargs):
     else:
         sampler = getattr(importlib.import_module(f'enchanted_surrogates.runners.{type_snake}'),type_pascal)(**runner_kwargs)
     return sampler
-
+    
+    
 def import_executor(type, executor_kwargs):
     """
     Dynamically imports and instantiates a executor class based on naming convention.
@@ -215,6 +216,3 @@ def import_parser(type, parser_kwargs):
     else:
         parser = getattr(importlib.import_module(f'enchanted_surrogates.parsers.{type_snake}'),type_pascal)(**parser_kwargs)
     return parser
-    
-if __name__ == "__main__":
-    print(src_dir)
