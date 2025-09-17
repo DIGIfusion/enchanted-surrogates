@@ -5,8 +5,10 @@ from itertools import product
 import numpy as np
 import importlib
 from enchanted_surrogates.utils.precise_imports import import_sampler
+from enchanted_surrogates.samplers.base_sampler import Sampler
 
-class NestedSampler():
+
+class NestedSampler(Sampler):
     """
     TODO: add docstring
     """
@@ -37,7 +39,12 @@ class NestedSampler():
         combined = [dict(kv for d in combo for kv in d.items()) for combo in combinations]
         
         self.submitted += len(combined)
-        self.has_budget = False # nested sampler only supports one batch. For nested active sampling a bespoke nested sampler is needed for each application
+        # self.has_budget = False # nested sampler only supports one batch. For nested active sampling a bespoke nested sampler is needed for each application
         return combined
     
-    
+    def register_future(self, future):
+        """ Doesn't matter for random sampler TODO: Probably? """
+        return None
+
+    def register_futures(self, futures):
+        return None
