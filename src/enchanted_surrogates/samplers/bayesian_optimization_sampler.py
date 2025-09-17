@@ -257,8 +257,8 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
-		result_dictionary = {}
-		result_dictionary_failed = {}
+        result_dictionary = {}
+        result_dictionary_failed = {}
         print('Building result dictionary')    
     
         # Load a stored result_dictionary file, if such a file exists.
