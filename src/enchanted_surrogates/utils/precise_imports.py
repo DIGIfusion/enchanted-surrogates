@@ -186,3 +186,33 @@ def import_executor(type, executor_kwargs):
             importlib.import_module(
                 f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_kwargs)
     return cls
+
+def import_parser(type, parser_kwargs):
+    """
+    Dynamically imports and instantiates a parser class based on naming convention.
+
+    Parameters
+    ----------
+    type : str
+        The name of the parser (in snake_case or PascalCase).
+    parser_kwargs : dict
+        Keyword arguments to pass to the sampler constructor.
+
+    Returns
+    -------
+    object
+        An instance of the parser class.
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    type_snake, type_pascal = get_snake_and_pascal(type)
+    eps = load_plugins()
+
+    if type_snake in eps:
+        parser = eps[type_snake](**parser_kwargs)
+    else:
+        parser = getattr(importlib.import_module(f'enchanted_surrogates.parsers.{type_snake}'),type_pascal)(**parser_kwargs)
+    return parser
