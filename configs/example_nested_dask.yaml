@@ -4,30 +4,30 @@ executor:
   sampler_kwargs:
     type: NestedSampler
     samplers: 
-    code1_sampler:
-      type: 'GridSampler'
-      bounds: [[-5, 5], [0, 1]]
-      parameters: ['c1', 'c2']
-      num_samples: 2
-    code2_sampler:
-      type: 'RandomSampler'
-      bounds: [[-5, 5], [0, 1]]
-      parameters: ['c3', 'c4']
-      num_samples: 2
+      code1_sampler:
+        type: GridSampler
+        bounds: [[-5, 5], [0, 1]]
+        parameters: ['c1', 'c2']
+        num_samples: 2
+      code2_sampler:
+        type: RandomSampler
+        bounds: [[-5, 5], [0, 1]]
+        parameters: ['c3', 'c4']
+        budget: 2
   executors:
     code1_executor:
-      type: 'DaskExecutor'
+      type: DaskExecutor
       runner_kwargs:
-        type: 'ExampleRunner'
+        type: ExampleRunner
         parameter_mode: 0
       LocalCluster_kwargs:
         name: 'es-dask_cluster'
         n_workers: 2
         threads_per_worker: 1
     code2_executor:
-      type: 'DaskExecutor'
+      type: DaskExecutor
       runner_kwargs:
-        type: 'ExampleRunner'
+        type: ExampleRunner
         parameter_mode: 1
       LocalCluster_kwargs:
         name: 'es-dask_cluster'
