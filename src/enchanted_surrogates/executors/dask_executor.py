@@ -93,7 +93,7 @@ class DaskExecutor(Executor):
             print('THE JOB SCRIPT FOR A WORKER IS:')
             print(self.cluster.job_script())
             
-            self.client = self.make_client()
+            self.client = Client(self.cluster ,timeout=180)
             print('SCHEDULER ADDRESS',self.cluster.scheduler_address)
             print('DASHBOARD LINK',self.client.dashboard_link)        
             
@@ -105,7 +105,7 @@ class DaskExecutor(Executor):
                 
         elif self.LocalCluster_kwargs:
             self.cluster = LocalCluster(**self.LocalCluster_kwargs)
-            self.client = Client(self.cluster, asynchronous=True)
+            self.client = Client(self.cluster)
             self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
             
         if self.block_until_cluster_started:
@@ -130,10 +130,6 @@ class DaskExecutor(Executor):
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
 
-    async def make_client(self):
-        client = await Client(self.cluster ,timeout=180, asynchronous=True)
-        return client
-    
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
         Waits for all Dask jobs submitted to SLURM to reach the RUNNING state.
@@ -250,29 +246,16 @@ class DaskExecutor(Executor):
                     print("Timeout of some of the samples")
             all_futures.extend(futures)
         print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
-
-        self.write_dataset(all_futures)
-
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
-        if self.sampler_type not in {'BayesianOptimizationSampler'}:
-            print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
-        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
-            file.write(f'ENCHANTED.FINISHED, {__class__}')
-        print('CLUSTER SHUTDOWN')
-        self.shutdown_cluster()
-
-    async def write_dataset(self, all_futures):
         dfs = []
         num_success = 0
         if self.sampler_type in {'BayesianOptimizationSampler'}:
             try: 
-                wait(all_futures, timeout=self.timeout)
+                wait(futures, timeout=self.timeout)
             except:
                 print("Timeout of some of the samples")
         else:
-            async for i, future in enumerate(as_completed(all_futures)):
-                result = await future.result()
+            for i, future in enumerate(as_completed(all_futures)):
+                result = future.result()
                 if result['success'] == True:
                     num_success += 1
                 # print('FUTURE RESULT',result, type(result))
@@ -282,6 +265,15 @@ class DaskExecutor(Executor):
                 print('_'*100)
             df_dataset = pd.concat(dfs)
             df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
+
+        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
+        if self.sampler_type not in {'BayesianOptimizationSampler'}:
+            print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
+        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
+            file.write(f'ENCHANTED.FINISHED, {__class__}')
+        print('CLUSTER SHUTDOWN')
+        self.shutdown_cluster()
 
 
     def submit_batch(self, samples, base_run_dir=None):
