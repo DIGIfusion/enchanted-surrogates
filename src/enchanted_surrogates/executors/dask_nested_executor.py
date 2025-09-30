@@ -4,6 +4,7 @@ from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.precise_imports import import_sampler
 import subprocess
 import time
+import asyncio
 import warnings
 import uuid
 import numpy as np
@@ -52,7 +53,8 @@ class DaskNestedExecutor(Executor):
                 self.reuse_bool.append(False)
                 self.reuse_index.append(None)
                 self.executors.append(import_executor(exe_type,exe_kwargs))
-
+        self.futures_ready = [asyncio.Event() for i in range(len(self.executors))]
+        
         print('debug re u ind', self.reuse_index)
         
         self.sampler_kwargs = sampler_kwargs#kwargs.get('sampler_kwargs')
@@ -65,7 +67,7 @@ class DaskNestedExecutor(Executor):
         self.start_cluster_when_needed = kwargs.get('start_cluster_when_needed', False)
         self.shutdown_finished_clusters = kwargs.get('shutdown_finished_clusters', False)
         self.current_samples_df = None
-    
+        self.all_futures = None
     def clean(self):
         """
         Cleans up resources
@@ -75,6 +77,10 @@ class DaskNestedExecutor(Executor):
             executor.clean()
 
     def start_runs(self):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.start_runs_async())  # fire and forget
+    
+    async def start_runs_async(self):
         """
         TDO: add docstring
         """
@@ -89,7 +95,7 @@ class DaskNestedExecutor(Executor):
                                   This signifies that there is already data in this folder. 
                                   Aborting to avoid accidental data mixing.''' )
 
-        all_futures = [[]]*len(self.executors)
+        self.all_futures = [[]]*len(self.executors)
         
         num_batches = 0
         batch_dir = os.path.join(self.base_run_dir, f'batch_{num_batches}')
@@ -104,7 +110,6 @@ class DaskNestedExecutor(Executor):
         print('TOTAL NUMBER OF SAMPLES TO BE RAN:', len(self.current_samples_df))
         sampler_cumulative_params = []
         for i, executor in enumerate(self.executors):
-            
             if i == 0:
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
                 executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
@@ -114,24 +119,13 @@ class DaskNestedExecutor(Executor):
                 filtered_df = unique_df[sampler_i_params]
                 sampler_i_samples = filtered_df.to_dict(orient="records")
                 futures = executor.submit_batch(sampler_i_samples, base_run_dir=batch_dir)
-                all_futures[i] = futures
+                self.all_futures[i] = futures
+                self.futures_ready[i].set()
                 
             else:
                 if self.start_cluster_when_needed:
-                    # This will wait untill atleast one future is finished of the first sub executor
-                    ac = as_completed(all_futures[i-1])
-                    previous_success = False
-                    print(f'WAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}')
-                    for i_fut in range(len(all_futures[i-1])):
-                        future = next(ac)
-                        result = future.result()
-                        if result['success']:
-                            previous_success = True
-                            break
-                    if previous_success:
-                        print('ONE FUTURE HAS COMPLETED WITH SUCCESS FOR FUTURE',i-1)
-                    else:
-                        raise RuntimeError(f'THERE HAS NOT BEEN A SINGLE SUCCESS FROM RUNNER: {self.runner_types[i-1]}. CHECK LOGS AT {self.dask_worker_std_out_dirs[i-1]}')
+                    await self.block_until_cluster_needed(i=i)
+        
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
                 # start cluster or assign client when reusing
                 if self.reuse_bool[i]:
@@ -139,56 +133,97 @@ class DaskNestedExecutor(Executor):
                     executor.cluster = self.executors[self.reuse_index[i]].cluster
                 else:
                     executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
-
-                for future in as_completed(all_futures[i-1]):
-                    result = future.result()
-                    run_dir = result['run_dir']
-                    previous_sampler_params = self.sampler.all_samplers[i-1].parameters
-                    previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
-                    # first filter for all the samples that have the same parameters as the previous sample
-                    mask = pd.Series(True, index=self.current_samples_df.index)
-                    for k, v in previous_sample.items():
-                        mask &= self.current_samples_df[k] == v
-                    filtered_df = self.current_samples_df[mask]
-                    
-                    # Then filter to remove duplicates in the parameters for the current sampler
-                    sampler_i_params = self.sampler.all_samplers[i].parameters
-                    sampler_cumulative_params += previous_sampler_params
-                    sampler_cumulative_params += sampler_i_params
-                    sampler_cumulative_params = list(set(sampler_cumulative_params))
-                    # print('debug sampler cumulative params', sampler_cumulative_params)
-                    # for params in sampler_cumulative_params:
-                    #     if params in sampler_negulative_params:
-                    #         sampler_negulative_params.remove(params)
-                    # print('debug sampler negulative params', sampler_negulative_params)
-                    unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
-                    filtered_df = unique_df[sampler_cumulative_params]
-                    # Create a DataFrame with repeated values
-                    # result.pop('success')
-                    # result.pop('run_dir')
-                    # for param in sampler_cumulative_params:
-                    #     if param in result:
-                    #         result.pop(param)
-                    extra_df = pd.DataFrame([result] * len(filtered_df))
-                    # Concatenate side-by-side
-                    filtered_df = filtered_df.reset_index(drop=True)
-                    combined_df = pd.concat([filtered_df, extra_df], axis=1)
-                    sampler_i_samples = combined_df.to_dict(orient="records")
-
-                    # base_run_dir_tmp = str(os.path.dirname(run_dir))
-                    enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{i-1}.csv')
-                    dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                    if os.path.exists(enchanted_dataset_path):
-                        dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
-                    else:
-                        dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
-                    sub_futures = executor.submit_batch(sampler_i_samples, base_run_dir=run_dir)
-                    all_futures[i] = all_futures[i] + sub_futures
-                    # this should shut down clusters when they have finished being used. Not to be used when doing active learning
+            asyncio.create_task(self.collect_filter_submit(i=i))
                 
-        # write the results for the last set of futures.
+        asyncio.create_task(self.write_last_dataset())
+
+        await self.wait_all()
+        
+        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
+        print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
+        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
+            file.write(f'ENCHANTED.FINISHED, {__class__}')
+        print('CLUSTER SHUTDOWN')
+        self.clean()
+    
+    async def block_until_cluster_needed(self, i):
+        # This will wait until at least one future is finished from the first sub-executor
+        await self.futures_ready[i-1].wait()
+        previous_success = False
+        print(f'WAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i - 1}: {self.runner_types[i - 1]}')
+        for future in as_completed(self.all_futures[i-1]):
+            result = future.result()
+            print('debug result', result['success'])
+            if result['success']:
+                previous_success = True
+                break
+
+        if previous_success:
+            print('ONE FUTURE HAS COMPLETED WITH SUCCESS FOR FUTURE', i - 1)
+        else:
+            raise RuntimeError(
+                f'THERE HAS NOT BEEN A SINGLE SUCCESS FROM RUNNER: {self.runner_types[i - 1]}. '
+                f'CHECK LOGS AT {self.dask_worker_std_out_dirs[i - 1]}'
+            )
+        return True
+        
+    async def collect_filter_submit(self, i):
+        executor = self.executors[i]
+        await self.futures_ready[i-1].wait()
+            
+        for future in as_completed(self.all_futures[i-1]):
+            result = future.result()
+            run_dir = result['run_dir']
+            previous_sampler_params = self.sampler.all_samplers[i-1].parameters
+            previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
+            # first filter for all the samples that have the same parameters as the previous sample
+            mask = pd.Series(True, index=self.current_samples_df.index)
+            for k, v in previous_sample.items():
+                mask &= self.current_samples_df[k] == v
+            filtered_df = self.current_samples_df[mask]
+            
+            # Then filter to remove duplicates in the parameters for the current sampler
+            sampler_i_params = self.sampler.all_samplers[i].parameters
+            sampler_cumulative_params += previous_sampler_params
+            sampler_cumulative_params += sampler_i_params
+            sampler_cumulative_params = list(set(sampler_cumulative_params))
+            # print('debug sampler cumulative params', sampler_cumulative_params)
+            # for params in sampler_cumulative_params:
+            #     if params in sampler_negulative_params:
+            #         sampler_negulative_params.remove(params)
+            # print('debug sampler negulative params', sampler_negulative_params)
+            unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
+            filtered_df = unique_df[sampler_cumulative_params]
+            # Create a DataFrame with repeated values
+            # result.pop('success')
+            # result.pop('run_dir')
+            # for param in sampler_cumulative_params:
+            #     if param in result:
+            #         result.pop(param)
+            extra_df = pd.DataFrame([result] * len(filtered_df))
+            # Concatenate side-by-side
+            filtered_df = filtered_df.reset_index(drop=True)
+            combined_df = pd.concat([filtered_df, extra_df], axis=1)
+            sampler_i_samples = combined_df.to_dict(orient="records")
+
+            # base_run_dir_tmp = str(os.path.dirname(run_dir))
+            enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{i-1}.csv')
+            dfi = pd.DataFrame({r:[v] for r,v in result.items()})
+            if os.path.exists(enchanted_dataset_path):
+                dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
+            else:
+                dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
+            sub_futures = executor.submit_batch(sampler_i_samples, base_run_dir=run_dir)
+            self.all_futures[i] = self.all_futures[i] + sub_futures
+            self.futures_ready[i].set()
+            # this should shut down clusters when they have finished being used. Not to be used when doing active learning
+
+    async def write_last_dataset(self):
+        await self.futures_ready[-1].wait()
+        # write the results for the latest set of futures.
         base_enchanted_dataset_path = os.path.join(self.base_run_dir, f'enchanted_dataset.csv')
-        for future in as_completed(all_futures[-1]):
+        for future in as_completed(self.all_futures[-1]):
             result = future.result()
             run_dir = result['run_dir']
             enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{len(self.executors)}.csv')
@@ -201,14 +236,15 @@ class DaskNestedExecutor(Executor):
                 dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
             else:
                 dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
-            
-            # this should shut down clusters when they have finished being used. Not to be used when doing active learning
-        for i, futures, executor in zip(range(len(self.executors)), all_futures, self.executors):
+
+    async def wait_all(self):
+        for i, futures, executor in zip(range(len(self.executors)), self.all_futures, self.executors):
             completed = 0
             succeded = 0
             for future in as_completed(futures):
                 completed += 1
-                if future.result()['success']:
+                result = future.result()
+                if result['success']:
                     succeded += 1
                 print("| RUNNER:", executor.runner_kwargs['type'],
                       f"\n| NUM COMPLETED: {completed}/{len(futures)}",
@@ -217,11 +253,3 @@ class DaskNestedExecutor(Executor):
                 if all(future.done() for future in futures) and not i in self.keep_alive:
                     print('CLOSING WORKERS FOR EXECUTOR:', i)
                     executor.clean()
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
-        print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
-        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
-            file.write(f'ENCHANTED.FINISHED, {__class__}')
-        print('CLUSTER SHUTDOWN')
-        self.clean()
-    
