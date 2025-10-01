@@ -19,7 +19,7 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
-    config.executor["config_filepath"] = config_path
+    config.executor_kwargs["config_filepath"] = config_path
     return config
 
 
@@ -30,10 +30,15 @@ def main(args: argparse.Namespace):
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
-
-    args.executor['runner_args'] = getattr(args, 'runner', None)
-    executor_type = args.executor.pop("type")
-    executor = import_executor(type=executor_type, executor_kwargs=args.executor)
+    
+    #Incase sampler or runner is defined outside the executor, only works for non nested workflows
+    if getattr(args, 'sampler_kwargs', None):
+        args.executor_kwargs['sampler_kwargs'] = args.sampler_kwargs
+    if getattr(args, 'runner_kwargs', None):
+        args.executor_kwargs['sampler_kwargs'] = args.runner_kwargs
+    
+    executor_type = args.executor_kwargs.pop("type")
+    executor = import_executor(type=executor_type, executor_kwargs=args.executor_kwargs)
     print("Starting runs...")
     executor.start_runs()
     print("Shutting down scheduler and workers...")
