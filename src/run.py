@@ -37,7 +37,6 @@ def main(args: argparse.Namespace):
     if getattr(args, 'runner_kwargs', None):
         args.executor_kwargs['sampler_kwargs'] = args.runner_kwargs
     
-    args.executor_kwargs['runner_kwargs'] = getattr(args, 'runner', None)
     executor_type = args.executor_kwargs.pop("type")
     executor = import_executor(type=executor_type, executor_kwargs=args.executor_kwargs)
     print("Starting runs...")
