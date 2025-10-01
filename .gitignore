@@ -1,5 +1,6 @@
 #other
 personal_configs/
+*ignore*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
