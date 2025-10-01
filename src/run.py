@@ -39,7 +39,7 @@ def main(args: argparse.Namespace):
     
     args.executor_kwargs['runner_kwargs'] = getattr(args, 'runner', None)
     executor_type = args.executor_kwargs.pop("type")
-    executor_kwargs = import_executor(type=executor_type, executor_kwargs=args.executor_kwargs)
+    executor = import_executor(type=executor_type, executor_kwargs=args.executor_kwargs)
     print("Starting runs...")
     executor.start_runs()
     print("Shutting down scheduler and workers...")
