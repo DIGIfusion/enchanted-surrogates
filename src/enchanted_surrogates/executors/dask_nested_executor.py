@@ -53,7 +53,7 @@ class DaskNestedExecutor(Executor):
                 self.reuse_index.append(None)
                 self.executors.append(import_executor(exe_type,exe_kwargs))
 
-        print('debug re u ind', self.reuse_index)
+        # print('debug re u ind', self.reuse_index)
         
         self.sampler_kwargs = sampler_kwargs#kwargs.get('sampler_kwargs')
         sampler_type = self.sampler_kwargs.pop("type")
@@ -139,7 +139,7 @@ class DaskNestedExecutor(Executor):
                 else:
                     executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
 
-                for result in as_completed(self.all_futures[i-1]):
+                for future in as_completed(self.all_futures[i-1]):
                     result = self.get_result(future)
                     run_dir = result['run_dir']
                     previous_sampler_params = self.sampler.all_samplers[i-1].parameters
@@ -174,8 +174,8 @@ class DaskNestedExecutor(Executor):
                     for col in extra_df.columns:
                         if col in filtered_df.columns:
                             filtered_df = filtered_df.drop(columns = [col])
-                    print('debug extra df', extra_df)
-                    print('debug filtered df', filtered_df)
+                    # print('debug extra df', extra_df)
+                    # print('debug filtered df', filtered_df)
                     combined_df = pd.concat([filtered_df, extra_df], axis=1)
                     sampler_i_samples = combined_df.to_dict(orient="records")
 

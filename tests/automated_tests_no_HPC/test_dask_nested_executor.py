@@ -13,6 +13,8 @@ from enchanted_surrogates.executors.dask_nested_executor import DaskNestedExecut
 
 
 def test_dask_nested_executor(tmp_path):
+    tmp_path = '/users/danieljordan/enchanted_plugins/enchanted-surrogates/tests/automated_tests_no_HPC/nested_test'
+
     print('TESTING DASK EXECUTOR')
     config = {}
 
