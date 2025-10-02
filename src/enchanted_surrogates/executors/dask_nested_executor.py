@@ -67,6 +67,8 @@ class DaskNestedExecutor(Executor):
         self.current_samples_df = None
         self.all_results = [{}]*len(self.executors)
         self.all_futures = [[]]*len(self.executors)
+        self.completed = [0]*len(self.executors)
+        self.succeded = [0]*len(self.executors)    
         
     def clean(self):
         """
@@ -105,7 +107,6 @@ class DaskNestedExecutor(Executor):
         print('TOTAL NUMBER OF SAMPLES TO BE RAN:', len(self.current_samples_df))
         sampler_cumulative_params = []
         for i, executor in enumerate(self.executors):
-            
             if i == 0:
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
                 executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
@@ -139,8 +140,10 @@ class DaskNestedExecutor(Executor):
                 else:
                     executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
 
-                for future in as_completed(self.all_futures[i-1]):
+                for j, future in enumerate(as_completed(self.all_futures[i-1])):
                     result = self.get_result(future)
+                    self.update_completion_stats(result, i)
+                    
                     run_dir = result['run_dir']
                     previous_sampler_params = self.sampler.all_samplers[i-1].parameters
                     previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
@@ -191,11 +194,22 @@ class DaskNestedExecutor(Executor):
                         self.all_results[i][future.key] = future.result()
                     self.all_futures[i] = self.all_futures[i] + sub_futures
                     # this should shut down clusters when they have finished being used. Not to be used when doing active learning
+                    print('debug shutdown_finished_clusters', self.shutdown_finished_clusters)
+                    if self.shutdown_finished_clusters:
+                        # cluster_status = [future.done() for future in futures]
+                        # print(f"STATUS OF CLUSTER: {i} | {executor.runner_kwargs['type']} | {cluster_status}")
+                        print('debug j, len fut', j+1, len(futures))
+                        if j+1==len(futures) and not i-1 in self.keep_alive:
+                            print('CLOSING WORKERS FOR EXECUTOR:', i-1)
+                            self.executors[i-1].clean()
+
                 
         # write the results for the last set of futures.
         base_enchanted_dataset_path = os.path.join(self.base_run_dir, f'enchanted_dataset.csv')
-        for future in as_completed(self.all_futures[-1]):
+        for j, future in enumerate(as_completed(self.all_futures[-1])):
             result = self.get_result(future)
+            self.update_completion_stats(result,i)
+
             run_dir = result['run_dir']
             enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{len(self.executors)}.csv')
             dfi = pd.DataFrame({r:[v] for r,v in result.items()})
@@ -207,23 +221,17 @@ class DaskNestedExecutor(Executor):
                 dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
             else:
                 dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
-            
+        
             # this should shut down clusters when they have finished being used. Not to be used when doing active learning
-        for i, futures, executor in zip(range(len(self.executors)), self.all_futures, self.executors):
-            completed = 0
-            succeded = 0
-            for future in as_completed(futures):
-                result = self.get_result(future)
-                completed += 1
-                if result['success']:
-                    succeded += 1
-                print("| RUNNER:", executor.runner_kwargs['type'],
-                      f"\n| NUM COMPLETED: {completed}/{len(futures)}",
-                      f"| NUM SUCCEDED: {succeded}/{len(futures)}")
+            print('debug shutdown_finished_clusters', self.shutdown_finished_clusters)
             if self.shutdown_finished_clusters:
-                if all(future.done() for future in futures) and not i in self.keep_alive:
-                    print('CLOSING WORKERS FOR EXECUTOR:', i)
-                    executor.clean()
+                # cluster_status = [future.done() for future in futures]
+                # print(f"STATUS OF CLUSTER: {i} | {executor.runner_kwargs['type']} | {cluster_status}")
+                print('debug j, len fut', j+1, len(futures))
+                if j+1==len(futures) and not len(self.executors) in self.keep_alive:
+                    print('CLOSING WORKERS FOR EXECUTOR:', len(self.executors))
+                    self.executors[-1].clean()
+                                    
         print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
         print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
         print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
@@ -242,3 +250,10 @@ class DaskNestedExecutor(Executor):
                 time.sleep(0.5)
         return result    
     
+    def update_completion_stats(self, result, i):
+        self.completed[i] += 1
+        if result['success']:
+            self.succeded[i] += 1
+        print("| RUNNER:", self.executors[i].runner_kwargs['type'],
+            f"\n| NUM COMPLETED: {self.completed[i]}/{len(self.all_futures[i])}",
+            f"| NUM SUCCEDED: {self.succeded[i]}/{len(self.all_futures[i])}")

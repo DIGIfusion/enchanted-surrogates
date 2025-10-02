@@ -8,6 +8,7 @@ class ExampleRunner(Runner):
 
     def __init__(self, *args, **kwargs):
         self.parameter_mode = kwargs.get('parameter_mode', 0)
+        self.sleep_sec = kwargs.get('sleep_sec', 0.01)
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         # Implementation for the example runner
@@ -34,7 +35,7 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(0.5)
+            sleep(self.sleep_sec)
             result = {
                 "output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
         elif self.parameter_mode == 1:
@@ -44,7 +45,7 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(0.5)
+            sleep(self.sleep_sec)
             result = {
                 "output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
         elif self.parameter_mode == 2:
@@ -54,7 +55,7 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(0.5)
+            sleep(self.sleep_sec)
             result = {
                 "output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
         else:

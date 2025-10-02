@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
-
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -30,6 +30,8 @@ def main(args: argparse.Namespace):
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
+    
+    print(enchanted_wizard)
     
     #Incase sampler or runner is defined outside the executor, only works for non nested workflows
     if getattr(args, 'sampler_kwargs', None):

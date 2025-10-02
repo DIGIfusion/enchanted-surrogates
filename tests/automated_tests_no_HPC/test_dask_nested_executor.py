@@ -52,7 +52,8 @@ def test_dask_nested_executor(tmp_path):
                 'type': 'DaskExecutor',
                 'runner_kwargs': {
                     'type': 'ExampleRunner',
-                    'parameter_mode': 0  # just to make sure each code does something different
+                    'parameter_mode': 0,  # just to make sure each code does something different
+                    'sleep_sec': 0.1
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
@@ -64,7 +65,8 @@ def test_dask_nested_executor(tmp_path):
                 'type': 'DaskExecutor',
                 'runner_kwargs': {
                     'type': 'ExampleRunner',
-                    'parameter_mode': 1  # just to make sure each code does something different
+                    'parameter_mode': 1,  # just to make sure each code does something different
+                    'sleep_sec': 0.1
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
@@ -76,7 +78,8 @@ def test_dask_nested_executor(tmp_path):
                 'type': 'DaskExecutor',
                 'runner_kwargs': {
                     'type': 'ExampleRunner',
-                    'parameter_mode': 2  # just to make sure each code does something different
+                    'parameter_mode': 2,  # just to make sure each code does something different
+                    'sleep_sec': 0.1
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
@@ -191,3 +194,7 @@ def test_dask_nested_executor_executor_reuse(tmp_path):
 
     # TODO clean up test
     # shutil.rmtree(base_run_dir)
+
+if __name__ == '__main__':
+    _, base_run_dir = sys.argv
+    test_dask_nested_executor(base_run_dir)
