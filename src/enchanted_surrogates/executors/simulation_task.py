@@ -25,6 +25,7 @@ def run_simulation_task(
             f"\nThere was a Python ERROR on when running a simulation task:\n{exc}\n",
             "params:", params, "\n",
             "run_dir:", run_dir, "\n",
+            'runner_output:',runner_output, '\n',
             traceback.format_exc(), flush=True)
         # print the whole traceback and not just the last error
         runner_output = {"success": False} 

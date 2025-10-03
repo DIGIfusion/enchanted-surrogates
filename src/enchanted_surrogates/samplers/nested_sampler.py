@@ -25,21 +25,29 @@ class NestedSampler(Sampler):
         self.batch_size = kwargs.get('batch_size', self.budget)
         self.submitted = 0
         self.all_parameters = [param for sampler in self.all_samplers for param in sampler.parameters]
-        
-    def get_next_samples(self):
-        # get all initial parameters
-        initial_parameters = []
-        for sampler in self.all_samplers:
-            initial_parameters.append(sampler.get_next_samples())
 
-        # Cartesian product of all sublists
-        combinations = product(*initial_parameters)
-        # Merge each tuple of dicts into a single dict
-        combined = [dict(kv for d in combo for kv in d.items()) for combo in combinations]
-        
-        self.submitted += len(combined)
-        # self.has_budget = False # nested sampler only supports one batch. For nested active sampling a bespoke nested sampler is needed for each application
-        return combined
+        self.initial_parameters = []
+        for sampler in self.all_samplers:
+            self.initial_parameters.append(sampler.get_next_samples())
+
+        self.total_num_runs = [np.sum(np.cumprod([len(ip) for ip in self.initial_parameters]))]
+        self.depth_num_runs = [np.cumprod([len(ip) for ip in self.initial_parameters])]
+        self.current_batch = 0 
+    def get_next_samples(self):
+        if self.current_batch == 0:
+            # get all initial parameters
+            
+            # Cartesian product of all sublists
+            combinations = product(*self.initial_parameters)
+            # Merge each tuple of dicts into a single dict
+            combined = [dict(kv for d in combo for kv in d.items()) for combo in combinations]
+            
+            self.submitted += len(combined)
+            # self.has_budget = False # nested sampler only supports one batch. For nested active sampling a bespoke nested sampler is needed for each application
+            self.current_batch += 1
+            return combined
+        else:
+            raise NotImplementedError
     
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """

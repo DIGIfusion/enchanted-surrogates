@@ -11,6 +11,9 @@ import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_executor
 from dask.distributed import print, as_completed, wait
 from enchanted_surrogates.utils.precise_imports import import_sampler
+from enchanted_surrogates.utils.print_stats_table import print_stats_table
+from queue import Queue 
+import threading
 
 class DaskNestedExecutor(Executor):
     """
@@ -52,8 +55,6 @@ class DaskNestedExecutor(Executor):
                 self.reuse_bool.append(False)
                 self.reuse_index.append(None)
                 self.executors.append(import_executor(exe_type,exe_kwargs))
-
-        # print('debug re u ind', self.reuse_index)
         
         self.sampler_kwargs = sampler_kwargs#kwargs.get('sampler_kwargs')
         sampler_type = self.sampler_kwargs.pop("type")
@@ -65,10 +66,12 @@ class DaskNestedExecutor(Executor):
         self.start_cluster_when_needed = kwargs.get('start_cluster_when_needed', False)
         self.shutdown_finished_clusters = kwargs.get('shutdown_finished_clusters', False)
         self.current_samples_df = None
-        self.all_results = [{}]*len(self.executors)
-        self.all_futures = [[]]*len(self.executors)
-        self.completed = [0]*len(self.executors)
-        self.succeded = [0]*len(self.executors)    
+        self.all_results = [{} for _ in self.executors]
+        self.result_queue = Queue()
+        self.all_futures = [[] for _ in self.executors]
+        self._futures_locks = [threading.Lock() for _ in range(len(self.executors))]
+        self.completed = [0 for _ in self.executors]
+        self.succeded = [0 for _ in self.executors]
         
     def clean(self):
         """
@@ -94,8 +97,8 @@ class DaskNestedExecutor(Executor):
                                   Aborting to avoid accidental data mixing.''' )
         
         
-        num_batches = 0
-        batch_dir = os.path.join(self.base_run_dir, f'batch_{num_batches}')
+        batch_num = 0
+        batch_dir = os.path.join(self.base_run_dir, f'batch_{batch_num}')
         os.makedirs(batch_dir, exist_ok=True)
         #TODO: make it work for batch sampling / active learning. while all([executor.has_budget for executor in executors])
         # HAVE ONE SAMPLER PER CONFIG, IT CAN CALL A SEPERATE SAMPLER PER CODE IF IT WANTS
@@ -115,22 +118,27 @@ class DaskNestedExecutor(Executor):
                 unique_df = self.current_samples_df.drop_duplicates(subset=sampler_i_params)
                 filtered_df = unique_df[sampler_i_params]
                 sampler_i_samples = filtered_df.to_dict(orient="records")
-                futures = executor.submit_batch(sampler_i_samples, base_run_dir=batch_dir)
-                self.all_futures[i] = futures
-                for future in as_completed(futures):
-                    self.all_results[i][future.key] = future.result()       
+                print('debug SUBMITTING IN BACKGROUND, (should be 0) EXE_INDEX', i)
+                self.submit_inbackground(samples=sampler_i_samples, base_run_dir=batch_dir, exe_index=i)
             else:
                 if self.start_cluster_when_needed:
                     # This will wait untill atleast one future is finished of the first sub executor
                     previous_success = False
-                    print(f'WAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}')
+                    print('*'*100,f'\n\nWAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}\n\n','*'*100)
+                    start = time.time()
                     while not previous_success:
-                        if len(list(self.all_results[i-1].values()))>0:
-                            successes = [result['success'] for result in self.all_results[i-1].values()]
-                            if any(successes):
+                        done_status = [future.done() for future in self.all_futures[i-1]]
+                        if any(done_status):
+                            prelim_results = [self.get_result(future, timeout=2) for future in self.all_futures[i-1]]
+                            suc = [] 
+                            for pr in prelim_results:
+                                if pr:
+                                    print('debug pr', pr)
+                                    suc.append(pr['success'])
+                                # successes = [res['success'] for res in prelim_results if res]
+                            if any(suc):
                                 previous_success = True
-                                print('ONE FUTURE HAS COMPLETED WITH SUCCESS FOR FUTURE',i-1)
-                        time.sleep(0.1)                        
+                                print('ONE FUTURE HAS COMPLETED WITH SUCCESS FOR FUTURE',i-1)                        
                 
                 print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
                 # start cluster or assign client when reusing
@@ -138,100 +146,95 @@ class DaskNestedExecutor(Executor):
                     executor.client = self.executors[self.reuse_index[i]].client
                     executor.cluster = self.executors[self.reuse_index[i]].cluster
                 else:
-                    executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
+                    executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i]) # If block_until_cluster_started = True, this can cause issues with the scheduler not being responsive enough for dask
 
-                for j, future in enumerate(as_completed(self.all_futures[i-1])):
-                    result = self.get_result(future)
-                    self.update_completion_stats(result, i)
-                    
-                    run_dir = result['run_dir']
-                    previous_sampler_params = self.sampler.all_samplers[i-1].parameters
-                    previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
-                    # first filter for all the samples that have the same parameters as the previous sample
-                    mask = pd.Series(True, index=self.current_samples_df.index)
-                    for k, v in previous_sample.items():
-                        mask &= self.current_samples_df[k] == v
-                    filtered_df = self.current_samples_df[mask]
-                    
-                    # Then filter to remove duplicates in the parameters for the current sampler
-                    sampler_i_params = self.sampler.all_samplers[i].parameters
-                    sampler_cumulative_params += previous_sampler_params
-                    sampler_cumulative_params += sampler_i_params
-                    sampler_cumulative_params = list(set(sampler_cumulative_params))
-                    # print('debug sampler cumulative params', sampler_cumulative_params)
-                    # for params in sampler_cumulative_params:
-                    #     if params in sampler_negulative_params:
-                    #         sampler_negulative_params.remove(params)
-                    # print('debug sampler negulative params', sampler_negulative_params)
-                    unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
-                    filtered_df = unique_df[sampler_cumulative_params]
-                    # Create a DataFrame with repeated values
-                    # result.pop('success')
-                    # result.pop('run_dir')
-                    # for param in sampler_cumulative_params:
-                    #     if param in result:
-                    #         result.pop(param)
-                    extra_df = pd.DataFrame([result] * len(filtered_df))
-                    # Concatenate side-by-side
-                    filtered_df = filtered_df.reset_index(drop=True)
-                    for col in extra_df.columns:
-                        if col in filtered_df.columns:
-                            filtered_df = filtered_df.drop(columns = [col])
-                    # print('debug extra df', extra_df)
-                    # print('debug filtered df', filtered_df)
-                    combined_df = pd.concat([filtered_df, extra_df], axis=1)
-                    sampler_i_samples = combined_df.to_dict(orient="records")
-
-                    # base_run_dir_tmp = str(os.path.dirname(run_dir))
-                    enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{i-1}.csv')
-                    dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                    if os.path.exists(enchanted_dataset_path):
-                        dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
-                    else:
-                        dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
-                    sub_futures = executor.submit_batch(sampler_i_samples, base_run_dir=run_dir)
-                    for future in as_completed(sub_futures):
-                        self.all_results[i][future.key] = future.result()
-                    self.all_futures[i] = self.all_futures[i] + sub_futures
-                    # this should shut down clusters when they have finished being used. Not to be used when doing active learning
-                    print('debug shutdown_finished_clusters', self.shutdown_finished_clusters)
-                    if self.shutdown_finished_clusters:
-                        # cluster_status = [future.done() for future in futures]
-                        # print(f"STATUS OF CLUSTER: {i} | {executor.runner_kwargs['type']} | {cluster_status}")
-                        print('debug j, len fut', j+1, len(futures))
-                        if j+1==len(futures) and not i-1 in self.keep_alive:
-                            print('CLOSING WORKERS FOR EXECUTOR:', i-1)
-                            self.executors[i-1].clean()
+                expected_num_fut = self.sampler.depth_num_runs[batch_num][i-1]
+                done, pending = self.seperate_futures(self.all_futures[i-1])
+                num_done = 0
+                while num_done < expected_num_fut:
+                    for j, future in enumerate(done):
+                        result = self.get_result(future)
+                        self.update_completion_stats(result, i-1)
+                        
+                        run_dir = result['run_dir']
+                        previous_sampler_params = self.sampler.all_samplers[i-1].parameters
+                        previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
+                        # first filter for all the samples that have the same parameters as the previous sample
+                        mask = pd.Series(True, index=self.current_samples_df.index)
+                        for k, v in previous_sample.items():
+                            mask &= self.current_samples_df[k] == v
+                        filtered_df = self.current_samples_df[mask]
+                        
+                        # Then filter to remove duplicates in the parameters for the current sampler
+                        sampler_i_params = self.sampler.all_samplers[i].parameters
+                        sampler_cumulative_params += previous_sampler_params
+                        sampler_cumulative_params += sampler_i_params
+                        sampler_cumulative_params = list(set(sampler_cumulative_params))
+                        unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
+                        filtered_df = unique_df[sampler_cumulative_params]
+                        extra_df = pd.DataFrame([result] * len(filtered_df))
+                        filtered_df = filtered_df.reset_index(drop=True)
+                        for col in extra_df.columns:
+                            if col in filtered_df.columns:
+                                filtered_df = filtered_df.drop(columns = [col])
+                        combined_df = pd.concat([filtered_df, extra_df], axis=1)
+                        sampler_i_samples = combined_df.to_dict(orient="records")
+                        enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{i-1}.csv')
+                        dfi = pd.DataFrame({r:[v] for r,v in result.items()})
+                        if os.path.exists(enchanted_dataset_path):
+                            dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
+                        else:
+                            dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
+                        print('debug SUBMITTING IN BACKGROUND, EXE_INDEX', i)
+                        self.submit_inbackground(samples=sampler_i_samples, base_run_dir=run_dir, exe_index=i)
+                        # this should shut down clusters when they have finished being used. Not to be used when doing active learning
+                        if self.shutdown_finished_clusters:
+                            cluster_status = [future.done() for future in self.all_futures[i-1]]
+                            print(f"STATUS OF CLUSTER: {i-1} | {self.executors[i-1].runner_kwargs['type']} | {cluster_status}")
+                            if all(cluster_status) and not i-1 in self.keep_alive:
+                                print(f'GRABBING RESULTS FOR RUNNER {self.runner_types[i-1]} BEFORE SHUTDOWN')
+                                self.get_results(self.all_futures[i-1])
+                                print(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
+                                self.executors[i-1].clean()
+                    num_done += len(done)
+                    done, pendng = self.seperate_futures(done)
 
                 
         # write the results for the last set of futures.
         base_enchanted_dataset_path = os.path.join(self.base_run_dir, f'enchanted_dataset.csv')
-        for j, future in enumerate(as_completed(self.all_futures[-1])):
-            result = self.get_result(future)
-            self.update_completion_stats(result,i)
+        done, pending = self.seperate_futures(self.all_futures[-1])
+        while pending:
+            for j, future in enumerate(done):
+                result = self.get_result(future)
+                self.update_completion_stats(result,len(self.executors)-1)
 
-            run_dir = result['run_dir']
-            enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{len(self.executors)}.csv')
-            dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-            if os.path.exists(enchanted_dataset_path):
-                dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
-            else:
-                dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
-            if os.path.exists(base_enchanted_dataset_path):
-                dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
-            else:
-                dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
+                run_dir = result['run_dir']
+                enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{len(self.executors)-1}.csv')
+                dfi = pd.DataFrame({r:[v] for r,v in result.items()})
+                if os.path.exists(enchanted_dataset_path):
+                    dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
+                else:
+                    dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
+                if os.path.exists(base_enchanted_dataset_path):
+                    dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
+                else:
+                    dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
+            
+                # this should shut down clusters when they have finished being used. Not to be used when doing active learning
+                if self.shutdown_finished_clusters:
+                    cluster_status = [future.done() for future in self.all_futures[-1]]
+                    print(f"STATUS OF CLUSTER: {len(self.executors)-1} | {executor.runner_kwargs['type']} | {cluster_status}")
+                    if all(cluster_status) and not len(self.executors) in self.keep_alive:
+                        print(f'GRABBING RESULTS FOR RUNNER {self.runner_types[-1]} BEFORE SHUTDOWN')
+                        self.get_results(self.all_futures[-1])        
+                        print('CLOSING WORKERS FOR EXECUTOR:', len(self.executors)-1)
+                        self.executors[-1].clean()
+            done, pending = self.seperate_futures(done)
         
-            # this should shut down clusters when they have finished being used. Not to be used when doing active learning
-            print('debug shutdown_finished_clusters', self.shutdown_finished_clusters)
-            if self.shutdown_finished_clusters:
-                # cluster_status = [future.done() for future in futures]
-                # print(f"STATUS OF CLUSTER: {i} | {executor.runner_kwargs['type']} | {cluster_status}")
-                print('debug j, len fut', j+1, len(futures))
-                if j+1==len(futures) and not len(self.executors) in self.keep_alive:
-                    print('CLOSING WORKERS FOR EXECUTOR:', len(self.executors))
-                    self.executors[-1].clean()
-                                    
+        print('ALL FUTURES SHOULD BE FINISHED NOW')
+        # print('WAITING FOR ALL FUTURES TO BE FINISHED')
+        # for futures in self.all_futures:
+        #     wait(futures)
         print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
         print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
         print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
@@ -240,20 +243,138 @@ class DaskNestedExecutor(Executor):
         print('CLUSTER SHUTDOWN')
         self.clean()
         
-    def get_result(self, future):
-        result = None
-        while not result:
-            try:
-                result = self.all_results[-1][future.key]
-            except KeyError:
-                print('SLEEPING TO GIVE THE CONCURRENT LOOP A CHANCE TO PUT THE FUTURE RESULT IN THE ALL_RESULTS DICT')
-                time.sleep(0.5)
-        return result    
+    def get_results(self, futures):
+        results = []
+        for future in futures:
+            results.append(self.get_result(future))
+        return results
     
-    def update_completion_stats(self, result, i):
-        self.completed[i] += 1
+    def seperate_futures(self, futures):
+        done = [future for future in futures if future.done()]
+        pending = [future for future in futures if not future.done()]
+        return done, pending
+    
+    def get_result(self, future, timeout=60):
+        result = None
+        started = time.time()
+        while not result and time.time()-started < timeout:
+            for results in self.all_results: # check to see if the result is in all_results
+                if future.key in results:
+                    result = results[future.key]
+            if not result: # if not in all results empty the results_queue
+                while not self.result_queue.empty():
+                    i, key, result_q = self.result_queue.get()
+                    self.all_results[i][key] = result_q
+                    if future.key == key:
+                        result = result_q
+            if not result:
+                print('SLEEPING TO GIVE THE CONCURRENT LOOP A CHANCE TO PUT THE FUTURE RESULT IN THE ALL_RESULTS QUEUE, sec passed:', time.time()-started)
+                time.sleep(0.5)
+        return result
+    
+    def update_completion_stats(self, result, exe_i, batch_num=0):
+        self.completed[exe_i] += 1
         if result['success']:
-            self.succeded[i] += 1
-        print("| RUNNER:", self.executors[i].runner_kwargs['type'],
-            f"\n| NUM COMPLETED: {self.completed[i]}/{len(self.all_futures[i])}",
-            f"| NUM SUCCEDED: {self.succeded[i]}/{len(self.all_futures[i])}")
+            self.succeded[exe_i] += 1
+        completion_stats = {
+            'header': f"BATCH {batch_num} COMPLETION STATS",
+            'subheader': f"{self.executors[exe_i].runner_kwargs['type']}",
+            'NESTED DEPTH': f"{exe_i}",
+            'COMPLETED': f"{self.completed[exe_i]}/{len(self.all_futures[exe_i])}",
+            'SUCCEDED': f"{self.succeded[exe_i]}/{len(self.all_futures[exe_i])}"
+        }   
+        total_completion_stats = {
+            'header': f"BATCH {batch_num} COMPLETION STATS",
+            'subheader': f"ENTIRE NESTED PIPELINE",
+            'COMPLETED': f"{np.sum(self.completed)}/{self.sampler.total_num_runs[batch_num]}",
+            'SUCCEDED': f"{np.sum(self.succeded)}/{self.sampler.total_num_runs[batch_num]}"
+        }
+        print_stats_table(completion_stats)
+        print_stats_table(total_completion_stats)
+    
+    # def submit_inbackground(self, samples, base_run_dir, exe_index):
+    #     def submit_and_queue(samples, base_run_dir, exe_index):
+    #         futures = self.executors[exe_index].submit_batch(samples, base_run_dir)
+    #         self.all_futures[exe_index].extend(futures)
+    #         for future, result in as_completed(futures, with_results=True):
+    #             self.result_queue.put((exe_index, future.key, result))
+    #     threading.Thread(target=submit_and_queue, args=(samples, base_run_dir, exe_index), daemon=True).start()
+
+    # def submit_inbackground(self, samples, base_run_dir, exe_index):
+    #     def submit_and_stream(samples, base_run_dir, exe_index):
+    #         from dask.distributed import Client, as_completed
+    #         local_client = Client(address=self.executors[exe_index].client.scheduler.address, asynchronous=False)
+    #         try:
+    #             # submit batch using the local client API provided by your executor
+    #             futures = self.executors[exe_index].submit_batch(samples, base_run_dir, client=local_client)
+    #             self.all_futures[exe_index].extend(futures)
+
+    #             for fut in as_completed(futures):
+    #                 # streaming: put each result as it finishes
+    #                 res = fut.result()
+    #                 self.result_queue.put((exe_index, fut.key, res))
+    #             wait(futures)
+    #         finally:
+    #             local_client.close()
+
+    #     threading.Thread(
+    #         target=submit_and_stream,
+    #         args=(samples, base_run_dir, exe_index),
+    #         daemon=True
+    #     ).start()
+    
+    # def submit_inbackground(self, samples, base_run_dir, exe_index):
+    #     def submit_and_stream(samples, base_run_dir, exe_index):
+    #         from dask.distributed import Client, as_completed
+    #         local_client = Client(address=self.executors[exe_index].client.scheduler.address, asynchronous=False)
+    #         try:
+    #             # submit batch using the local client API provided by your executor
+    #             futures = self.executors[exe_index].submit_batch(samples, base_run_dir, client=local_client)
+    #             self.all_futures[exe_index].extend(futures)
+                
+    #             while len(futures) > 0:
+    #                 for fut in futures:
+    #                     if fut.done():
+    #                         res = fut.result()
+    #                         self.result_queue.put((exe_index, fut.key, res))
+    #                         #remove finnished future from list
+    #                         futures = [f for f in futures if f.key != fut.key]
+    #         finally:
+    #             local_client.close()
+
+    #     threading.Thread(
+    #         target=submit_and_stream,
+    #         args=(samples, base_run_dir, exe_index),
+    #         daemon=True
+    #     ).start()
+        
+    def submit_inbackground(self, samples, base_run_dir, exe_index):
+        def submit_and_stream(samples, base_run_dir, exe_index):
+            from distributed import Client, wait
+            local_client = Client(address=self.executors[exe_index].client.scheduler.address,
+                                asynchronous=False)
+            try:
+                futures = self.executors[exe_index].submit_batch(
+                    samples, base_run_dir, client=local_client
+                )
+                
+                with self._futures_locks[exe_index]:
+                    self.all_futures[exe_index].extend(futures)
+
+                pending = set(futures)
+                while pending:
+                    done, pending = wait(list(pending), return_when='FIRST_COMPLETED')
+                    for fut in done:
+                        res = fut.result()
+                        # try:
+                        #     
+                        # except Exception as e:
+                        #     res = {"error": str(e)}
+                        self.result_queue.put((exe_index, fut.key, res))
+            finally:
+                local_client.close()
+        threading.Thread(
+            target=submit_and_stream,
+            args=(samples, base_run_dir, exe_index),
+            daemon=True
+        ).start()

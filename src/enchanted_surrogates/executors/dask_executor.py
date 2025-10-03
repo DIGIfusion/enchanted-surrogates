@@ -166,7 +166,7 @@ class DaskExecutor(Executor):
                     job_id = fields[0]
                     job_state = fields[4]  # Typically the 5th column is state
 
-                    if job_state != 'R':
+                    if job_state == 'PD':
                         print('='*100)
                         print('\n'.join(dask_lines))
                         print(f"Job {job_id} is in state {job_state} — waiting...")
@@ -276,7 +276,7 @@ class DaskExecutor(Executor):
         self.shutdown_cluster()
 
 
-    def submit_batch(self, samples, base_run_dir=None):
+    def submit_batch(self, samples, base_run_dir=None, client=None):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
@@ -289,6 +289,10 @@ class DaskExecutor(Executor):
         Returns:
             list: List of futures representing the submitted tasks.
         """
+        
+        if not client:
+            client = self.client
+        
         if not base_run_dir:
             base_run_dir = self.base_run_dir
         assert base_run_dir
@@ -298,7 +302,7 @@ class DaskExecutor(Executor):
         for sample_params in samples:
             sample_run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
             run_dirs.append(sample_run_dir)
-            new_future = self.client.submit(
+            new_future = client.submit(
                 run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
             )
             futures.append(new_future)
