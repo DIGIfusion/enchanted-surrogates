@@ -336,9 +336,9 @@ class DaskNestedExecutor(Executor):
     #         finally:
     #             logger.info(f"background scale-down loop exiting for scale-down-{self.runner_types[exe_i]}-nest_depth-{exe_i}-batch_num-{batch_num}")
 
-        thread = threading.Thread(target=_loop, daemon=daemon, name=f"scale-down-{self.runner_types[exe_i]}-nest_depth-{exe_i}-batch_num-{batch_num}")
-        thread.start()
-        return thread
+    #     thread = threading.Thread(target=_loop, daemon=daemon, name=f"scale-down-{self.runner_types[exe_i]}-nest_depth-{exe_i}-batch_num-{batch_num}")
+    #     thread.start()
+    #     return thread
     
     def seperate_futures(self, futures):
         seen = set()
