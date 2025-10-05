@@ -2,7 +2,10 @@ import os
 from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask.distributed import print as dask_print
+from dask.distributed.comm import CommClosedError
+
 from enchanted_surrogates.executors import simulation_task
+from enchanted_surrogates.runners.make_run_dir import make_run_dir
 # Patch print inside the module if it uses bare `print()` calls
 simulation_task.print = dask_print
 # Override local print
@@ -17,7 +20,29 @@ import subprocess
 import time
 import warnings
 import uuid
+import numpy as np
 import pandas as pd
+
+from distributed import Client, get_worker, get_client
+import time
+def retire_self():
+    # running on the worker
+    w = get_worker()
+    c = get_client()
+    addr = w.address
+
+    # optional: drop local in-memory data you don't want kept
+    try:
+        for k in list(w.data):
+            del w.data[k]
+    except Exception:
+        pass
+
+    # ask scheduler to retire and close this worker immediately
+    c.retire_workers(workers=[addr], close_workers=True)
+
+    # return for logging/verification
+    return addr
 
 class DaskExecutor(Executor):
     """
@@ -116,7 +141,7 @@ class DaskExecutor(Executor):
                     try:
                         self.client.wait_for_workers(i, timeout=timeout_)
                         warnings.warn(f'MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}')
-                    except:
+                    except TimeoutError:
                         print(f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n")
                 else:
                     self.client.wait_for_workers(i, timeout=self.expected_number_of_workers+120)
@@ -201,6 +226,41 @@ class DaskExecutor(Executor):
             is controlling other clusters. To only shut down the workers, use a different method.
         """
         self.client.shutdown()
+        
+    def send_retire_task(self, n_workers):
+        if self.client:
+            for i in range(n_workers):
+                self.client.submit(retire_self)
+            self.scale_n_jobs -= n_workers
+        
+    
+    def scheduler_is_alive(self, timeout=1):
+        if self.client:
+            if getattr(self.client, "closed", False):
+                return False
+            try:
+                info = self.client.scheduler_info(timeout=timeout)
+                return bool(info and info.get("address"))
+            except (TimeoutError, OSError, CommClosedError):
+                return False
+        else:
+            return False    
+    def count_alive_workers(self):
+        num_alive_workers = None
+        if self.client:
+            count = 1
+            while not num_alive_workers:
+                try:
+                    self.client.wait_for_workers(count, timeout=0.1)
+                except TimeoutError:
+                    num_alive_workers = count - 1
+                count += 1
+        return num_alive_workers
+            
+    def scale(self, num_workers):
+        if self.count_alive_workers == self.scale_n_jobs:
+            self.cluster.scale(num_workers)
+        self.scale_n_jobs = num_workers
 
     def start_runs(self):
         """
@@ -276,7 +336,7 @@ class DaskExecutor(Executor):
         self.shutdown_cluster()
 
 
-    def submit_batch(self, samples, base_run_dir=None, client=None):
+    def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
@@ -299,13 +359,19 @@ class DaskExecutor(Executor):
         
         futures = []
         run_dirs = []
+        fut_to_rundir = {}
         for sample_params in samples:
-            sample_run_dir = os.path.join(base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
+            sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_kwargs['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
                 run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
             )
             futures.append(new_future)
+            fut_to_rundir[new_future.key] = sample_run_dir
         p_info = [str(sample_params)+f'| {rd}' for sample_params,rd in zip(samples,run_dirs)]
         print(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_kwargs['type']} \n",'\n'.join(p_info))
-        return futures
+        
+        if include_fut_to_rundir:
+            return futures, fut_to_rundir
+        else:
+            return futures

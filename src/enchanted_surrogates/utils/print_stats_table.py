@@ -1,4 +1,6 @@
 import shutil
+from datetime import datetime
+
 
 def print_stats_table(stats):
     """
@@ -81,6 +83,7 @@ def print_stats_table(stats):
     output.append(center(header_line))
     if subheader_line:
         output.append(center(subheader_line))
+    output.append(center(f'{datetime.now()}'))
     output.append(border)
     for line in stat_lines:
         output.append(f"|  {line.ljust(box_width - 4)}  |")

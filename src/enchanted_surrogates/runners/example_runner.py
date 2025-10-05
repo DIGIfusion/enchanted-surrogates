@@ -4,9 +4,14 @@ from .base_runner import Runner
 from time import sleep
 import numpy as np
 
+from enchanted_surrogates.utils.is_package_available import is_package_available
+
+if is_package_available('dask'):
+  from dask.distributed import print
+
 from collections.abc import Iterable
 import numbers
-
+from datetime import datetime
 def is_number(x):
     return isinstance(x, numbers.Number)
 
@@ -175,7 +180,9 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(self.get_sleep_sec())
+            sleep_sec = self.get_sleep_sec()
+            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+            sleep(sleep_sec)
             result = {
                 "output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
         elif self.parameter_mode == 1:
@@ -185,7 +192,9 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(self.get_sleep_sec())
+            sleep_sec = self.get_sleep_sec()
+            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+            sleep(sleep_sec)
             result = {
                 "output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
         elif self.parameter_mode == 2:
@@ -195,7 +204,9 @@ class ExampleRunner(Runner):
             os.system(cmd)
             with open(outfile, 'r') as f:
                 output = float(f.read().strip())
-            sleep(self.get_sleep_sec())
+            sleep_sec = self.get_sleep_sec()
+            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+            sleep(sleep_sec)
             result = {
                 "output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
         else:
