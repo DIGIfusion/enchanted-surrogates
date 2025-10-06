@@ -1,7 +1,12 @@
 import os
 from .base_executor import Executor
-from dask.distributed import Client, as_completed, wait, LocalCluster
+from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
+import dask
+
+dask.config.set({
+    "distributed.scheduler.worker-ttl": "180s"
+})
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.runners.make_run_dir import make_run_dir
@@ -22,7 +27,6 @@ import uuid
 import numpy as np
 import pandas as pd
 
-from distributed import Client, get_worker, get_client
 import time
 def retire_self():
     # running on the worker
