@@ -206,7 +206,19 @@ class DaskExecutor(Executor):
             is controlling other clusters. To only shut down the workers, use a different method.
         """
         self.client.shutdown()
-            
+
+    def count_alive_workers(self):
+        num_alive_workers = None
+        if self.client:
+            count = 1
+            while not num_alive_workers:
+                try:
+                    self.client.wait_for_workers(count, timeout=0.1)
+                except TimeoutError:
+                    num_alive_workers = count - 1
+                count += 1
+        return num_alive_workers
+
     def scale(self, num_workers):
         if self.count_alive_workers == self.scale_n_jobs:
             self.cluster.scale(num_workers)
