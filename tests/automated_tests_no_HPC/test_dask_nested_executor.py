@@ -57,7 +57,7 @@ def test_dask_nested_executor(tmp_path):
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
-                    'n_workers': 3,
+                    'n_workers': 2,
                     'threads_per_worker': 1
                 },
             },
@@ -70,7 +70,7 @@ def test_dask_nested_executor(tmp_path):
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
-                    'n_workers': 3,
+                    'n_workers': 2,
                     'threads_per_worker': 1
                 }
             },
@@ -83,7 +83,7 @@ def test_dask_nested_executor(tmp_path):
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
-                    'n_workers': 3,
+                    'n_workers': 2,
                     'threads_per_worker': 1
                 }
             }
@@ -152,7 +152,7 @@ def test_dask_nested_executor_executor_reuse(tmp_path):
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
-                    'n_workers': 5,
+                    'n_workers': 2,
                     'threads_per_worker': 1
                 },
             },
@@ -171,7 +171,7 @@ def test_dask_nested_executor_executor_reuse(tmp_path):
                 },
                 'LocalCluster_kwargs': {
                     'name': 'es-dask_cluster',
-                    'n_workers': 5,
+                    'n_workers': 2,
                     'threads_per_worker': 1
                 }
             }
