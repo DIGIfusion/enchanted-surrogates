@@ -20,26 +20,8 @@ import warnings
 import uuid
 import numpy as np
 import pandas as pd
-
 import time
-def retire_self():
-    # running on the worker
-    w = get_worker()
-    c = get_client()
-    addr = w.address
 
-    # optional: drop local in-memory data you don't want kept
-    try:
-        for k in list(w.data):
-            del w.data[k]
-    except Exception:
-        pass
-
-    # ask scheduler to retire and close this worker immediately
-    c.retire_workers(workers=[addr], close_workers=True)
-
-    # return for logging/verification
-    return addr
 
 class DaskExecutor(Executor):
     """
