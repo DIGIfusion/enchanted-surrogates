@@ -2,12 +2,6 @@ import os
 from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
-import dask
-
-dask.config.set({
-    "distributed.scheduler.worker-ttl": "180s"
-})
-
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.runners.make_run_dir import make_run_dir
 # Patch print inside the module if it uses bare `print()` calls
@@ -134,9 +128,8 @@ class DaskExecutor(Executor):
                                 
         elif self.LocalCluster_kwargs:
             self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
-            self.cluster = LocalCluster(**self.LocalCluster_kwargs, timeout=180)
-            self.client = Client(self.cluster, timeout=180)
-            self.client.wait_for_workers(n_workers=self.expected_number_of_workers, timeout=180)
+            self.cluster = LocalCluster(**self.LocalCluster_kwargs)
+            self.client = Client(self.cluster)
             
         if self.block_until_cluster_started:
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
