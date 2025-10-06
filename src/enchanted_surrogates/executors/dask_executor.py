@@ -129,7 +129,7 @@ class DaskExecutor(Executor):
                 
         elif self.LocalCluster_kwargs:
             self.cluster = LocalCluster(**self.LocalCluster_kwargs)
-            self.client = Client(self.cluster)
+            self.client = Client(self.cluster, timeout=180)
             self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
             
         if self.block_until_cluster_started:
