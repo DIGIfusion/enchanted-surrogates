@@ -128,7 +128,7 @@ class DaskExecutor(Executor):
                 self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_kwargs.get('processes',1))
                 
         elif self.LocalCluster_kwargs:
-            self.cluster = LocalCluster(**self.LocalCluster_kwargs)
+            self.cluster = LocalCluster(**self.LocalCluster_kwargs, timeout=180)
             self.client = Client(self.cluster, timeout=180)
             self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
             
