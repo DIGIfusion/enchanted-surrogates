@@ -2,7 +2,6 @@ import os
 from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster
 from dask.distributed import print as dask_print
-from dask.distributed.comm import CommClosedError
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.runners.make_run_dir import make_run_dir
@@ -232,19 +231,19 @@ class DaskExecutor(Executor):
             for i in range(n_workers):
                 self.client.submit(retire_self)
             self.scale_n_jobs -= n_workers
-        
-    
-    def scheduler_is_alive(self, timeout=1):
-        if self.client:
-            if getattr(self.client, "closed", False):
-                return False
-            try:
-                info = self.client.scheduler_info(timeout=timeout)
-                return bool(info and info.get("address"))
-            except (TimeoutError, OSError, CommClosedError):
-                return False
-        else:
-            return False    
+            
+    # def scheduler_is_alive(self, timeout=1):
+    #     if self.client:
+    #         if getattr(self.client, "closed", False):
+    #             return False
+    #         try:
+    #             info = self.client.scheduler_info(timeout=timeout)
+    #             return bool(info and info.get("address"))
+    #         except (TimeoutError, OSError, CommClosedError):
+    #             return False
+    #     else:
+    #         return False    
+
     def count_alive_workers(self):
         num_alive_workers = None
         if self.client:
