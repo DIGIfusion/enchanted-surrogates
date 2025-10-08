@@ -155,6 +155,7 @@ class ExampleRunner(Runner):
         are compatible with dataset and surrogate tooling.
         """
 
+        print('CHANGED SINGLE CODE RUN')
         
         # Implementation for the example runner
         # Logic should follow something like
@@ -184,7 +185,7 @@ class ExampleRunner(Runner):
             print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
             sleep(sleep_sec)
             result = {
-                "output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
+                "output_1": output, "success": True, 'other_code_out_A': 'something_from_code_A'}
         elif self.parameter_mode == 1:
             c3 = params["c3"]
             c4 = params["c4"]
@@ -196,7 +197,7 @@ class ExampleRunner(Runner):
             print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
             sleep(sleep_sec)
             result = {
-                "output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
+                "output_2": output, "success": True, 'other_code_out_B': 'something_from_code_B'}
         elif self.parameter_mode == 2:
             c5 = params["c5"]
             c6 = params["c6"]
@@ -208,7 +209,7 @@ class ExampleRunner(Runner):
             print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
             sleep(sleep_sec)
             result = {
-                "output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
+                "output_3": output, "success": True, 'other_code_out_C': 'something_from_code_C'}
         else:
             raise ValueError(
                 'THE SET PARAMETER MODE DOES NOT MATCH ANY KNOWN PARAMETER MODE FOR EXAMPLE RUNNER')

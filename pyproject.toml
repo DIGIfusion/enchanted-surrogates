@@ -25,3 +25,8 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[project.optional-dependencies]
+pysgpp = [
+    "numpy<2.0",
+    "pysgpp"
+]

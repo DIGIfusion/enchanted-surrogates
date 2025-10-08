@@ -5,7 +5,7 @@ import pandas as pd
 
 
 def run_simulation_task(
-        runner_kwargs: dict, run_dir: str, params: dict = None, future=None) -> dict:
+        runner_kwargs: dict, run_dir: str, params: dict = None, future=None, timeout=None) -> dict:
     """
     Runs a single simulation task using the specified runner and parameters.
     Args:
