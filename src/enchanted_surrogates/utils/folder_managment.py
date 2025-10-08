@@ -9,6 +9,7 @@ import multiprocessing
 import math
 
 def enchanted_data_squash(source_dir, image_path=None, num_threads=None):
+    print(f'USING SQUASHFS TO COMPRESS TO GENERATED DATA INTO A READ ONLY FORMAT. SEE README.txt IN: {executor.base_run_dir}')
     assert os.path.isdir(source_dir), f"Source directory '{source_dir}' does not exist"
 
     # Default image path outside source_dir
