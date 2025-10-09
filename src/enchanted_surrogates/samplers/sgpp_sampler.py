@@ -92,6 +92,7 @@ class SgppSampler(Sampler):
         self.num_samples_by_batch = []        
         
         self.train = {}
+        self.code_acquisition = {}
         self.run_dirs = {}
         # self.S.Act = {}
         self.bounds_points = {}
@@ -218,8 +219,15 @@ class SgppSampler(Sampler):
                 for _, row in train_df.iterrows()
             }
 
-            self.train.update(new_train)
+            acquisition_col = [col for col in new_data_df.columns if 'acquisition' in col]
+            if len(acquisition_col) > 0:
+                new_acquisition = {
+                    tuple(row[col] for col in self.parameters): float(row[acquisition_col].iloc[0])
+                    for _, row in train_df.iterrows()
+                }
+                self.code_acquisiton.update(new_acquisition)
 
+            self.train.update(new_train)
             
             for i in range(self.gridStorage.getSize()):
                 gp = self.gridStorage.getPoint(i)
@@ -369,29 +377,28 @@ class SgppSampler(Sampler):
             else:
                 print('doing variance refinement')
                 self.variance_refinement()
-        # elif self.refinement_type == 'decay':
-        #     volumes, volumes_ = self.compute_basis_function_volumes()
-        #     # Min-Max Normalization
-        #     volumes_norm = (volumes_ - volumes_.min()) / (volumes_.max() - volumes_.min())
-        #     decay_aquisition_volume = pysgpp.DataVector(self.gridStorage.getSize())
-        #     decay_aquisition_ = []
-        #     for i in range(self.gridStorage.getSize()):
-        #         gp = self.gridStorage.getPoint(i)
-        #         unit_point = ()
-        #         for j in range(self.dim):
-        #             unit_point = unit_point + (gp.getStandardCoordinate(j),)
-                
-        #         box_point = self.point_transform_unit2box(unit_point)
-        #         if np.isnan(self.decay[box_point]):
-        #             decay_aquisition_.append(0)
-        #         else:
-        #             decay_aquisition_.append(-(self.decay[box_point]**2))
-        #     decay_aquisition_ = np.array(decay_aquisition_)
-        #     decay_aq_norm = (decay_aquisition_ - np.nanmin(decay_aquisition_)) / (np.nanmax(decay_aquisition_) - np.nanmin(decay_aquisition_))
+        elif self.refinement_type == 'code_acquisition':
+            volumes, volumes_ = self.compute_basis_function_volumes()
+            # Min-Max Normalization
+            volumes_norm = (volumes_ - volumes_.min()) / (volumes_.max() - volumes_.min())
+            code_acquisition = np.array(list(self.code_acquisition.values()))
+            code_acquisition_norm = {key: (ca - code_acquisition.nanmin()) / (code_acquisition.nanmax() - code_acquisition.nanmin()) for key, ca in self.code_acquisition.items()}
             
-        #     for i in range(self.gridStorage.getSize()):
-        #         decay_aquisition_volume[i] = self.exploit*decay_aq_norm + (1-self.exploit)* volumes_norm 
-        #     self.gridGen.refine(pysgpp.SurplusRefinementFunctor(decay_aquisition_volume, self.point_refinements_per_batch))
+            code_aquisition_volume = pysgpp.DataVector(self.gridStorage.getSize())
+            for i in range(self.gridStorage.getSize()):
+                gp = self.gridStorage.getPoint(i)
+                unit_point = ()
+                for j in range(self.dim):
+                    unit_point = unit_point + (gp.getStandardCoordinate(j),)
+                
+                box_point = self.point_transform_unit2box(unit_point)
+                if np.isnan(code_acquisition_norm[box_point]):
+                    code_aquisition_volume[i] = 0.0
+                else:
+                    code_aquisition_volume[i] = float(self.exploit*code_acquisition_norm[box_point] + (1-self.exploit)* volumes_norm )
+                    # decay_aquisition_.append(-(self.decay[box_point]**2))
+            
+            self.gridGen.refine(pysgpp.SurplusRefinementFunctor(code_aquisition_volume, self.point_refinements_per_batch))
     
     def parent_value_scaled(self, box_point):
         # if self.gaussian_input_uncertanties:
