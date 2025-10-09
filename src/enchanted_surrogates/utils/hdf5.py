@@ -36,14 +36,14 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5"):
                             
 
 
-    # Remove original files and folders
-    # for item in os.listdir(source_dir):
-    #     item_path = os.path.join(source_dir, item)
-    #     if item_path != hdf5_path:
-    #         if os.path.isdir(item_path):
-    #             shutil.rmtree(item_path)
-    #         else:
-    #             os.remove(item_path)
+    ## Remove original files and folders
+    for item in os.listdir(source_dir):
+        item_path = os.path.join(source_dir, item)
+        if item_path != hdf5_path:
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            else:
+                os.remove(item_path)
 
     # Add notebook and README
     create_jupyter_notebook(source_dir, hdf5_name)

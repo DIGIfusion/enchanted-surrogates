@@ -5,7 +5,7 @@ from datetime import datetime
 from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-from enchanted_surrogates.utils.folder_managment import enchanted_data_squash
+from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -47,8 +47,8 @@ def main(args: argparse.Namespace):
     print("Shutting down scheduler and workers...")
     executor.clean()
     if hasattr(args, 'general'):
-        if args.general.get('squash_data'):
-            enchanted_data_squash(executor.base_run_dir)
+        if args.general.get('hdf5_data'):
+            convert_directory_to_hdf5(executor.base_run_dir)
     return
 
 
