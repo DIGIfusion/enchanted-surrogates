@@ -5,6 +5,7 @@ import json
 import numpy as np
 
 def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5"):
+    print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
 
     with h5py.File(hdf5_path, "w") as h5f:
