@@ -7,6 +7,7 @@ from scipy.stats import norm, truncnorm
 import pandas as pd
 import pickle
 from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.utils.precise_imports import import_sampler
 from time import sleep
 from copy import deepcopy
 
@@ -51,6 +52,8 @@ class SgppSampler(Sampler):
         self.custom_limit_value = 0
         self.dim=len(parameters)
         self.n_jobs = kwargs.get('n_jobs', 0)
+        self.base_run_dir = None
+        self.alpha = None
         
         adaptive_strategy = kwargs.get('adaptive_strategy',None)
         # needed for active sampling but useful to opt out when using the samplers model for a predictor in post processing
@@ -80,11 +83,11 @@ class SgppSampler(Sampler):
          
         # The test sampler is used to fill the space and run the surrogate model so that we can calcualte the integral and sobel indicies to brute_check for convergence in UQ situations.
         brute_check_sampler_kwargs = kwargs.get('brute_check_sampler')
-        if type(brute_check_sampler_kwargs) != type(None):
+        if brute_check_sampler_kwargs:
             self.do_brute_check=True
             brute_check_sampler_kwargs['parameters'] = self.parameters
             brute_check_sampler_kwargs['bounds'] = self.bounds
-            self.brute_check_sampler = getattr(importlib.import_module(f"samplers.{brute_check_sampler_kwargs['type']}"),brute_check_sampler_kwargs['type'])(**brute_check_sampler_kwargs) 
+            self.brute_check_sampler = import_sampler(brute_check_sampler_kwargs['type'], brute_check_sampler_kwargs)
             self.old_brute_check_predictions = None
         else:
             self.do_brute_check=False
@@ -108,10 +111,10 @@ class SgppSampler(Sampler):
         # min max normalisation
         unit_point = tuple()
         for i, bco in enumerate(box_point):
-            min = self.bounds[i][0]
-            max = self.bounds[i][1]
-            assert max > min
-            uco = (bco - min) / (max - min)
+            min_ = self.bounds[i][0]
+            max_ = self.bounds[i][1]
+            assert max_ > min_
+            uco = (bco - min_) / (max_ - min_)
             unit_point = unit_point + (uco,)
         return unit_point
 
@@ -119,10 +122,10 @@ class SgppSampler(Sampler):
         # min max normalisation
         box_point = tuple()
         for i, uco in enumerate(unit_point):
-            min = self.bounds[i][0]
-            max = self.bounds[i][1]
-            assert max > min
-            bco = uco*(max - min) + min
+            min_ = self.bounds[i][0]
+            max_ = self.bounds[i][1]
+            assert max_ > min_
+            bco = uco*(max_ - min_) + min_
             box_point = box_point + (bco,)
         return box_point
     
@@ -138,9 +141,6 @@ class SgppSampler(Sampler):
         # self.grid = pysgpp.Grid.createPolyBoundaryGrid(self.dim, self.poly_basis_degree)
         print('INITIAL LEVEL:',self.initial_level)
         # self.gridGen.regular(self.initial_level)
-        if self.do_add_initial_boundary:
-            print('GRID SIZE BEFORE INITIAL BOUNDARY:', self.gridStorage.getSize())
-            self.add_initial_boundary(level=self.initial_level)
         print('INITIAL GRID SIZE:', self.gridStorage.getSize())
         # array containing labels in order they come from;- for i in range(gridStorage.getSize()): gp = gridStorage.getPoint(i)
         self.alpha = pysgpp.DataVector(self.gridStorage.getSize())
@@ -225,7 +225,7 @@ class SgppSampler(Sampler):
                     tuple(row[col] for col in self.parameters): float(row[acquisition_col].iloc[0])
                     for _, row in train_df.iterrows()
                 }
-                self.code_acquisiton.update(new_acquisition)
+                self.code_acquisition.update(new_acquisition)
 
             self.train.update(new_train)
             
@@ -382,7 +382,7 @@ class SgppSampler(Sampler):
             # Min-Max Normalization
             volumes_norm = (volumes_ - volumes_.min()) / (volumes_.max() - volumes_.min())
             code_acquisition = np.array(list(self.code_acquisition.values()))
-            code_acquisition_norm = {key: (ca - code_acquisition.nanmin()) / (code_acquisition.nanmax() - code_acquisition.nanmin()) for key, ca in self.code_acquisition.items()}
+            code_acquisition_norm = {key: (ca - np.nanmin(code_acquisition)) / (np.nanmax(code_acquisition) - np.nanmin(code_acquisition)) for key, ca in self.code_acquisition.items()}
             
             code_aquisition_volume = pysgpp.DataVector(self.gridStorage.getSize())
             for i in range(self.gridStorage.getSize()):
@@ -486,6 +486,8 @@ class SgppSampler(Sampler):
             box_point = point
         elif unit_or_box == 'unit':
             box_point = self.point_transform_unit2box(point)
+        else:
+            box_point = point
         box_point = tuple(box_point)
         if box_point in self.train.keys():
             return self.train[box_point]
@@ -628,21 +630,21 @@ class SgppSampler(Sampler):
         return rel_entropy
     
         
-        ##save new grid with boundary tree values        
-        print('pickeling boundary tree points')        
-        with open(os.path.join(batch_dir,'virtual_boundary_points.pkl'), 'wb') as file:
-            pickle.dump(self.virtual_boundary_points, file)
+        # ##save new grid with boundary tree values        
+        # print('pickeling boundary tree points')        
+        # with open(os.path.join(batch_dir,'virtual_boundary_points.pkl'), 'wb') as file:
+        #     pickle.dump(self.virtual_boundary_points, file)
 
-        print('pickeling anchor boundary points')        
-        with open(os.path.join(batch_dir,'anchor_boundary_points.pkl'), 'wb') as file:
-            print('debug len anchor points 10', len(self.anchor_boundary_points))
-            pickle.dump(self.anchor_boundary_points, file)
+        # print('pickeling anchor boundary points')        
+        # with open(os.path.join(batch_dir,'anchor_boundary_points.pkl'), 'wb') as file:
+        #     print('debug len anchor points 10', len(self.anchor_boundary_points))
+        #     pickle.dump(self.anchor_boundary_points, file)
         
-        print('SAVING GRID')
-        with open(os.path.join(batch_dir,'pysgpp_grid_virtual_boundary.txt'), 'w') as file:
-            file.write(self.grid.serialize())
-        print('SAVING SURPLUSES')
-        self.alpha.toFile(os.path.join(batch_dir, 'surpluses_virtual_boundary.mat'))
+        # print('SAVING GRID')
+        # with open(os.path.join(batch_dir,'pysgpp_grid_virtual_boundary.txt'), 'w') as file:
+        #     file.write(self.grid.serialize())
+        # print('SAVING SURPLUSES')
+        # self.alpha.toFile(os.path.join(batch_dir, 'surpluses_virtual_boundary.mat'))
         
         # del grid
         # del gridStorage
@@ -693,14 +695,14 @@ class SgppSampler(Sampler):
             df['max_surplus'] = [np.max(np.abs(np.array(self.alpha.array())))]
             df['do_surplus_based'] = self.do_surplus_based
             df['trunc_norm_integral'] = self.quadrature_function_integral(self.unit_truncnorm_pdf, acted_on='unit_point')
-            if self.test_dir != None:
-                x_test, y_test = self.get_test_set(self.test_dir)
-                y_pred = self.surrogate_predict(x_test, n_jobs=self.n_jobs)
-                residuals = y_test - y_pred
-                me = np.mean(np.abs(residuals))
-                df["mean_error"]=[me]
-                df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
-                df["std_error"] = [np.abs(np.sqrt(np.var(y_test))-quad_std)]
+            # if self.test_dir != None:
+            #     x_test, y_test = self.get_test_set(self.test_dir)
+            #     y_pred = self.surrogate_predict(x_test, n_jobs=self.n_jobs)
+            #     residuals = y_test - y_pred
+            #     me = np.mean(np.abs(residuals))
+            #     df["mean_error"]=[me]
+            #     df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
+            #     df["std_error"] = [np.abs(np.sqrt(np.var(y_test))-quad_std)]
             if self.do_brute_check:
                 print('DOING BRUTE CHECK')
                 predictions = self.surrogate_predict(self.brute_check_sampler.samples, n_jobs=self.n_jobs)
@@ -764,41 +766,41 @@ class SgppSampler(Sampler):
         print('SAVING SURPLUSES')
         self.alpha.toFile(os.path.join(batch_dir, name+'surpluses.mat'))
         
-    def get_test_set(self, test_dir):
-        print('RETRIVING TEST SET FROM', test_dir)        
-        if os.path.exists(os.path.join(test_dir,'merged_runner_return.csv')):        
-            df_test = pd.read_csv(os.path.join(test_dir,'merged_runner_return.csv'))
-            print('got runner_return.csv')
-        elif os.path.exists(os.path.join(test_dir, 'merged_runner_return.txt')):
-            df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
-            print('got runner_return.txt')
-        # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
-        #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
-        #     print('got runner_return.txt')    
-        else:
-            print('NO RUNNER RETURN FOUND, BEGINNIGN PARSING')
-            finished_result = find_files(test_dir, 'GENE.finished')
-            stopped_result = find_files(test_dir, 'stopped_by_monitor')
-            result = finished_result + stopped_result
-            run_dirs = [os.path.dirname(path) for path in result]
-            if len(result) == 0:        
-                raise FileNotFoundError('NO RUNNER RETURN PATH WAS FOUND IN:',test_dir,'\n ALSO THERE SEEM TO BE NO FINNISHED OR EARLY STOPPED GENE RUNS IN:',test_dir)
-            else:
-                outputs = []
-                for i, run_dir in enumerate(run_dirs):
-                    if i % 10 == 0:
-                        print('NUMBER OF RUN_DIR PARSED:',i)
-                    outputs.append(parse_run_dir(run_dir, parameters))
-                with open(os.path.join(test_dir, 'merged_runner_return.txt'), 'w') as file:
-                    lines = [runner_return_headder] + outputs
-                    lines = [line+'\n' for line in lines]
-                    file.writelines(lines)
-                df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
+    # def get_test_set(self, test_dir):
+    #     print('RETRIVING TEST SET FROM', test_dir)        
+    #     if os.path.exists(os.path.join(test_dir,'merged_runner_return.csv')):        
+    #         df_test = pd.read_csv(os.path.join(test_dir,'merged_runner_return.csv'))
+    #         print('got runner_return.csv')
+    #     elif os.path.exists(os.path.join(test_dir, 'merged_runner_return.txt')):
+    #         df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
+    #         print('got runner_return.txt')
+    #     # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
+    #     #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
+    #     #     print('got runner_return.txt')    
+    #     else:
+    #         print('NO RUNNER RETURN FOUND, BEGINNIGN PARSING')
+    #         finished_result = find_files(test_dir, 'GENE.finished')
+    #         stopped_result = find_files(test_dir, 'stopped_by_monitor')
+    #         result = finished_result + stopped_result
+    #         run_dirs = [os.path.dirname(path) for path in result]
+    #         if len(result) == 0:        
+    #             raise FileNotFoundError('NO RUNNER RETURN PATH WAS FOUND IN:',test_dir,'\n ALSO THERE SEEM TO BE NO FINNISHED OR EARLY STOPPED GENE RUNS IN:',test_dir)
+    #         else:
+    #             outputs = []
+    #             for i, run_dir in enumerate(run_dirs):
+    #                 if i % 10 == 0:
+    #                     print('NUMBER OF RUN_DIR PARSED:',i)
+    #                 outputs.append(parse_run_dir(run_dir, parameters))
+    #             with open(os.path.join(test_dir, 'merged_runner_return.txt'), 'w') as file:
+    #                 lines = [runner_return_headder] + outputs
+    #                 lines = [line+'\n' for line in lines]
+    #                 file.writelines(lines)
+    #             df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
                 
-        test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
-        # print('debug l tx', len(test_x))
-        test_y = np.array(df_test.iloc[:,-1].astype('float'))
-        return test_x, test_y
+    #     test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
+    #     # print('debug l tx', len(test_x))
+    #     test_y = np.array(df_test.iloc[:,-1].astype('float'))
+    #     return test_x, test_y
     
         
     def register_future(self, future):
