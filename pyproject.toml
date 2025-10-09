@@ -30,3 +30,8 @@ pysgpp = [
     "numpy<2.0",
     "pysgpp"
 ]
+hdf5 = [
+    "h5py",
+    "ipykernel",
+    "ipywidgets",
+]
