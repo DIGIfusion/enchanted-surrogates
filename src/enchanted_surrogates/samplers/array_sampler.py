@@ -40,9 +40,8 @@ class ArraySampler(Sampler):
         get_next_parameter: Gets the next parameter combination.
 
     """
-    BATCH_SAMPLE_SIZE = 1
 
-    def __init__(self, bounds, total_budget, parameters, **kwargs):
+    def __init__(self, bounds, parameters, **kwargs):
         """
         Initializes the ArraySampler.
 
@@ -62,7 +61,7 @@ class ArraySampler(Sampler):
                     f"you requested {self.total_budget}",
                 )
             )
-
+        self.batch_size = kwargs.get("batch_size", self.total_budget)
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
@@ -90,7 +89,7 @@ class ArraySampler(Sampler):
         """
         list_param_dicts = []
 
-        for _ in range(self.BATCH_SAMPLE_SIZE):
+        for _ in range(self.batch_size):
             if self.current_index >= len(self.samples):
                 break
             params = self.samples[self.current_index]

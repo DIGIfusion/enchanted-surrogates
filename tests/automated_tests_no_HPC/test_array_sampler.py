@@ -29,10 +29,10 @@ def test_total_budget_limit_raises_exception():
 
 def test_get_next_samples_returns_dicts(monkeypatch):
     bounds = [[1, 2], ["x", "y"]]
-    sampler = ArraySampler(bounds=bounds, total_budget=None, parameters=["num", "char"])
+    sampler = ArraySampler(bounds=bounds, total_budget=None, parameters=["num", "char"], )
 
-    # Patch BATCH_SAMPLE_SIZE to 2 for testing
-    sampler.BATCH_SAMPLE_SIZE = 2
+    # Patch batch_size to 2 for testing
+    sampler.batch_size = 2
     sampler.submitted = 0  # ensure counter exists
 
     samples = sampler.get_next_samples()

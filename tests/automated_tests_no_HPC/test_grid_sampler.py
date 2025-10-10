@@ -60,7 +60,7 @@ def test_get_next_samples_respects_batch_size():
     params = ["x"]
 
     sampler = GridSampler(bounds=bounds, num_samples=num_samples, parameters=params)
-    sampler.BATCH_SAMPLE_SIZE = 2
+    sampler.batch_size = 2
 
     batch1 = sampler.get_next_samples()
     batch2 = sampler.get_next_samples()
