@@ -27,7 +27,7 @@ After installing the package and any desired plugins, you can use the command li
 For example, to run a simulation with the example runner and parser, you can use the following command:
 
 ```bash
-enchanted-surrogates run.py -cf path/to/config/file
+python enchanted-surrogates/src/run.py -cf path/to/config/file
 ```
 
 Make sure to replace `path/to/config/file` with the actual path to your configuration file.
@@ -56,3 +56,26 @@ The executor initalizes a sampler and fetches samples from it. The executor init
 The sampler generates a batch of samples. A sample is sent to the Runner. 
 The Runner initalizes and uses a Parser for writing input files based on the sample parameters and postprocessing output files. 
 
+## Quick start
+
+TODO.
+
+
+## Other
+
+Github repository: https://github.com/DIGIfusion/enchanted-surrogates
+
+
+### Citation
+
+If you use this package in your research, please cite:
+
+```bibtex
+@Misc{enchanted-surrogates,
+  title =        {Enchanted Surrogates: A flexible framework for surrogate modelling of fusion plasma simulations},
+  author =       {},
+  howpublished = {Github},
+  year =         {2025},
+  url =          {https://github.com/DIGIfusion/enchanted-surrogates}
+}
+```
