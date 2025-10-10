@@ -13,11 +13,11 @@ Mandatory fields in the configuration file for using the HELENA plugin:
 runner:
   type: HelenaRunner
   executable_path: "/path/to/helena/executable"
-  other_params: {
-    "namelist_path": "/path/to/fort.10",
-    "only_generate_files": True,
-    "input_parameter_type": 3, 
-  }  
+  other_params:
+    namelist_path: "/path/to/fort.10"
+    only_generate_files: True
+    input_parameter_type: 1
+
 ```
 
 
@@ -26,8 +26,32 @@ runner:
 The HELENA plugin supports multiple different input parameter settings, which determine how the input files are generated based on the sample parameters. The supported types are:
 
 - Type 1: Standard input parameters. The sample parameters directly correspond to the input parameters in the HELENA namelist.
-TODO: Add more.
+  
+```yaml
+sampler: 
+    type: RandomSampler
+    bounds: [[0.02, 0.04], [0.0, 0.45], [1.0, 3.0]]
+    parameters: ['pedestal_delta', 'tria', 'beta_N']
+    budget: 10
 
+```
+
+- Type 2:
+
+- Type 3:
+
+- Type 4: Europed parameters. The sample parameters correspond to the Europed parameterization, which includes parameters such as the pedestal temperature gradient, core temperature slope, and fast ion pressure scaling factor. These parameters are then converted to the standard HELENA input parameters internally. The KBM constaint is applied.
+  
+```yaml
+sampler: 
+    type: RandomSampler
+    bounds: [[0.02, 0.04], [0.0, 0.45], [1.0, 3.0]]
+    parameters: ['pedestal_delta', 'tria', 'beta_N']
+    budget: 10
+
+```
+
+- Type 5: Europed-type parameters without KBM constraint. Similar to Type 4, but the KBM constraint is not applied.
 
 ## Example configuration
 
@@ -37,20 +61,48 @@ TODO: Add more.
 If a specific normalized beta is required, the HELENA plugin contains multple methods to achieve this. Firstly, the target beta_N has to be specified in the parameters section of the configuration file:
 
 ```yaml
-  sampler: 
-      type: RandomSampler
-      bounds: [[0.02, 0.04], [0.0, 0.45], [1.0, 3.0]]
-      num_samples: [2, 2]
-      parameters: ['pedestal_delta', 'tria', 'beta_N']
-      budget: 2
+sampler: 
+    type: RandomSampler
+    bounds: [[0.02, 0.04], [0.0, 0.45], [1.0, 3.0]]
+    parameters: ['pedestal_delta', 'tria', 'beta_N']
+    budget: 10
+    
+runner:
+  type: HelenaRunner
+  ...
+  other_params:
+    ...
+    beta_iteration: 1
+    beta_tolerance: 0.01
+    max_beta_iterations: 4
 ```
 ---
 ### 1. Iterative adustment of the core temperature slope 
 
 Linear + secant method approach.
 
+
+#### Step 1: Initialization
+
+Run HELENA at two initial values of the core temperature slope $a_{T}$:
+
+$$
+a_{T,0} = 0, \quad a_{T,1} = 1,
+$$
+
+with corresponding outputs
+
+$$
+\beta_{N,0} = \beta_N(a_{T,0}), \quad \beta_{N,1} = \beta_N(a_{T,1}).
+$$
+
+#### Step 2: Update
+
+#### Step 3: Convergence
+
+
 ---
-### 2. Calulation of an approximate core temperature slope
+### 2. Calculation of an approximate core temperature slope
 
 From Europed. Newton's method.
 This method reconstructs the pressure profile and iteratively adjusts the core temperature slope to reach the target beta_N, but without running HELENA multiple times. The procedure is as follows:
