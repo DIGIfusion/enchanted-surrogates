@@ -1,4 +1,4 @@
-executor:
+executor_kwargs:
   type: DaskNestedExecutor
   base_run_dir: "data_dir"
   sampler_kwargs:
