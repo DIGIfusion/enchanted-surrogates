@@ -37,7 +37,6 @@ __pycache__/
 data_store/*
 core
 *images*
-*.png
 *.jpg
 *out*
 tests/example/
