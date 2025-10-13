@@ -10,6 +10,12 @@ has_children: true
 ## How to install
 
 Make sure you have a clean virtual environment with Python 3.10 or higher.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+```
+
 Then clone the repository and install the package with pip:
 
 ```bash
