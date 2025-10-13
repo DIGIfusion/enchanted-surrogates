@@ -18,7 +18,7 @@ pip install -e enchanted-surrogates/
 ```
 
 This will install the core package and its dependencies.
-In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well.
+In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well. See the [Plugins](./plugins/index.md) section for more details.
 
 
 ## How to run
@@ -30,8 +30,17 @@ For example, to run a simulation with the example runner and parser, you can use
 python enchanted-surrogates/src/run.py -cf path/to/config/file
 ```
 
-Make sure to replace `path/to/config/file` with the actual path to your configuration file.
-
+Make sure to replace `path/to/config/file` with the actual path to your configuration file. 
+The configuration file should be in YAML format and specify the runner, sampler, executor, and other parameters needed for the simulation. 
+  
+```yaml
+executor:
+    type: ...
+sampler: 
+    type: ...
+runner:
+    type: ...
+```
 
 
 

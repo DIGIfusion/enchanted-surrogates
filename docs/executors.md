@@ -1,12 +1,21 @@
+---
+layout: default
+title: Executors
+nav_order: 2
+has_children: false
+---
+
 # Executors
 
 Description of different executors available in the enchanted-surrogates package and the configurations needed to use them.
 
 ## Local Executor
 
+TODO.
 
 ## Joblib Executor
 
+TODO.
 
 ## Dask Executor
 
@@ -51,14 +60,22 @@ walltime: '00:20:00',
 config_name: 'slurm', 
 interface: 'ib0', 
 ```
- 
+
+
 
 ## Nested executors
 
 Nested executors allow for running nested sampling schemes, which is useful when one code is used to generate input for another code.
 
-![nested1](../img/nested.png)
-
-![nested2](./img//nested.png)
+![nested](./img//nested.png)
 
 The resulting folder structure is a nested, where the outer keys are the parameters from the outer sampler, and the inner keys are the parameters from the inner sampler. The values are the results from the runner.
+
+
+### Example cases
+
+Different executors, different runners, different samplers.
+Ex. Run HELENA with random sampler and MISHKA with grid sampler, and with different executors.
+
+Same executor, different runners, different samplers.
+Run HELENA with random sampler and MISHKA with grid sampler, but use one same executor.
