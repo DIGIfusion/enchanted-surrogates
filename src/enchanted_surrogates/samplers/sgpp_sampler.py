@@ -5,6 +5,7 @@ import pysgpp
 from scipy.stats import sobol_indices, uniform, entropy
 from scipy.stats import norm, truncnorm
 import pandas as pd
+import shutil
 import pickle
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler
@@ -27,6 +28,8 @@ from joblib import Parallel, delayed, cpu_count
 
 class SgppSampler(Sampler):
     def __init__(self, bounds, parameters, test_dir=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6, **kwargs):
+        self.base_run_dir = kwargs.get('base_run_dir')
+        self.budget = kwargs.get('budget', 100)
         self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
         self.gaussian_input_uncertanties = kwargs.get('gaussian_input_uncertanties', False)
         
@@ -52,29 +55,54 @@ class SgppSampler(Sampler):
         self.custom_limit_value = 0
         self.dim=len(parameters)
         self.n_jobs = kwargs.get('n_jobs', 0)
-        self.base_run_dir = None
         self.alpha = None
         
         adaptive_strategy = kwargs.get('adaptive_strategy',None)
         # needed for active sampling but useful to opt out when using the samplers model for a predictor in post processing
         self.do_surplus_based=True
+        self.adaptive_strategy = adaptive_strategy
         if adaptive_strategy:
             basis_type = adaptive_strategy['basis'].pop('type')
             self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **adaptive_strategy['basis'])
             self.gridStorage = self.grid.getStorage()
             self.gridGen = self.grid.getGenerator()
-            self.initial_level = adaptive_strategy.get('initial_level', 2)       
+            self.initial_level = adaptive_strategy.get('initial_level', 2)
             self.gridGen.regular(self.initial_level)
 
             self.point_refinements_per_batch = adaptive_strategy.get('point_refinements_per_batch', 2)
             self.refinement_type = adaptive_strategy.get('refinement_type', 'surplus')
-            if self.refinement_type == 'surplus':
-                self.do_surplus_based=True
-            elif self.refinement_type == 'threshold':
-                self.do_surplus_based=False
-                self.mean_recent_surplus_threshold = adaptive_strategy['mean_recent_surplus_threshold']
-            else:
-                self.do_surplus_based=False
+            if self.refinement_type == 'static_grid':
+                self.level = self.initial_level
+                self.final_level = self.adaptive_strategy.kwargs.get('final_level')
+            
+            if self.refinement_type == 'anova_spatially_dimensionally':
+                # self.initial_dataset_sampler_kwargs = adaptive_strategy.get('initial_dataset_sampler_kwargs', None)
+                # if self.initial_dataset_sampler_kwargs:
+                #     self.initial_dataset_sampler = import_sampler(self.initial_dataset_sampler_kwargs['type'], self.initial_dataset_sampler_kwargs)
+                #     self.initial_dataset_path = None
+                # else:
+                self.initial_dataset_path = adaptive_strategy['initial_dataset_path']
+                if self.base_run_dir:                    
+                    if not os.path.exists(os.path.join(self.base_run_dir, 'batch_00')):
+                        os.mkdir(os.path.join(self.base_run_dir, 'batch_00'))                        
+                    shutil.copy(self.initial_dataset_path, os.path.join(self.base_run_dir, 'batch_00', 'enchanted_dataset.csv'))
+                    with open(os.path.join(self.base_run_dir, 'batch_00', 'readme.txt'), 'w') as readme:
+                        readme.write(f"""
+This data set was copyed here from, {self.initial_dataset_path}.
+It is the initial dataset that was used to guide the anova spatially dimensioanlly adaptive sparse grid refinement:
+https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
+""")
+                self.initial_dataset_df = pd.read_csv(self.initial_dataset_path, index_col=False)
+                print('debug df', self.initial_dataset_df.columns, self.parameters)
+                self.initial_dataset_df_inputs = self.initial_dataset_df[self.parameters]
+                output_col = [col for col in self.initial_dataset_df.columns if 'output' in col]
+                assert len(output_col) == 1
+                self.initial_dataset_df_output = self.initial_dataset_df[output_col]
+                self.initial_dataset_inputs_box_points = self.initial_dataset_df_inputs.to_numpy()
+                self.initial_dataset_inputs_unit_points = np.array(self.points_transform_box2unit(self.initial_dataset_inputs_box_points))
+                assert len(self.initial_dataset_inputs_unit_points) == len(self.initial_dataset_df)
+                self.initial_dataSet = pysgpp.DataMatrix(self.initial_dataset_inputs_unit_points.tolist())
+
             self.infer_bounds = adaptive_strategy.get('infer_bounds', False)
             self.infer_parents = adaptive_strategy.get('infer_parents', False)
             self.mean_recent_surplus_threshold = adaptive_strategy.get('mean_recent_surplus_threshold')
@@ -103,8 +131,7 @@ class SgppSampler(Sampler):
         self.virtual_boundary_points = {}
         self.anchor_boundary_points = {}
         
-        self.grid_increase = None    
-        self.all_batch_info = []
+        self.grid_increase = None
         self.custom_submitted = 0
     
     def point_transform_box2unit(self, box_point):
@@ -201,7 +228,7 @@ class SgppSampler(Sampler):
         train, dict: A dictionary where the keys are a tuple of inputs (x0,x1,x2) (*in the order of the origional parameters) and the value is a label
         """
         #
-
+        
         if self.batch_number == 0:
             return self.get_initial_samples()
         
@@ -209,7 +236,7 @@ class SgppSampler(Sampler):
             if not self.base_run_dir:
                 raise RuntimeError('base_run_dir IS NOT SET IN SAMPLER. THIS IS PASSED IN THE CONFIG FOR THE EXECUTOR. THE EXECUTOR MUST THEN PASS IT TO THE SAMPLER SO IT CAN GRAB DATA FOR TRAINING. ENSURE THE EXECUTOR HAS THIS LINE IN start_runs --> self.sampler.base_run_dir = self.base_run_dir ')
             previous_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
-            new_data_df = pd.read_csv(os.path.join(previous_batch_dir, f'enchanted_dataset_batch_{self.batch_number-1}.csv'))
+            new_data_df = pd.read_csv(os.path.join(previous_batch_dir, f'enchanted_dataset.csv'))
             output_col = [col for col in new_data_df.columns if 'output' in col]
             if len(output_col) > 1:
                 raise RuntimeError('StaticSparseGrid SAMPLER REQUIRES EXACTLY ONE OUTPUT VARIABLE. THE single_code_run IN THE RUNNER SHOULD RETURN A DICTIONARY OF OUTPUTS WHERE ONLY ONE HAS output IN THE KEY, eg \{growthrate_output\:5\}. THIS IS THE ONE THAT WILL BE USED FOR ACTIVE LEARNING PUTPOSES')
@@ -223,7 +250,7 @@ class SgppSampler(Sampler):
             if len(acquisition_col) > 0:
                 new_acquisition = {
                     tuple(row[col] for col in self.parameters): float(row[acquisition_col].iloc[0])
-                    for _, row in train_df.iterrows()
+                    for _, row in new_data_df.iterrows()
                 }
                 self.code_acquisition.update(new_acquisition)
 
@@ -236,13 +263,14 @@ class SgppSampler(Sampler):
                     unit_point = unit_point + (gp.getStandardCoordinate(j),)
                 box_point = self.point_transform_unit2box(unit_point)
 
-                if box_point not in self.train.keys() and box_point not in self.bounds_points and box_point not in self.parent_points:
-                    if self.infer_bounds and not gp.isInnerPoint() or self.infer_parents and not gp.isLeaf():
-                        # If it is both then default to boundary point
-                        if self.infer_bounds and not gp.isInnerPoint():
-                            print('appending bounds points')
-                            self.bounds_points[box_point] = np.mean(list(self.train.values()))#self.surrogate_predict([box_point])[0]
-                        # TODO: infer parents WOn't work as surrogate predict has no alpha value, put alpha set up into surrogate predict
+                self.alpha[i] = self.approx_lookup(box_point, self.train)
+                # if not self.approx_in(box_point, self.train): # and box_point not in self.bounds_points and box_point not in self.parent_points:
+                #     if self.infer_bounds and not gp.isInnerPoint() or self.infer_parents and not gp.isLeaf():
+                #         # If it is both then default to boundary point
+                #         if self.infer_bounds and not gp.isInnerPoint():
+                #             print('appending bounds points')
+                #             self.bounds_points[box_point] = np.mean(list(self.train.values()))#self.surrogate_predict([box_point])[0]
+                #         # TODO: infer parents WOn't work as surrogate predict has no alpha value, put alpha set up into surrogate predict
                         # elif self.infer_parents and not gp.isLeaf():
                         #     self.parent_points[box_point] = self.surrogate_predict([box_point])[0]
                         #     print('appending parent points')
@@ -255,26 +283,19 @@ class SgppSampler(Sampler):
                 # elif box_point in self.bounds_points.keys():
                 #     self.alpha[i] = self.bounds_points[box_point]
                 # elif box_point in self.parent_points.keys():
-                #     self.alpha[i] = self.parent_points[box_point] 
+                #     self.alpha[i] = self.parent_points[box_point]
+                 
             
             
             # This changes alpha from the training point values into the surpluses
             pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(self.alpha)
             # Now the surrogate is trained we can write batch info
-            print('debug write batch info', self.do_write_batch_info)
             if self.do_write_batch_info:
                 # Now the surrogate is trained we can write batch info
                 self.write_batch_info(previous_batch_dir)
             else:
                 self.save_grid(previous_batch_dir)
-            
-            print('debug cust sub', self.custom_submitted, 'budget', self.budget)
-            if self.custom_submitted > self.budget:
-                # self.budget = 0 # this will stop the executor from asking for more samples because base_sampler.has_budget() will return false 
-                # using return None to stop sampling as I need sampler to request samples for one batch more than the config allows so that I can write the batch info on the last batch
-                self.merge_batch_info()
-                return None # this needs to be allowed by the executor
-                
+                            
             grid_size_before_refinement = self.gridStorage.getSize()
             print('grid size before refinement:', grid_size_before_refinement)
             
@@ -299,7 +320,7 @@ class SgppSampler(Sampler):
                 
                 box_point = self.point_transform_unit2box(unit_point)
 
-                if box_point not in self.train.keys() and box_point not in self.bounds_points and box_point not in self.parent_points:
+                if not self.approx_in(box_point, self.train): # and box_point not in self.bounds_points and box_point not in self.parent_points:
                     print('NEW POINT',box_point, unit_point)
                     print('IS BOUNDARY', not gp.isInnerPoint())
                     print('is parent', not gp.isLeaf())
@@ -319,6 +340,17 @@ class SgppSampler(Sampler):
             self.num_samples_by_batch.append(len(self.train)+len(batch_samples))
             print('len batch_samples',len(batch_samples))        
             self.custom_submitted += len(batch_samples)
+            
+            if self.custom_submitted > self.budget:
+                # self.budget = 0 # this will stop the executor from asking for more samples because base_sampler.has_budget() will return false 
+                # using return None to stop sampling as I need sampler to request samples for one batch more than the config allows so that I can write the batch info on the last batch
+                self.merge_batch_info()
+                return None # this needs to be allowed by the executor
+            
+            if self.refinement_type=='static_grid':
+                if self.level > self.final_level:
+                    self.merge_batch_info()
+                    return None
             return batch_samples
     
     def update_mean_recent_surplus(self):
@@ -339,6 +371,9 @@ class SgppSampler(Sampler):
             alpha[i] = float(self.lookup_function(box_point)**2)
         pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(self.alpha)
         self.gridGen.refine(pysgpp.SurplusRefinementFunctor(alpha, self.point_refinements_per_batch))
+    
+    def approx_in(self, query_key, dictionary, tol=1e-9):
+        return any(all(abs(a - b) < tol for a, b in zip(query_key, key)) for key in dictionary)
     
     def refine(self):
         if self.refinement_type == 'surplus':
@@ -399,6 +434,30 @@ class SgppSampler(Sampler):
                     # decay_aquisition_.append(-(self.decay[box_point]**2))
             
             self.gridGen.refine(pysgpp.SurplusRefinementFunctor(code_aquisition_volume, self.point_refinements_per_batch))
+        elif self.refinement_type == 'anova_spatially_dimensionally':
+            # num_initial_datapoints = len(self.initial_dataset_df)
+            # errorVector = DataVector(num_initial_datapoints)
+            pred = np.array(self.surrogate_predict(self.initial_dataset_inputs_box_points)).flatten()
+            assert len(pred) == len(self.initial_dataset_df)
+            true = self.initial_dataset_df_output.to_numpy().flatten()
+            assert len(pred) == len(self.initial_dataset_df)
+            error = np.array((pred - true)**2).flatten().tolist()
+            errorVector = pysgpp.DataVector(error)            
+            #refinement  stuff
+            refinement = pysgpp.ANOVAHashRefinement()
+            decorator = pysgpp.PredictiveRefinement(refinement)
+            # refine a single grid point each time
+            # print("Error over all = %s" % errorVector.sum())
+            indicator = pysgpp.PredictiveRefinementIndicator(self.grid, self.initial_dataSet, errorVector, self.point_refinements_per_batch)
+            decorator.free_refine(self.gridStorage, indicator)
+            # print("Refinement step %d, new grid size: %d" % (refnum+1, HashGridStorage.getSize()))
+        elif self.refinement_type == "static_grid":
+            self.level += 1
+            basis_type = self.adaptive_strategy['basis'].pop('type')
+            self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **self.adaptive_strategy['basis'])
+            self.gridStorage = self.grid.getStorage()
+            self.gridGen = self.grid.getGenerator()
+            self.gridGen.regular(self.level)     
     
     def parent_value_scaled(self, box_point):
         # if self.gaussian_input_uncertanties:
@@ -418,10 +477,9 @@ class SgppSampler(Sampler):
             return False
     
     # currently only works with point in the unit cube.     
-    def surrogate_predict(self, box_points, n_jobs=-1):
+    def surrogate_predict(self, box_points, n_jobs=0):
         self.gridStorage = self.grid.getStorage()
         alpha = pysgpp.DataVector(self.gridStorage.getSize())
-        # print('debug size, predict:', self.gridStorage.getSize())
         for i in range(self.gridStorage.getSize()):
             gp = self.gridStorage.getPoint(i)
             unit_point = ()
@@ -435,7 +493,7 @@ class SgppSampler(Sampler):
         
         def batch_predict(box_points):
             import pysgpp as sg
-            unit_points = self.points_transform_box2unit(np.array(box_points))
+            unit_points = np.array(self.points_transform_box2unit(np.array(box_points))).tolist()
             unit_points_dm = sg.DataMatrix(unit_points)
             opEval = sg.createOperationMultipleEval(self.grid, unit_points_dm)
             results = sg.DataVector(len(unit_points))
@@ -463,13 +521,11 @@ class SgppSampler(Sampler):
         # self.gridStorage = self.grid.getStorage()
         self.gridStorage = self.grid.getStorage()
         alpha = pysgpp.DataVector(self.gridStorage.getSize())
-        print('debug quad func integral: size:', self.gridStorage.getSize())
         for i in range(self.gridStorage.getSize()):
             gp = self.gridStorage.getPoint(i)
             unit_point = ()
             for j in range(self.dim):
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
-            # print('debug quad func int, unit_point', unit_point)
             if acted_on=='unit_point':
                 alpha[i] = float(function(unit_point))
             elif acted_on=='box_point':
@@ -481,6 +537,14 @@ class SgppSampler(Sampler):
         unit_integral = op_quad.doQuadrature(alpha)
         return unit_integral
     
+    def approx_lookup(self, query_key, dictionary, tol=1e-9, default=None):
+        return next(
+            (dictionary[key]
+            for key in dictionary
+            if all(abs(a - b) < tol for a, b in zip(query_key, key))),
+            default
+        )
+    
     def lookup_function(self, point, unit_or_box='box'):
         if unit_or_box == 'box':
             box_point = point
@@ -489,34 +553,39 @@ class SgppSampler(Sampler):
         else:
             box_point = point
         box_point = tuple(box_point)
-        if box_point in self.train.keys():
-            return self.train[box_point]
-        elif box_point in self.bounds_points.keys():
-            return self.bounds_points[box_point]
-        elif box_point in self.parent_points.keys():
-            return self.parent_points[box_point]
-        elif box_point in self.virtual_boundary_points.keys():
-            return self.virtual_boundary_points[box_point]
-        elif box_point in self.anchor_boundary_points.keys():
-            return self.anchor_boundary_points[box_point]
+        if self.approx_in(box_point, self.train):
+            return self.approx_lookup(box_point, self.train)
+        
+        elif self.approx_in(box_point, self.bounds_points):
+            return self.approx_lookup(box_point, self.bounds_points)
+        
+        elif self.approx_in(box_point, self.parent_points):
+            return self.approx_lookup(box_point, self.parent_points)
+        
+        elif self.approx_in(box_point, self.virtual_boundary_points):
+            return self.approx_lookup(box_point, self.virtual_boundary_points)
+        
+        elif self.approx_in(box_point, self.anchor_boundary_points):
+            return self.approx_lookup(box_point, self.anchor_boundary_points)
         else: 
             self.point_not_in_train_count += 1
             # get closeest point,
-            # all_points = list(self.train.keys()) + list(self.parent_points.keys()) + list(self.bounds_points.keys())
+            all_points = list(self.train.keys()) + list(self.parent_points.keys()) + list(self.bounds_points.keys())
             # all_points_dict = self.train | self.parent_points | self.bounds_points
-            # closest_point = all_points[np.argmin(np.sum(np.abs(np.array(all_points) - box_point)**2))]
+            closest_point = all_points[np.argmin(np.sum(np.abs(np.array(all_points) - box_point)**2))]
             messages=[f'this point {box_point} was not in train, bounds_points or parent_points',
                       f'len train: {len(self.train)}',
                       f'grid size: {self.gridStorage.getSize()}',
-                    #   f'closeest point: {closest_point}',
+                      f'closeest point: {closest_point}',
                       f'number of times this issue has occured: {self.point_not_in_train_count}', 
-                      'returning simulation value for closest point',
-                      f'train:{self.train}']
+                      'returning simulation value for closest point']
+                    #   f'train:{self.train}']
             message = '\n'.join(messages)
-            # print(f'this point {box_point} was not in train, bounds_points or parent_points')
+            # warnings.warning(message)
+            # return self.lookup_function(closest_point)
+            
             raise KeyError(message)
-            # # raise ValueError(f'this point {box_point} was not in train, bounds_points or parent_points')
-            # return all_points_dict[closest_point]
+            
     
     def unit_truncnorm_pdf(self, unit_point):
         sigma_multiplyer = 3
@@ -525,7 +594,6 @@ class SgppSampler(Sampler):
     
     def quadrature_expectation(self):
         # assumes uniform input distributions
-        print('debug quad expectation, gaussian input uncertanties??:', self.gaussian_input_uncertanties)
         if self.gaussian_input_uncertanties:
             # Pfx = lambda unit_point: self.unit_truncnorm_pdf(unit_point)*self.lookup_function(unit_point, unit_or_box='unit')
             return self.quadrature_function_integral(function=self.gaussian_Pfx, acted_on='unit_point')        
@@ -540,7 +608,6 @@ class SgppSampler(Sampler):
     def quadrature_variance(self):
         # assumes uniform probability distirbutions for inputs
         # VAR(f(x)) = EXP(f(x)**2) - EXP(f(x))**2
-        print('debug gauss input unc', self.gaussian_input_uncertanties)
         if self.gaussian_input_uncertanties:
             fxsquared = lambda unit_point: self.unit_truncnorm_pdf(unit_point)*self.lookup_function(unit_point, unit_or_box='unit')**2
         else:
@@ -669,7 +736,10 @@ class SgppSampler(Sampler):
         # sasg.alpha = new_alpha
         # print('sasg degree',sasg.grid.getDegree())
         return new_grid
-           
+    
+    def write_cycle_info(self, *args, **kwargs):
+        return self.write_batch_info(*args, **kwargs)       
+    
     def write_batch_info(self, batch_dir, name='', save_grid=True): #Necessary
         fname = name+'batch_info.csv'
         # print('debug do boundary tree:', self.do_boundary_tree)
@@ -684,7 +754,7 @@ class SgppSampler(Sampler):
             print('before quad exp')
             quad_exp = self.quadrature_expectation()
             print('before quad var')
-            quad_std = 2*np.sqrt(self.quadrature_variance())
+            quad_std = np.sqrt(self.quadrature_variance())
             print('after quad var')
             df = pd.DataFrame({"num_samples":[len(self.train)], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "mean":[quad_exp],"std":[quad_std],"num_anchor_points":[len(self.anchor_boundary_points)]})
             if self.grid_increase != None:
@@ -724,7 +794,11 @@ class SgppSampler(Sampler):
                 for d, sto in enumerate(sobol_total_order):
                     df[f'brute_sobol_total_order_{d}']= [sto]
             df.to_csv(os.path.join(batch_dir,fname), header=True, index=False)
-            self.all_batch_info.append(df)
+            all_batch_info_path = os.path.join(os.path.dirname(batch_dir), 'batch_info.csv')
+            if os.path.exists(all_batch_info_path):
+                df.to_csv(all_batch_info_path, mode='a', header=False, index=False)
+            else:
+                df.to_csv(all_batch_info_path, mode='w', header=True, index=False)            
             del df
         
         if save_grid:

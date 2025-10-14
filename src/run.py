@@ -2,10 +2,12 @@
 import yaml
 import argparse
 from datetime import datetime
+import os
 from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
+import shutil
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -40,8 +42,13 @@ def main(args: argparse.Namespace):
     if getattr(args, 'runner_kwargs', None):
         args.executor_kwargs['sampler_kwargs'] = args.runner_kwargs
     
+    if not os.path.exists(args.executor_kwargs['base_run_dir']):
+        os.mkdir(args.executor_kwargs['base_run_dir'])
+    shutil.copy(args.executor_kwargs['config_filepath'], args.executor_kwargs['base_run_dir'])
+    
     executor_type = args.executor_kwargs.pop("type")
     executor = import_executor(type=executor_type, executor_kwargs=args.executor_kwargs)
+    
     print("Starting runs...")
     executor.start_runs()
     print("Shutting down scheduler and workers...")

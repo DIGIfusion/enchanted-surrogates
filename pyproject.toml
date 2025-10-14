@@ -30,6 +30,10 @@ pysgpp = [
     "numpy<2.0",
     "pysgpp"
 ]
+chaospy = [
+    "chaospy",
+    "numpy>2.0"
+]
 hdf5 = [
     "h5py",
     "ipykernel",

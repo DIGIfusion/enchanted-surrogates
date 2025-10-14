@@ -155,8 +155,6 @@ class ExampleRunner(Runner):
         are compatible with dataset and surrogate tooling.
         """
 
-        print('CHANGED SINGLE CODE RUN')
-        
         # Implementation for the example runner
         # Logic should follow something like
         # - via parser, write some input files there
