@@ -76,6 +76,52 @@ The Runner initalizes and uses a Parser for writing input files based on the sam
 TODO.
 
 
+
+## Contribution guidlines
+
+- `main` branch is for stable code
+- `develop/{feature}` or `develop/{user}` for changes, but try to keep `main` up to date and minimize lifetime of branches
+- For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
+- The configs folder in the source is to be kept for test config files and example cases that would be benefical to the wider community.  
+
+## Coding Style Standards
+
+The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used. 
+Although we will likely lint with `flake` so don't worry too much about it. 
+
+
+## Testing
+### Automated Testing at Pull Requests
+The `tests` folder contains unit tests. These can be run manually by using the command:
+
+    pytest tests/automated_tests_no_HPC -v -s
+
+and will also be automatically run by Github Actions at certain pushes and pull requests. It is recommended to locally run the tests before making a commit.
+
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests.
+
+
+### Linting Tests
+A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
+To check the linting locally and get a full overview of all possible issues, run:  
+
+For single file check:  
+
+    pylint /path/to/file.py --disable=R,C,W,E0401
+
+For all python files in $PWD:  
+
+    pylint $(find $PWD -name "*.py") --disable=R,C,W,E0401
+
+
+### Machine Specific Tests
+For now, no HPC specific tests are run as part of the automated testsing procedure. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. 
+
+Alternatively, one may ceate a tests folder for a specific machine in  `/enchanted-surrogates/tests/MACHINE_NAME_tests`, which should be executable via
+
+    python -m pytest tests/MACHINE_NAME_tests
+
+
 ## Other
 
 Github repository: https://github.com/DIGIfusion/enchanted-surrogates
@@ -94,3 +140,9 @@ If you use this package in your research, please cite:
   url =          {https://github.com/DIGIfusion/enchanted-surrogates}
 }
 ```
+
+## Acknowledgements
+The development of this framework has been support by multiple funding sources:
+- Research Council of Finland project numbers: 355460, 358941.
+- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
+- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 

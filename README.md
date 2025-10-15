@@ -2,16 +2,18 @@
 
 A framework for creating databases for surrogate models of complex physics codes.
 
+See Github Pages: https://digifusion.github.io/enchanted-surrogates/.
+
 ## Database generation for a simulation consists of: 
 
 1. Running the code
     - Every code has it's own runtime entry points (e.g., I/O, actual execution)
 2. On a search space
-    - e.g., hypercube, or efficiently searching across a space with active learinng
+    - e.g., hypercube, or efficiently searching across a space with active learing
 
 i.e., step 1. is repeated many times to fill volume spanned by 2. 
 
-Idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use mutliple searches types. 
+The idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use mutliple searches types. 
 
 In the simplest case, the iterative process could be automated via `batch` job submission on `SLURM`, but this doesn't scale well if we use different HPC systems. So, idea is to use [dask](https://jobqueue.dask.org/en/latest/examples.html#slurm-deployments). 
 
@@ -49,49 +51,6 @@ To add submodules:
 
 1. Compiling code
 2. Training downstream surrogate (outside of active learning)
-
-## Contribution guidlines
-
-- `main` branch is for stable code
-- `develop/{feature}` or `develop/{user}` for changes, but try to keep `main` up to date and minimize lifetime of branches
-- For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
-- The configs folder in the source is to be kept for test config files and example cases that would be benefical to the wider community.  
-
-## Coding Style Standards
-
-The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used. 
-Although we will likely lint with `flake` so don't worry too much about it. 
-
-
-## Testing
-### Automated Testing at Pull Request
-The `tests` folder contains unit tests. These can be run manually by using the command:
-
-    python -m pytest tests/automated_tests_no_HPC -v -s
-
-and will also be automatically run by Github Actions at certain pushes and pull-requests. It is recommended to manually run the tests before submitting a pull request.
-
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests.
-
-
-### Linting Tests
-A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
-To check the linting locally and get a full overview of all possible issues, run:  
-For single file check:  
-
-    pylint /path/to/file.py --disable=R,C,W,E0401
-
-For all python files in $PWD:  
-
-    pylint $(find $PWD -name "*.py") --disable=R,C,W,E0401
-
-
-### Machine Specific Tests
-For now, no HPC specific tests are run as part of the automated testsing procedure. So if you use enchanted surrogates on a specific machine it is your responsibility to test updates on that machine. 
-
-Alternatively, one may ceate a tests folder for a specific machine in  `/enchanted-surrogates/tests/MACHINE_NAME_tests`, which should be executable via
-
-    python -m pytest tests/MACHINE_NAME_tests
 
 ## Acknowledgements
 The development of this framework has been support by multiple funding sources:
