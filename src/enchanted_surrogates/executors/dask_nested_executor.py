@@ -5,6 +5,7 @@ import os
 import time
 import warnings
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from dask.distributed import print, as_completed, wait
 from enchanted_surrogates.utils.precise_imports import import_sampler
