@@ -1,26 +1,28 @@
 import os
-from .base_executor import Executor
+import subprocess
+import time
+import warnings
+import pandas as pd
+
+from dask_jobqueue import SLURMCluster
+from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
+
+from .base_executor import Executor
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
+from enchanted_surrogates.utils.precise_imports import import_sampler
+
+
 # Patch print inside the module if it uses bare `print()` calls
 simulation_task.print = dask_print
 # Override local print
 from dask.distributed import print
+
 # Alias the task function
 run_simulation_task = simulation_task.run_simulation_task
 
-from dask_jobqueue import SLURMCluster
-from dask.distributed import LocalCluster
-from enchanted_surrogates.utils.precise_imports import import_sampler
-import subprocess
-import time
-import warnings
-import uuid
-import numpy as np
-import pandas as pd
-import time
 
 
 class DaskExecutor(Executor):

@@ -1,19 +1,21 @@
 import os
 import sys
-from .base_runner import Runner
+import numbers
+from collections.abc import Iterable
+from datetime import datetime
 from time import sleep
 import numpy as np
 
+from .base_runner import Runner
 from enchanted_surrogates.utils.is_package_available import is_package_available
 
 if is_package_available('dask'):
-  from dask.distributed import print
+    from dask.distributed import print
 
-from collections.abc import Iterable
-import numbers
-from datetime import datetime
+
 def is_number(x):
     return isinstance(x, numbers.Number)
+
 
 def is_iterable(x, *, treat_strings_as_iterable=True):
     if not isinstance(x, Iterable):
@@ -21,6 +23,7 @@ def is_iterable(x, *, treat_strings_as_iterable=True):
     if not treat_strings_as_iterable and isinstance(x, (str, bytes, bytearray)):
         return False
     return True
+
 
 class ExampleRunner(Runner):
     """

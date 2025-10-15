@@ -1,25 +1,21 @@
+"""
+TODO: Add module docstring
+"""
 import os
-from .base_executor import Executor
-from enchanted_surrogates.executors import simulation_task
-from enchanted_surrogates.utils.precise_imports import import_sampler
-import subprocess
 import time
 import warnings
-import uuid
-import numpy as np
 import pandas as pd
-from enchanted_surrogates.utils.precise_imports import import_executor
+from datetime import datetime
 from dask.distributed import print, as_completed, wait
 from enchanted_surrogates.utils.precise_imports import import_sampler
+from enchanted_surrogates.utils.precise_imports import import_executor
+from .base_executor import Executor
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
-from queue import Queue 
-import threading
-from datetime import datetime
 
-import logging
-from logging.handlers import RotatingFileHandler
-
-# TODO: IMPLIMENT DYNAMIC SCALE DOWN. The most likely method for success is to remove any storage of futures that could be tied to workers, stopping them from retireing. Then using cluster.scale().also call future.cancel() and future.release() del future to be sure it is not holding back the dynamic scaling
+# TODO: IMPLIMENT DYNAMIC SCALE DOWN. The most likely method for success is to remove
+# any storage of futures that could be tied to workers, stopping them from retireing.
+# Then using cluster.scale().also call future.cancel() and future.release() del future
+# to be sure it is not holding back the dynamic scaling
 
 class DaskNestedExecutor(Executor):
     """
