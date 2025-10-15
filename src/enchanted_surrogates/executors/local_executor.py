@@ -1,7 +1,7 @@
 import os
 import uuid
-from .base_executor import Executor
-from .simulation_task import run_simulation_task
+from enchanted_surrogates.executors.base_executor import Executor
+from enchanted_surrogates.executors.simulation_task import run_simulation_task
 from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
