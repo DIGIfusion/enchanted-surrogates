@@ -24,9 +24,9 @@ def load_configuration(config_path: str) -> argparse.Namespace:
 
     # In case sampler or runner is defined outside the executor.
     # This only works for non nested workflows.
-    if getattr(config, 'sampler_kwargs', None) is None:
+    if getattr(config, 'sampler', None):
         config.executor['sampler_kwargs'] = config.sampler
-    if getattr(config, 'runner_kwargs', None) is None:
+    if getattr(config, 'runner', None):
         config.executor['runner_kwargs'] = config.runner
     return config
 
