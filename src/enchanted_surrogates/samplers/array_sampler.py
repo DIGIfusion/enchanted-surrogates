@@ -15,7 +15,7 @@ class ArraySampler(Sampler):
         bounds (list of list of float or int): The bounds of each parameter.
         num_samples (list of int): The number of samples for each parameter.
         parameters (list of str): The names of the parameters.
-        total_budget (int): The total number of parameter combinations.
+        budget (int): The total number of parameter combinations.
         num_initial_points (int): The number of initial points in the sample space.
         samples (list of list of float or int): The generated parameter combinations.
         current_index (int): The index of the current parameter combination.
@@ -53,15 +53,15 @@ class ArraySampler(Sampler):
 
         self.parameters = parameters
         self.bounds = bounds
-        self.total_budget = np.prod(np.array([len(b) for b in bounds]))
-        if self.total_budget > 100000:
+        self.budget = np.prod(np.array([len(b) for b in bounds]))
+        if self.budget > 100000:
             raise Exception(
                 (
                     "Can not do array sampling on more than 10000 samples, ",
-                    f"you requested {self.total_budget}",
+                    f"you requested {self.budget}",
                 )
             )
-        self.batch_size = kwargs.get("batch_size", self.total_budget)
+        self.batch_size = kwargs.get("batch_size", self.budget)
         self.samples = list(self.generate_parameters())
         self.current_index = 0
 
