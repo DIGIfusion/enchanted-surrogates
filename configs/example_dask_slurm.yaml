@@ -1,0 +1,21 @@
+executor:
+  type: DaskExecutor
+  base_run_dir: "data_dir/dask_slurm"
+  SLURMcluster_kwargs:
+    account: "project_2009007"
+    queue: "small"
+    cores: 1 
+    memory: "1GB"
+    processes: 1
+    walltime: "00:05:00"
+    interface: "ib0"
+    job_name: enchanted-surrogates-example
+  scale_n_jobs: 1
+sampler:
+  type: RandomSampler
+  bounds: [[0.0, 1.0], [0.0, 10.0]]
+  budget: 4
+  parameters: ['c1', 'c2']
+runner:
+  type: ExampleRunner
+  other_params: {}
