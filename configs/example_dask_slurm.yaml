@@ -1,7 +1,7 @@
 executor:
   type: DaskExecutor
   base_run_dir: "data_dir/dask_slurm"
-  SLURMcluster_kwargs:
+  SLURMcluster_config:
     account: "project_2009007"
     queue: "small"
     cores: 1 

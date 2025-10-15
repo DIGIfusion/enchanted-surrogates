@@ -24,10 +24,17 @@ def load_configuration(config_path: str) -> argparse.Namespace:
 
     # In case sampler or runner is defined outside the executor.
     # This only works for non nested workflows.
-    if getattr(config, 'sampler', None):
-        config.executor['sampler_kwargs'] = config.sampler
-    if getattr(config, 'runner', None):
-        config.executor['runner_kwargs'] = config.runner
+    if 'sampler_config' not in config.executor:
+        if getattr(config, 'sampler', None):
+            config.executor['sampler_config'] = config.sampler
+        elif 'sampler' in config.executor:
+            config.executor['sampler_config'] = config.executor.pop('sampler')
+    if 'runner_config' not in config.executor:
+        if getattr(config, 'runner', None):
+            config.executor['runner_config'] = config.runner
+        elif 'runner' in config.executor:
+            config.executor['runner_config'] = config.executor.pop('runner')
+    print(config)
     return config
 
 
@@ -42,7 +49,7 @@ def main(args: argparse.Namespace):
     print(enchanted_wizard)
 
     executor_type = args.executor.pop("type")
-    executor = import_executor(type=executor_type, executor_kwargs=args.executor)
+    executor = import_executor(type=executor_type, executor_config=args.executor)
     print("Starting runs...")
     executor.start_runs()
     print("Shutting down scheduler and workers...")

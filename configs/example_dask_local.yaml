@@ -1,7 +1,7 @@
 executor:
   type: DaskExecutor
   base_run_dir: "data_dir/dask_local"
-  LocalCluster_kwargs:
+  LocalCluster_config:
     n_workers: 1
 sampler:
   type: RandomSampler

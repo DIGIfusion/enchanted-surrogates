@@ -23,7 +23,7 @@ class DaskNestedExecutor(Executor):
     TODO: add docstring
     """
 
-    def __init__(self, base_run_dir, executors:dict, sampler_kwargs:dict, *args, **kwargs):
+    def __init__(self, base_run_dir, executors:dict, sampler_config:dict, *args, **kwargs):
         """
         TODO: add docstring
         """
@@ -31,9 +31,9 @@ class DaskNestedExecutor(Executor):
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
         self.executor_names = list(executors.keys())
-        self.executors_kwargs = list(executors.values())
-        self.executor_types = [exe_kwargs['type'] for exe_kwargs in self.executors_kwargs]
-        self.runner_types = [executor_kwargs['runner_kwargs']['type'] for executor_kwargs in self.executors_kwargs]
+        self.executors_config = list(executors.values())
+        self.executor_types = [exe_config['type'] for exe_config in self.executors_config]
+        self.runner_types = [executor_config['runner_config']['type'] for executor_config in self.executors_config]
         self.dask_worker_std_out_dirs = [os.path.join(self.base_run_dir, f'worker_out_{self.runner_types[i]}_{i}') for i in range(len(executors))]
         print('THE EXECUTORS WILL BE RAN WITH THESE CODES IN THE FOLLOWING ORDER:\n',
               self.runner_types)
@@ -42,7 +42,9 @@ class DaskNestedExecutor(Executor):
         self.reuse_index = []
         self.keep_alive = []
         # take into account reusing executors feature might be in place
-        for exe_type, exe_kwargs in zip(self.executor_types, self.executors_kwargs):
+        for exe_type, exe_config in zip(self.executor_types, self.executors_config):
+            exe_config["base_run_dir"] = ""
+            exe_config["sampler_config"] = {}
             if exe_type in self.executor_names:
                 exe = import_executor(executors[exe_type]['type'], executors[exe_type])
                 index = self.executor_names.index(exe_type)
@@ -51,17 +53,17 @@ class DaskNestedExecutor(Executor):
                 self.reuse_index.append(index)
                 if index >= len(self.executors):
                     raise RuntimeError('YOU ARE TRYING TO REUSE AN EXECUTOR THAT HAS NOT YET BEEN CREATED, YOU CAN ONLY REUSE ALREADY MADE EXECUTORS')
-                exe.runner_kwargs = exe_kwargs['runner_kwargs']
+                exe.runner_config = exe_config['runner_config']
                 self.executors.append(exe)
                 
             else:
                 self.reuse_bool.append(False)
                 self.reuse_index.append(None)
-                self.executors.append(import_executor(exe_type,exe_kwargs))
+                self.executors.append(import_executor(exe_type, exe_config))
         
-        self.sampler_kwargs = sampler_kwargs#kwargs.get('sampler_kwargs')
-        sampler_type = self.sampler_kwargs.pop("type")
-        self.sampler = import_sampler(type=sampler_type, sampler_kwargs=self.sampler_kwargs) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_kwargs)
+        self.sampler_config = sampler_config#kwargs.get('sampler_config')
+        sampler_type = self.sampler_config.pop("type")
+        self.sampler = import_sampler(type=sampler_type, sampler_config=self.sampler_config) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_config)
 
         self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)
         for executor in self.executors:
@@ -143,7 +145,7 @@ class DaskNestedExecutor(Executor):
             # if self.do_dynamic_scale_down:
             #     self.start_dynamic_scale_down_background(exe_i=i, batch_num=batch_num)
             if i == 0:
-                print(f"STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
+                print(f"STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
                 sampler_i_params = self.sampler.all_samplers[i].parameters
                 sampler_cumulative_params += sampler_i_params
@@ -176,7 +178,7 @@ class DaskNestedExecutor(Executor):
                                 print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
                 
-                print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_kwargs['type']}")
+                print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 # start cluster or assign client when reusing
                 if self.reuse_bool[i]:
                     executor.client = self.executors[self.reuse_index[i]].client
@@ -227,7 +229,7 @@ class DaskNestedExecutor(Executor):
                         
                 if self.shutdown_finished_clusters:
                     cluster_status = [future.done() for future in self.all_futures[i-1]]
-                    print(f"STATUS OF CLUSTER: {i-1} | {self.executors[i-1].runner_kwargs['type']} | {cluster_status}")
+                    print(f"STATUS OF CLUSTER: {i-1} | {self.executors[i-1].runner_config['type']} | {cluster_status}")
                     if all(cluster_status) and not i-1 in self.keep_alive:
                         print(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
                         self.executors[i-1].clean()
@@ -265,7 +267,7 @@ class DaskNestedExecutor(Executor):
             
         if self.shutdown_finished_clusters:
             cluster_status = [future.done() for future in self.all_futures[-1]]
-            print(f"STATUS OF CLUSTER: {len(self.executors)-1} | {executor.runner_kwargs['type']} | {cluster_status}")
+            print(f"STATUS OF CLUSTER: {len(self.executors)-1} | {executor.runner_config['type']} | {cluster_status}")
             if all(cluster_status) and not len(self.executors) in self.keep_alive:
                 print('CLOSING WORKERS FOR EXECUTOR:', len(self.executors)-1)
                 self.executors[-1].clean()
@@ -382,7 +384,7 @@ class DaskNestedExecutor(Executor):
             self.succeded[exe_i] += 1
         completion_stats = {
             'header': f"BATCH {batch_num} COMPLETION STATS",
-            'subheader': f"{self.executors[exe_i].runner_kwargs['type']}",
+            'subheader': f"{self.executors[exe_i].runner_config['type']}",
             'NESTED DEPTH': f"{exe_i}",
             'COMPLETED': f"{self.completed[exe_i]}/{self.sampler.depth_num_runs[batch_num][exe_i]}",
             'SUCCEDED': f"{self.succeded[exe_i]}/{self.sampler.depth_num_runs[batch_num][exe_i]}"

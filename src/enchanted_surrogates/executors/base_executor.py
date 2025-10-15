@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 
 class Executor(ABC):
     def __init__(
-        self, sampler_kwargs, runner_kwargs, base_run_dir, output_dir=None, *args, **kwargs
+        self, sampler_config, runner_config, base_run_dir, output_dir=None, *args, **kwargs
     ):
-        self.sampler_kwargs = sampler_kwargs
-        self.runner_kwargs = runner_kwargs
+        self.sampler_config = sampler_config
+        self.runner_config = runner_config
         self.base_run_dir = base_run_dir
         self.output_dir = output_dir  # TODO rename
 

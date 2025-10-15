@@ -39,7 +39,7 @@ class BayesianOptimizationSampler(Sampler):
         async_samp (bool): Whether to use asynchronous sampling.
         parameters (list): List of parameter names.
         parser (type): Parser type for collecting sample information.
-        parser_kwargs: Parser kwargs
+        parser_config: Parser kwargs
     """
 
     def __init__(
@@ -67,14 +67,14 @@ class BayesianOptimizationSampler(Sampler):
         self.async_samp = kwargs.get('async_samp', False)  # Default value for async sampling
         self.parameters = kwargs.get('parameters', [])  # List of parameter names
         self.parser_type = kwargs.get('parser', None)  # Parser type for sample information
-        self.parser_kwargs = kwargs.get('parser_kwargs',{})
-        #if self.parser_kwargs == None:
+        self.parser_config = kwargs.get('parser_config',{})
+        #if self.parser_config == None:
         if self.parser_type == None:
             self.parser = None
         else:
         #        self.parser = import_parser(self.parser_type)
         #else:
-            self.parser = import_parser(self.parser_type, self.parser_kwargs)
+            self.parser = import_parser(self.parser_type, self.parser_config)
         self.futures = []
 
 

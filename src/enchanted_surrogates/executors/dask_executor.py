@@ -32,36 +32,34 @@ class DaskExecutor(Executor):
     SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
     """
 
-    def __init__(self, runner_kwargs, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
         Initializes the DaskExecutor.
 
         Args:
             base_run_dir (str): Base directory for storing run outputs.
-            sampler_kwargs (dict): Arguments for the sampler, including its type.
-            runner_kwargs (dict): Arguments for the runner.
+            sampler_config (dict): Arguments for the sampler, including its type.
+            runner_config (dict): Arguments for the runner.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments, including:
                 - type (str): Type of executor.
                 - scale_n_jobs (int): Number of jobs to scale the cluster to.
-                - SLURMcluster_kwargs (dict): Arguments for SLURMCluster.
-                - LocalCluster_kwargs (dict): Arguments for LocalCluster.
+                - SLURMcluster_config (dict): Arguments for SLURMCluster.
+                - LocalCluster_config (dict): Arguments for LocalCluster.
                 - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
         """
+        super().__init__(*args, **kwargs)
         print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
-        self.base_run_dir = kwargs.get('base_run_dir')
-        self.sampler_kwargs = kwargs.get('sampler_kwargs')
-        if self.sampler_kwargs:
-            self.sampler_type = self.sampler_kwargs.pop("type")
+        if self.sampler_config:
+            self.sampler_type = self.sampler_config.pop("type")
             self.sampler = import_sampler(
-                type=self.sampler_type, sampler_kwargs=self.sampler_kwargs)
+                type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
-        self.SLURMcluster_kwargs = kwargs.get('SLURMcluster_kwargs')
-        self.LocalCluster_kwargs = kwargs.get('LocalCluster_kwargs')
+        self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
+        self.LocalCluster_config = kwargs.get('LocalCluster_config')
         self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)  # for debugging purposes only
-        self.runner_kwargs = runner_kwargs
         self.cluster = None
         self.client = None
         self.expected_number_of_workers = None
@@ -83,21 +81,21 @@ class DaskExecutor(Executor):
         print('MAKING CLUSTER')
         worker_logs_dir = None
 
-        if self.SLURMcluster_kwargs:
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_kwargs.get('processes',1))
+        if self.SLURMcluster_config:
+            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
 
             if not slurm_out_dir:
                 slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
             worker_logs_dir = slurm_out_dir
             if not os.path.exists(slurm_out_dir):
                 os.makedirs(slurm_out_dir)
-            jed = self.SLURMcluster_kwargs.get('job_extra_directives')
+            jed = self.SLURMcluster_config.get('job_extra_directives')
             if not jed:
-                self.SLURMcluster_kwargs['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+                self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
             else:
-                self.SLURMcluster_kwargs['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
+                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
             print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
-            self.cluster = SLURMCluster(**self.SLURMcluster_kwargs)
+            self.cluster = SLURMCluster(**self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
             print('THE JOB SCRIPT FOR A WORKER IS:')
             print(self.cluster.job_script())
@@ -110,9 +108,9 @@ class DaskExecutor(Executor):
                 print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
                 self.wait_for_all_dask_jobs_running()
                                 
-        elif self.LocalCluster_kwargs:
-            self.expected_number_of_workers = self.LocalCluster_kwargs['n_workers']
-            self.cluster = LocalCluster(**self.LocalCluster_kwargs)
+        elif self.LocalCluster_config:
+            self.expected_number_of_workers = self.LocalCluster_config['n_workers']
+            self.cluster = LocalCluster(**self.LocalCluster_config)
             self.client = Client(self.cluster)
             
         if self.block_until_cluster_started:
@@ -251,7 +249,7 @@ class DaskExecutor(Executor):
                                       This signifies that there is already data in this folder. 
                                       Aborting to avoid accidental data mixing.''' )
 
-        print(f"STARTING RUNS FOR RUNNER {self.runner_kwargs['type']}, FROM WITHIN A {__class__}")
+        print(f"STARTING RUNS FOR RUNNER {self.runner_config['type']}, FROM WITHIN A {__class__}")
 
         if not self.client:
             self.start_cluster()
@@ -325,15 +323,15 @@ class DaskExecutor(Executor):
         run_dirs = []
         fut_to_rundir = {}
         for sample_params in samples:
-            sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_kwargs['type']) 
+            sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
-                run_simulation_task, self.runner_kwargs, sample_run_dir, sample_params
+                run_simulation_task, self.runner_config, sample_run_dir, sample_params
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir
         p_info = [str(sample_params)+f'| {rd}' for sample_params,rd in zip(samples,run_dirs)]
-        print(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_kwargs['type']} \n",'\n'.join(p_info))
+        print(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_config['type']} \n",'\n'.join(p_info))
         
         if include_fut_to_rundir:
             return futures, fut_to_rundir
