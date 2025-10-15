@@ -3,7 +3,7 @@ from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
 from enchanted_surrogates.executors import simulation_task
-from enchanted_surrogates.runners.make_run_dir import make_run_dir
+from enchanted_surrogates.utils.make_run_dir import make_run_dir
 # Patch print inside the module if it uses bare `print()` calls
 simulation_task.print = dask_print
 # Override local print
