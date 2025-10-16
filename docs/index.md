@@ -9,7 +9,7 @@ has_children: true
 
 A framework for creating databases for surrogate models of complex physics codes.{: .fs-6 .fw-300 }
 
-[View it on GitHub][https://github.com/DIGIfusion/enchanted-surrogates]{: .btn .fs-5 .mb-4 .mb-md-0 }
+[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){: .btn .fs-5 .mb-4 .mb-md-0 }
 
 ---
 ## How to install
