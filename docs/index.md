@@ -17,10 +17,11 @@ A framework for creating databases for surrogate models of complex physics codes
 {: .warning }
 This documentation is under development.
 
+Machine learning surrogate model development requires large amounts of data, which is often generated using complex and computationally expensive simulation codes. The `enchanted-surrogates` package provides a flexible framework for creating databases for surrogate models of such complex physics codes.
 Database generation for a simulation consists of: 
 
 1. Running the code
-    - Every code has it's own runtime entry points (e.g., I/O, actual execution)
+    - Every code has it's own runtime entry points (e.g., I/O, actual execution) and computational resource needs
 2. On a search space
     - e.g., hypercube, or efficiently searching across a space with active learing
 
@@ -71,6 +72,14 @@ runner:
     type: ...
 ```
 
+### Quick start example
+
+The following command runs the example local executor with the example configuration file. It creates a run directory in the current working directory, where it generates random samples and runs the example code.
+
+```bash
+python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_local.yaml
+```
+
 
 
 ## Code structure
@@ -105,7 +114,7 @@ We encourage contributions to the enchanted-surrogates package! Here are some gu
 - `develop` branch is for latest development code (merges from feature branches)
 - `develop/{feature}` or `develop/{user}` for changes.
 - `bug/{descriptive_name}` for bug fixes.
-- **One feature or fix per branch/per pull request**. This ensures that changes are isolated and easier to review.
+- **One feature or fix per pull request**. This ensures that changes are isolated and easier to review. Be respectful of your fellow developers and create small, focused pull requests.
 - Use pull requests to merge branches. Delete branch after merge.
 - Use `Issues` for bug reports, feature requests, etc.
 - For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
@@ -163,7 +172,7 @@ If you use this package in your research, please cite:
 ```bibtex
 @Misc{enchanted-surrogates,
   title =        {Enchanted Surrogates: A flexible framework for surrogate modelling of fusion plasma simulations},
-  author =       {},
+  author =       {A. Kit, A.M. Bruncrona, D. Jordan, A.E. Järvinen},
   howpublished = {Github},
   year =         {2025},
   url =          {https://github.com/DIGIfusion/enchanted-surrogates}
