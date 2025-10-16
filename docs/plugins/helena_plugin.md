@@ -173,7 +173,7 @@ To improve robustness, two modifications can be applied:
    \Delta apf = apf_{k} - apf_{k-1}
    $$
 
-   is restricted to $|\Delta apf| \leq \Delta apf^{\max}$ (with $\Delta apf^{\max} = 2.$ in the code.  TODO: make this user-defined in the config file).
+   is restricted to $\|\Delta apf \| \leq \Delta apf^{\max}$ (with $\Delta apf^{\max} = 2.$ in the code.  TODO: make this user-defined in the config file).
 
 
 
