@@ -127,6 +127,10 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
 6. **Github Actions**:
    - The plugin template contains a GitHub Actions workflow setup to automate testing and deployment. Make sure the tests pass.
 
+7. **Documentation**:
+   - Update the `README.md` file with information about your plugin, including installation instructions, usage examples, and any other relevant details.
+   - In case you want to add your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins.
+
 
 ## Existing plugins
 
