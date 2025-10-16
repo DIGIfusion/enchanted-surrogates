@@ -89,7 +89,7 @@ TODO.
 - For longer term items to be integrated, e.g., Active Learning, suggest to use `Issues` followed by a branch. 
 - The configs folder in the source is to be kept for test config files and example cases that would be benefical to the wider community.  
 
-## Coding Style Standards
+### Coding Style Standards
 
 The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used. 
 Although we will likely lint with `flake` so don't worry too much about it. 
@@ -127,9 +127,11 @@ Alternatively, one may ceate a tests folder for a specific machine in  `/enchant
     python -m pytest tests/MACHINE_NAME_tests
 
 
-## Other
+## About the project
 
-Github repository: https://github.com/DIGIfusion/enchanted-surrogates
+### License
+
+Enchanted surrogates is distributed by an MIT license.
 
 
 ### Citation
@@ -146,7 +148,7 @@ If you use this package in your research, please cite:
 }
 ```
 
-## Acknowledgements
+### Acknowledgements
 The development of this framework has been support by multiple funding sources:
 - Research Council of Finland project numbers: 355460, 358941.
 - EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
