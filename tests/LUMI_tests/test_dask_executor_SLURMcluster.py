@@ -23,20 +23,20 @@ def test_dask_executor():
     assert user_config['project']
     
     # -- Executor
-    executor_kwargs = {
+    executor_config = {
         'type': 'DaskExecutor',
         'base_run_dir': f"{os.path.dirname(__file__)}/example_base_run_dir",
         'block_unitil_cluster_started': True, # default False: for debugging purposes
-        'sampler_kwargs':{
+        'sampler_config':{
             'type': 'RandomSampler',
             'bounds':[[-5, 5], [0, 1]],
             'parameters':['c1', 'c2'],
             'total_budget':50
         },
-        'runner_kwargs':{
+        'runner_config':{
             'type': 'ExampleRunner'
         },
-        'SLURMcluster_kwargs':{
+        'SLURMcluster_config':{
             'name':'es-dask_cluster', # This can be used by dask to seperate clusters and avoid confusion
             'cores':1, #
             'memory':'500MB', # Memory per node to be split between the number of workers on that node
@@ -52,19 +52,19 @@ def test_dask_executor():
                 f"export PYTHONPATH={user_config['path_to_enchanted-surrogates']}:$PYTHONPATH"
             ]
         },
-        'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_kwargs['processes'] number workers on each node
+        'scale_n_jobs': 2 # used by dask-jobqueue to submit n sbatch jobs where each job requests a single node and starts SLURMcluster_config['processes'] number workers on each node
     }
 
-    if os.path.exists(executor_kwargs['base_run_dir']):
-        print('REMOVING OLD BASE RUN DIR: ',executor_kwargs['base_run_dir'])
-        os.system(f"rm -r {executor_kwargs['base_run_dir']}")
+    if os.path.exists(executor_config['base_run_dir']):
+        print('REMOVING OLD BASE RUN DIR: ',executor_config['base_run_dir'])
+        os.system(f"rm -r {executor_config['base_run_dir']}")
 
     # create the executor
-    executor = DaskExecutor(**executor_kwargs, **config)
+    executor = DaskExecutor(**executor_config, **config)
     
     executor.start_runs()
 
-    assert os.path.exists(os.path.join(executor_kwargs['base_run_dir'],'ENCHANTED.FINISHED'))
+    assert os.path.exists(os.path.join(executor_config['base_run_dir'],'ENCHANTED.FINISHED'))
 
     # TODO clean up test
     # shutil.rmtree(base_run_dir)

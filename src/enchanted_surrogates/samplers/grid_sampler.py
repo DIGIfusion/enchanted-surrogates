@@ -30,9 +30,7 @@ class GridSampler(Sampler):
         get_next_parameter: Gets the next parameter combination.
     """
 
-    BATCH_SAMPLE_SIZE = 1
-
-    def __init__(self, bounds, num_samples, parameters):
+    def __init__(self, bounds, num_samples, parameters, *args, **kwargs):
         """
         Initializes the Grid sampler.
 
@@ -49,9 +47,10 @@ class GridSampler(Sampler):
         self.parameters = parameters
         self.bounds = bounds
         self.num_samples = num_samples
-
         # check for stupidity
         self.budget = np.prod(np.array(num_samples))
+        self.batch_size = kwargs.get("batch_size", self.budget)
+
         if self.budget > 100000:
             raise Exception(
                 (
@@ -89,7 +88,7 @@ class GridSampler(Sampler):
         """
         list_param_dicts = []
 
-        for _ in range(self.BATCH_SAMPLE_SIZE):
+        for _ in range(self.batch_size):
             if self.current_index >= len(self.samples):
                 break
             params = self.samples[self.current_index]

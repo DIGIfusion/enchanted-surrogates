@@ -9,12 +9,13 @@ class RandomSampler(Sampler):
         self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
+        self.batch_size = kwargs.get("batch_size", self.budget)
 
     def get_next_samples(self) -> list[dict]:
         # TODO not use uniform?
         # TODO batch samples
         list_param_dicts = []
-        for _ in range(self.BATCH_SAMPLE_SIZE):
+        for _ in range(self.batch_size):
             params = [np.random.uniform(low, high) for low, high in self.bounds]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
