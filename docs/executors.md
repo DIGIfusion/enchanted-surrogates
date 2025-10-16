@@ -12,6 +12,7 @@ Description of different executors available in the enchanted-surrogates package
 ## Local Executor
 
 TODO.
+Example configuration: /configs/example_local.yaml
 
 ## Joblib Executor
 
@@ -20,7 +21,10 @@ TODO.
 ## Dask Executor
 
 Dask documentation: https://jobqueue.dask.org/en/latest/
+
 See cluster specific documentation for more details.
+
+
 
 Other arguments:
 
@@ -29,7 +33,6 @@ job_script_prologue: ['module load your-modules-here',],
 job_extra_directives: [
     '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out', 
     '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'], 
-
 ```
 
 ### Local cluster
@@ -43,8 +46,9 @@ n_workers: 2,
 threads_per_worker: 1,
 memory_limit: '12GB', 
 processes: 1
-
 ```
+
+Example configuration: /configs/example_dask_local.yaml
 
 ### SLURM cluster
 
@@ -61,6 +65,7 @@ config_name: 'slurm',
 interface: 'ib0', 
 ```
 
+Example configuration: /configs/example_dask_slurm.yaml
 
 
 ## Nested executors
