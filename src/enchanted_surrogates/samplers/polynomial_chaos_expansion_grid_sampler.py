@@ -9,6 +9,9 @@ import pandas as pd
 # import matplotlib.pyplot as plt
 # plt.rcParams.update({'font.size': 24})
 import chaospy as cp
+import numpoly as npy
+
+
 import pickle
 import warnings
 
@@ -57,6 +60,7 @@ class PolynomialChaosExpansionGridSampler(Sampler):
         # Define a 2D uniform distribution over [0, 1]^2
         self.dist = cp.J(*[cp.Uniform(b[0], b[1]) for b in self.bounds])
         self.polynomials = None
+
         self.nodes = None
         self.weights = None
         self.weights_dict=None
@@ -81,8 +85,6 @@ class PolynomialChaosExpansionGridSampler(Sampler):
             list[dict[str, float]]: The initial parameters.
         """
         
-        self.polynomials = cp.generate_expansion(self.initial_poly_order, self.dist)
-
         # Use Gaussian quadrature to compute nodes and weights
         self.nodes, self.weights = cp.generate_quadrature(self.initial_poly_order, self.dist, rule=self.quadrature_rule, sparse=self.sparse)
         print('debug nodes, len', len(self.nodes), type(self.nodes), self.nodes)
@@ -134,8 +136,8 @@ class PolynomialChaosExpansionGridSampler(Sampler):
 
             # print("Any NaNs in weights?", np.isnan(weights).any())
             self.depreciated.append(len(self.train) - len(self.nodes.T))
-            fit_result = cp.fit_quadrature(self.polynomials, self.nodes, np.array(weights), evaluations)
-            self.coeffs = fit_result.coefficients
+            self.polynomials = cp.generate_expansion(self.poly_order, self.dist)
+            self.fitted_poly = cp.fit_quadrature(self.polynomials, self.nodes, np.array(weights), evaluations)
 
             # write previous batch info
             previous_batch_dir = os.path.join(self.base_run_dir,f'batch_{self.batch_number}')
@@ -145,7 +147,6 @@ class PolynomialChaosExpansionGridSampler(Sampler):
 
             # Get next samples
             self.poly_order += 1
-            self.polynomials = cp.generate_expansion(self.poly_order, self.dist)
 
             # Use Gaussian quadrature to compute nodes and weights
             if self.sparse:
@@ -174,6 +175,12 @@ class PolynomialChaosExpansionGridSampler(Sampler):
                 print(f'Exceeding budget of {self.budget} samples. Stopping sampling.')
                 return []
             return samples
+        
+    # pce_model: callable that evaluates PCE at points with shape (dim, n_points)
+    # def pce_model(self, points):
+    #     # cp.call(polynomials, points) -> shape (n_basis, n_points)
+    #     vals = cp.call(self.polynomials, points)          # shape (n_basis, n_points)
+    #     return (vals.T @ self.coeffs).ravel()             # shape (n_points,)
     
     def save_poly_grid(self, batch_dir):
         with open(os.path.join(batch_dir, 'train.pkl'), 'wb') as file:
@@ -188,30 +195,37 @@ class PolynomialChaosExpansionGridSampler(Sampler):
     def write_batch_info(self, batch_dir):
         num_samples = len(self.nodes.T)
         # Construct the PCE surrogate model
-        pce_model = cp.call(self.polynomials, self.coeffs)
+        
+        # # Expectation is the first coefficient (constant term)
+        # expectation = cp.E(pce_model, self.dist)
 
-        # Expectation is the first coefficient (constant term)
-        expectation = cp.E(pce_model, self.dist)
+        # if len(expectation) > 1:
+        #     expectation=expectation[0]
+        # else:
+        #     print('EXPECTATION IS A SCALER AS IT SHOULD BE', len(expectation), expectation)
 
-        if len(expectation) > 1:
-            expectation=expectation[0]
-        else:
-            print('EXPECTATION IS A SCALER AS IT SHOULD BE', len(expectation), expectation)
+        # # Variance is the sum of squared non-constant coefficients
+        # variance = cp.Var(pce_model, self.dist)
+        # if len(variance)>1:
+        #     variance = np.sum(variance)
+        # # First-order Sobol indices
+        # sobol_first = cp.Sens_m(pce_model, self.dist)
+        # if len(sobol_first.shape) > 1:
+        #     sobol_first = np.sum(sobol_first,axis=1)
+        # sobol_first_dict = {param+'_sobolF': sf for param, sf in zip(self.parameters, sobol_first)}
+        # # Total-order Sobol indices
+        # sobol_total = cp.Sens_t(pce_model, self.dist)
+        # if len(sobol_total) > 1:
+        #     sobol_total = np.sum(sobol_total, axis=1)
+        # sobol_total_dict = {param+'_sobolT': st for param, st in zip(self.parameters, sobol_total)}
+        
+        expectation = cp.E(self.fitted_poly, self.dist)
+        variance = cp.Var(self.fitted_poly, self.dist)
+        sobol_first = cp.Sens_m(self.fitted_poly, self.dist)
+        sobol_total = cp.Sens_t(self.fitted_poly, self.dist)
 
-        # Variance is the sum of squared non-constant coefficients
-        variance = cp.Var(pce_model, self.dist)
-        if len(variance)>1:
-            variance = np.sum(variance)
-        # First-order Sobol indices
-        sobol_first = cp.Sens_m(pce_model, self.dist)
-        if len(sobol_first.shape) > 1:
-            sobol_first = np.sum(sobol_first,axis=1)
-        sobol_first_dict = {param+'_sobolF': sf for param, sf in zip(self.parameters, sobol_first)}
-        # Total-order Sobol indices
-        sobol_total = cp.Sens_t(pce_model, self.dist)
-        if len(sobol_total) > 1:
-            sobol_total = np.sum(sobol_total, axis=1)
-        sobol_total_dict = {param+'_sobolT': st for param, st in zip(self.parameters, sobol_total)}
+        sobol_first_dict = {param + '_sobolF': sf for param, sf in zip(self.parameters, sobol_first)}
+        sobol_total_dict = {param + '_sobolT': st for param, st in zip(self.parameters, sobol_total)}
         
         all_batch_info = {}
         all_batch_info.update({'num_samples':[num_samples], 'num_depreciated':self.depreciated[-1], 'total_runs':len(self.train), 'poly_order':self.poly_order, 'mean':[expectation], 'std':[np.sqrt(variance)]})

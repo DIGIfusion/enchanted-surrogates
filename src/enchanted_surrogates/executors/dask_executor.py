@@ -3,6 +3,7 @@ from .base_executor import Executor
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
 import dask
+from enchanted_surrogates.utils.time_format import format_sec
 
 dask.config.set({
     "distributed.scheduler.worker-ttl": "180s"
@@ -342,7 +343,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                 if not samples:
                     shutil.rmtree(batch_dir)
                     break
-                if not self.sampler.has_budget:
+                if self.sampler.submitted > self.sampler.budget:
                     shutil.rmtree(batch_dir)
                     break
                 
@@ -386,11 +387,12 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                         
                                         
                     print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{len(futures)}] Futures Completed ({((i+1)/len(futures))*100:.1f}%)","|",f"[{num_success}/{len(futures)}] Futures Succeded ({(num_success/len(futures))*100:.1f}%)")
-                    print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%) \n{'_'*100}")
-                        
+                    print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")
+                    print(f"TIME PASSED: {format_sec(time.time()-start)} d - hh:mm:ss \n {'_'*100}")
+                    
             self.current_batch += 1
         
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
+        print('WALLTIME FOR ENCHANTED SURROGATES:', format_sec(time.time()-start),'d h:m:s')
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
             print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
         print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)

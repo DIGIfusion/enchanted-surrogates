@@ -477,7 +477,12 @@ https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
             return False
     
     # currently only works with point in the unit cube.     
-    def surrogate_predict(self, box_points, n_jobs=0):
+    def surrogate_predict(self, points, n_jobs=0, space='box_space'):
+        if space == 'box_space':
+            unit_points = self.points_transform_box2unit(points)
+        else:
+            unit_points = points
+
         self.gridStorage = self.grid.getStorage()
         alpha = pysgpp.DataVector(self.gridStorage.getSize())
         for i in range(self.gridStorage.getSize()):
@@ -485,15 +490,14 @@ https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
             unit_point = ()
             for j in range(self.dim):
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
-            
             box_point = self.point_transform_unit2box(unit_point)
             alpha[i] = float(self.lookup_function(box_point))
         
         pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(alpha)
         
-        def batch_predict(box_points):
+        def batch_predict(unit_points):
             import pysgpp as sg
-            unit_points = np.array(self.points_transform_box2unit(np.array(box_points))).tolist()
+            unit_points = np.array(unit_points).tolist()
             unit_points_dm = sg.DataMatrix(unit_points)
             opEval = sg.createOperationMultipleEval(self.grid, unit_points_dm)
             results = sg.DataVector(len(unit_points))
@@ -502,18 +506,54 @@ https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
             # ans = np.array([results.get(i) for i in range(len(positions))])
             return ans
         if n_jobs==0:
-            return batch_predict(box_points)
+            return batch_predict(unit_points)
         else:
             if n_jobs == -1:
                 n_jobs = cpu_count()
-            split_box_points = np.array_split(box_points, n_jobs)
-            ans_list = Parallel(n_jobs=n_jobs)(delayed(batch_predict)(box_points) for box_points in split_box_points)
+            split_box_points = np.array_split(unit_points, n_jobs)
+            ans_list = Parallel(n_jobs=n_jobs)(delayed(batch_predict)(unit_points) for unit_points in split_box_points)
             return np.concatenate(ans_list, axis=0)
     
     def quadrature_integral(self):
         op_quad = pysgpp.createOperationQuadrature(self.grid)
         unit_integral = op_quad.doQuadrature(self.alpha)
         return unit_integral
+    
+    def combi_grid_analysis(self):
+        "This converts the heirarchial grid function into a combi-grid global function that can be used for expectation, var and sobol indicies calculation"
+        treeStorage_all = pysgpp.convertHierarchicalSparseGridToCombigrid(self.grid.getStorage(),
+                                                               pysgpp.GridConversionTypes_ALLSUBSPACES)
+        surrogate_predict_unit = lambda points: self.surrogate_predict(points, n_jobs=0, space='unit_space')
+        func = pysgpp.MultiFunc(surrogate_predict_unit)    
+        opt_all = pysgpp.CombigridMultiOperation.createExpUniformLinearInterpolation(self.dim, func)
+        opt_all.getLevelManager().addLevelsFromStructure(treeStorage_all)
+        
+        # create polynomial basis
+        config = pysgpp.OrthogonalPolynomialBasis1DConfiguration()
+        config.polyParameters.type_ = pysgpp.OrthogonalPolynomialBasisType_LEGENDRE
+        basisFunction = pysgpp.OrthogonalPolynomialBasis1D(config)
+        
+        # create polynomial chaos surrogate from sparse grid
+        surrogateConfig = pysgpp.CombigridSurrogateModelConfiguration()
+        surrogateConfig.type = pysgpp.CombigridSurrogateModelsType_POLYNOMIAL_CHAOS_EXPANSION
+        surrogateConfig.loadFromCombigridOperation(opt_all)
+        surrogateConfig.basisFunction = basisFunction
+        pce = pysgpp.createCombigridSurrogateModel(surrogateConfig)
+        # compute sobol indices
+        sobol_indices = pysgpp.DataVector(1)
+        total_indices = pysgpp.DataVector(1)
+        pce.getComponentSobolIndices(sobol_indices)
+        pce.getTotalSobolIndices(total_indices)
+        # print results
+        print('COMBIGRID ANALYSIS')
+        print("Mean: {} Variance: {}".format(pce.mean(), pce.variance()))
+        print("Sobol indices {}".format(sobol_indices.toString()))
+        print("Total Sobol indices {}".format(total_indices.toString()))
+        print("Sum {}\n".format(sobol_indices.sum()))
+        
+        out_dict = {'mean':pce.mean, 'std': np.sqrt(pce.variance), 'sobolF':sobol_indices, 'sobolT':total_indices}
+        
+        return out_dict
     
     def quadrature_function_integral(self, function, acted_on='box_point'):
         # this would be useful for calculating expectation values, variances and sobol indicies, even with non uniform probability distirbutions
