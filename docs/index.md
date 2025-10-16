@@ -67,10 +67,10 @@ Modules for generating samples according to some rule set.
 Modules for distributing and executing the runs. 
  
 ### Runners
-Code specifiic modules for executing the code in question. Commonly paired with a code specific parser. 
+Code-specific modules for executing the code in question. Commonly paired with a code-specific parser. 
 
 ### Parsers
-Code specific modules for reading and writing files produced by the code. 
+Code-specific modules for reading and writing files produced by the code. 
 
 
 The executor initalizes a sampler and fetches samples from it. The executor initialized some cluster or job queue or similar. 
