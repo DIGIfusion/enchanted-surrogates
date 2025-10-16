@@ -7,6 +7,7 @@ parent: Plugins
 
 # HELENA plugin
 
+The HELENA plugin provides a parser and runner for the HELENA MHD equilibrium code. You need a compiled HELENA executable to use this plugin. The plugin supports different input parameter types and can handle beta iteration to achieve a target normalized beta.
 Mandatory fields in the configuration file for using the HELENA plugin:
 
 ```yaml
@@ -19,6 +20,7 @@ runner:
     input_parameter_type: 1
 
 ```
+
 
 
 ## Input parameter types
