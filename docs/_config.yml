@@ -29,3 +29,7 @@ callouts:
   warning:
     title: Warning
     color: red
+
+
+include:
+  - /docs/_includes/head_custom.html
