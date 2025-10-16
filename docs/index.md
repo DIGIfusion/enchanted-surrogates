@@ -13,6 +13,7 @@ A framework for creating databases for surrogate models of complex physics codes
 [View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){: .btn .fs-5 .mb-4 .mb-md-0 }
 
 ---
+
 {: .warning }
 This documentation is under development.
 
