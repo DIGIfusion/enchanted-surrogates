@@ -103,7 +103,7 @@ def get_snake_and_pascal(string):
     return string_snake, string_pascal
 
 
-def import_sampler(type, sampler_kwargs):
+def import_sampler(type, sampler_config):
     """
     Dynamically imports and instantiates a sampler class based on naming convention.
 
@@ -111,7 +111,7 @@ def import_sampler(type, sampler_kwargs):
     ----------
     type : str
         The name of the sampler (in snake_case or PascalCase).
-    sampler_kwargs : dict
+    sampler_config : dict
         Keyword arguments to pass to the sampler constructor.
 
     Returns
@@ -126,18 +126,18 @@ def import_sampler(type, sampler_kwargs):
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
     eps = load_plugins()
-    if 'type' in sampler_kwargs:
-        sampler_kwargs.pop('type')
+    if 'type' in sampler_config:
+        sampler_config.pop('type')
     if type_snake in eps:
-        sampler = eps[type_snake](**sampler_kwargs)
+        sampler = eps[type_snake](**sampler_config)
     else:
         sampler = getattr(
             importlib.import_module(
-                f'enchanted_surrogates.samplers.{type_snake}'), type_pascal)(**sampler_kwargs)
+                f'enchanted_surrogates.samplers.{type_snake}'), type_pascal)(**sampler_config)
     return sampler
 
 
-def import_runner(type, runner_kwargs):
+def import_runner(type, runner_config):
     """
     Dynamically imports and instantiates a runner class based on naming convention.
 
@@ -145,7 +145,7 @@ def import_runner(type, runner_kwargs):
     ----------
     type : str
         The name of the sampler (in snake_case or PascalCase).
-    sampler_kwargs : dict
+    sampler_config : dict
         Keyword arguments to pass to the sampler constructor.
 
     Returns
@@ -162,15 +162,15 @@ def import_runner(type, runner_kwargs):
     eps = load_plugins()
 
     if type_snake in eps:
-        runner = eps[type_snake](**runner_kwargs)
+        runner = eps[type_snake](**runner_config)
     else:
         runner = getattr(
             importlib.import_module(
-                f'enchanted_surrogates.runners.{type_snake}'), type_pascal)(**runner_kwargs)
+                f'enchanted_surrogates.runners.{type_snake}'), type_pascal)(**runner_config)
     return runner
 
 
-def import_executor(type, executor_kwargs):
+def import_executor(type, executor_config):
     """
     Dynamically imports and instantiates a executor class based on naming convention.
 
@@ -178,7 +178,7 @@ def import_executor(type, executor_kwargs):
     ----------
     type : str
         The name of the executor (in snake_case or PascalCase).
-    executor_kwargs : dict
+    executor_config : dict
         Keyword arguments to pass to the executor constructor.
 
     Returns
@@ -195,14 +195,14 @@ def import_executor(type, executor_kwargs):
     eps = load_plugins()
 
     if type_snake in eps:
-        cls = eps[type_snake](**executor_kwargs)
+        cls = eps[type_snake](**executor_config)
     else:
         cls = getattr(
             importlib.import_module(
-                f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_kwargs)
+                f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_config)
     return cls
 
-def import_parser(type, parser_kwargs):
+def import_parser(type, parser_config):
     """
     Dynamically imports and instantiates a parser class based on naming convention.
 
@@ -210,7 +210,7 @@ def import_parser(type, parser_kwargs):
     ----------
     type : str
         The name of the parser (in snake_case or PascalCase).
-    parser_kwargs : dict
+    parser_config : dict
         Keyword arguments to pass to the sampler constructor.
 
     Returns
@@ -227,7 +227,7 @@ def import_parser(type, parser_kwargs):
     eps = load_plugins()
 
     if type_snake in eps:
-        parser = eps[type_snake](**parser_kwargs)
+        parser = eps[type_snake](**parser_config)
     else:
-        parser = getattr(importlib.import_module(f'enchanted_surrogates.parsers.{type_snake}'),type_pascal)(**parser_kwargs)
+        parser = getattr(importlib.import_module(f'enchanted_surrogates.parsers.{type_snake}'),type_pascal)(**parser_config)
     return parser

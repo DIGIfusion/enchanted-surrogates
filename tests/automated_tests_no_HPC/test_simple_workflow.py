@@ -18,9 +18,9 @@ def test_full_workflow_local(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 10
-    sampler_kwargs = {
+    sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-    runner_kwargs = {
+    runner_config = {
         'type': 'ExampleRunner'
     }
 
@@ -28,8 +28,8 @@ def test_full_workflow_local(tmp_path):
     # create the executor
 
     executor = LocalExecutor(
-        sampler_kwargs=sampler_kwargs,
-        runner_kwargs=runner_kwargs,
+        sampler_config=sampler_config,
+        runner_config=runner_config,
         base_run_dir=base_run_dir,
         **config)
     executor.start_runs()
@@ -49,19 +49,19 @@ def test_full_workflow_joblib(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 50
-    sampler_kwargs = {
+    sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
 
     # -- runner args
-    runner_kwargs = {
+    runner_config = {
         'type': 'ExampleRunner'
     }
 
     base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
     # create the executor
     executor = JoblibExecutor(
-        sampler_kwargs=sampler_kwargs,
-        runner_kwargs=runner_kwargs,
+        sampler_config=sampler_config,
+        runner_config=runner_config,
         base_run_dir=base_run_dir,
         **config)
     executor.start_runs()
@@ -79,19 +79,19 @@ def test_full_workflow_dask(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 50
-    sampler_kwargs = {
+    sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
 
     # -- runner args
-    runner_kwargs = {
+    runner_config = {
         'type': 'ExampleRunner'
     }
 
     base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
     # create the executor
     executor = DaskExecutor(
-        sampler_kwargs=sampler_kwargs,
-        runner_kwargs=runner_kwargs,
+        sampler_config=sampler_config,
+        runner_config=runner_config,
         base_run_dir=base_run_dir,
         **config)
     # executor.start_runs()   # Dask executor missing local cluster option

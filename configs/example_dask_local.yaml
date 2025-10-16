@@ -1,6 +1,8 @@
 executor:
-  type: LocalExecutor
-  base_run_dir: "data_dir/local"
+  type: DaskExecutor
+  base_run_dir: "data_dir/dask_local"
+  LocalCluster_config:
+    n_workers: 1
 sampler:
   type: RandomSampler
   bounds: [[0.0, 1.0], [0.0, 10.0]]

@@ -1,19 +1,21 @@
 import os
 import sys
-from .base_runner import Runner
+import numbers
+from collections.abc import Iterable
+from datetime import datetime
 from time import sleep
 import numpy as np
 
+from .base_runner import Runner
 from enchanted_surrogates.utils.is_package_available import is_package_available
 
 if is_package_available('dask'):
-  from dask.distributed import print
+    from dask.distributed import print
 
-from collections.abc import Iterable
-import numbers
-from datetime import datetime
+
 def is_number(x):
     return isinstance(x, numbers.Number)
+
 
 def is_iterable(x, *, treat_strings_as_iterable=True):
     if not isinstance(x, Iterable):
@@ -21,6 +23,7 @@ def is_iterable(x, *, treat_strings_as_iterable=True):
     if not treat_strings_as_iterable and isinstance(x, (str, bytes, bytearray)):
         return False
     return True
+
 
 class ExampleRunner(Runner):
     """
@@ -79,7 +82,7 @@ class ExampleRunner(Runner):
     def __init__(self, *args, **kwargs):
         self.parameter_mode = kwargs.get('parameter_mode', 0)
         self.sleep_sec = kwargs.get('sleep_sec', 0.01)
-    
+
     def get_sleep_sec(self):
         """
         Return a numeric sleep duration (seconds) derived from self.sleep_sec.
@@ -114,7 +117,9 @@ class ExampleRunner(Runner):
             return self.sleep_sec
         elif is_iterable(self.sleep_sec):
             if len(self.sleep_sec) > 2:
-                raise ValueError('RANDOM SLEEP BOUNDS MUST BE AN ITERABLE WITH ONLY TWO VALUES, LOWER BOUND AND UPPER BOUND. SELF.SLEEP_SEC HAS MORE THAN TWO VALUES')
+                raise ValueError(
+                    'RANDOM SLEEP BOUNDS MUST BE AN ITERABLE WITH ONLY TWO VALUES,'
+                    + ' LOWER BOUND AND UPPER BOUND. SELF.SLEEP_SEC HAS MORE THAN TWO VALUES')
             return np.random.uniform(*self.sleep_sec)
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
@@ -155,7 +160,6 @@ class ExampleRunner(Runner):
         are compatible with dataset and surrogate tooling.
         """
 
-        
         # Implementation for the example runner
         # Logic should follow something like
         # - via parser, write some input files there
@@ -173,45 +177,24 @@ class ExampleRunner(Runner):
 
         # TODO make example parser
         # parser.write_input(run_dir, params)
-        if self.parameter_mode == 0:
-            c1 = params["c1"]
-            c2 = params["c2"]
-            cmd = f'{sys.executable} -c "print({c1} + {c2})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_1": output, "success": True, 'other_code_output_A': 'something_from_code_A'}
-        elif self.parameter_mode == 1:
-            c3 = params["c3"]
-            c4 = params["c4"]
-            cmd = f'{sys.executable} -c "print({c3} + {c4})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_2": output, "success": True, 'other_code_output_B': 'something_from_code_B'}
-        elif self.parameter_mode == 2:
-            c5 = params["c5"]
-            c6 = params["c6"]
-            cmd = f'{sys.executable} -c "print({c5} + {c6})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_3": output, "success": True, 'other_code_output_C': 'something_from_code_C'}
+        if len(params.keys()) == 0:
+            c1 = 0.0
+            c2 = 0.0
+        elif len(params.keys()) == 1:
+            c1 = params[list(params.keys())[0]]
+            c2 = 0.0
         else:
-            raise ValueError(
-                'THE SET PARAMETER MODE DOES NOT MATCH ANY KNOWN PARAMETER MODE FOR EXAMPLE RUNNER')
+            c1 = params[list(params.keys())[0]]
+            c2 = params[list(params.keys())[1]]
+
+        cmd = f'{sys.executable} -c "print({c1} + {c2})" >> "{outfile}"'
+        os.system(cmd)
+        with open(outfile, 'r') as f:
+            output = float(f.read().strip())
+        sleep_sec = self.get_sleep_sec()
+        print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+        sleep(sleep_sec)
+        result = {"output": output, "success": True}
 
         # TODO execute some code actually
         # for now, just sum the two parameters
