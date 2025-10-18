@@ -3,48 +3,93 @@ import h5py
 import shutil
 import json
 import numpy as np
+import fnmatch
 
-def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5"):
+def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None):
+    """
+    Pack source_dir into an HDF5 file and optionally delete original files/dirs.
+    
+    Parameters
+    - source_dir (str)
+    - hdf5_name (str): name of the HDF5 file created inside source_dir
+    - skip_delete (iterable[str] | None): exact filenames or relative paths to preserve (examples: "keep.txt", "subdir/keep.dat")
+    - skip_patterns (iterable[str] | None): glob-style patterns matched against relative paths (examples: "*.log", "cache/*")
+    """
     print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
+    skip_delete = set(skip_delete or [])
+    skip_patterns = list(skip_patterns or [])
 
     with h5py.File(hdf5_path, "w") as h5f:
         for root, _, files in os.walk(source_dir):
             rel_root = os.path.relpath(root, source_dir)
+            if rel_root == '.':
+                rel_root = ''
             group = h5f.require_group(rel_root)
             for file in files:
                 file_path = os.path.join(root, file)
-                if file_path == hdf5_path:
-                    continue  # Skip the HDF5 file itself
+                # Skip the HDF5 file itself
+                if os.path.abspath(file_path) == os.path.abspath(hdf5_path):
+                    continue
 
                 with open(file_path, "rb") as f:
                     data = f.read()
 
-                dataset_path = os.path.join(rel_root, file)
+                # dataset path inside HDF5 uses posix-like relative path
+                dataset_path = os.path.join(rel_root, file) if rel_root else file
                 if dataset_path in h5f:
                     print(f"⚠️ Skipping duplicate: {dataset_path}")
-                else:
+                    continue
+
+                try:
+                    decoded = data.decode("utf-8")
+                    group.create_dataset(file, data=decoded)
+                    group[file].attrs["type"] = "text"
+                except (UnicodeDecodeError, ValueError):
                     try:
-                        decoded = data.decode("utf-8")
-                        group.create_dataset(file, data=decoded)
-                        group[file].attrs["type"] = "text"
-                    except (UnicodeDecodeError, ValueError):
-                        try:
-                            group.create_dataset(file, data=np.frombuffer(data, dtype='uint8'))
-                            group[file].attrs["type"] = "binary"
-                        except:
-                            print(f"⚠️ PATH FAILURE: {dataset_path}")
-                            
+                        group.create_dataset(file, data=np.frombuffer(data, dtype='uint8'))
+                        group[file].attrs["type"] = "binary"
+                    except Exception:
+                        print(f"⚠️ PATH FAILURE: {dataset_path}")
 
+    # Helper to decide whether to remove a path
+    def should_preserve(rel_path):
+        # Exact-name preserve
+        if rel_path in skip_delete:
+            return True
+        # Pattern preserve (glob-style)
+        for pat in skip_patterns:
+            if fnmatch.fnmatch(rel_path, pat):
+                return True
+        return False
 
-    ## Remove original files and folders
+    ## Remove original files and folders except HDF5 and any preserved entries
     for item in os.listdir(source_dir):
         item_path = os.path.join(source_dir, item)
-        if item_path != hdf5_path:
-            if os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-            else:
-                os.remove(item_path)
+        rel_item = item  # top-level relative path
+        if os.path.abspath(item_path) == os.path.abspath(hdf5_path):
+            continue  # never remove the archive itself
+        if should_preserve(rel_item):
+            print(f"⏭ Preserving top-level item: {rel_item}")
+            continue
+        if os.path.isdir(item_path):
+            # For directories, check if any child matches skip rules; if so, preserve entire dir
+            preserve_dir = False
+            for root, dirs, files in os.walk(item_path):
+                for name in dirs + files:
+                    rel_child = os.path.relpath(os.path.join(root, name), source_dir)
+                    rel_child = rel_child.replace(os.path.sep, '/')
+                    if should_preserve(rel_child):
+                        preserve_dir = True
+                        break
+                if preserve_dir:
+                    break
+            if preserve_dir:
+                print(f"⏭ Preserving directory because it contains preserved item: {rel_item}")
+                continue
+            shutil.rmtree(item_path)
+        else:
+            os.remove(item_path)
 
     # Add notebook and README
     create_jupyter_notebook(source_dir, hdf5_name)
@@ -52,6 +97,7 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5"):
 
     print(f"✅ Packed '{source_dir}' into '{hdf5_name}' with notebook and README.")
 
+# create_jupyter_notebook and create_readme unchanged (copy from original)
 def create_jupyter_notebook(target_dir, hdf5_name):
     notebook_path = os.path.join(target_dir, "explore_hdf5.ipynb")
     notebook_content = {
@@ -137,9 +183,6 @@ def create_jupyter_notebook(target_dir, hdf5_name):
     with open(notebook_path, "w") as f:
         json.dump(notebook_content, f)
 
-    with open(notebook_path, "w") as f:
-        json.dump(notebook_content, f)
-
 def create_readme(target_dir, hdf5_name):
     readme_path = os.path.join(target_dir, "README.txt")
     with open(readme_path, "w") as f:
@@ -170,8 +213,12 @@ Enjoy your compact, HPC-friendly archive!
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python hdf5.py /path/to/folder")
-    else:
-        folder = sys.argv[1]
-        convert_directory_to_hdf5(folder)
+    import argparse
+    parser = argparse.ArgumentParser(description="Pack a directory into a single HDF5 archive.")
+    parser.add_argument("folder", help="Path to folder to pack")
+    parser.add_argument("--name", "-n", default="archive.h5", help="HDF5 filename to create in the folder")
+    parser.add_argument("--preserve", "-p", nargs="*", default=[], help="Exact relative paths to preserve (top-level or subpaths)")
+    parser.add_argument("--preserve-pattern", "-P", nargs="*", default=[], help="Glob patterns (relative paths) to preserve")
+    args = parser.parse_args()
+
+    convert_directory_to_hdf5(args.folder, hdf5_name=args.name, skip_delete=args.preserve, skip_patterns=args.preserve_pattern)
