@@ -22,8 +22,8 @@ class MultiSampler(Sampler):
         """
         samplers_keys = samplers.keys
         samplers_types = [samplers[k]['type'] for k in samplers_keys()]
-        samplers_kwargs = [samplers[k] for k in samplers_keys()]
-        self.all_samplers = [import_sampler(type=sampler_type, sampler_kwargs=sampler_kwargs) for sampler_type, sampler_kwargs in zip(samplers_types,samplers_kwargs)]
+        samplers_config = [samplers[k] for k in samplers_keys()]
+        self.all_samplers = [import_sampler(type=sampler_type, sampler_config=sampler_config) for sampler_type, sampler_config in zip(samplers_types,samplers_config)]
         self.sample_all_combinations = sample_all_combinations
         
         self.budget = np.inf

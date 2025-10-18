@@ -5,7 +5,7 @@ import pandas as pd
 
 
 def run_simulation_task(
-        runner_kwargs: dict, run_dir: str, params: dict = None, future=None, timeout=None) -> dict:
+        runner_config: dict, run_dir: str, params: dict = None, future=None) -> dict:
     """
     Runs a single simulation task using the specified runner and parameters.
     Args:
@@ -15,8 +15,8 @@ def run_simulation_task(
     Raises:
     """
     os.makedirs(run_dir, exist_ok=True)
-    runner_type = runner_kwargs['type']
-    runner = import_runner(type=runner_type, runner_kwargs=runner_kwargs)
+    runner_type = runner_config['type']
+    runner = import_runner(type=runner_type, runner_config=runner_config)
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 

@@ -76,9 +76,9 @@ class SgppSampler(Sampler):
                 self.final_level = self.adaptive_strategy.kwargs.get('final_level')
             
             if self.refinement_type == 'anova_spatially_dimensionally':
-                # self.initial_dataset_sampler_kwargs = adaptive_strategy.get('initial_dataset_sampler_kwargs', None)
-                # if self.initial_dataset_sampler_kwargs:
-                #     self.initial_dataset_sampler = import_sampler(self.initial_dataset_sampler_kwargs['type'], self.initial_dataset_sampler_kwargs)
+                # self.initial_dataset_sampler_config = adaptive_strategy.get('initial_dataset_sampler_config', None)
+                # if self.initial_dataset_sampler_config:
+                #     self.initial_dataset_sampler = import_sampler(self.initial_dataset_sampler_config['type'], self.initial_dataset_sampler_config)
                 #     self.initial_dataset_path = None
                 # else:
                 self.initial_dataset_path = adaptive_strategy['initial_dataset_path']
@@ -110,12 +110,12 @@ https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
         self.mean_recent_surplus = np.inf
          
         # The test sampler is used to fill the space and run the surrogate model so that we can calcualte the integral and sobel indicies to brute_check for convergence in UQ situations.
-        brute_check_sampler_kwargs = kwargs.get('brute_check_sampler')
-        if brute_check_sampler_kwargs:
+        brute_check_sampler_config = kwargs.get('brute_check_sampler')
+        if brute_check_sampler_config:
             self.do_brute_check=True
-            brute_check_sampler_kwargs['parameters'] = self.parameters
-            brute_check_sampler_kwargs['bounds'] = self.bounds
-            self.brute_check_sampler = import_sampler(brute_check_sampler_kwargs['type'], brute_check_sampler_kwargs)
+            brute_check_sampler_config['parameters'] = self.parameters
+            brute_check_sampler_config['bounds'] = self.bounds
+            self.brute_check_sampler = import_sampler(brute_check_sampler_config['type'], brute_check_sampler_config)
             self.old_brute_check_predictions = None
         else:
             self.do_brute_check=False

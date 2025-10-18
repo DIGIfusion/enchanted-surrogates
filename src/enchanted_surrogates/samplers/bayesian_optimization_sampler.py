@@ -2,10 +2,11 @@
 samplers/bayesian_optimization_sampler.py
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
-sampler through the search space to yield optimial information gain as specified 
+sample through the search space to yield optimial information gain as specified 
 by the acquisition strategy.
 """
 from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.utils.precise_imports import import_parser
 import numpy as np
 import pickle as pkl
 import os
@@ -15,8 +16,8 @@ try:
     import botorch, gpytorch, torch
 except:
     print(
-        "import botorch, gpytorch failed.",
-        "Please make sure that you have botorch and gpytorch installed",
+        "import botorch, gpytorch, torch failed.",
+        "Please make sure that you have torch, botorch, and gpytorch installed",
     )
 
 
@@ -37,7 +38,8 @@ class BayesianOptimizationSampler(Sampler):
         ucb_beta (float): Beta parameter for UCB acquisition function.
         async_samp (bool): Whether to use asynchronous sampling.
         parameters (list): List of parameter names.
-        parser (object): Parser object for collecting sample information.
+        parser (type): Parser type for collecting sample information.
+        parser_config: Parser kwargs
     """
 
     def __init__(
@@ -48,21 +50,35 @@ class BayesianOptimizationSampler(Sampler):
         """
         Initializes the BayesianOptimization sampler with the given parameters.
         """
+        print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
+        self._budget = kwargs.get('budget', 20)
         self.initial_samples = kwargs.get('initial_samples', 50)
+        self.collected_samples = 0
+        self.base_run_dir = kwargs.get('base_run_dir', '')
         self.verbose = kwargs.get('verbose', False)
         self.fully_bayesian = kwargs.get('fully_bayesian', False)
         self.acquisition_batch_size = kwargs.get('acquisition_batch_size', 20)
         self.observations = kwargs.get('observations', [None])
         self.bounds = kwargs.get('bounds', [None])
-        self.acquisition_function = kwargs.get('acquisition_function', 'qEI')
+        self.acquisition_function = kwargs.get('acquisition_function', 'qLEI')
         self.random_fraction = kwargs.get('random_fraction', 0.2)
         self.failure_prob_filter = kwargs.get('failure_prob_filter', False)
         self.ucb_beta = kwargs.get('ucb_beta', 2.0)  # Default value for UCB beta
         self.async_samp = kwargs.get('async_samp', False)  # Default value for async sampling
         self.parameters = kwargs.get('parameters', [])  # List of parameter names
-        self.parser = kwargs.get('parser', None)  # Parser object for sample information
+        self.parser_type = kwargs.get('parser', None)  # Parser type for sample information
+        self.parser_config = kwargs.get('parser_config',{})
+        #if self.parser_config == None:
+        if self.parser_type == None:
+            self.parser = None
+        else:
+        #        self.parser = import_parser(self.parser_type)
+        #else:
+            self.parser = import_parser(self.parser_type, self.parser_config)
+        self.futures = []
 
-    def get_next_parameter(self):
+
+    def get_next_samples(self):
         """
         Generates the next parameter samples based on the model and the 
         acquisition function. 
@@ -71,88 +87,112 @@ class BayesianOptimizationSampler(Sampler):
             list: List of dictionaries containing next parameter samples.
 
         """
-        acq = None  # Initialize acq to avoid possibly-used-before-assignment error
-        if self.acquisition_function == 'qLEI':
-            acq = botorch.acquisition.qLogExpectedImprovement(
-                model=self.model, 
-                best_f=self.best_f)
-        elif self.acquisition_function == 'qUCB':
-            acq = botorch.acquisition.qUpperConfidenceBound(
-                model=self.model, 
-                beta=self.ucb_beta)
-        elif self.acquisition_function == 'qEI':
-            acq = botorch.acquisition.qExpectedImprovement(
-                model=self.model, 
-                best_f=self.best_f)
-        elif self.acquisition_function == 'qPI':
-            acq = botorch.acquisition.qProbabilityOfImprovement(
-                model=self.model, 
-                best_f=self.best_f)
-        if acq is None:
-            raise ValueError(f"Unsupported acquisition function: {self.acquisition_function}")
-
+        # Build the result dictionary
+        self.build_result_dictionary(self.base_run_dir)
+        self.collected_samples = len(self.result_dictionary['inputs'])
+        print(str(100*self.collected_samples/self.initial_samples),
+              ' % of initial samples collected')
+        # Assume random sampling if self.collected_samples is below 
+        # the number of initial samples.
         batch_samples = []
-        if self.async_samp:
-            if torch.rand(1) < self.random_fraction:
+        if self.collected_samples < self.initial_samples:
+            for _ in range(int(self.acquisition_batch_size)):
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
                     for (lb, ub) in self.bounds
                 ]
                 param_dict = dict(zip(self.parameters, params))
                 batch_samples.append(param_dict)
-                return batch_samples
-            else:
-                qval = 1
-        else:  
-            qval = int((1 - self.random_fraction)*self.acquisition_batch_size)
-            for _ in range(int(self.random_fraction*self.acquisition_batch_size)):
-                params = [
-                    torch.distributions.Uniform(lb, ub).sample().item()
-                    for (lb, ub) in self.bounds
-                ]
-                param_dict = dict(zip(self.parameters, params))
-                batch_samples.append(param_dict)
+        else:
+            # Fit the surrogate model
+            self.train_surrogate()
+            acq = None  # Initialize acq to avoid possibly-used-before-assignment error
+            if self.acquisition_function == 'qLEI':
+                acq = botorch.acquisition.qLogExpectedImprovement(
+                    model=self.model, 
+                    best_f=self.best_f)
+            elif self.acquisition_function == 'qUCB':
+                acq = botorch.acquisition.qUpperConfidenceBound(
+                    model=self.model, 
+                    beta=self.ucb_beta)
+            elif self.acquisition_function == 'qEI':
+                acq = botorch.acquisition.qExpectedImprovement(
+                    model=self.model, 
+                    best_f=self.best_f)
+            elif self.acquisition_function == 'qPI':
+                acq = botorch.acquisition.qProbabilityOfImprovement(
+                    model=self.model, 
+                    best_f=self.best_f)
+            if acq is None:
+                raise ValueError(f"Unsupported acquisition function: {self.acquisition_function}")
 
-        candidates, acq_values = botorch.optim.optimize_acqf(
-            acq, 
-            bounds=torch.FloatTensor(self.bounds).T,
-            sequential=False, 
-            q=qval,
-            num_restarts=10,
-            raw_samples=1024
-            )
+            if self.async_samp:
+                if torch.rand(1) < self.random_fraction:
+                    params = [
+                        torch.distributions.Uniform(lb, ub).sample().item()
+                        for (lb, ub) in self.bounds
+                    ]
+                    param_dict = dict(zip(self.parameters, params))
+                    batch_samples.append(param_dict)
+                    return batch_samples
+                else:
+                    qval = 1
+            else:  
+                qval = int((1 - self.random_fraction)*self.acquisition_batch_size)
+                for _ in range(int(self.random_fraction*self.acquisition_batch_size)):
+                    params = [
+                        torch.distributions.Uniform(lb, ub).sample().item()
+                        for (lb, ub) in self.bounds
+                    ]
+                    param_dict = dict(zip(self.parameters, params))
+                    batch_samples.append(param_dict)
 
-        if self.failure_prob_filter:
-            if self.result_dictionary_failed != [None]:
-                cand_accept = []
-                not_enough = True
-                target_len = len(candidates[:,0])
-                while not_enough:
-                    pred = self.model_failed(self.normalize_input(candidates))
-                    pred = pred.mean
-                    for i in range(len(pred)):
-                        if torch.rand(1) > pred[i]:
-                            cand_accept.append(candidates[i,:].numpy())
-                    if len(cand_accept) < target_len:
-                        candidates, acq_values = botorch.optim.optimize_acqf(
-                            acq, 
-                            bounds=torch.FloatTensor(self.bounds).T,
-                            sequential=False, 
-                            q=target_len - len(cand_accept),
-                            num_restarts=10,
-                            raw_samples=1024
-                            )
-                    else:
-                        not_enough = False
-                        candidates = np.array(cand_accept)
-                        candidates = torch.tensor(candidates)
+            candidates, acq_values = botorch.optim.optimize_acqf(
+                acq, 
+                bounds=torch.FloatTensor(self.bounds).T,
+                sequential=False, 
+                q=qval,
+                num_restarts=10,
+                raw_samples=1024
+                )
+
+            if self.failure_prob_filter:
+                if self.result_dictionary_failed != [None]:
+                    cand_accept = []
+                    not_enough = True
+                    target_len = len(candidates[:,0])
+                    while not_enough:
+                        pred = self.model_failed(self.normalize_input(candidates))
+                        pred = pred.mean
+                        for i in range(len(pred)):
+                            if torch.rand(1) > pred[i]:
+                                cand_accept.append(candidates[i,:].numpy())
+                        if len(cand_accept) < target_len:
+                            candidates, acq_values = botorch.optim.optimize_acqf(
+                                acq, 
+                                bounds=torch.FloatTensor(self.bounds).T,
+                                sequential=False, 
+                                q=target_len - len(cand_accept),
+                                num_restarts=10,
+                                raw_samples=1024
+                                )
+                        else:
+                            not_enough = False
+                            candidates = np.array(cand_accept)
+                            candidates = torch.tensor(candidates)
                 
-        for index, _ in enumerate(range(candidates.size(dim=0))):
-            params_dict = dict(zip(self.parameters, candidates[index,:].numpy()))
-            batch_samples.append(params_dict)  
+            for index, _ in enumerate(range(candidates.size(dim=0))):
+                params_dict = dict(zip(self.parameters, candidates[index,:].numpy()))
+                batch_samples.append(params_dict)  
+
+        self.submitted += len(batch_samples)
         return batch_samples
+    
+    def register_future(self, future):
+        self.futures.append(future)
 
     def train_surrogate(self):
+        print('Training the surrogate model')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
         distances = torch.from_numpy(np.sum(
@@ -217,14 +257,10 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
-        result_dictionary = {}  # Initialize result_dictionary to avoid used-before-assignment error
-
-        # Make sure that result_dictionary does not exist in locals
-        if 'result_dictionary' in locals():
-            locals().pop('result_dictionary')
-        if 'result_dictionary_failed' in locals():
-            locals().pop('result_dictionary_failed')
-        
+        result_dictionary = {}
+        result_dictionary_failed = {}
+        print('Building result dictionary')    
+    
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 'result_dictionary.pkl')):
             resdict = open(os.path.join(base_run_directory,  
@@ -241,11 +277,15 @@ class BayesianOptimizationSampler(Sampler):
         #for dirname in self.result_dictionary
 
         for dirname in dirlist:
-            if dirname in ['CONFIG.yaml', 'result_dictionary.pkl']:
+            if dirname in ['CONFIG.yaml', 
+                           'result_dictionary.pkl', 
+                           'worker_out_DaskExecutor', 
+                           'ENCHANTED.FINISHED',
+                           'enchanted_dataset.csv']:
                 continue
             else:
                 try:
-                    if 'result_dictionary' in locals():
+                    if bool(result_dictionary):
                         if (os.path.join(base_run_directory, dirname) in
                             result_dictionary['run_dir']):
                             continue
@@ -260,7 +300,7 @@ class BayesianOptimizationSampler(Sampler):
                 except:
                     continue
             if sample_dict['failure'] == 0:
-                if 'result_dictionary' in locals():
+                if bool(result_dictionary):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary[key] = np.concatenate(
@@ -271,7 +311,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in result_dictionary.keys():
                         result_dictionary[key]=[result_dictionary[key]]
             else:
-                if 'result_dictionary_failed' in locals():
+                if bool(result_dictionary_failed):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary_failed[key] = np.concatenate(
@@ -281,17 +321,17 @@ class BayesianOptimizationSampler(Sampler):
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
                         result_dictionary_failed[key]=[result_dictionary_failed[key]]
-        if 'result_dictionary' in locals():
+        if bool(result_dictionary):
             self.result_dictionary = result_dictionary
         else:
             self.result_dictionary = [None]
-        if 'result_dictionary_failed' in locals():
+        if bool(result_dictionary_failed):
             self.result_dictionary_failed = result_dictionary_failed
         else:
             self.result_dictionary_failed = [None]
         if normalize:
             self.normalize_results()
-        if 'result_dictionary' in locals():
+        if bool(result_dictionary):
             res_dict_dump = {'result_dictionary':result_dictionary}
             resdict = open(
                 os.path.join(base_run_directory, 

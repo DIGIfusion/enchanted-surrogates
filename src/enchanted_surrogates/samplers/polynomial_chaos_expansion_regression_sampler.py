@@ -14,11 +14,11 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
     def __init__(self, *args, **kwargs):
         self.parameters = kwargs.get('parameters')
         self.bounds = kwargs.get('bounds')
-        if not self.parameters and 'sub_sampler_kwargs' in kwargs:
-            self.parameters = kwargs['sub_sampler_kwargs'].get('parameters')
+        if not self.parameters and 'sub_sampler_config' in kwargs:
+            self.parameters = kwargs['sub_sampler_config'].get('parameters')
         
-        if not self.bounds and 'sub_sampler_kwargs' in kwargs:
-            self.bounds = kwargs['sub_sampler_kwargs'].get('bounds')        
+        if not self.bounds and 'sub_sampler_config' in kwargs:
+            self.bounds = kwargs['sub_sampler_config'].get('bounds')        
         
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters must match.')
@@ -34,7 +34,7 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
         if self.do_brute_force_uq:
             from enchanted_surrogates.samplers.sobol_indices_sampler import SobolIndicesSampler
             brute_force_uq_dir = os.path.join(self.base_run_dir, 'brute_force_uq')
-            sis_kwargs = {
+            sis_config = {
                 'type': 'sobol_indices_sampler',
                 'bounds': self.bounds,
                 'parameters': self.parameters,
@@ -46,26 +46,26 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
                 'seed': 19588,
                 'base_run_dir': brute_force_uq_dir,
             }
-            self.sis = SobolIndicesSampler(**sis_kwargs)
+            self.sis = SobolIndicesSampler(**sis_config)
             
         self.train = {}
         self.sampling_strategy = kwargs.get('sampling_strategy', 'random')  # random, lhs, halton, sobol, grid
         if self.sampling_strategy=='grid':
             warnings.warn('GRID SAMPLING STRATEGIE IS NOT SUITED TO BATCH SAMPLING. PLEASE USE ANOTHER STRATEGIE IF MORE THAN 1 BATCH IS REQUIRED')
         self.batch_size = kwargs.get('batch_size',None)
-        self.sub_sampler_kwargs = kwargs.get('sub_sampler_kwargs', None)
-        if self.sub_sampler_kwargs:
-            if not 'parameters' in self.sub_sampler_kwargs:
-                self.sub_sampler_kwargs['parameters'] = self.parameters
+        self.sub_sampler_config = kwargs.get('sub_sampler_config', None)
+        if self.sub_sampler_config:
+            if not 'parameters' in self.sub_sampler_config:
+                self.sub_sampler_config['parameters'] = self.parameters
         
-            if not 'bounds' in self.sub_sampler_kwargs:
-                self.sub_sampler_kwargs['bounds'] = self.bounds 
+            if not 'bounds' in self.sub_sampler_config:
+                self.sub_sampler_config['bounds'] = self.bounds 
         
             if self.batch_size:
-                warnings.warn('BOTH BATCH SIZE AND sub_sampler_kwargs IS SET. THE BATCH SIZE WILL BE DECIDED BY THE SUB SAMPLER. IT IS NOT REQUIRED TO SET THE BATCH SIZE IN THIS CASE')
-            self.sub_sampler = import_sampler(self.sub_sampler_kwargs['type'], self.sub_sampler_kwargs)
+                warnings.warn('BOTH BATCH SIZE AND sub_sampler_config IS SET. THE BATCH SIZE WILL BE DECIDED BY THE SUB SAMPLER. IT IS NOT REQUIRED TO SET THE BATCH SIZE IN THIS CASE')
+            self.sub_sampler = import_sampler(self.sub_sampler_config['type'], self.sub_sampler_config)
             
-        if not self.batch_size and not self.sub_sampler_kwargs:
+        if not self.batch_size and not self.sub_sampler_config:
             warnings.warn('BATCH SIZE NOT SET, USING DEFAULT VALUE OF 2')
             self.batch_size = 2
         
@@ -83,8 +83,8 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
         self.submitted = 0
         
         self.budget = kwargs.get('budget')
-        if not self.budget and 'sub_sampler_kwargs' in kwargs:
-            self.budget = kwargs['sub_sampler_kwargs'].get('budget')
+        if not self.budget and 'sub_sampler_config' in kwargs:
+            self.budget = kwargs['sub_sampler_config'].get('budget')
             if not self.budget:
                 self.budget = self.sub_sampler.budget             
     
@@ -96,7 +96,7 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
         
         
     def get_initial_samples(self, *args, **kwargs):
-        if self.sub_sampler_kwargs:
+        if self.sub_sampler_config:
             samples = self.sub_sampler.get_next_samples()
         else:
             np.random.seed(self.seed)
@@ -151,7 +151,7 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
             warnings.warn(f"write_batch_info raised an exception: {exc}; skipping batch info write for batch {self.batch_number-1}", UserWarning)
 
         self.seed += 1
-        if self.sub_sampler_kwargs:
+        if self.sub_sampler_config:
             samples = self.sub_sampler.get_next_samples()
         else:
             np.random.seed(self.seed)
