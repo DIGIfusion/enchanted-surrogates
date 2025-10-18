@@ -8,12 +8,12 @@ import fnmatch
 def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None):
     """
     Pack source_dir into an HDF5 file and optionally delete original files/dirs.
-    
+
     Parameters
     - source_dir (str)
     - hdf5_name (str): name of the HDF5 file created inside source_dir
-    - skip_delete (iterable[str] | None): exact filenames or relative paths to preserve (examples: "keep.txt", "subdir/keep.dat")
-    - skip_patterns (iterable[str] | None): glob-style patterns matched against relative paths (examples: "*.log", "cache/*")
+    - skip_delete (iterable[str] | None): exact filenames or relative paths to preserve
+    - skip_patterns (iterable[str] | None): glob-style patterns matched against relative paths
     """
     print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
@@ -24,8 +24,16 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
         for root, _, files in os.walk(source_dir):
             rel_root = os.path.relpath(root, source_dir)
             if rel_root == '.':
-                rel_root = ''
-            group = h5f.require_group(rel_root)
+                rel_root = ''  # top-level
+            # Normalize rel_root to posix style for consistent dataset paths and pattern matching
+            rel_root_posix = rel_root.replace(os.path.sep, '/').lstrip('/')
+
+            # Use the HDF5 root group for top-level, otherwise require/create a subgroup
+            if rel_root_posix == '':
+                group = h5f  # root group
+            else:
+                group = h5f.require_group(rel_root_posix)
+
             for file in files:
                 file_path = os.path.join(root, file)
                 # Skip the HDF5 file itself
@@ -36,13 +44,16 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
                     data = f.read()
 
                 # dataset path inside HDF5 uses posix-like relative path
-                dataset_path = os.path.join(rel_root, file) if rel_root else file
+                dataset_path = f"{rel_root_posix}/{file}" if rel_root_posix else file
+                dataset_path = dataset_path.lstrip('/')
+
                 if dataset_path in h5f:
                     print(f"⚠️ Skipping duplicate: {dataset_path}")
                     continue
 
                 try:
                     decoded = data.decode("utf-8")
+                    # create dataset under the current group using the plain filename
                     group.create_dataset(file, data=decoded)
                     group[file].attrs["type"] = "text"
                 except (UnicodeDecodeError, ValueError):
@@ -52,18 +63,15 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
                     except Exception:
                         print(f"⚠️ PATH FAILURE: {dataset_path}")
 
-    # Helper to decide whether to remove a path
     def should_preserve(rel_path):
-        # Exact-name preserve
-        if rel_path in skip_delete:
+        rel_path_posix = rel_path.replace(os.path.sep, '/').lstrip('/')
+        if rel_path_posix in skip_delete:
             return True
-        # Pattern preserve (glob-style)
         for pat in skip_patterns:
-            if fnmatch.fnmatch(rel_path, pat):
+            if fnmatch.fnmatch(rel_path_posix, pat):
                 return True
         return False
 
-    ## Remove original files and folders except HDF5 and any preserved entries
     for item in os.listdir(source_dir):
         item_path = os.path.join(source_dir, item)
         rel_item = item  # top-level relative path
@@ -73,7 +81,6 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
             print(f"⏭ Preserving top-level item: {rel_item}")
             continue
         if os.path.isdir(item_path):
-            # For directories, check if any child matches skip rules; if so, preserve entire dir
             preserve_dir = False
             for root, dirs, files in os.walk(item_path):
                 for name in dirs + files:
