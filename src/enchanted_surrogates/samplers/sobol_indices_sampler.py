@@ -51,7 +51,8 @@ class SobolIndicesSampler(Sampler):
         self.is_converged = False
         self.batch_dif = None
         self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
-                
+        self.method = kwargs.get('method', 'martinez')
+        
         start_num_samples = kwargs.get('start_num_samples', None)
         end_num_samples = kwargs.get('end_num_samples', None)
         if not self.start_size:
@@ -193,6 +194,92 @@ class SobolIndicesSampler(Sampler):
             f_AB[dim] = df[df['source'] == f'AB_{dim}'].sort_values('index')[output_column].values.reshape(s, n)
         return {'f_A': f_A, 'f_B': f_B, 'f_AB': f_AB}
 
+    def martinez_estimator(self, func_dict, ddof=1):
+        """
+        Compute Martinez first-order and total-order Sobol indices.
+
+        Parameters
+        - func_dict: dict with keys
+            'f_A': shape (s, N)
+            'f_B': shape (s, N)
+            'f_AB': shape (D, s, N)
+        where s is number of independent repeats (usually 1).
+        - ddof: degrees of freedom for sample cov/var (default 1).
+
+        Returns
+        - dict with keys 'first_order' (np.ndarray, shape (D,))
+                    'total_order' (np.ndarray, shape (D,))
+                    'var_Y' (float), 'mean_Y' (float), 'N' (int)
+        """
+        # Validate shapes and collapse s if needed
+        f_A = np.asarray(func_dict['f_A'])
+        f_B = np.asarray(func_dict['f_B'])
+        f_AB = np.asarray(func_dict['f_AB'])
+
+        if f_A.ndim == 2 and f_A.shape[0] == 1:
+            f_A = f_A.ravel()
+        if f_B.ndim == 2 and f_B.shape[0] == 1:
+            f_B = f_B.ravel()
+        if f_AB.ndim == 3:
+            # result shape: (D, N)
+            D, s, N = f_AB.shape
+            if s != 1:
+                f_AB = f_AB.reshape(D, s * N)
+                # Not expected in usual Sobol; keep simple by averaging repeats
+                f_AB = f_AB.reshape(D, s, N).mean(axis=1)
+            else:
+                f_AB = f_AB[:, 0, :]
+        else:
+            raise ValueError("f_AB must have shape (D, s, N)")
+
+        N = f_A.size
+        if f_B.size != N:
+            raise ValueError("f_A and f_B must have same length N")
+        if f_AB.shape[1] != N:
+            raise ValueError("Each f_AB[i] must have length N")
+
+        # means
+        mean_fA = f_A.mean()
+        mean_fB = f_B.mean()
+        mean_fAB = f_AB.mean(axis=1)  # shape (D,)
+
+        # mean and variance of Y across all uniform samples (A and B)
+        Y_all = np.concatenate([f_A, f_B])
+        mean_Y = Y_all.mean()
+        # unbiased variance over 2N samples with ddof
+        var_Y = Y_all.var(ddof=ddof)
+
+        # If var_Y is zero, indices are undefined; handle gracefully
+        if var_Y == 0:
+            first_order = np.zeros(D)
+            total_order = np.zeros(D)
+            return {'first_order': first_order, 'total_order': total_order,
+                    'var_Y': var_Y, 'mean_Y': mean_Y, 'N': N}
+
+        # compute covariances (use ddof for unbiased estimate)
+        # cov(f_A, f_AB_i)
+        cov_fA_fAB = ((f_A - mean_fA)[None, :] * (f_AB - mean_fAB[:, None])).sum(axis=1) / (N - ddof)
+        # cov(f_B, f_AB_i)
+        cov_fB_fAB = ((f_B - mean_fB)[None, :] * (f_AB - mean_fAB[:, None])).sum(axis=1) / (N - ddof)
+
+        first_order = cov_fA_fAB / var_Y
+        total_order = 1.0 - (cov_fB_fAB / var_Y)
+
+        class res():
+            def __init__(self):
+                self.first_order = np.asarray(first_order)
+                self.total_order = np.asarray(total_order)
+        res_obj = res()
+        return res_obj
+        # return {
+        #     'first_order': np.asarray(first_order),
+        #     'total_order': np.asarray(total_order),
+        #     'var_Y': float(var_Y),
+        #     'mean_Y': float(mean_Y),
+        #     'N': int(N)
+        # }
+
+
     def analyze_from_df(self, df=None, csv_path=None, output_column='output'):
         """
         Reads a CSV file containing Sobol samples and model outputs,
@@ -214,7 +301,10 @@ class SobolIndicesSampler(Sampler):
         func_dict = self.assemble_func_dict(df, output_column)
         n = func_dict['f_A'].shape[1]
 
-        res = sobol_indices(func=func_dict, n=n)
+        if self.method == 'martinez':
+            res = self.martinez_estimator(func_dict)
+        else:
+            res = sobol_indices(func=func_dict, n=n)
 
         all_uniform_outputs = np.concatenate([
             func_dict['f_A'].flatten(),

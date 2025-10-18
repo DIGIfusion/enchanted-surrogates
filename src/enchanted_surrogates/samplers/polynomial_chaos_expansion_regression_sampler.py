@@ -39,10 +39,11 @@ class PolynomialChaosExpansionRegressionSampler(Sampler):
                 'bounds': self.bounds,
                 'parameters': self.parameters,
                 'start_num_samples': (len(self.parameters)+2)*16,
+                'method': 'saltelli',
                 'end_num_samples': int(1e7),
                 'convergence_tolerence': self.brute_force_uq_tolerence,
                 'do_write_batch_info': False,
-                'seed': self.seed,
+                'seed': 19588,
                 'base_run_dir': brute_force_uq_dir,
             }
             self.sis = SobolIndicesSampler(**sis_kwargs)
