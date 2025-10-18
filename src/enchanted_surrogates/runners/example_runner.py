@@ -177,51 +177,12 @@ class ExampleRunner(Runner):
 
         # TODO make example parser
         # parser.write_input(run_dir, params)
-<<<<<<< HEAD
-        if self.parameter_mode == 0:
-            c1 = params["c1"]
-            c2 = params["c2"]
-            cmd = f'{sys.executable} -c "print({c1} + {c2})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_1": output, "success": True, 'other_code_out_A': 'something_from_code_A'}
-        elif self.parameter_mode == 1:
-            c3 = params["c3"]
-            c4 = params["c4"]
-            cmd = f'{sys.executable} -c "print({c3} + {c4})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_2": output, "success": True, 'other_code_out_B': 'something_from_code_B'}
-        elif self.parameter_mode == 2:
-            c5 = params["c5"]
-            c6 = params["c6"]
-            cmd = f'{sys.executable} -c "print({c5} + {c6})" >> "{outfile}"'
-            os.system(cmd)
-            with open(outfile, 'r') as f:
-                output = float(f.read().strip())
-            sleep_sec = self.get_sleep_sec()
-            print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
-            sleep(sleep_sec)
-            result = {
-                "output_3": output, "success": True, 'other_code_out_C': 'something_from_code_C'}
-=======
         if len(params.keys()) == 0:
             c1 = 0.0
             c2 = 0.0
         elif len(params.keys()) == 1:
             c1 = params[list(params.keys())[0]]
             c2 = 0.0
->>>>>>> develop
         else:
             c1 = params[list(params.keys())[0]]
             c2 = params[list(params.keys())[1]]
