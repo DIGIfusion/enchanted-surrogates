@@ -62,10 +62,9 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
      ```
    - Clone the `enchanted-surrogates` repository to have access to the core package:
      ```bash
-     git clone  --single-branch --branch develop https://github.com/DIGIfusion/enchanted-surrogates.git
+     git clone https://github.com/DIGIfusion/enchanted-surrogates.git
      pip install -e enchanted-surrogates/
      ```
-     (Currnetly using a specific branch for plugin development, since the plugin support is not yet merged to main.)
 
 2. **Create the Plugin Repository**:
    - Go to [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template) and click "Use this template" to create a new repository for your plugin. Name it following the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin.
@@ -84,10 +83,7 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
       version = "0.1.0"
       description = "A plugin for enchanted-surrogates to support Codename simulations."
       readme = "README.md"
-      authors = [
-        {name = "", email = ""
-        },
-      ]
+      authors = [{name = "", email = ""},]
       license = {text = "MIT"}
       dependencies = [
         "enchanted_surrogates",
@@ -95,7 +91,7 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
         "numpy",
         "fortranformat",
         "scipy",]
-      requires-python = ">=3.11"
+      requires-python = ">=3.10"
 
       [tool.setuptools.packages.find]
       where = ["src"]
@@ -104,10 +100,10 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
    - Define entry points in `pyproject.toml` to register your parser and runner with the `enchanted-surrogates` framework. For example:
      ```toml
      [tool.poetry.plugins."enchanted_surrogates.parsers"]
-     codename_parser = "enchanted_plugin_codename.helena_parser:CodenameParser"
+     codename_parser = "enchanted_plugin_codename.codename_parser:CodenameParser"
 
      [tool.poetry.plugins."enchanted_surrogates.runners"]
-     codename_runner = "enchanted_plugin_codename.helena_runner:CodenameRunner"
+     codename_runner = "enchanted_plugin_codename.codename_runner:CodenameRunner"
      ```
      These will allow the main package to discover and utilize your plugin seamlessly.
 
@@ -123,13 +119,17 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
      after which you can use your plugin with `enchanted-surrogates`.
 
 5. **Testing**:
-   - Write unit tests in `test_plugin.py` to validate the functionality of your parser and runner.
+   - Write unit tests in the `tests\` folder to validate the functionality of your parser and runner. The folder already contains some test files that should be edited to correctly test your plugin.
    - Use `pytest` to run your tests:
      ```bash
-     pytest tests/
+     pytest tests/ -sv
      ```
 6. **Github Actions**:
-   - Set up a GitHub Actions workflow to automate testing and deployment.
+   - The plugin template contains a GitHub Actions workflow setup to automate testing and deployment. Make sure the tests pass.
+
+7. **Documentation**:
+   - Update the `README.md` file with information about your plugin, including installation instructions, usage examples, and any other relevant details.
+   - In case you want to add your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins.
 
 
 ## Existing plugins
