@@ -303,6 +303,9 @@ class SobolIndicesSampler(Sampler):
 
         if self.method == 'martinez':
             res = self.martinez_estimator(func_dict)
+        elif self.method == 'compare':
+            res1 = self.martinez_estimator(func_dict)
+            res2 = sobol_indices(func=func_dict, n=n)
         else:
             res = sobol_indices(func=func_dict, n=n)
 
@@ -320,9 +323,17 @@ class SobolIndicesSampler(Sampler):
             'std': np.sqrt(variance)
         }
 
-        for i, param in enumerate(self.parameters):
-            result[f'{param}_sobolF'] = res.first_order[i]
-            result[f'{param}_sobolT'] = res.total_order[i]
+        if self.method == 'compare':
+            for i, param in enumerate(self.parameters):
+                result[f'{param}_martinez_sobolF'] = res1.first_order[i]
+                result[f'{param}_martinez_sobolT'] = res1.total_order[i]
+            for i, param in enumerate(self.parameters):
+                result[f'{param}_saltelli_sobolF'] = res2.first_order[i]
+                result[f'{param}_saltelli_sobolT'] = res2.total_order[i]    
+        else:            
+            for i, param in enumerate(self.parameters):
+                result[f'{param}_sobolF'] = res.first_order[i]
+                result[f'{param}_sobolT'] = res.total_order[i]
         
         return result
     

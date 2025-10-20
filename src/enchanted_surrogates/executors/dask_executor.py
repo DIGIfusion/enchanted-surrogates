@@ -56,6 +56,7 @@ class DaskExecutor(Executor):
         self.base_run_dir = kwargs.get('base_run_dir')
         self.sampler_config = kwargs.get('sampler_config')
         if self.sampler_config:
+            self.sampler_config['base_run_dir'] = self.base_run_dir
             self.sampler_type = self.sampler_config.pop("type")
             self.sampler = import_sampler(type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)

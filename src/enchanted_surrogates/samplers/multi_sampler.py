@@ -25,7 +25,7 @@ class MultiSampler(Sampler):
         samplers_config = [samplers[k] for k in samplers_keys()]
         self.all_samplers = [import_sampler(type=sampler_type, sampler_config=sampler_config) for sampler_type, sampler_config in zip(samplers_types,samplers_config)]
         self.sample_all_combinations = sample_all_combinations
-        
+        self.parameters = [param for sampler in self.all_samplers for param in sampler.parameters]
         self.budget = np.inf
     def get_next_samples(self):
         # get all initial parameters
