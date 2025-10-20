@@ -6,7 +6,6 @@ from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -58,6 +57,8 @@ def main(args: argparse.Namespace):
     
     if hasattr(args, 'general'):
         if args.general.get('pack_data_hdf5', True):
+            # the import is placed here so that users don't need h5py installed in their enviroment to use run.py
+            from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
             # reduce num files with hdf5
             batch_dirs = get_batch_dirs(args.executor['base_run_dir'])
             for batch_dir in batch_dirs:
