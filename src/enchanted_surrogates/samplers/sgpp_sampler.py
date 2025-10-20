@@ -813,18 +813,18 @@ https://sgpp.sparsegrids.org/docs/example_predictiveANOVARefinement_py.html
             #     df["mean_error"]=[me]
             #     df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
             #     df["std_error"] = [np.abs(np.sqrt(np.var(y_test))-quad_std)]
-            if self.do_brute_check:
-                print('DOING BRUTE CHECK')
-                predictions = self.surrogate_predict(self.brute_check_sampler.samples, n_jobs=self.n_jobs)
-                expectation = self.expectation_approx(predictions)
-                double_sigma = self.double_sigma_approx(predictions)
-                entropy_diff = self.relative_entropy(self.old_brute_check_predictions, predictions, num_bins=200)
-                self.old_brute_check_predictions=predictions
-                print('EXPECTATION', expectation)
-                df["brute_expectation"]=[expectation]
-                df["brute_double_sigma"]=[double_sigma]
-                df["brute_entropy_diff"]=[entropy_diff]
-                del predictions
+            # if self.do_brute_check:
+            #     print('DOING BRUTE CHECK')
+            #     predictions = self.surrogate_predict(self.brute_check_sampler.samples, n_jobs=self.n_jobs)
+            #     expectation = self.expectation_approx(predictions)
+            #     double_sigma = self.double_sigma_approx(predictions)
+            #     entropy_diff = self.relative_entropy(self.old_brute_check_predictions, predictions, num_bins=200)
+            #     self.old_brute_check_predictions=predictions
+            #     print('EXPECTATION', expectation)
+            #     df["brute_expectation"]=[expectation]
+            #     df["brute_double_sigma"]=[double_sigma]
+            #     df["brute_entropy_diff"]=[entropy_diff]
+            #     del predictions
                 
             if self.do_brute_force_sobol_indicies:
                 print('doing brute sobol indicies')

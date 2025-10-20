@@ -252,47 +252,6 @@ class PolynomialChaosExpansionGridSampler(Sampler):
         self.all_batch_info.append(df)
         
         
-    # def post_run(self, base_dir, *args, **kwargs):
-    #     print('MERGING AND WRITING ALL batch INFO')
-    #     parameters, bounds, simulation_name, value_of_interest = self.get_config_info(base_dir)
-    #     df = pd.concat(self.all_batch_info, ignore_index=True)
-    #     df.to_csv(os.path.join(base_dir, 'all_batch_info.csv'))
-    #     figure = plt.figure()
-    #     plt.plot(df['num_samples'], df['mean'], marker='o')
-    #     plt.fill_between(df['num_samples'], df['mean'].to_numpy()-df['std'].to_numpy(), df['mean'].to_numpy()+df['std'].to_numpy(), color='grey',label='Standard Deviation')
-    #     plt.legend()
-    #     xlabel = f'Number of {simulation_name} Evaluations'
-    #     ylabel = f'Expectation of {value_of_interest}'
-    #     figure.tight_layout()
-    #     figure.savefig(os.path.join(base_dir, 'mean_std.png'), dpi=200)
-        
-    #     figure = plt.figure()
-    #     plt.plot(df['num_samples'].iloc[1:], df['mean_diff'].iloc[1:], marker='o')
-    #     plt.legend()
-    #     xlabel = f'Number of {simulation_name} Evaluations'
-    #     ylabel = f'Expectation of {value_of_interest}'
-    #     figure.tight_layout()
-    #     figure.savefig(os.path.join(base_dir, 'mean_diff.png'), dpi=200)
-        
-        
-    def get_config_info(self, base_run_dir):
-        listdir = os.listdir(base_run_dir)
-        config_file_name = [name for name in listdir if '.yaml' in name]
-        if len(config_file_name) > 1:
-            raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
-        config_file_name = config_file_name[0]
-        config = load_configuration(os.path.join(base_run_dir, config_file_name))
-        bounds=np.array(config.sampler['bounds'])
-        parameters = config.sampler['parameters']
-        
-        if hasattr(config, 'general'):
-            value_of_interest = config.general.get('value_of_interest', 'Function Value')
-            simulation_name = config.general.get('simulation_name', 'Parent Model')
-        else:
-            value_of_interest = 'Function Value'
-            simulation_name = 'Parent Model'
-            
-        return parameters, bounds, simulation_name, value_of_interest
 
     def approx_lookup(self, query_key, dictionary, tol=1e-9, default=None):
         return next(
