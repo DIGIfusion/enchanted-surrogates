@@ -277,7 +277,7 @@ class DaskExecutor(Executor):
                 try: 
                     wait(futures, timeout=self.timeout)
                 except:
-                    warnings.warn(f'''{len([fut for fut in futures if not fut.done()])} SAMPLES DID NOT FINISH IN THE TIMEOUT [{self.timeout}sec]\n
+                    warnings.warn(f'''SOME SAMPLES DID NOT FINISH IN THE TIMEOUT [{self.timeout}sec]\n
 THESE SAMPLES WILL CONTINUE RUNNING ON THE WORKER, CONSUMING RESOURCES AND BLOCKING FUTURE TASKS.
 IF EVENTUALLY COMPLETED THESE WORKERS MAY OR MAY NOT BE INCLUDED IN ANY DATASET OR ACTIVE LEARNING PROCESS CARRIED OUT BY ENCHANTED SURROGATES.
 TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY ENDING/KILLING OF YOUR CODE THERE AND DO NOT SET DaskExecutor.timeout''')
