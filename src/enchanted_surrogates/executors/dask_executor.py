@@ -9,9 +9,11 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
+from enchanted_surrogates.utils.time_format import format_sec
 
 from .base_executor import Executor
 from enchanted_surrogates.executors import simulation_task
+import shutil
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
 from enchanted_surrogates.utils.precise_imports import import_sampler
 
@@ -52,10 +54,12 @@ class DaskExecutor(Executor):
         super().__init__(*args, **kwargs)
         print('INITIALISING DASK EXECUTOR')
         self.type = kwargs.get('type')
+        self.base_run_dir = kwargs.get('base_run_dir')
+        self.sampler_config = kwargs.get('sampler_config')
         if self.sampler_config:
+            self.sampler_config['base_run_dir'] = self.base_run_dir
             self.sampler_type = self.sampler_config.pop("type")
-            self.sampler = import_sampler(
-                type=self.sampler_type, sampler_config=self.sampler_config)
+            self.sampler = import_sampler(type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
         self.run_error_log_path = os.path.join(self.base_run_dir, 'runs_error_log.jsonl')
@@ -65,6 +69,7 @@ class DaskExecutor(Executor):
         self.cluster = None
         self.client = None
         self.expected_number_of_workers = None
+        self.current_batch = 0
 
     def start_cluster(self, slurm_out_dir=None):
         """
@@ -81,14 +86,11 @@ class DaskExecutor(Executor):
             Warning: If fewer workers than expected are started.
         """
         print('MAKING CLUSTER')
-        worker_logs_dir = None
-
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
 
             if not slurm_out_dir:
                 slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
-            worker_logs_dir = slurm_out_dir
             if not os.path.exists(slurm_out_dir):
                 os.makedirs(slurm_out_dir)
             jed = self.SLURMcluster_config.get('job_extra_directives')
@@ -222,7 +224,7 @@ class DaskExecutor(Executor):
         return num_alive_workers
 
     def scale(self, num_workers):
-        if self.count_alive_workers == self.scale_n_jobs:
+        if self.count_alive_workers() == self.scale_n_jobs:
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
@@ -244,7 +246,7 @@ class DaskExecutor(Executor):
         if not os.path.exists(self.base_run_dir):
             print('MAKING BASE RUN DIR:',self.base_run_dir)
             os.makedirs(self.base_run_dir)
-
+                
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
             if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
                 raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
@@ -258,43 +260,97 @@ class DaskExecutor(Executor):
         print('CLUSTER STARTED')
         all_futures = []
 
+        print(f'SAMPLER: {self.sampler_type}')
+        enchanted_dataset_path_success = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
+        enchanted_dataset_path_fail = os.path.join(self.base_run_dir, 'enchanted_dataset_fail.csv')
+        completed = 0
+        all_success = 0
         while self.sampler.has_budget:
             samples = self.sampler.get_next_samples()
             futures = self.submit_batch(samples, request_errors=True)
+            print(f'SAMPLER: {self.sampler_type} | BATCH:{self.current_batch}')
+            
             if self.sampler_type in {'BayesianOptimizationSampler'}:
-                print("Bayesian Optimization Sampler")
+                samples = self.sampler.get_next_samples()
+                futures = self.submit_batch(samples, base_run_dir=self.base_run_dir, request_errors=True)
+                all_futures.extend(futures)
                 print(f"Launching {len(futures)} samples")
+
                 try: 
                     wait(futures, timeout=self.timeout)
                 except:
-                    print("Timeout of some of the samples")
-            all_futures.extend(futures)
-        print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
-        dfs = []
-        num_success = 0
-        if self.sampler_type in {'BayesianOptimizationSampler'}:
-            try: 
-                wait(futures, timeout=self.timeout)
-            except:
-                print("Timeout of some of the samples")
-        else:
-            for i, future in enumerate(as_completed(all_futures)):
-                result, error_info = future.result()
-                if result['success'] == True:
-                    num_success += 1
-                if error_info is not None:
-                    with open(self.run_error_log_path, "a") as f:
-                        f.write(json.dumps(error_info) + "\n")
+                    warnings.warn(f'''SOME SAMPLES DID NOT FINISH IN THE TIMEOUT [{self.timeout}sec]\n
+THESE SAMPLES WILL CONTINUE RUNNING ON THE WORKER, CONSUMING RESOURCES AND BLOCKING FUTURE TASKS.
+IF EVENTUALLY COMPLETED THESE WORKERS MAY OR MAY NOT BE INCLUDED IN ANY DATASET OR ACTIVE LEARNING PROCESS CARRIED OUT BY ENCHANTED SURROGATES.
+TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY ENDING/KILLING OF YOUR CODE THERE AND DO NOT SET DaskExecutor.timeout''')
+                
 
-                # print('FUTURE RESULT',result, type(result))
-                result = {k:[v] for k,v in result.items()}
-                dfs.append(pd.DataFrame(result))
-                print(f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
-                print('_'*100)
-            df_dataset = pd.concat(dfs)
-            df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
+            else: 
+                batch_dir = os.path.join(self.base_run_dir,f'batch_{self.current_batch}')
+                enchanted_dataset_batch_path_success = os.path.join(batch_dir,'enchanted_dataset.csv')
+                enchanted_dataset_batch_path_fail = os.path.join(batch_dir,'enchanted_dataset_fail.csv')
 
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
+                if not os.path.exists(batch_dir):
+                    print('MAKING BATCH DIR:',batch_dir)
+                    os.makedirs(batch_dir)        
+                samples = self.sampler.get_next_samples()
+                if not samples:
+                    shutil.rmtree(batch_dir)
+                    break
+                if self.sampler.submitted > self.sampler.budget:
+                    shutil.rmtree(batch_dir)
+                    break
+                
+                futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
+                all_futures.extend(futures)
+                print(f"Launching {len(futures)} samples")
+
+                dfs = []
+                num_success = 0
+                for i, future in enumerate(as_completed(futures)):
+                    result, error_info = future.result()
+                    completed += 1
+                    if result['success'] == True:
+                        num_success += 1
+                        all_success += 1
+                    if error_info is not None:
+                        with open(self.run_error_log_path, "a") as f:
+                            f.write(json.dumps(error_info) + "\n")
+
+                    # print('FUTURE RESULT',result, type(result))
+                    result = {k:[v] for k,v in result.items()}
+                    dfi = pd.DataFrame(result)
+                    dfs.append(dfi)
+                    
+                    if result['success']:
+                        if os.path.exists(enchanted_dataset_batch_path_success):
+                            dfi.to_csv(enchanted_dataset_batch_path_success, mode='a', header=False, index=False)
+                        else:
+                            dfi.to_csv(enchanted_dataset_batch_path_success, mode='w', header=True, index=False)
+
+                        if os.path.exists(enchanted_dataset_path_success):
+                            dfi.to_csv(enchanted_dataset_path_success, mode='a', header=False, index=False)
+                        else:
+                            dfi.to_csv(enchanted_dataset_path_success, mode='w', header=True, index=False)
+                    else:
+                        if os.path.exists(enchanted_dataset_batch_path_fail):
+                            dfi.to_csv(enchanted_dataset_batch_path_fail, mode='a', header=False, index=False)
+                        else:
+                            dfi.to_csv(enchanted_dataset_batch_path_fail, mode='w', header=True, index=False)
+
+                        if os.path.exists(enchanted_dataset_path_fail):
+                            dfi.to_csv(enchanted_dataset_path_fail, mode='a', header=False, index=False)
+                        else:
+                            dfi.to_csv(enchanted_dataset_path_fail, mode='w', header=True, index=False)
+                        
+
+                    print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{len(futures)}] Futures Completed ({((i+1)/len(futures))*100:.1f}%)","|",f"[{num_success}/{len(futures)}] Futures Succeded ({(num_success/len(futures))*100:.1f}%)")
+                    print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")
+                    print(f"TIME PASSED: {format_sec(time.time()-start)} d - hh:mm:ss \n {'_'*100}")
+                    
+            self.current_batch += 1
+        
+        print('WALLTIME FOR ENCHANTED SURROGATES:', format_sec(time.time()-start),'d h:m:s')
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
             print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
         print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
