@@ -67,6 +67,7 @@ def main(args: argparse.Namespace, config_path=None):
     executor.start_runs()
     print("Shutting down scheduler and workers...")
     executor.clean()
+    return
 
 if __name__ == "__main__":
     print(f'{datetime.now()} - Starting Enchanted surrogates.')
