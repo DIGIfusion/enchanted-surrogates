@@ -221,7 +221,7 @@ class DaskNestedExecutor(Executor):
                             dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
                         else:
                             dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
-                        sub_futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=run_dir, include_fut_to_rundir=True)
+                        sub_futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=run_dir, include_fut_to_rundir=True, request_errors=True)
                         self.all_futures[i].extend(sub_futures)
                         self.all_fut_to_rundir.update(fut_to_rundir)
                         # this should shut down clusters when they have finished being used. Not to be used when doing active learning
@@ -240,10 +240,12 @@ class DaskNestedExecutor(Executor):
         done = [fut for fut in futures_check.values() if fut.done()]
         while futures_check:
             for j, future in enumerate(done):
-                result = self.get_result(future, timeout=5)
+                result, error_info = self.get_result(future, timeout=5)
                 if not result:
                     print('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
+                
+                
                 
                 self.update_completion_stats(result,len(self.executors)-1)
                 # if self.do_dynamic_scale_down:
