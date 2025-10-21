@@ -194,11 +194,12 @@ class DaskNestedExecutor(Executor):
                         if not result:
                             continue
                         self.update_completion_stats(result, i-1)
+                        futures_check.pop(future.key)
+                        
                         if not result['success']:
                             continue
                         # if self.do_dynamic_scale_down:
                         #     self.dynamic_scale_down(exe_i=i-1, batch_num=batch_num)
-                        futures_check.pop(future.key)
                         run_dir = result['run_dir']
                         previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
                         # first filter for all the samples that have the same parameters as the previous sample
@@ -235,7 +236,7 @@ class DaskNestedExecutor(Executor):
                     if all(cluster_status) and not i-1 in self.keep_alive:
                         print(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
                         self.executors[i-1].clean()
-                            
+                        
         # write the results for the last set of futures.
         base_enchanted_dataset_path = os.path.join(self.base_run_dir, f'enchanted_dataset.csv')
         futures_check = {fut.key:fut for fut in self.all_futures[-1]}
