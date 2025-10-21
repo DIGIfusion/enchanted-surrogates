@@ -171,6 +171,7 @@ class DaskNestedExecutor(Executor):
                         done_status = [future.done() for future in self.all_futures[i-1]]
                         if any(done_status):
                             prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
+                            print('debug prelim results', prelim_results)
                             suc = [] 
                             for pr in prelim_results:
                                 if pr:
@@ -179,6 +180,18 @@ class DaskNestedExecutor(Executor):
                                 previous_success = True
                                 print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
+                        if all(done_status):
+                            prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
+                            suc = [] 
+                            for pr in prelim_results:
+                                if pr:
+                                    suc.append(pr['success'])
+                            if not any(suc):
+                                print(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+                                print('SHUTTING DOWN DASK WORKERS')
+                                self.clean()
+                                raise RuntimeError(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+
                 
                 print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 # start cluster or assign client when reusing
@@ -192,16 +205,19 @@ class DaskNestedExecutor(Executor):
                 done = [fut for fut in futures_check.values() if fut.done()]
                 while futures_check:
                     for j, future in enumerate(done):
-                        result, error_info = self.get_result(future, timeout=5)
-                        if not result:
+                        result= self.get_result(future, timeout=5)
+                        if result is not None:
                             continue
+                        result, error_info = result
+                        self.update_completion_stats(result, i-1)
+
                         if error_info is not None:
                             with open(self.run_error_log_path, "a") as f:
                                 f.write(json.dumps(error_info) + "\n")
 
-                        self.update_completion_stats(result, i-1)
                         futures_check.pop(future.key)
-                        
+                        run_dir = result['run_dir']
+                        print('debug success?', result['success'], "error info?", error_info)                        
                         if not result['success']:
                             enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{i-1}.csv')
                             dfi = pd.DataFrame({r:[v] for r,v in result.items()})
@@ -212,7 +228,6 @@ class DaskNestedExecutor(Executor):
                             continue
                         # if self.do_dynamic_scale_down:
                         #     self.dynamic_scale_down(exe_i=i-1, batch_num=batch_num)
-                        run_dir = result['run_dir']
                         previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
                         # first filter for all the samples that have the same parameters as the previous sample
                         mask = pd.Series(True, index=self.current_samples_df.index)
@@ -257,12 +272,11 @@ class DaskNestedExecutor(Executor):
         done = [fut for fut in futures_check.values() if fut.done()]
         while futures_check:
             for j, future in enumerate(done):
-                result, error_info = self.get_result(future, timeout=5)
-                if not result:
+                result = self.get_result(future, timeout=5)
+                if result is not None:
                     print('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
-                
-                
+                result, error_info = result
                 
                 self.update_completion_stats(result,len(self.executors)-1)
                 # if self.do_dynamic_scale_down:

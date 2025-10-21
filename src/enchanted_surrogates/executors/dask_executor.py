@@ -266,8 +266,6 @@ class DaskExecutor(Executor):
         completed = 0
         all_success = 0
         while self.sampler.has_budget:
-            samples = self.sampler.get_next_samples()
-            futures = self.submit_batch(samples, request_errors=True)
             print(f'SAMPLER: {self.sampler_type} | BATCH:{self.current_batch}')
             
             if self.sampler_type in {'BayesianOptimizationSampler'}:
@@ -318,11 +316,13 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                             f.write(json.dumps(error_info) + "\n")
 
                     # print('FUTURE RESULT',result, type(result))
+                    success = result['success']
                     result = {k:[v] for k,v in result.items()}
                     dfi = pd.DataFrame(result)
                     dfs.append(dfi)
                     
-                    if result['success']:
+                    print('debug result success,', result['success'])
+                    if success:
                         if os.path.exists(enchanted_dataset_batch_path_success):
                             dfi.to_csv(enchanted_dataset_batch_path_success, mode='a', header=False, index=False)
                         else:
