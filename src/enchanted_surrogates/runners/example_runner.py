@@ -82,6 +82,7 @@ class ExampleRunner(Runner):
     def __init__(self, *args, **kwargs):
         self.parameter_mode = kwargs.get('parameter_mode', 0)
         self.sleep_sec = kwargs.get('sleep_sec', 0.01)
+        self.fail_prob = kwargs.get('fail_prob', 0)
 
     def get_sleep_sec(self):
         """
@@ -201,5 +202,10 @@ class ExampleRunner(Runner):
 
         # TODO read output
         # parser.read_output(run_dir)
-
+        
+        # chack if failed
+        if self.fail_prob > 0:
+          flip = np.random.uniform()
+          if flip < self.fail_prob:
+            raise RuntimeError(f'THE RUN FAIED BECAUSE IT WAS UNLUCKY, fail_prob:{self.fail_prob}')
         return result
