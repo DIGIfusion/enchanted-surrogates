@@ -3,6 +3,7 @@ import subprocess
 import time
 import warnings
 import pandas as pd
+import json
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
@@ -57,6 +58,7 @@ class DaskExecutor(Executor):
                 type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
+        self.run_error_log_path = os.path.join(self.base_run_dir, 'runs_error_log.jsonl')
         self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
         self.LocalCluster_config = kwargs.get('LocalCluster_config')
         self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)  # for debugging purposes only
@@ -258,7 +260,7 @@ class DaskExecutor(Executor):
 
         while self.sampler.has_budget:
             samples = self.sampler.get_next_samples()
-            futures = self.submit_batch(samples)
+            futures = self.submit_batch(samples, request_errors=True)
             if self.sampler_type in {'BayesianOptimizationSampler'}:
                 print("Bayesian Optimization Sampler")
                 print(f"Launching {len(futures)} samples")
@@ -277,9 +279,13 @@ class DaskExecutor(Executor):
                 print("Timeout of some of the samples")
         else:
             for i, future in enumerate(as_completed(all_futures)):
-                result = future.result()
+                result, error_info = future.result()
                 if result['success'] == True:
                     num_success += 1
+                if error_info is not None:
+                    with open(self.run_error_log_path, "a") as f:
+                        f.write(json.dumps(error_info) + "\n")
+
                 # print('FUTURE RESULT',result, type(result))
                 result = {k:[v] for k,v in result.items()}
                 dfs.append(pd.DataFrame(result))
@@ -298,7 +304,7 @@ class DaskExecutor(Executor):
         self.shutdown_cluster()
 
 
-    def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False):
+    def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False, request_errors=False):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
@@ -326,7 +332,7 @@ class DaskExecutor(Executor):
             sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
-                run_simulation_task, self.runner_config, sample_run_dir, sample_params
+                run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir
