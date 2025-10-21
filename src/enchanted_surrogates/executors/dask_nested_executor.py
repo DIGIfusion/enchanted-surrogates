@@ -180,17 +180,17 @@ class DaskNestedExecutor(Executor):
                                 previous_success = True
                                 print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
-                        if all(done_status):
-                            prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
-                            suc = [] 
-                            for pr in prelim_results:
-                                if pr:
-                                    suc.append(pr['success'])
-                            if not any(suc):
-                                print(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
-                                print('SHUTTING DOWN DASK WORKERS')
-                                self.clean()
-                                raise RuntimeError(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+                        # if all(done_status):
+                        #     prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
+                        #     suc = [] 
+                        #     for pr in prelim_results:
+                        #         if pr:
+                        #             suc.append(pr['success'])
+                        #     if not any(suc):
+                        #         print(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+                        #         print('SHUTTING DOWN DASK WORKERS')
+                        #         self.clean()
+                        #         raise RuntimeError(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
 
                 
                 print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
@@ -203,10 +203,12 @@ class DaskNestedExecutor(Executor):
 
                 futures_check = {fut.key:fut for fut in self.all_futures[i-1]}
                 done = [fut for fut in futures_check.values() if fut.done()]
+                print('futures_check:', futures_check)
                 while futures_check:
+                    print('futures_check:', futures_check)
                     for j, future in enumerate(done):
                         result= self.get_result(future, timeout=5)
-                        if result is not None:
+                        if result is None:
                             continue
                         result, error_info = result
                         self.update_completion_stats(result, i-1)
@@ -273,7 +275,7 @@ class DaskNestedExecutor(Executor):
         while futures_check:
             for j, future in enumerate(done):
                 result = self.get_result(future, timeout=5)
-                if result is not None:
+                if result is None:
                     print('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
                 result, error_info = result
@@ -287,7 +289,7 @@ class DaskNestedExecutor(Executor):
                 enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{len(self.executors)-1}.csv')
                 
                 dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                
+                print('debug success? 2', result['success'], "error info?", error_info)                        
                 if result['success']:
                     if os.path.exists(enchanted_dataset_path):
                         dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
