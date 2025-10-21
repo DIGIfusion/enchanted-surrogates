@@ -194,6 +194,8 @@ class DaskNestedExecutor(Executor):
                         if not result:
                             continue
                         self.update_completion_stats(result, i-1)
+                        if not result['success']:
+                            continue
                         # if self.do_dynamic_scale_down:
                         #     self.dynamic_scale_down(exe_i=i-1, batch_num=batch_num)
                         futures_check.pop(future.key)
