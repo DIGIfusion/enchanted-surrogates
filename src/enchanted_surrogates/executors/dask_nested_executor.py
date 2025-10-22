@@ -171,7 +171,6 @@ class DaskNestedExecutor(Executor):
                         done_status = [future.done() for future in self.all_futures[i-1]]
                         if any(done_status):
                             prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
-                            print('debug prelim results', prelim_results)
                             suc = [] 
                             for pr in prelim_results:
                                 if pr:
@@ -203,12 +202,10 @@ class DaskNestedExecutor(Executor):
 
                 futures_check = {fut.key:fut for fut in self.all_futures[i-1]}
                 done = [fut for fut in futures_check.values() if fut.done()]
-                print('futures_check:', futures_check)
                 while futures_check:
-                    print('futures_check:', futures_check)
                     for j, future in enumerate(done):
                         result= self.get_result(future, timeout=5)
-                        if result is None:
+                        if result == (None, None):
                             continue
                         result, error_info = result
                         self.update_completion_stats(result, i-1)
@@ -219,7 +216,6 @@ class DaskNestedExecutor(Executor):
 
                         futures_check.pop(future.key)
                         run_dir = result['run_dir']
-                        print('debug success?', result['success'], "error info?", error_info)                        
                         if not result['success']:
                             enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{i-1}.csv')
                             dfi = pd.DataFrame({r:[v] for r,v in result.items()})
@@ -276,7 +272,7 @@ class DaskNestedExecutor(Executor):
         while futures_check:
             for j, future in enumerate(done):
                 result = self.get_result(future, timeout=5)
-                if result is None:
+                if result == (None, None):
                     print('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
                 result, error_info = result
@@ -293,7 +289,6 @@ class DaskNestedExecutor(Executor):
                 enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{len(self.executors)-1}.csv')
                 
                 dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                print('debug success? 2', result['success'], 'result?', result, "\nerror info?", error_info)                        
                 if result['success']:
                     if os.path.exists(enchanted_dataset_path):
                         dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
@@ -399,35 +394,40 @@ class DaskNestedExecutor(Executor):
         return done, pending
     
     def get_result(self, future, timeout=60, silent=False):
-        result = None
-        try:
-            result = future.result(timeout=timeout)
-            self.log_stats['fut_res_available'] += 1
-        except:
-            pass
-            
-        if not result:
-            started = time.time()
-            while not result and time.time()-started < timeout:
-                run_dir = self.all_fut_to_rundir.get(future.key)
-                if run_dir:
-                    result_dir = os.path.join(run_dir, 'enchanted_datapoint.csv')
-                    if os.path.exists(result_dir):
-                        try:
-                            df = pd.read_csv(result_dir)
-                            result = df.iloc[0].to_dict()
-                            self.log_stats['fut_res_not_available'] += 1
-                        except pd.errors.EmptyDataError as e:
-                            print('EMPTY DATA ERROR: WAITING LONGER\n',e)
-                    else:
-                        if not silent: print('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
-                else:
-                    raise RuntimeError(f'THIS FUTURE HAS BEEN SUBMITTED BUT THE RUN_DIR WAS NOT ADDED TO fut_to_rundir, future.key: {future.key}')
-                if not result:
-                    if timeout == 0:
-                        break
-                    if not silent: print('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
-                    time.sleep(1)
+        started = time.time()
+        result = None, None
+        while result == (None, None) and time.time()-started < timeout:
+            if future.done():
+                try:
+                    result = future.result(timeout=timeout)
+                    self.log_stats['fut_res_available'] += 1
+                except:
+                    pass
+                    
+                if result == (None,None):
+                    while result == (None, None) and time.time()-started < timeout:
+                        run_dir = self.all_fut_to_rundir.get(future.key)
+                        if run_dir:
+                            result_dir = os.path.join(run_dir, 'enchanted_datapoint.csv')
+                            if os.path.exists(result_dir):
+                                try:
+                                    df = pd.read_csv(result_dir)
+                                    result = df.iloc[0].to_dict()
+                                    self.log_stats['fut_res_not_available'] += 1
+                                except pd.errors.EmptyDataError as e:
+                                    print('EMPTY DATA ERROR: WAITING LONGER\n',e)
+                            else:
+                                if not silent: print('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
+                        else:
+                            raise RuntimeError(f'THIS FUTURE HAS BEEN SUBMITTED BUT THE RUN_DIR WAS NOT ADDED TO fut_to_rundir, future.key: {future.key}')
+                        if result == (None,None):
+                            if timeout == 0:
+                                break
+                            if not silent: print('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
+                            time.sleep(1)
+            else:
+                print('FUTURE NOT DONE YET, CANNOT GET RESULT NOW, SLEEPING 1 SEC AND TRYING AGAIN')
+                time.sleep(1)
         return result
     
     def update_completion_stats(self, result, exe_i, batch_num=0):
