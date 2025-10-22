@@ -388,7 +388,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
             sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
-                run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors
+                run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors, retries=0
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir

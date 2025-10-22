@@ -240,7 +240,8 @@ class DaskNestedExecutor(Executor):
                         # Then filter to remove duplicates in the parameters for the current sampler
                         unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
                         filtered_df = unique_df[sampler_cumulative_params]
-                        extra_df = pd.DataFrame([result] * len(filtered_df))
+                        filtered_result = {k: v for k, v in result.items() if k not in ['success', 'run_dir', 'error_id']}
+                        extra_df = pd.DataFrame([filtered_result] * len(filtered_df))
                         filtered_df = filtered_df.reset_index(drop=True)
                         for col in extra_df.columns:
                             if col in filtered_df.columns:
@@ -281,6 +282,9 @@ class DaskNestedExecutor(Executor):
                 result, error_info = result
                 
                 self.update_completion_stats(result,len(self.executors)-1)
+                if error_info is not None:
+                    with open(self.run_error_log_path, "a") as f:
+                        f.write(json.dumps(error_info) + "\n")
                 # if self.do_dynamic_scale_down:
                 #     self.dynamic_scale_down(exe_i=len(self.executors)-1, batch_num=batch_num)
                 futures_check.pop(future.key)
@@ -289,7 +293,7 @@ class DaskNestedExecutor(Executor):
                 enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{len(self.executors)-1}.csv')
                 
                 dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                print('debug success? 2', result['success'], "error info?", error_info)                        
+                print('debug success? 2', result['success'], 'result?', result, "\nerror info?", error_info)                        
                 if result['success']:
                     if os.path.exists(enchanted_dataset_path):
                         dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)

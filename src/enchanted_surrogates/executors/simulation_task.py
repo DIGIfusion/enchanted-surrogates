@@ -21,7 +21,11 @@ def run_simulation_task(
     error_info = None
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
-
+        if 'success' not in runner_output or not isinstance(runner_output.get('success'), bool):
+            raise KeyError(
+                "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
+                + " VALUE PAIR 'success': bool")
+        
     except Exception as exc:
         print(
             "=" * 100,
@@ -44,10 +48,6 @@ def run_simulation_task(
         }
         runner_output = {"success": False, "error_id": error_id}
         
-    if 'success' not in runner_output or not isinstance(runner_output.get('success'), bool):
-        raise KeyError(
-            "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
-            + " VALUE PAIR 'success': bool")
     runner_output.update(params)
     runner_output['run_dir'] = run_dir
     df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
