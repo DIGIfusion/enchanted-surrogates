@@ -7,16 +7,17 @@ name = "enchanted-surrogates"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = [
-    "joblib",
-    "numpy",
-    "pytest",
-    "dask[complete]",
-    "dask-jobqueue",
-    "pandas",
-    "pylint",
-    "coverage",
+  "importlib-metadata>=8.7",
+  "joblib",
+  "numpy",
+  "pytest",
+  "dask[complete]",
+  "dask-jobqueue",
+  "pandas",
+  "pylint",
+  "coverage"
 ]
 
 [tool.setuptools]
@@ -24,4 +25,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
