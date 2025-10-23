@@ -7,7 +7,7 @@ name = "enchanted-surrogates"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 dependencies = [
     "joblib",
     "numpy",
@@ -27,6 +27,9 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.optional-dependencies]
+sobol_sequence = [
+    "scipy"
+]
 pysgpp = [
     "numpy<2.0",
     "pysgpp"
