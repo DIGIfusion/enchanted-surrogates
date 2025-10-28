@@ -27,7 +27,7 @@ def is_iterable(x, *, treat_strings_as_iterable=True):
 
 class ExampleRunner(Runner):
     """
-    ExampleRunner: a minimal Runner implementation that executes a tiny example workload,
+    ExampleRunner: a minimal Runner implementation that executes a tiny example calculation,
     reads a numeric output from a file, and returns a simple result dictionary.
 
     Overview
@@ -40,11 +40,6 @@ class ExampleRunner(Runner):
     - Intended as a lightweight example and template for implementing real runners.
 
     Initialization parameters (via kwargs)
-    - parameter_mode (int, default 0): selects which pair of parameter names the run
-      will read from `params` and which output key will be used.
-      - 0 -> expects params["c1"], params["c2"] -> returns "output_1"
-      - 1 -> expects params["c3"], params["c4"] -> returns "output_2"
-      - 2 -> expects params["c5"], params["c6"] -> returns "output_3"
     - sleep_sec (number or two-element iterable, default 0.01): controls the pause
       after executing the example command. See Sleep sec behavior below.
     - fail_prob (float in [0, 1], default 0): probability that the run raises a
@@ -74,20 +69,18 @@ class ExampleRunner(Runner):
       so they integrate cleanly with dataset creation and surrogate tooling.
 
     Errors and edge cases
-    - Raises ValueError for unsupported parameter_mode.
     - Raises ValueError for invalid random sleep bounds (not exactly two values or low > high).
     - Raises TypeError if sleep_sec is neither a number nor a two-element iterable.
     - If fail_prob is set in (0,1], a RuntimeError may be raised after a successful run
       to simulate stochastic failures; the probability of raising is equal to fail_prob.
 
     Example usage
-    - runner = ExampleRunner(parameter_mode=0, sleep_sec=(0.1, 0.5), fail_prob=0.1)
+    - runner = ExampleRunner(sleep_sec=(0.1, 0.5), fail_prob=0.1)
     - runner.single_code_run("/tmp/run1", params={"c1": 1.2, "c2": 2.3})
       -> {"output": 3.5, "success": True}
     """
 
     def __init__(self, *args, **kwargs):
-        self.parameter_mode = kwargs.get('parameter_mode', 0)
         self.sleep_sec = kwargs.get('sleep_sec', 0.01)
         self.fail_prob = kwargs.get('fail_prob', 0)
 
@@ -143,7 +136,7 @@ class ExampleRunner(Runner):
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         """
-        Execute a single example run in `run_dir` using the current parameter_mode and
+        Execute a single example run in `run_dir` and
         return a simple results dictionary suitable for dataset creation and active
         learning workflows.
 
@@ -156,13 +149,12 @@ class ExampleRunner(Runner):
 
         Parameters
         - run_dir (str): Directory path where "output.txt" will be created and read.
-        - params (dict, optional): Parameter mapping required by the chosen parameter_mode.
+        - params (dict, optional): Parameter mapping.
 
         Returns
         - dict: At minimum contains:
           - "output" (float): primary numeric result.
           - "success" (bool): True if the run produced an output.
-        - Additional diagnostic keys may be included as non-iterable base types.
 
         Notes and constraints
         - The method appends to "output.txt"; repeated runs will append unless the caller
