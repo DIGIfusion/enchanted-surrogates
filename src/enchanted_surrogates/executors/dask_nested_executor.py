@@ -2,6 +2,7 @@
 TODO: Add module docstring
 """
 import os
+import json
 import time
 import warnings
 import pandas as pd
@@ -30,6 +31,7 @@ class DaskNestedExecutor(Executor):
         print('INITIALISING NESTED EXECUTOR')
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
+        self.run_error_log_path = os.path.join(self.base_run_dir, 'runs_error_log.jsonl')
         self.executor_names = list(executors.keys())
         self.executors_config = list(executors.values())
         self.executor_types = [exe_config['type'] for exe_config in self.executors_config]
@@ -152,7 +154,7 @@ class DaskNestedExecutor(Executor):
                 unique_df = self.current_samples_df.drop_duplicates(subset=sampler_i_params)
                 filtered_df = unique_df[sampler_i_params]
                 sampler_i_samples = filtered_df.to_dict(orient="records")
-                futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=batch_dir, include_fut_to_rundir=True)
+                futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=batch_dir, include_fut_to_rundir=True, request_errors=True)
                 self.all_futures[i].extend(futures)
                 self.all_fut_to_rundir.update(fut_to_rundir)
             else:
@@ -168,7 +170,7 @@ class DaskNestedExecutor(Executor):
                     while not previous_success:
                         done_status = [future.done() for future in self.all_futures[i-1]]
                         if any(done_status):
-                            prelim_results = [self.get_result(future, timeout=2, silent=False) for future in self.all_futures[i-1]]
+                            prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
                             suc = [] 
                             for pr in prelim_results:
                                 if pr:
@@ -177,6 +179,18 @@ class DaskNestedExecutor(Executor):
                                 previous_success = True
                                 print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
+                        # if all(done_status):
+                        #     prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
+                        #     suc = [] 
+                        #     for pr in prelim_results:
+                        #         if pr:
+                        #             suc.append(pr['success'])
+                        #     if not any(suc):
+                        #         print(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+                        #         print('SHUTTING DOWN DASK WORKERS')
+                        #         self.clean()
+                        #         raise RuntimeError(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
+
                 
                 print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 # start cluster or assign client when reusing
@@ -190,14 +204,28 @@ class DaskNestedExecutor(Executor):
                 done = [fut for fut in futures_check.values() if fut.done()]
                 while futures_check:
                     for j, future in enumerate(done):
-                        result = self.get_result(future, timeout=5)
-                        if not result:
+                        result= self.get_result(future, timeout=5)
+                        if result == (None, None):
                             continue
+                        result, error_info = result
                         self.update_completion_stats(result, i-1)
-                        # if self.do_dynamic_scale_down:
-                        #     self.dynamic_scale_down(exe_i=i-1, batch_num=batch_num)
+
+                        if error_info is not None:
+                            with open(self.run_error_log_path, "a") as f:
+                                f.write(json.dumps(error_info) + "\n")
+
                         futures_check.pop(future.key)
                         run_dir = result['run_dir']
+                        if not result['success']:
+                            enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{i-1}.csv')
+                            dfi = pd.DataFrame({r:[v] for r,v in result.items()})
+                            if os.path.exists(enchanted_dataset_fail_path):
+                                dfi.to_csv(enchanted_dataset_fail_path, mode='a', header=False, index=False)
+                            else:
+                                dfi.to_csv(enchanted_dataset_fail_path, mode='w', header=True, index=False)
+                            continue
+                        # if self.do_dynamic_scale_down:
+                        #     self.dynamic_scale_down(exe_i=i-1, batch_num=batch_num)
                         previous_sample = {k: result[k] for k in previous_sampler_params if k in result}
                         # first filter for all the samples that have the same parameters as the previous sample
                         mask = pd.Series(True, index=self.current_samples_df.index)
@@ -208,7 +236,8 @@ class DaskNestedExecutor(Executor):
                         # Then filter to remove duplicates in the parameters for the current sampler
                         unique_df = filtered_df.drop_duplicates(subset=sampler_i_params)
                         filtered_df = unique_df[sampler_cumulative_params]
-                        extra_df = pd.DataFrame([result] * len(filtered_df))
+                        filtered_result = {k: v for k, v in result.items() if k not in ['success', 'run_dir', 'error_id']}
+                        extra_df = pd.DataFrame([filtered_result] * len(filtered_df))
                         filtered_df = filtered_df.reset_index(drop=True)
                         for col in extra_df.columns:
                             if col in filtered_df.columns:
@@ -221,7 +250,7 @@ class DaskNestedExecutor(Executor):
                             dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
                         else:
                             dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
-                        sub_futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=run_dir, include_fut_to_rundir=True)
+                        sub_futures, fut_to_rundir = self.executors[i].submit_batch(sampler_i_samples, base_run_dir=run_dir, include_fut_to_rundir=True, request_errors=True)
                         self.all_futures[i].extend(sub_futures)
                         self.all_fut_to_rundir.update(fut_to_rundir)
                         # this should shut down clusters when they have finished being used. Not to be used when doing active learning
@@ -233,35 +262,53 @@ class DaskNestedExecutor(Executor):
                     if all(cluster_status) and not i-1 in self.keep_alive:
                         print(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
                         self.executors[i-1].clean()
-                            
+                        
         # write the results for the last set of futures.
         base_enchanted_dataset_path = os.path.join(self.base_run_dir, f'enchanted_dataset.csv')
+        base_enchanted_dataset_fail_path = os.path.join(self.base_run_dir, f'enchanted_dataset_fail.csv')
+        
         futures_check = {fut.key:fut for fut in self.all_futures[-1]}
         done = [fut for fut in futures_check.values() if fut.done()]
         while futures_check:
             for j, future in enumerate(done):
                 result = self.get_result(future, timeout=5)
-                if not result:
+                if result == (None, None):
                     print('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
+                result, error_info = result
                 
                 self.update_completion_stats(result,len(self.executors)-1)
+                if error_info is not None:
+                    with open(self.run_error_log_path, "a") as f:
+                        f.write(json.dumps(error_info) + "\n")
                 # if self.do_dynamic_scale_down:
                 #     self.dynamic_scale_down(exe_i=len(self.executors)-1, batch_num=batch_num)
                 futures_check.pop(future.key)
                 run_dir = result['run_dir']
                 enchanted_dataset_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_{len(self.executors)-1}.csv')
-                dfi = pd.DataFrame({r:[v] for r,v in result.items()})
-                if os.path.exists(enchanted_dataset_path):
-                    dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
-                else:
-                    dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
+                enchanted_dataset_fail_path = os.path.join(os.path.dirname(run_dir), f'enchanted_dataset_fail_{len(self.executors)-1}.csv')
                 
-                if os.path.exists(base_enchanted_dataset_path):
-                    dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
-                else:
-                    dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
-            
+                dfi = pd.DataFrame({r:[v] for r,v in result.items()})
+                if result['success']:
+                    if os.path.exists(enchanted_dataset_path):
+                        dfi.to_csv(enchanted_dataset_path, mode='a', header=False, index=False)
+                    else:
+                        dfi.to_csv(enchanted_dataset_path, mode='w', header=True, index=False)
+                    
+                    if os.path.exists(base_enchanted_dataset_path):
+                        dfi.to_csv(base_enchanted_dataset_path, mode='a', header=False, index=False)
+                    else:
+                        dfi.to_csv(base_enchanted_dataset_path, mode='w', header=True, index=False)
+                elif not result['success']:
+                    if os.path.exists(enchanted_dataset_fail_path):
+                        dfi.to_csv(enchanted_dataset_fail_path, mode='a', header=False, index=False)
+                    else:
+                        dfi.to_csv(enchanted_dataset_fail_path, mode='w', header=True, index=False)
+                    
+                    if os.path.exists(base_enchanted_dataset_fail_path):
+                        dfi.to_csv(base_enchanted_dataset_fail_path, mode='a', header=False, index=False)
+                    else:
+                        dfi.to_csv(base_enchanted_dataset_fail_path, mode='w', header=True, index=False)
                 # this should shut down clusters when they have finished being used. Not to be used when doing active learning
             done = [fut for fut in futures_check.values() if fut.done()]
             
@@ -347,35 +394,40 @@ class DaskNestedExecutor(Executor):
         return done, pending
     
     def get_result(self, future, timeout=60, silent=False):
-        result = None
-        try:
-            result = future.result(timeout=timeout)
-            self.log_stats['fut_res_available'] += 1
-        except:
-            pass
-            
-        if not result:
-            started = time.time()
-            while not result and time.time()-started < timeout:
-                run_dir = self.all_fut_to_rundir.get(future.key)
-                if run_dir:
-                    result_dir = os.path.join(run_dir, 'enchanted_datapoint.csv')
-                    if os.path.exists(result_dir):
-                        try:
-                            df = pd.read_csv(result_dir)
-                            result = df.iloc[0].to_dict()
-                            self.log_stats['fut_res_not_available'] += 1
-                        except pd.errors.EmptyDataError as e:
-                            print('EMPTY DATA ERROR: WAITING LONGER\n',e)
-                    else:
-                        if not silent: print('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
-                else:
-                    raise RuntimeError(f'THIS FUTURE HAS BEEN SUBMITTED BUT THE RUN_DIR WAS NOT ADDED TO fut_to_rundir, future.key: {future.key}')
-                if not result:
-                    if timeout == 0:
-                        break
-                    if not silent: print('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
-                    time.sleep(1)
+        started = time.time()
+        result = None, None
+        while result == (None, None) and time.time()-started < timeout:
+            if future.done():
+                try:
+                    result = future.result(timeout=timeout)
+                    self.log_stats['fut_res_available'] += 1
+                except:
+                    pass
+                    
+                if result == (None,None):
+                    while result == (None, None) and time.time()-started < timeout:
+                        run_dir = self.all_fut_to_rundir.get(future.key)
+                        if run_dir:
+                            result_dir = os.path.join(run_dir, 'enchanted_datapoint.csv')
+                            if os.path.exists(result_dir):
+                                try:
+                                    df = pd.read_csv(result_dir)
+                                    result = df.iloc[0].to_dict()
+                                    self.log_stats['fut_res_not_available'] += 1
+                                except pd.errors.EmptyDataError as e:
+                                    print('EMPTY DATA ERROR: WAITING LONGER\n',e)
+                            else:
+                                if not silent: print('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
+                        else:
+                            raise RuntimeError(f'THIS FUTURE HAS BEEN SUBMITTED BUT THE RUN_DIR WAS NOT ADDED TO fut_to_rundir, future.key: {future.key}')
+                        if result == (None,None):
+                            if timeout == 0:
+                                break
+                            if not silent: print('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
+                            time.sleep(1)
+            else:
+                print('FUTURE NOT DONE YET, CANNOT GET RESULT NOW, SLEEPING 1 SEC AND TRYING AGAIN')
+                time.sleep(1)
         return result
     
     def update_completion_stats(self, result, exe_i, batch_num=0):
