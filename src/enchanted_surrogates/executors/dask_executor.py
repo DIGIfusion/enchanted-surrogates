@@ -46,7 +46,7 @@ class DaskExecutor(Executor):
                 - scale_n_jobs (int): Number of jobs to scale the cluster to.
                 - SLURMcluster_config (dict): Arguments for SLURMCluster.
                 - LocalCluster_config (dict): Arguments for LocalCluster.
-                - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
+                - block_until_cluster_started (bool): Whether to block until the cluster is fully started.
         """
         super().__init__(*args, **kwargs)
         print('INITIALISING DASK EXECUTOR')
