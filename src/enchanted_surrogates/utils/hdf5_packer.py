@@ -6,7 +6,7 @@ import numpy as np
 import fnmatch
 import re
 
-def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None, uuid_only=False):
+def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None, uuid_only=False, delete_packed=False):
     """
     Pack source_dir into an HDF5 file and optionally delete original files/dirs.
 
@@ -16,17 +16,28 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
     - skip_delete (iterable[str] | None): Exact filenames or relative paths to preserve.
     - skip_patterns (iterable[str] | None): Glob-style patterns matched against relative paths.
     - uuid_only (bool): If True, only include files located in directories with UUIDs in their path.
+    - delete_packed (bool): If True, delete files and directories that were packed.
     """
     print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
     skip_delete = set(skip_delete or [])
     skip_patterns = list(skip_patterns or [])
+    packed_paths = set()
 
     uuid_regex = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
     def path_has_uuid(path):
         parts = path.replace(os.path.sep, '/').split('/')
         return any(uuid_regex.search(part) for part in parts)
+
+    def should_preserve(rel_path):
+        rel_path_posix = rel_path.replace(os.path.sep, '/').lstrip('/')
+        if rel_path_posix in skip_delete:
+            return True
+        for pat in skip_patterns:
+            if fnmatch.fnmatch(rel_path_posix, pat):
+                return True
+        return False
 
     with h5py.File(hdf5_path, "w") as h5f:
         for root, _, files in os.walk(source_dir):
@@ -65,8 +76,34 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
                         group[file].attrs["type"] = "binary"
                     except Exception:
                         print(f"⚠️ PATH FAILURE: {dataset_path}")
+                        continue
 
-    # Add notebook and README
+                packed_paths.add(file_path)
+
+    # Delete packed files and their directories if requested
+    if delete_packed:
+        for file_path in sorted(packed_paths, key=len, reverse=True):
+            rel_path = os.path.relpath(file_path, source_dir)
+            if should_preserve(rel_path):
+                continue
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"⚠️ Could not delete file: {file_path} ({e})")
+
+        # Remove empty directories
+        for root, dirs, _ in os.walk(source_dir, topdown=False):
+            for d in dirs:
+                dir_path = os.path.join(root, d)
+                rel_dir = os.path.relpath(dir_path, source_dir)
+                if should_preserve(rel_dir):
+                    continue
+                try:
+                    if not os.listdir(dir_path):
+                        os.rmdir(dir_path)
+                except Exception as e:
+                    print(f"⚠️ Could not delete directory: {dir_path} ({e})")
+
     create_jupyter_notebook(source_dir, hdf5_name)
     create_readme(source_dir, hdf5_name)
 

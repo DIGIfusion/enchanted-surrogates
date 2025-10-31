@@ -76,7 +76,7 @@ def main(args: argparse.Namespace, config_path=None):
             # reduce num files with hdf5
             batch_dirs = get_batch_dirs(args.executor['base_run_dir'])
             for batch_dir in batch_dirs:
-                convert_directory_to_hdf5(batch_dir, uuid_only=True)
+                convert_directory_to_hdf5(batch_dir, uuid_only=True, delete_packed=True)
     return
 
 if __name__ == "__main__":
