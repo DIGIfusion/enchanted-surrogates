@@ -4,56 +4,59 @@ import shutil
 import json
 import numpy as np
 import fnmatch
+import re
 
-def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None):
+def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None, uuid_only=False):
     """
     Pack source_dir into an HDF5 file and optionally delete original files/dirs.
 
-    Parameters
-    - source_dir (str)
-    - hdf5_name (str): name of the HDF5 file created inside source_dir
-    - skip_delete (iterable[str] | None): exact filenames or relative paths to preserve
-    - skip_patterns (iterable[str] | None): glob-style patterns matched against relative paths
+    Parameters:
+    - source_dir (str): Directory to pack.
+    - hdf5_name (str): Name of the HDF5 file created inside source_dir.
+    - skip_delete (iterable[str] | None): Exact filenames or relative paths to preserve.
+    - skip_patterns (iterable[str] | None): Glob-style patterns matched against relative paths.
+    - uuid_only (bool): If True, only include files located in directories with UUIDs in their path.
     """
     print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
     skip_delete = set(skip_delete or [])
     skip_patterns = list(skip_patterns or [])
 
+    uuid_regex = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+    def path_has_uuid(path):
+        parts = path.replace(os.path.sep, '/').split('/')
+        return any(uuid_regex.search(part) for part in parts)
+
     with h5py.File(hdf5_path, "w") as h5f:
         for root, _, files in os.walk(source_dir):
             rel_root = os.path.relpath(root, source_dir)
             if rel_root == '.':
-                rel_root = ''  # top-level
-            # Normalize rel_root to posix style for consistent dataset paths and pattern matching
+                rel_root = ''
             rel_root_posix = rel_root.replace(os.path.sep, '/').lstrip('/')
 
-            # Use the HDF5 root group for top-level, otherwise require/create a subgroup
-            if rel_root_posix == '':
-                group = h5f  # root group
-            else:
-                group = h5f.require_group(rel_root_posix)
+            if uuid_only and not path_has_uuid(rel_root_posix):
+                continue
+
+            group = h5f if rel_root_posix == '' else h5f.require_group(rel_root_posix)
 
             for file in files:
                 file_path = os.path.join(root, file)
-                # Skip the HDF5 file itself
+                rel_path = os.path.relpath(file_path, source_dir).replace(os.path.sep, '/')
+
                 if os.path.abspath(file_path) == os.path.abspath(hdf5_path):
                     continue
 
                 with open(file_path, "rb") as f:
                     data = f.read()
 
-                # dataset path inside HDF5 uses posix-like relative path
-                dataset_path = f"{rel_root_posix}/{file}" if rel_root_posix else file
-                dataset_path = dataset_path.lstrip('/')
-
+                dataset_path = rel_path.lstrip('/')
                 if dataset_path in h5f:
                     print(f"⚠️ Skipping duplicate: {dataset_path}")
                     continue
 
                 try:
                     decoded = data.decode("utf-8")
-                    # create dataset under the current group using the plain filename
                     group.create_dataset(file, data=decoded)
                     group[file].attrs["type"] = "text"
                 except (UnicodeDecodeError, ValueError):
@@ -63,46 +66,12 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
                     except Exception:
                         print(f"⚠️ PATH FAILURE: {dataset_path}")
 
-    def should_preserve(rel_path):
-        rel_path_posix = rel_path.replace(os.path.sep, '/').lstrip('/')
-        if rel_path_posix in skip_delete:
-            return True
-        for pat in skip_patterns:
-            if fnmatch.fnmatch(rel_path_posix, pat):
-                return True
-        return False
-
-    for item in os.listdir(source_dir):
-        item_path = os.path.join(source_dir, item)
-        rel_item = item  # top-level relative path
-        if os.path.abspath(item_path) == os.path.abspath(hdf5_path):
-            continue  # never remove the archive itself
-        if should_preserve(rel_item):
-            print(f"⏭ Preserving top-level item: {rel_item}")
-            continue
-        if os.path.isdir(item_path):
-            preserve_dir = False
-            for root, dirs, files in os.walk(item_path):
-                for name in dirs + files:
-                    rel_child = os.path.relpath(os.path.join(root, name), source_dir)
-                    rel_child = rel_child.replace(os.path.sep, '/')
-                    if should_preserve(rel_child):
-                        preserve_dir = True
-                        break
-                if preserve_dir:
-                    break
-            if preserve_dir:
-                print(f"⏭ Preserving directory because it contains preserved item: {rel_item}")
-                continue
-            shutil.rmtree(item_path)
-        else:
-            os.remove(item_path)
-
     # Add notebook and README
     create_jupyter_notebook(source_dir, hdf5_name)
     create_readme(source_dir, hdf5_name)
 
     print(f"✅ Packed '{source_dir}' into '{hdf5_name}' with notebook and README.")
+
 
 # create_jupyter_notebook and create_readme unchanged (copy from original)
 def create_jupyter_notebook(target_dir, hdf5_name):

@@ -6,7 +6,7 @@ from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
+from enchanted_surrogates.utils.hdf5_packer import convert_directory_to_hdf5
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -61,7 +61,7 @@ def main(args: argparse.Namespace):
             # reduce num files with hdf5
             batch_dirs = get_batch_dirs(args.executor['base_run_dir'])
             for batch_dir in batch_dirs:
-                convert_directory_to_hdf5(batch_dir, skip_delete=['enchanted_dataset.csv', 'batch_info.csv'])
+                convert_directory_to_hdf5(batch_dir, uuid_only=True)
     return
 
 
