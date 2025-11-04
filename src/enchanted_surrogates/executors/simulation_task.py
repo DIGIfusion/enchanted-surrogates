@@ -50,8 +50,10 @@ def run_simulation_task(
         
     runner_output.update(params)
     runner_output['run_dir'] = run_dir
-    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
-    df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
+    
+    if os.path.exists(run_dir):
+        df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
+        df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
     
     if return_errors:
         return runner_output, error_info

@@ -32,7 +32,8 @@ sdsg = [
 ]
 pysgpp = [
     "numpy<2.0",
-    "pysgpp"
+    "pysgpp",
+    "scikit-learn",
 ]
 chaospy = [
     "chaospy",

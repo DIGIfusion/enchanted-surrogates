@@ -11,6 +11,8 @@ from dask.distributed import Client, as_completed, wait, LocalCluster, get_worke
 from dask.distributed import print as dask_print
 from enchanted_surrogates.utils.time_format import format_sec
 
+from enchanted_surrogates.utils.precise_imports import import_runner
+
 from .base_executor import Executor
 from enchanted_surrogates.executors import simulation_task
 import shutil
@@ -70,6 +72,7 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
         self.current_batch = 0
+        self.save_run_dirs = kwargs.get('save_run_dirs', True)
 
     def start_cluster(self, slurm_out_dir=None):
         """
@@ -293,9 +296,11 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     os.makedirs(batch_dir)        
                 samples = self.sampler.get_next_samples()
                 if not samples:
+                    print("SAMPLER DID NOT RETURN ANY SAMPLES, EXITING")
                     shutil.rmtree(batch_dir)
                     break
                 if self.sampler.submitted > self.sampler.budget:
+                    print('BUDGET REACHED EXITING')
                     shutil.rmtree(batch_dir)
                     break
                 
@@ -358,7 +363,11 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
             file.write(f'ENCHANTED.FINISHED, {__class__}')
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
-
+        
+        runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
+        if hasattr(runner,'light_post_processing'):
+            print('PERFORMING LIGHT POST PROCESSING FROM THE RUNNER:',self.runner_config['type'])
+            runner.light_post_processing(self.base_run_dir)
 
     def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False, request_errors=False):
         """
@@ -385,7 +394,10 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
         run_dirs = []
         fut_to_rundir = {}
         for sample_params in samples:
-            sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
+            if not self.save_run_dirs:
+                sample_run_dir = make_run_dir(base_run_dir='/tmp/', prepend=self.runner_config['type']) 
+            else:
+                sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
                 run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors, retries=0

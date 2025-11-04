@@ -42,6 +42,7 @@ class SobolIndicesSampler(Sampler):
         """
         print('INALIZING SOBOL INDICES SAMPLER')
         self.parameters = parameters
+        print('debug sis parameters:', self.parameters)
         self.bounds = bounds
         self.d = len(parameters)
         self.convergence_tolerence = kwargs.get('convergence_tolerence', None)
@@ -279,6 +280,57 @@ class SobolIndicesSampler(Sampler):
         #     'N': int(N)
         # }
 
+    def jansen_estimator(self, func_dict, ddof=1):
+        """
+        Compute Jansen total-order Sobol indices.
+
+        Parameters:
+        - func_dict: dict with keys
+            'f_A': shape (s, N)
+            'f_B': shape (s, N)
+            'f_AB': shape (D, s, N)
+        - ddof: degrees of freedom for sample variance (default 1)
+
+        Returns:
+        - dict with keys 'total_order' (np.ndarray, shape (D,))
+                        'var_Y' (float), 'mean_Y' (float), 'N' (int)
+        """
+        f_A = np.asarray(func_dict['f_A'])
+        f_AB = np.asarray(func_dict['f_AB'])
+
+        if f_A.ndim == 2 and f_A.shape[0] == 1:
+            f_A = f_A.ravel()
+        if f_AB.ndim == 3:
+            D, s, N = f_AB.shape
+            if s != 1:
+                f_AB = f_AB.reshape(D, s, N).mean(axis=1)
+            else:
+                f_AB = f_AB[:, 0, :]
+        else:
+            raise ValueError("f_AB must have shape (D, s, N)")
+
+        N = f_A.size
+        if f_AB.shape[1] != N:
+            raise ValueError("Each f_AB[i] must have length N")
+
+        # mean and variance of Y across all uniform samples (A and B)
+        Y_all = f_A  # Jansen only uses f_A for variance
+        mean_Y = Y_all.mean()
+        var_Y = Y_all.var(ddof=ddof)
+
+        # If var_Y is zero, indices are undefined
+        if var_Y == 0:
+            total_order = np.zeros(D)
+            return {'total_order': total_order, 'var_Y': var_Y, 'mean_Y': mean_Y, 'N': N}
+
+        # Jansen total-order estimator
+        total_order = ((f_A[None, :] - f_AB)**2).mean(axis=1) / (2 * var_Y)
+
+        class res():
+            def __init__(self):
+                self.total_order = np.asarray(total_order)
+        return res()
+
 
     def analyze_from_df(self, df=None, csv_path=None, output_column='output'):
         """
@@ -315,26 +367,30 @@ class SobolIndicesSampler(Sampler):
             'std': np.sqrt(variance)
         }
 
-        if self.method == 'martinez':
+        if 'martinez' in self.method:
             res = self.martinez_estimator(func_dict)
             for i, param in enumerate(self.parameters):
-                result[f'{param}_sobolF'] = res.first_order[i]
-                result[f'{param}_sobolT'] = res.total_order[i]
+                result[f'{param}_martinez_sobolF'] = res.first_order[i]
+                result[f'{param}_martinez_sobolT'] = res.total_order[i]
 
-        elif self.method == 'compare':
-            res1 = self.martinez_estimator(func_dict)
-            res2 = sobol_indices(func=func_dict, n=n)
+        if 'janson' in self.method:
+            res = self.jansen_estimator(func_dict)
             for i, param in enumerate(self.parameters):
-                result[f'{param}_martinez_sobolF'] = res1.first_order[i]
-                result[f'{param}_martinez_sobolT'] = res1.total_order[i]
-            for i, param in enumerate(self.parameters):
-                result[f'{param}_saltelli_sobolF'] = res2.first_order[i]
-                result[f'{param}_saltelli_sobolT'] = res2.total_order[i]
-        else:
-            res = sobol_indices(func=func_dict, n=n)
-            for i, param in enumerate(self.parameters):
-                result[f'{param}_sobolF'] = res.first_order[i]
-                result[f'{param}_sobolT'] = res.total_order[i]
+                result[f'{param}_jansen_sobolT'] = res.total_order[i]
+        
+        # elif self.method == 'compare':
+        #     res1 = self.martinez_estimator(func_dict)
+        #     res2 = sobol_indices(func=func_dict, n=n)
+        #     for i, param in enumerate(self.parameters):
+        #         result[f'{param}_martinez_sobolF'] = res1.first_order[i]
+        #         result[f'{param}_martinez_sobolT'] = res1.total_order[i]
+        #     for i, param in enumerate(self.parameters):
+        #         result[f'{param}_saltelli_sobolF'] = res2.first_order[i]
+        #         result[f'{param}_saltelli_sobolT'] = res2.total_order[i]
+        res = sobol_indices(func=func_dict, n=n)
+        for i, param in enumerate(self.parameters):
+            result[f'{param}_saltelli_sobolF'] = res.first_order[i]
+            result[f'{param}_saltelli_sobolT'] = res.total_order[i]
         
         return result
     

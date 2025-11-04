@@ -92,3 +92,5 @@ def print_stats_table(stats):
     # Print centered in terminal
     for line in output:
         print(line.center(term_width))
+    
+    return '\n'.join(output)
