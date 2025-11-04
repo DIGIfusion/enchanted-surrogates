@@ -7,7 +7,7 @@ name = "enchanted-surrogates"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 dependencies = [
     "joblib",
     "numpy",
@@ -29,6 +29,9 @@ where = ["src"]
 [project.optional-dependencies]
 sdsg = [
   "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
+]
+sobol_sequence = [
+    "scipy"
 ]
 pysgpp = [
     "numpy<2.0",
