@@ -44,16 +44,21 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.current_multiindices = [self.init_multiindex]
         # create objects to do sensitivity-driven adaptve sparse grid interpolation
         # grid object
+        print('MAKING THE GRID OBJECT')
         self.Grid_obj = Grid(self.dim, self.grid_level, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights)
         # multiindex object
+        print('MAKING THE MULTIINDEX OBJECT')
         self.Multiindex_obj = Multiindex(self.dim)
 
         # interpolation object
+        print('MAKING THE INTERPOLATION OBJECT')
         self.InterpToSpectral_obj = InterpolationToSpectral(self.dim, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights, self.max_level, self.Grid_obj)
+        print('MAKING THE SPECTRAL PROJECTION OBJECT')
         self.SpectralProjection_obj = SpectralProjection(self.dim, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights, self.max_level, self.Grid_obj)
         
         # adaptivity object; the most important thing is the refinement indicator; see the paper
         # see also the implementation
+        print('MAKING THE ADAPTIVITY OBJECT')
         self.Adaptivity_obj = SpectralScores(self.dim, self.tols, self.init_multiindex, self.max_level, self.level_to_nodes, self.InterpToSpectral_obj)
 
         # add initial multiindex to the multiindex set, aka, K = {(1, 1, ..., 1)}
@@ -64,6 +69,8 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.current_grid_points = None
         
         self.batch_number = 0
+        print('FINISHED INITALIZING SENTITIVITY DRIVEN SPARSE GRID SAMPLER')
+
     def get_initial_samples(self):
         init_grid_points     = self.Grid_obj.get_std_sg_surplus_points(self.init_multiindex_set)
         # init_no_points         = self.Grid_obj.get_no_fg_grid_points(self.current_multiindex_set)
