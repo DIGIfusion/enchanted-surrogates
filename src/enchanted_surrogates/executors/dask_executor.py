@@ -1,4 +1,8 @@
 import os
+#!/usr/bin/env python3
+import glob
+import os
+            
 import subprocess
 import time
 import warnings
@@ -73,6 +77,7 @@ class DaskExecutor(Executor):
         self.expected_number_of_workers = None
         self.current_batch = 0
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
+        self.submit_command = kwargs.get('submit_command', None)
 
     def start_cluster(self, slurm_out_dir=None):
         """
@@ -103,6 +108,10 @@ class DaskExecutor(Executor):
                 self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
             print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
             self.cluster = SLURMCluster(**self.SLURMcluster_config)
+            
+            if self.submit_command:
+                self.cluster.job_cls.submit_command = self.submit_command
+            
             self.cluster.scale(self.scale_n_jobs)
             print('THE JOB SCRIPT FOR A WORKER IS:')
             print(self.cluster.job_script())

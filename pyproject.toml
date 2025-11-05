@@ -31,7 +31,7 @@ sdsg = [
   "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
 ]
 sobol_sequence = [
-    "scipy"
+    "scipy",
 ]
 pysgpp = [
     "numpy<2.0",
