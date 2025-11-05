@@ -35,7 +35,7 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.weights         = [lambda x: 1. for i in range(self.dim)]
 
         # tolerance used in the adaptive algorithm
-        self.tols         = tol*np.ones(self.dim + 1)
+        self.tols         = float(tol)*np.ones(self.dim + 1)
         # maximum level reachable by the sparse grid
         self.max_level     = max_level
 
@@ -127,6 +127,12 @@ class SensitivityDrivenSparseGrid(Sampler):
             self.Adaptivity_obj.init_adaption()
             
             self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+            
+            if len(self.current_multiindices) == 0:
+                while len(self.current_multiindices) == 0:
+                    self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+                    self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+            
             print('debug current_multiindices', self.current_multiindices)
             samples = []
             self.current_grid_points = []
@@ -171,6 +177,17 @@ class SensitivityDrivenSparseGrid(Sampler):
                 return None
             
             self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+            if len(self.current_multiindices) == 0:
+                while len(self.current_multiindices) == 0:
+                    self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+                    self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+                    self.Adaptivity_obj.check_termination_criterion()
+                    finished_adapt = self.Adaptivity_obj.stop_adaption                    
+                    print('finished_adapt?',finished_adapt)
+                    print('******************')
+                    if finished_adapt:
+                        return None
+
             
             samples = []
             self.current_grid_points = []
