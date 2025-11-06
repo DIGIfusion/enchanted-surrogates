@@ -150,6 +150,10 @@ class DaskExecutor(Executor):
                 print(f"  CPUs: {info['nthreads']}")
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
+        
+        bash_command = "scancel $(squeue -u $USER -o '%i %j' | awk '$2 ~ /dask/ {print $1}')"
+        print(f"**TOP TIP** USE THIS SLURM BASH COMMAND TO CANCEL ALL JOBS WITH dask IN THE NAME\n{bash_command}")
+
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """

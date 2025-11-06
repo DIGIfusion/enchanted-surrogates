@@ -9,12 +9,18 @@ class ProvideListSampler(Sampler):
         """
         self.parameters = parameters
         self.samples_lists = samples_lists    
+        
+        self.num_repeats = kwargs.get('num_repeats', 1)
+        self.include_index = kwargs.get('include_index', False)
+        
         self.samples = self.generate_parameters()
         self.num_samples = len(self.samples)
         self.current_index = 0
         
         self.batch_size = kwargs.get('batch_size', self.num_samples)
         self.batch_number = 0
+        
+        
     def get_initial_samples(self, *args, **kwargs):
         """
         Gets the initial parameters.
@@ -34,6 +40,10 @@ class ProvideListSampler(Sampler):
             list of float: The next parameter combination.
         """
         samples = np.array(self.samples_lists).T
+        samples = samples * self.num_repeats
+        if self.include_index:
+            samples = [
+                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
         return samples
         
     def get_next_samples(self):
