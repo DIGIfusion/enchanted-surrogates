@@ -74,7 +74,15 @@ class SobolGRunner(Runner):
         self.clean(run_dir)
         return {"output": output, "success": True}
     
-    def light_post_processing(self, base_run_dir):
+    def light_post_processing(self, base_run_dir, *args, **kwargs):
+        stats = self.analytical_stats()
+        stats['header'] = 'ANALYTICAL UQ QUANTITIES'
+        stats['subheader'] = f'SOBOL G FUNCTION | a:{self.a}'
+        table = print_stats_table(stats)
+        # with open(os.path.join(base_run_dir, 'true_uq_stats.txt'),'w') as file:
+        #     file.write(table)
+
+    def light_pre_processing(self, base_run_dir, *args, **kwargs):
         stats = self.analytical_stats()
         stats['header'] = 'ANALYTICAL UQ QUANTITIES'
         stats['subheader'] = f'SOBOL G FUNCTION | a:{self.a}'
