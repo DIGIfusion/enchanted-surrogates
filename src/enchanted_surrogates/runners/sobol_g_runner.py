@@ -2,6 +2,7 @@ import os
 from .base_runner import Runner
 import numpy as np
 import shutil 
+import warnings
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
 class SobolGRunner(Runner):
     """
@@ -27,6 +28,8 @@ class SobolGRunner(Runner):
         if not isinstance(self.a, (list, tuple, np.ndarray)):
             raise TypeError("Parameter 'a' must be a list, tuple, or numpy array of floats with length equal to the number of sampled dimensions. Each float must be between 0 and 1.")
 
+        if np.any(np.array(self.a) == 0):
+            warnings.warn('IN THE SOBOL G RUNNER ONE OF THE a VAUES IS 0. THIS MEANS IF ANY OF THE INPUTS IS 0.5 THEN THE OUTPUT WILL BE 0. BEWARE THIS CAN CAUSE ISSUES WITH SPARSE GRIDS WHERE MANY OF THE POINTS HAVE AT LEAST ONE DIMENSION WITH 0.5 VALUE.')
     def sobol_g(self, x):
         return np.prod([(np.abs(4 * xi - 2) + ai) / (1 + ai) for xi, ai in zip(x, self.a)])
 
@@ -74,7 +77,15 @@ class SobolGRunner(Runner):
         self.clean(run_dir)
         return {"output": output, "success": True}
     
-    def light_post_processing(self, base_run_dir):
+    def light_post_processing(self, base_run_dir, *args, **kwargs):
+        stats = self.analytical_stats()
+        stats['header'] = 'ANALYTICAL UQ QUANTITIES'
+        stats['subheader'] = f'SOBOL G FUNCTION | a:{self.a}'
+        table = print_stats_table(stats)
+        # with open(os.path.join(base_run_dir, 'true_uq_stats.txt'),'w') as file:
+        #     file.write(table)
+
+    def light_pre_processing(self, base_run_dir, *args, **kwargs):
         stats = self.analytical_stats()
         stats['header'] = 'ANALYTICAL UQ QUANTITIES'
         stats['subheader'] = f'SOBOL G FUNCTION | a:{self.a}'

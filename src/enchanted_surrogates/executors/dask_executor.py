@@ -78,6 +78,9 @@ class DaskExecutor(Executor):
         self.current_batch = 0
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
         self.submit_command = kwargs.get('submit_command', None)
+        
+        self.psudo_runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
+
 
     def start_cluster(self, slurm_out_dir=None):
         """
@@ -262,7 +265,11 @@ class DaskExecutor(Executor):
         if not os.path.exists(self.base_run_dir):
             print('MAKING BASE RUN DIR:',self.base_run_dir)
             os.makedirs(self.base_run_dir)
-                
+        
+        if hasattr(self.psudo_runner,'light_pre_processing'):
+            print('PERFORMING LIGHT PRE PROCESSING FROM THE RUNNER:',self.runner_config['type'])
+            self.psudo_runner.light_pre_processing(self.base_run_dir)
+        
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
             if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
                 raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
@@ -377,10 +384,9 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
         
-        runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
-        if hasattr(runner,'light_post_processing'):
+        if hasattr(self.psudo_runner,'light_post_processing'):
             print('PERFORMING LIGHT POST PROCESSING FROM THE RUNNER:',self.runner_config['type'])
-            runner.light_post_processing(self.base_run_dir)
+            self.psudo_runner.light_post_processing(self.base_run_dir)
 
     def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False, request_errors=False):
         """

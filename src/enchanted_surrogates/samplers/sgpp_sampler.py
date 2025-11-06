@@ -596,7 +596,7 @@ class SgppSampler(Sampler):
             alpha[i] = float(self.lookup_function(box_point))
         
         # pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(alpha)
-        self.heirarchisation(self.grid, self.alpha)
+        self.heirarchisation(self.grid, alpha)
         
         def batch_predict(unit_points):
             import pysgpp as sg
@@ -944,6 +944,11 @@ class SgppSampler(Sampler):
                 df[f'{param}_anchorAnova_sobolF'] = [si]
                 df[f'{param}_anchorAnova_anchorFrac'] = [af]
 
+            sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol_surrogate(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
+            for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
+                df[f'{param}_anchorAnovaSurr_sobolF'] = [si]
+                df[f'{param}_anchorAnovaSurr_anchorFrac'] = [af]
+
             if self.do_quad_sobol:
                 quad_first_order_sobol = self.quadrature_first_order_sobol(num_points=20)
                 for param, si in zip(self.parameters, quad_first_order_sobol):
@@ -1088,6 +1093,115 @@ class SgppSampler(Sampler):
 
         print("Anchor contributions per dimension:", anchor_counts)
         return sobol_indices, np.array(anchor_counts)/len(df)
+
+    def anchored_anova_firstorder_sobol_surrogate(
+        self,
+        df_or_path,
+        parameters,
+        total_var,
+        value_col='f',
+        weight_col='w',
+        tol=1e-6,
+        min_slice_size=10,
+        n_eval=101,
+        use_trapezoid=True,
+        require_inside_domain=True
+    ):
+        """
+        Estimate first-order Sobol indices using anchored ANOVA from sparse grid anchors,
+        evaluating the surrogate model along 1D slices through each anchor.
+
+        New behavior:
+        - For each anchor and each input dimension i, create a 1D grid of n_eval points
+        over the observed range of parameter i, fix other dimensions to the anchor value,
+        and evaluate self.surrogate.predict(X_grid) to compute the conditional variance.
+
+        Parameters (new/changed):
+        - n_eval: number of 1D points to evaluate along each slice (default 101)
+        - use_trapezoid: if True use trapezoidal weights along the 1D grid; else use uniform weights
+        - require_inside_domain: if True skip anchors if the anchor value lies outside the observed domain of any parameter
+
+        Notes:
+        - If your input measure is uniform, trapezoidal or uniform weights are appropriate for the 1D integral.
+        - This function assumes self.surrogate.predict accepts a 2D array of shape (n_points, d) and returns shape (n_points,) or (n_points,1).
+        """
+        import numpy as np
+        import pandas as pd
+
+        df = pd.read_csv(df_or_path) if isinstance(df_or_path, str) else df_or_path.copy()
+        d = len(parameters)
+        sobol_matrix = []
+        anchor_counts = np.zeros(d, dtype=int)
+
+        # compute observed ranges for each parameter from df
+        param_mins = {p: df[p].min() for p in parameters}
+        param_maxs = {p: df[p].max() for p in parameters}
+
+        for _, anchor in df.iterrows():
+            sobol_per_dim = []
+            for i, dim_i in enumerate(parameters):
+                other_dims = [p for p in parameters if p != dim_i]
+
+                # optionally skip anchors outside observed domain (numerical safety)
+                if require_inside_domain:
+                    ai = anchor[dim_i]
+                    if (ai < param_mins[dim_i] - tol) or (ai > param_maxs[dim_i] + tol):
+                        sobol_per_dim.append(np.nan)
+                        continue
+
+                # build 1D grid for dimension i over the observed range
+                xi_min = param_mins[dim_i]
+                xi_max = param_maxs[dim_i]
+                if xi_max <= xi_min:
+                    sobol_per_dim.append(np.nan)
+                    continue
+
+                xi_grid = np.linspace(xi_min, xi_max, n_eval)
+
+                # construct full input matrix: each row is a point where other dims fixed at anchor
+                X_grid = np.zeros((n_eval, d), dtype=float)
+                for j, p in enumerate(parameters):
+                    if p == dim_i:
+                        X_grid[:, j] = xi_grid
+                    else:
+                        X_grid[:, j] = float(anchor[p])
+
+                # evaluate surrogate (handle possible shapes)
+                y_pred = self.surrogate_predict(X_grid, space='box_space')
+                y_pred = np.asarray(y_pred).reshape(-1)
+                # print('debug surrgoate predict in aafoss:', y_pred)
+                
+                # compute weights across xi_grid
+                if use_trapezoid:
+                    # trapezoidal weights approximate integral over xi
+                    dx = (xi_max - xi_min) / (n_eval - 1)
+                    w = np.ones(n_eval) * dx
+                    w[0] *= 0.5
+                    w[-1] *= 0.5
+                else:
+                    w = np.ones(n_eval) / n_eval
+
+                # normalize weights to sum to 1
+                w_norm = w / np.sum(w)
+
+                # conditional mean and variance along this slice
+                fi_mean = np.sum(w_norm * y_pred)
+                fi_var = np.sum(w_norm * (y_pred - fi_mean)**2)
+
+                # convert to Sobol fraction of total variance
+                sobol_val = fi_var / total_var if total_var > 0 else np.nan
+                # print('debug sobol_val, fi_var, total_var', sobol_val, fi_var, total_var)
+                sobol_per_dim.append(sobol_val)
+                anchor_counts[i] += 1
+
+            sobol_matrix.append(sobol_per_dim)
+
+        sobol_matrix = np.array(sobol_matrix, dtype=float)
+        # print('debug, sobol matrix', sobol_matrix)
+        sobol_indices = np.nanmean(sobol_matrix, axis=0)
+
+        return sobol_indices, np.array(anchor_counts) / len(df)
+
 
 
     def kde_weighted_mean_var(self, df_or_path, value_col='f', parameters=None, bandwidth=0.1, kernel='gaussian'):

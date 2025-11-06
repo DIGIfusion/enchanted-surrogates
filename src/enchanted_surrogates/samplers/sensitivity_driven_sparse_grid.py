@@ -21,7 +21,9 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.bounds = bounds
         self.dim = len(parameters)
         self.budget = kwargs.get('budget',1)
-   
+        self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
+        self.write_batch_info_every_x_samples = kwargs.get('write_batch_info_every_x_samples', 1)
+        self.num_samples_at_last_write = 0
         # sparse grid setup
         # here, we consider a uniform input distribution, thus the bounds are [0, 1]^dim
         self.left_bounds     = np.zeros(self.dim)
@@ -35,7 +37,11 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.weights         = [lambda x: 1. for i in range(self.dim)]
 
         # tolerance used in the adaptive algorithm
-        self.tols         = tol*np.ones(self.dim + 1)
+        if tol == 0:
+            self.ignore_finish_criteria = True
+        else:
+            self.ignore_finish_criteria = False
+        self.tols         = float(tol)*np.ones(self.dim + 1)
         # maximum level reachable by the sparse grid
         self.max_level     = max_level
 
@@ -44,26 +50,34 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.current_multiindices = [self.init_multiindex]
         # create objects to do sensitivity-driven adaptve sparse grid interpolation
         # grid object
+        print('MAKING THE GRID OBJECT')
         self.Grid_obj = Grid(self.dim, self.grid_level, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights)
         # multiindex object
+        print('MAKING THE MULTIINDEX OBJECT')
         self.Multiindex_obj = Multiindex(self.dim)
 
         # interpolation object
+        print('MAKING THE INTERPOLATION OBJECT')
         self.InterpToSpectral_obj = InterpolationToSpectral(self.dim, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights, self.max_level, self.Grid_obj)
+        print('MAKING THE SPECTRAL PROJECTION OBJECT')
         self.SpectralProjection_obj = SpectralProjection(self.dim, self.level_to_nodes, self.left_bounds, self.right_bounds, self.weights, self.max_level, self.Grid_obj)
         
         # adaptivity object; the most important thing is the refinement indicator; see the paper
         # see also the implementation
+        print('MAKING THE ADAPTIVITY OBJECT')
         self.Adaptivity_obj = SpectralScores(self.dim, self.tols, self.init_multiindex, self.max_level, self.level_to_nodes, self.InterpToSpectral_obj)
 
         # add initial multiindex to the multiindex set, aka, K = {(1, 1, ..., 1)}
         self.init_multiindex_set = self.Multiindex_obj.get_std_total_degree_mindex(self.grid_level)
+        self.current_multiindex_set = self.init_multiindex_set
         
         self.global_index = 0
         
         self.current_grid_points = None
         
         self.batch_number = 0
+        print('FINISHED INITALIZING SENTITIVITY DRIVEN SPARSE GRID SAMPLER')
+
     def get_initial_samples(self):
         init_grid_points     = self.Grid_obj.get_std_sg_surplus_points(self.init_multiindex_set)
         # init_no_points         = self.Grid_obj.get_no_fg_grid_points(self.current_multiindex_set)
@@ -127,6 +141,14 @@ class SensitivityDrivenSparseGrid(Sampler):
             self.Adaptivity_obj.init_adaption()
             
             self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+            
+            if len(self.current_multiindices) == 0:
+                while len(self.current_multiindices) == 0:
+                    if not self.do_one_adaption_step_postproc():
+                        return None
+                    # self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+                    self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+            
             print('debug current_multiindices', self.current_multiindices)
             samples = []
             self.current_grid_points = []
@@ -148,6 +170,7 @@ class SensitivityDrivenSparseGrid(Sampler):
             
         else:
             print(f'GETTING BATCH {self.batch_number}')
+            batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')            
             data = self.get_data()
             for sg_point_set, multiindex in zip(self.current_grid_points, self.current_multiindices):
                 for sg_point in sg_point_set:
@@ -158,20 +181,40 @@ class SensitivityDrivenSparseGrid(Sampler):
 
                 self.InterpToSpectral_obj.update_sg_evals_multiindex_lut(multiindex, self.Grid_obj)
             
-            batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
-            self.write_batch_info(batch_dir=batch_dir)
+            self.current_multiindex_set = self.Adaptivity_obj.multiindex_set          
+            if self.do_write_batch_info:
+                if self.submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
+                    # Now the surrogate is trained we can write batch info
+                    self.write_batch_info(batch_dir=batch_dir)
+                    self.num_samples_at_last_write = self.submitted    
             
-            self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+            if not self.do_one_adaption_step_postproc():
+                return None
+            # self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+            #**********DO NOT ADD ANY MORE FINISHED CHECKS, IT CAN CAUSE PREMATURE FINISH**************
             self.Adaptivity_obj.check_termination_criterion()
             finished_adapt = self.Adaptivity_obj.stop_adaption
-            
             print('finished_adapt?',finished_adapt)
             print('******************')
-            if finished_adapt:
+            if finished_adapt and not self.ignore_finish_criteria:
+                self.write_batch_info(batch_dir=batch_dir)
                 return None
             
             self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
-            
+            if len(self.current_multiindices) == 0:
+                while len(self.current_multiindices) == 0:
+                    if not self.do_one_adaption_step_postproc():
+                        return None
+                    self.Adaptivity_obj.check_termination_criterion()
+                    finished_adapt = self.Adaptivity_obj.stop_adaption                    
+                    print('finished_adapt?',finished_adapt)
+                    print('******************')
+                    if finished_adapt and not self.ignore_finish_criteria:
+                        self.write_batch_info(batch_dir=batch_dir)
+                        return None
+                    # self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+                    self.current_multiindices = self.Adaptivity_obj.do_one_adaption_step_preproc()
+                    
             samples = []
             self.current_grid_points = []
             for multiindex in self.current_multiindices:
@@ -187,7 +230,7 @@ class SensitivityDrivenSparseGrid(Sampler):
             return samples
 
     def get_batch_info(self):
-        spectral_coeff, orth_poly_basis_global = self.InterpToSpectral_obj.get_spectral_coeff_sg(self.Adaptivity_obj.multiindex_set)
+        spectral_coeff, orth_poly_basis_global = self.InterpToSpectral_obj.get_spectral_coeff_sg(self.current_multiindex_set)
         mean = self.SpectralProjection_obj.get_mean(spectral_coeff)
         var = self.SpectralProjection_obj.get_variance(spectral_coeff)
         
@@ -197,8 +240,8 @@ class SensitivityDrivenSparseGrid(Sampler):
             'std': np.sqrt(var)
         }
         
-        total_order = self.SpectralProjection_obj.get_total_sobol_indices(spectral_coeff, self.Adaptivity_obj.multiindex_set)
-        first_order = self.SpectralProjection_obj.get_first_order_sobol_indices(spectral_coeff, self.Adaptivity_obj.multiindex_set)
+        total_order = self.SpectralProjection_obj.get_total_sobol_indices(spectral_coeff, self.current_multiindex_set)
+        first_order = self.SpectralProjection_obj.get_first_order_sobol_indices(spectral_coeff, self.current_multiindex_set)
         for i, param in enumerate(self.parameters):
             batch_info[f'{param}_sobolF'] = first_order[i]
             batch_info[f'{param}_sobolT'] = total_order[i]
@@ -226,6 +269,15 @@ class SensitivityDrivenSparseGrid(Sampler):
         
         print('WRITING BATCH INFO TOOK:', time.time()-start, 'sec')
         return batch_info
+    
+    def do_one_adaption_step_postproc(self): 
+        try:
+            self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+            return True
+        except Exception as e:
+            print('ADAPTIVITY POSTPROC FAILED. STOPPING SAMPLING. \n',e)
+            return False
+            
     
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """
