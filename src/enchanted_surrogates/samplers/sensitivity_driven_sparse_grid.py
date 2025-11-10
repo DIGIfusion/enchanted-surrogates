@@ -182,6 +182,7 @@ class SensitivityDrivenSparseGrid(Sampler):
                 self.InterpToSpectral_obj.update_sg_evals_multiindex_lut(multiindex, self.Grid_obj)
             
             self.current_multiindex_set = self.Adaptivity_obj.multiindex_set          
+            self.save_state(batch_dir=batch_dir)
             if self.do_write_batch_info:
                 if self.submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
                     # Now the surrogate is trained we can write batch info
@@ -260,15 +261,19 @@ class SensitivityDrivenSparseGrid(Sampler):
         else:
             df.to_csv(all_batch_info_path, mode='w', header=True, index=False)
         df.to_csv(os.path.join(batch_dir,'batch_info.csv'), index=False)         
-        
+                
+        print('WRITING BATCH INFO TOOK:', time.time()-start, 'sec')
+        return batch_info
+    
+    def save_state(self, batch_dir):
+        print('SAVING STATE:', batch_dir)
+
         with open(os.path.join(batch_dir,'multiindex_set.pkl'), 'wb') as file:
             pickle.dump(self.Adaptivity_obj.multiindex_set,file)
         
+        spectral_coeff, orth_poly_basis_global = self.InterpToSpectral_obj.get_spectral_coeff_sg(self.current_multiindex_set)
         with open(os.path.join(batch_dir,'spectral_coeff.pkl'), 'wb') as file:
-            pickle.dump(self.Adaptivity_obj.multiindex_set,file)
-        
-        print('WRITING BATCH INFO TOOK:', time.time()-start, 'sec')
-        return batch_info
+            pickle.dump(spectral_coeff,file)
     
     def do_one_adaption_step_postproc(self): 
         try:

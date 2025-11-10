@@ -18,6 +18,7 @@ dependencies = [
     "pylint",
     "coverage",
     "matplotlib",
+    "plotly",
 ]
 
 [tool.setuptools]
