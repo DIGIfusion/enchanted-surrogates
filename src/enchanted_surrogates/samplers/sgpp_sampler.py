@@ -1,6 +1,9 @@
 import numpy as np
 import warnings
 import os
+import time
+import subprocess
+import io
 import pysgpp
 from scipy.stats import sobol_indices, uniform, entropy
 from scipy.stats import norm, truncnorm
@@ -9,6 +12,8 @@ import shutil
 import pickle
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler
+from enchanted_surrogates.utils.simple_progress_bar import SimpleProgressBar
+
 from time import sleep
 from copy import deepcopy
 
@@ -37,6 +42,7 @@ from joblib import Parallel, delayed, cpu_count
 class SgppSampler(Sampler):
     def __init__(self, bounds, parameters, test_dir=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6, **kwargs):
         self.base_run_dir = kwargs.get('base_run_dir')
+        # history
         self.budget = kwargs.get('budget', 100)
         self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
         self.write_batch_info_every_x_samples = kwargs.get('write_batch_info_every_x_samples', 1)
@@ -258,6 +264,7 @@ class SgppSampler(Sampler):
             self.guide_dataset = pysgpp.DataMatrix(self.guide_dataset_inputs_unit_points.tolist())
         elif self.guide_sampler is not None:
             samples = self.guide_sampler.get_next_samples()
+            self.guide_dataset_size = len(samples)
             self.custom_submitted += len(samples)
             self.batch_number += 1
             return samples
@@ -598,30 +605,109 @@ class SgppSampler(Sampler):
         # pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(alpha)
         self.heirarchisation(self.grid, alpha)
         
-        def batch_predict(unit_points):
-            import pysgpp as sg
-            unit_points = np.array(unit_points).tolist()
-            unit_points_dm = sg.DataMatrix(unit_points)
-            opEval = sg.createOperationMultipleEval(self.grid, unit_points_dm)
-            results = sg.DataVector(len(unit_points))
-            opEval.eval(alpha, results)
-            ans = np.array(results.array()) # sometimes this line breaks python. 
-            # ans = np.array([results.get(i) for i in range(len(positions))])
-            return ans
+        # def batch_predict(unit_points):
+        #     import pysgpp as sg
+        #     unit_points = np.array(unit_points).tolist()
+        #     unit_points_dm = sg.DataMatrix(unit_points)
+        #     opEval = sg.createOperationMultipleEval(self.grid, unit_points_dm)
+        #     results = sg.DataVector(len(unit_points))
+        #     opEval.eval(alpha, results)
+        #     ans = np.array(results.array()) # sometimes this line breaks python. 
+        #     # ans = np.array([results.get(i) for i in range(len(positions))])
+        #     return ans
         if n_jobs==0:
-            return batch_predict(unit_points)
+            return self._batch_predict(unit_points, self.grid, self.alpha)
         else:
             if n_jobs == -1:
                 n_jobs = cpu_count()
             split_box_points = np.array_split(unit_points, n_jobs)
-            ans_list = Parallel(n_jobs=n_jobs)(delayed(batch_predict)(unit_points) for unit_points in split_box_points)
+            ans_list = Parallel(n_jobs=n_jobs)(delayed(self._batch_predict)(unit_points, self.grid, self.alpha) for unit_points in split_box_points)
             return np.concatenate(ans_list, axis=0)
     
+
+    def _batch_predict(self, unit_points, grid, alpha, timeout=60, per_call_timeout=60):
+        DELIMITER = b'\x00\xff\x00\xff\xfe\xfd\xfc\xfbUNLIKELY_DELIMITER\xfb\xfc\xfd\xfe\xff\x00\xff\x00'
+        serial_grid = grid.serialize()
+        assert isinstance(serial_grid, str)
+        serial_grid = serial_grid.encode('utf-8')
+
+        result = None
+        start = time.time()
+
+        # Build alpha_array from pysgpp.DataVector or from sequence-like alpha
+        if isinstance(alpha, pysgpp.DataVector):
+            alpha_array = np.array([alpha[i] for i in range(alpha.getSize())])
+        else:
+            alpha_array = np.asarray(alpha)
+
+        unit_points = np.array(unit_points)
+        # pre-serialize alpha and unit_points once
+        buf_alpha = io.BytesIO()
+        np.save(buf_alpha, alpha_array)
+        alpha_serial = buf_alpha.getvalue()
+
+        buf_up = io.BytesIO()
+        np.save(buf_up, unit_points)
+        up_serial = buf_up.getvalue()
+
+        script_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'sgpp_sampler_helper_scripts',
+            'predict.py'
+        )
+
+        while result is None and time.time() - start < timeout:
+            combined = alpha_serial + DELIMITER + serial_grid + DELIMITER + up_serial
+
+            proc = subprocess.Popen(
+                ["python", script_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False
+            )
+
+            stdout = None
+            stderr = None
+
+            try:
+                stdout, stderr = proc.communicate(input=combined, timeout=per_call_timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                _stdout, _stderr = proc.communicate()
+                stdout = _stdout or stdout
+                stderr = _stderr or stderr
+                warnings.warn(f"Subprocess timed out; killed.\nstdout: { (stdout.decode(errors='replace') if isinstance(stdout, (bytes, bytearray)) else stdout) }\nstderr: { (stderr.decode(errors='replace') if isinstance(stderr, (bytes, bytearray)) else stderr) }")
+                time.sleep(0.5)
+                continue
+
+            # check returncode first
+            if proc.returncode != 0:
+                err_text = stderr.decode(errors='replace') if isinstance(stderr, (bytes, bytearray)) else str(stderr)
+                warnings.warn(f"_batch_predict Subprocess failed (code {proc.returncode}):\n{err_text}")
+                time.sleep(0.5)
+                continue
+
+            # parse stdout bytes into numpy array
+            try:
+                # stdout should be bytes containing an .npy or .npz archive written by the child
+                arr = np.load(io.BytesIO(stdout))
+                return arr
+            except Exception as e:
+                out_text = stdout.decode(errors='replace') if isinstance(stdout, (bytes, bytearray)) else str(stdout)
+                warnings.warn(f"_batch_predict Unexpected output or parse error: {e}\nstdout:\n{out_text}")
+                time.sleep(0.5)
+                continue
+
+        return result
+
+    
     def _quadrature_integral(self):
-        op_quad = pysgpp.createOperationQuadrature(self.grid)
-        print('debug performing quadrature integral')
-        unit_integral = op_quad.doQuadrature(self.alpha)
-        return unit_integral
+        # op_quad = pysgpp.createOperationQuadrature(self.grid)
+        # print('debug performing quadrature integral')
+        # unit_integral = op_quad.doQuadrature(self.alpha)
+        # return unit_integral
+        return self.do_quadrature(self.grid, self.alpha)
     
     def quadrature_integral(self, *args, **kwargs):
         return self.safe_run(self._quadrature_integral, *args, **kwargs)
@@ -688,9 +774,11 @@ class SgppSampler(Sampler):
         # pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(alpha)
         self.heirarchisation(self.grid, alpha)
         print('debug performing quadrature in quadrature function integral')
-        op_quad = pysgpp.createOperationQuadrature(self.grid)
-        unit_integral = op_quad.doQuadrature(alpha)
-        return unit_integral
+        # op_quad = pysgpp.createOperationQuadrature(self.grid)
+        # unit_integral = op_quad.doQuadrature(alpha)
+        # return unit_integral
+
+        return self.do_quadrature(self.grid, alpha)
     
     def quadrature_function_integral(self, *args, **kwargs):
         return self.safe_run(self._quadrature_function_integral, *args, **kwargs)
@@ -910,16 +998,22 @@ class SgppSampler(Sampler):
         # if self.do_boundary_tree:
         #     self.add_boundary_tree(batch_dir)
         if self.do_write_batch_info:
+            timer_start = time.time()
             print(f'+++ \n Write ACTIVE batch: {self.batch_number}')
             print('+++ \n NUM INNER LEAF POINTS', len(self.train))            
             print('+++ \n NUM PARENT POINTS', len(self.parent_points))
             print('+++ \n NUM bounds POINTS', len(self.bounds_points))
             # df = pd.DataFrame({"num_samples":[self.num_samples_by_batch[-1]], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "quad_expectation":[self.quadrature_expectation()],"quad_double_sigma":[2*np.sqrt(self.quadrature_variance())]})
-            print('before quad exp')
+            start = time.time()
+            print('TIMING QUAD EXPECTATION')
             quad_exp = self.quadrature_expectation()
-            print('before quad var')
+            print(f'QUAD EXPECTATION TOOK {(time.time()-start)/60} min')
+            start = time.time()
+            print('TIMING QUAD VARIANCE')
             quad_std = np.sqrt(self.quadrature_variance())
-            print('after quad var')
+            print(f'QUAD VARIANCE TOOK {(time.time()-start)/60} min')
+
+            
             df = pd.DataFrame({"num_samples":[len(self.train)+self.guide_dataset_size], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "quad_mean":[quad_exp],"quad_std":[quad_std],"num_anchor_points":[len(self.anchor_boundary_points)]})
             if self.grid_increase != None:
                 df['mean_recent_surplus'] = [np.mean( np.abs(np.array(self.alpha.array())[-self.grid_increase : ]) )]
@@ -935,25 +1029,37 @@ class SgppSampler(Sampler):
             if len(output_col)>1:
                 warnings.warn(f'MORE THAN ONE OUTPUT COL {output_col}. Taking the first')
             output_col = output_col[0]
+            
+            start = time.time()
+            print('TIMING WEIGHTED MEAN CALC')
             weighted_mean, weighted_var, weights = self.kde_weighted_mean_var(data_df, value_col=output_col, parameters=self.parameters)
+            print(f'WEIGHTED MEAN CALC TOOK {(time.time()-start)/60} min')
             df['weighted_mean'] = [weighted_mean]
             df['weighted_std'] = [np.sqrt(weighted_var)]
             
+            start = time.time()
+            print('TIMING ANCHORED ANOVA FO SOBOL CALC')
             sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
             for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
                 df[f'{param}_anchorAnova_sobolF'] = [si]
                 df[f'{param}_anchorAnova_anchorFrac'] = [af]
-
+            print(f'ANCHORED ANOVA FO SOBOL CALC TOOK {(time.time()-start)/60} min')
+            
+            start = time.time()
+            print('TIMING ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC')
             sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol_surrogate(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
             for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
                 df[f'{param}_anchorAnovaSurr_sobolF'] = [si]
                 df[f'{param}_anchorAnovaSurr_anchorFrac'] = [af]
-
+            print(f'ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC TOOK {(time.time()-start)/60} min')
+            
             if self.do_quad_sobol:
+                start = time.time()
+                print('TIMING QUAD FIRST ORDER SOBOL')
                 quad_first_order_sobol = self.quadrature_first_order_sobol(num_points=20)
                 for param, si in zip(self.parameters, quad_first_order_sobol):
                     df[f'{param}_quad_sobolF'] = [si]
-            
+                print(f'QUAD FIRST ORDER SOBOL TOOK {(time.time()-start)/60} min')
             # if self.test_dir != None:
             #     x_test, y_test = self.get_test_set(self.test_dir)
             #     y_pred = self.surrogate_predict(x_test, n_jobs=self.n_jobs)
@@ -1051,7 +1157,7 @@ class SgppSampler(Sampler):
         d = len(parameters)
         sobol_matrix = []
         anchor_counts = np.zeros(d, dtype=int)
-
+        bar = SimpleProgressBar(total=len(df)*d, file=os.path.join(self.base_run_dir,'AAFOS.progress'),header='ANCHORED ANOVA FIRST ORDER SOBOL', description='This will compute the first order sobol indices')
         for _, anchor in df.iterrows():
             sobol_per_dim = []
 
@@ -1085,6 +1191,7 @@ class SgppSampler(Sampler):
                 fi_var = np.sum(wi_norm * (fi_vals - fi_mean)**2)
                 sobol_per_dim.append(fi_var / total_var)
                 anchor_counts[i] += 1
+                bar.update(1)
 
             sobol_matrix.append(sobol_per_dim)
 
@@ -1137,11 +1244,10 @@ class SgppSampler(Sampler):
         param_mins = {p: df[p].min() for p in parameters}
         param_maxs = {p: df[p].max() for p in parameters}
 
+        bar = SimpleProgressBar(total=len(df)*d, file=os.path.join(self.base_run_dir,'AAFOSS.progress'), header='ANCHORED ANOVA FIRST ORDER SOBOL SURROGATE', description='This will compute the first order sobol indices. It uses surrogate prediction rather than only parent model output values')
         for _, anchor in df.iterrows():
             sobol_per_dim = []
             for i, dim_i in enumerate(parameters):
-                other_dims = [p for p in parameters if p != dim_i]
-
                 # optionally skip anchors outside observed domain (numerical safety)
                 if require_inside_domain:
                     ai = anchor[dim_i]
@@ -1167,7 +1273,7 @@ class SgppSampler(Sampler):
                         X_grid[:, j] = float(anchor[p])
 
                 # evaluate surrogate (handle possible shapes)
-                y_pred = self.surrogate_predict(X_grid, space='box_space')
+                y_pred = self.surrogate_predict(X_grid, space='box_space', n_jobs=0)
                 y_pred = np.asarray(y_pred).reshape(-1)
                 # print('debug surrgoate predict in aafoss:', y_pred)
                 
@@ -1193,6 +1299,7 @@ class SgppSampler(Sampler):
                 # print('debug sobol_val, fi_var, total_var', sobol_val, fi_var, total_var)
                 sobol_per_dim.append(sobol_val)
                 anchor_counts[i] += 1
+                bar.update(1)
 
             sobol_matrix.append(sobol_per_dim)
 
@@ -1298,7 +1405,7 @@ class SgppSampler(Sampler):
                 # pysgpp.createOperationHierarchisation(sub_grid).doHierarchisation(sub_alpha)
             
                 # Integrate over x_{-i}
-                print('debug, doing quadrature in quadrature_first order sobol')
+                # print('debug, doing quadrature in quadrature_first order sobol')
                 fi_vals.append(self.do_quadrature(sub_grid, sub_alpha))
 
             # Compute variance of f_i(x_i)
@@ -1310,10 +1417,73 @@ class SgppSampler(Sampler):
             first_order_sobol.append(S_i)
         return first_order_sobol
 
-    def _do_quadrature(self, grid, alpha):
-        quad = pysgpp.createOperationQuadrature(grid)
-        print('debug, doing quadrature in quadrature_first order sobol')
-        return quad.doQuadrature(alpha)
+    def _do_quadrature(self, grid, alpha, timeout=30, per_call_timeout=10):
+        DELIMITER = b'\x00\xff\x00\xff\xfe\xfd\xfc\xfbUNLIKELY_DELIMITER\xfb\xfc\xfd\xfe\xff\x00\xff\x00'
+        serial_grid = grid.serialize()
+        assert isinstance(serial_grid, str)
+        serial_grid = serial_grid.encode('utf-8')
+
+        result = None
+        start = time.time()
+
+        if isinstance(alpha, pysgpp.DataVector):
+            alpha_array = np.array([alpha[i] for i in range(alpha.getSize())])
+        else:
+            alpha_array = np.array([alpha[i] for i in range(len(alpha))])
+
+        # pre-serialize alpha once
+        buf = io.BytesIO()
+        np.save(buf, alpha_array)
+        alpha_serial = buf.getvalue()
+
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                'sgpp_sampler_helper_scripts', 'do_quadrature.py')
+
+        while result is None and time.time() - start < timeout:
+            combined = alpha_serial + DELIMITER + serial_grid
+
+            proc = subprocess.Popen(
+                ["python", script_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            stderr=None
+            stdout=None
+            try:
+                stdout, stderr = proc.communicate(input=combined, timeout=per_call_timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                _stdout, _stderr = proc.communicate()
+                stdout = _stdout or stdout
+                stderr = _stderr or stderr
+                warnings.warn(f"Subprocess timed out; killed.\n stdout: \n{stdout} \n stderr: \n{stderr}")
+                time.sleep(0.5)
+                continue
+
+            # check returncode first
+            if proc.returncode != 0:
+                warnings.warn(f"_do_quadrature Subprocess failed (code {proc.returncode}):\n{stderr.decode(errors='replace')}")
+                time.sleep(0.5)
+                continue
+
+            # parse stdout safely
+            try:
+                # stdout is bytes; decode and strip
+                text = stdout.decode().strip()
+                result = float(text)
+                return result
+            except Exception:
+                warnings.warn(f"_do_quadrature Unexpected output: {stdout.decode(errors='replace')}")
+                time.sleep(0.5)
+                continue
+
+        return result
+        
+        # quad = pysgpp.createOperationQuadrature(grid)
+        # print('debug, doing quadrature in quadrature_first order sobol')
+        # return quad.doQuadrature(alpha)
     
     def do_quadrature(self, *args, **kwargs):
         return self.safe_run(self._do_quadrature, *args, **kwargs)
