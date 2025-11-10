@@ -320,7 +320,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     shutil.rmtree(batch_dir)
                     break
                 if self.sampler.submitted > self.sampler.budget:
-                    print('BUDGET REACHED EXITING')
+                    print(f'BUDGET REACHED | SUBMITTED={self.sampler.submitted} | BUDGET={self.sampler.budget} | EXITING')
                     shutil.rmtree(batch_dir)
                     break
                 

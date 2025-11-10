@@ -18,6 +18,7 @@ class ProvideListSampler(Sampler):
         self.current_index = 0
         
         self.batch_size = kwargs.get('batch_size', self.num_samples)
+        self.budget = len(self.samples)*self.num_repeats    
         self.batch_number = 0
         
         
@@ -28,8 +29,13 @@ class ProvideListSampler(Sampler):
         Returns:
             list[dict[str, float]]: The initial parameters.
         """
-        samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples]
+        samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples] * self.num_repeats
+        if self.include_index:
+            samples = [
+                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+        
         self.submitted += len(samples)
+        self.batch_number += 1
         return samples
 
     def generate_parameters(self):
@@ -40,15 +46,13 @@ class ProvideListSampler(Sampler):
             list of float: The next parameter combination.
         """
         samples = np.array(self.samples_lists).T
-        samples = samples * self.num_repeats
-        if self.include_index:
-            samples = [
-                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+        samples = samples
         return samples
         
     def get_next_samples(self):
         """
         """
+        print('getting next samples')
         if self.batch_number == 0:
             return self.get_initial_samples()
         else:
