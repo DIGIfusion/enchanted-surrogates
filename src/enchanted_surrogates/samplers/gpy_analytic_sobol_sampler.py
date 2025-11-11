@@ -45,7 +45,7 @@ def rbf_kernel_product_double_integral_1d_matrix(Xi, Xj, lengthscale, a, b):
 # ---------------------------
 # Sampler
 # ---------------------------
-class GPyAnalyticSobolSampler(Sampler):
+class GpyAnalyticSobolSampler(Sampler):
     def __init__(self, *args, **kwargs):
         # configuration
         self.parameters = kwargs.get('parameters')
@@ -97,7 +97,11 @@ class GPyAnalyticSobolSampler(Sampler):
         self._solve_K = None
 
         # timeouts and misc
-        self.write_batch_info_timeout = kwargs.get('write_batch_info_timeout', 120)
+        self.write_batch_info_timeout = kwargs.get('write_batch_info_timeout', 5*60)
+        self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
+        self.num_samples_at_last_write = 0
+        self.write_batch_info_every_x_samples = kwargs.get('write_batch_info_every_x_samples',1)
+        
         self.optimize_global = kwargs.get('optimize_global', True)  # optimize global hyperparams by default
 
     # ---------------------------
@@ -228,7 +232,7 @@ class GPyAnalyticSobolSampler(Sampler):
                 self.gp_model.optimize(messages=False)
             except Exception:
                 pass
-
+    
         # Extract and cache hyperparameters
         try:
             self.kernel_variance = float(self.gp_model.kern.variance.values[0])
@@ -261,14 +265,19 @@ class GPyAnalyticSobolSampler(Sampler):
             self._K_cholesky = None
             self._solve_K = lambda vec: K_inv.dot(vec)
 
-        # optionally save global model
-        if batch_dir is not None:
-            try:
-                os.makedirs(batch_dir, exist_ok=True)
-                with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'wb') as f:
-                    pickle.dump(self.gp_model, f)
-            except Exception:
-                pass
+        if self.do_write_batch_info:
+            previous_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
+            if self.submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
+                # Now the surrogate is trained we can write batch info
+                self.write_batch_info(previous_batch_dir)
+                self.num_samples_at_last_write = self.submitted
+
+                # optionally save global model
+                try:
+                    with open(os.path.join(previous_batch_dir, 'gpy_model.pkl'), 'wb') as f:
+                        pickle.dump(self.gp_model, f)
+                except Exception:
+                    pass
 
         # ---------------------------
         # Ensure pool
@@ -494,7 +503,6 @@ class GPyAnalyticSobolSampler(Sampler):
 
         batch_info = {
             'num_samples': [n],
-            'poly_order': [None],
             'mean': [mu],
             'std': [math.sqrt(var_pred)]
         }
@@ -507,7 +515,8 @@ class GPyAnalyticSobolSampler(Sampler):
     def write_batch_info(self, batch_dir):
         print('WRITING BATCH INFO')
         try:
-            run_with_timeout(self._write_batch_info_inner, self.write_batch_info_timeout, kwargs={'batch_dir': batch_dir})
+            # run_with_timeout(self._write_batch_info_inner, self.write_batch_info_timeout, kwargs={'batch_dir': batch_dir})
+            self._write_batch_info_inner(batch_dir=batch_dir)
         except FunctionTimeoutError:
             warnings.warn(f"write_batch_info timed out after {self.write_batch_info_timeout} seconds; skipping batch info write for batch {self.batch_number-1}", UserWarning)
         except FunctionExecutionError as exc:

@@ -48,3 +48,7 @@ hdf5 = [
     "ipykernel",
     "ipywidgets",
 ]
+GPy = [
+    "GPy",
+    "scikit-learn",
+]
