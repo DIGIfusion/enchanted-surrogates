@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import numbers
 from collections.abc import Iterable
 from datetime import datetime
@@ -197,10 +198,13 @@ class ExampleRunner(Runner):
             raise TypeError(f'Parameter c2 is not numeric: {c2!r}')
 
         # Execute a tiny Python one-liner that prints the sum and append to outfile
-        cmd = f'{sys.executable} -c "print({c1} + {c2})" >> "{outfile}"'
-        ret = os.system(cmd)
-        if ret != 0:
-            raise RuntimeError(f'Command execution failed with exit code {ret}')
+        cmd = [sys.executable, '-c', f'print({c1} + {c2})']
+
+        with open(outfile, 'a') as f:
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE)
+
+        if result.returncode != 0:
+            raise RuntimeError(f'Command execution failed with exit code {result.returncode}')
 
         # Read output and convert to float (strip whitespace)
         with open(outfile, 'r') as f:
