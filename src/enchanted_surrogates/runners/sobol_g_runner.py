@@ -224,7 +224,7 @@ class SobolGRunner(Runner):
     
     def light_post_processing(self, base_run_dir, *args, **kwargs):
         self.print_stats()
-        outdir = os.path.join('base_run_dir', "true_function_plots")
+        outdir = os.path.join(base_run_dir, "true_function_plots")
         os.makedirs(outdir, exist_ok=True)        
 
         # Plot lower-triangle (shows mirrored pairs) and save
@@ -246,7 +246,7 @@ class SobolGRunner(Runner):
         with open(os.path.join(base_run_dir, 'true_uq_stats.txt'), 'w') as file:
             file.write(table)
             
-        outdir = os.path.join('base_run_dir', "true_function_plots")
+        outdir = os.path.join(base_run_dir, "true_function_plots")
         os.makedirs(outdir, exist_ok=True)        
 
         # Plot lower-triangle (shows mirrored pairs) and save

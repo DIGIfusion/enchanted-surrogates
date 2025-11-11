@@ -79,8 +79,10 @@ class SgppSampler(Sampler):
         self.do_surplus_based=True
         self.adaptive_strategy = adaptive_strategy
         if adaptive_strategy:
-            basis_type = adaptive_strategy['basis'].pop('type')
-            self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **adaptive_strategy['basis'])
+            print('debug: adapt strat', adaptive_strategy)
+            basis_type = adaptive_strategy['basis']['type']
+            basis_args = {k: v for k, v in adaptive_strategy['basis'].items() if k != 'type'}
+            self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **basis_args)
             self.gridStorage = self.grid.getStorage()
             self.gridGen = self.grid.getGenerator()
             self.initial_level = adaptive_strategy.get('initial_level', 2)
@@ -562,8 +564,9 @@ class SgppSampler(Sampler):
             # print("Refinement step %d, new grid size: %d" % (refnum+1, HashGridStorage.getSize()))
         elif self.refinement_type == "static_grid":
             self.level += 1
-            basis_type = self.adaptive_strategy['basis'].pop('type')
-            self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **self.adaptive_strategy['basis'])
+            # basis_type = self.adaptive_strategy['basis'].pop('type')
+            basis_args = {k: v for k, v in adaptive_strategy['basis'].items() if k != 'type'}
+            self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **basis_args)
             self.gridStorage = self.grid.getStorage()
             self.gridGen = self.grid.getGenerator()
             self.gridGen.regular(self.level)     
@@ -984,9 +987,9 @@ class SgppSampler(Sampler):
             # box_point = self.point_transform_unit2box(unit_point) 
             # new_alpha[i] = self.train[box_point]
         # pysgpp.createOperationHierarchisation(new_grid).doHierarchisation(new_alpha)
-        # sasg.grid = new_grid
-        # sasg.alpha = new_alpha
-        # print('sasg degree',sasg.grid.getDegree())
+        # sgpp.grid = new_grid
+        # sgpp.alpha = new_alpha
+        # print('sgpp degree',sgpp.grid.getDegree())
         return new_grid
     
     def write_cycle_info(self, *args, **kwargs):
@@ -1157,43 +1160,44 @@ class SgppSampler(Sampler):
         d = len(parameters)
         sobol_matrix = []
         anchor_counts = np.zeros(d, dtype=int)
-        bar = SimpleProgressBar(total=len(df)*d, file=os.path.join(self.base_run_dir,'AAFOS.progress'),header='ANCHORED ANOVA FIRST ORDER SOBOL', description='This will compute the first order sobol indices')
-        for _, anchor in df.iterrows():
-            sobol_per_dim = []
+        with open(os.path.join(self.base_run_dir,'AAFOS.progress'), 'w+') as file:
+            bar = SimpleProgressBar(total=len(df)*d, file=file,header='ANCHORED ANOVA FIRST ORDER SOBOL', description='This will compute the first order sobol indices')
+            for _, anchor in df.iterrows():
+                sobol_per_dim = []
 
-            for i in range(d):
-                dim_i = parameters[i]
-                other_dims = [p for j, p in enumerate(parameters) if j != i]
+                for i in range(d):
+                    dim_i = parameters[i]
+                    other_dims = [p for j, p in enumerate(parameters) if j != i]
 
-                # Select points where all other dimensions match the anchor (within tol)
-                mask = np.ones(len(df), dtype=bool)
-                for dim_j in other_dims:
-                    mask &= np.abs(df[dim_j] - anchor[dim_j]) < tol
+                    # Select points where all other dimensions match the anchor (within tol)
+                    mask = np.ones(len(df), dtype=bool)
+                    for dim_j in other_dims:
+                        mask &= np.abs(df[dim_j] - anchor[dim_j]) < tol
 
-                slice_df = df[mask]
-                if len(slice_df) < min_slice_size:
-                    sobol_per_dim.append(np.nan)
-                    continue
+                    slice_df = df[mask]
+                    if len(slice_df) < min_slice_size:
+                        sobol_per_dim.append(np.nan)
+                        continue
 
-                fi_vals = slice_df[value_col].values
+                    fi_vals = slice_df[value_col].values
 
-                if weight_col in df.columns:
-                    wi_vals = slice_df[weight_col].values
-                    wi_norm = wi_vals / np.sum(wi_vals)
-                else:
-                    xi_vals = slice_df[dim_i].values.reshape(-1, 1)
-                    xi_tree = KDTree(xi_vals)
-                    dists, _ = xi_tree.query(xi_vals, k=2)
-                    wi_est = dists[:, 1]  # distance to nearest neighbor
-                    wi_norm = wi_est / np.sum(wi_est)
+                    if weight_col in df.columns:
+                        wi_vals = slice_df[weight_col].values
+                        wi_norm = wi_vals / np.sum(wi_vals)
+                    else:
+                        xi_vals = slice_df[dim_i].values.reshape(-1, 1)
+                        xi_tree = KDTree(xi_vals)
+                        dists, _ = xi_tree.query(xi_vals, k=2)
+                        wi_est = dists[:, 1]  # distance to nearest neighbor
+                        wi_norm = wi_est / np.sum(wi_est)
 
-                fi_mean = np.sum(wi_norm * fi_vals)
-                fi_var = np.sum(wi_norm * (fi_vals - fi_mean)**2)
-                sobol_per_dim.append(fi_var / total_var)
-                anchor_counts[i] += 1
-                bar.update(1)
+                    fi_mean = np.sum(wi_norm * fi_vals)
+                    fi_var = np.sum(wi_norm * (fi_vals - fi_mean)**2)
+                    sobol_per_dim.append(fi_var / total_var)
+                    anchor_counts[i] += 1
+                    bar.update(1)
 
-            sobol_matrix.append(sobol_per_dim)
+                sobol_matrix.append(sobol_per_dim)
 
         sobol_matrix = np.array(sobol_matrix)
         sobol_indices = np.nanmean(sobol_matrix, axis=0)
@@ -1244,64 +1248,65 @@ class SgppSampler(Sampler):
         param_mins = {p: df[p].min() for p in parameters}
         param_maxs = {p: df[p].max() for p in parameters}
 
-        bar = SimpleProgressBar(total=len(df)*d, file=os.path.join(self.base_run_dir,'AAFOSS.progress'), header='ANCHORED ANOVA FIRST ORDER SOBOL SURROGATE', description='This will compute the first order sobol indices. It uses surrogate prediction rather than only parent model output values')
-        for _, anchor in df.iterrows():
-            sobol_per_dim = []
-            for i, dim_i in enumerate(parameters):
-                # optionally skip anchors outside observed domain (numerical safety)
-                if require_inside_domain:
-                    ai = anchor[dim_i]
-                    if (ai < param_mins[dim_i] - tol) or (ai > param_maxs[dim_i] + tol):
+        with open(os.path.join(self.base_run_dir,'AAFOSS.progress'), 'w+') as file:
+            bar = SimpleProgressBar(total=len(df)*d, file=file, header='ANCHORED ANOVA FIRST ORDER SOBOL SURROGATE', description='This will compute the first order sobol indices. It uses surrogate prediction rather than only parent model output values')
+            for _, anchor in df.iterrows():
+                sobol_per_dim = []
+                for i, dim_i in enumerate(parameters):
+                    # optionally skip anchors outside observed domain (numerical safety)
+                    if require_inside_domain:
+                        ai = anchor[dim_i]
+                        if (ai < param_mins[dim_i] - tol) or (ai > param_maxs[dim_i] + tol):
+                            sobol_per_dim.append(np.nan)
+                            continue
+
+                    # build 1D grid for dimension i over the observed range
+                    xi_min = param_mins[dim_i]
+                    xi_max = param_maxs[dim_i]
+                    if xi_max <= xi_min:
                         sobol_per_dim.append(np.nan)
                         continue
 
-                # build 1D grid for dimension i over the observed range
-                xi_min = param_mins[dim_i]
-                xi_max = param_maxs[dim_i]
-                if xi_max <= xi_min:
-                    sobol_per_dim.append(np.nan)
-                    continue
+                    xi_grid = np.linspace(xi_min, xi_max, n_eval)
 
-                xi_grid = np.linspace(xi_min, xi_max, n_eval)
+                    # construct full input matrix: each row is a point where other dims fixed at anchor
+                    X_grid = np.zeros((n_eval, d), dtype=float)
+                    for j, p in enumerate(parameters):
+                        if p == dim_i:
+                            X_grid[:, j] = xi_grid
+                        else:
+                            X_grid[:, j] = float(anchor[p])
 
-                # construct full input matrix: each row is a point where other dims fixed at anchor
-                X_grid = np.zeros((n_eval, d), dtype=float)
-                for j, p in enumerate(parameters):
-                    if p == dim_i:
-                        X_grid[:, j] = xi_grid
+                    # evaluate surrogate (handle possible shapes)
+                    y_pred = self.surrogate_predict(X_grid, space='box_space', n_jobs=0)
+                    y_pred = np.asarray(y_pred).reshape(-1)
+                    # print('debug surrgoate predict in aafoss:', y_pred)
+                    
+                    # compute weights across xi_grid
+                    if use_trapezoid:
+                        # trapezoidal weights approximate integral over xi
+                        dx = (xi_max - xi_min) / (n_eval - 1)
+                        w = np.ones(n_eval) * dx
+                        w[0] *= 0.5
+                        w[-1] *= 0.5
                     else:
-                        X_grid[:, j] = float(anchor[p])
+                        w = np.ones(n_eval) / n_eval
 
-                # evaluate surrogate (handle possible shapes)
-                y_pred = self.surrogate_predict(X_grid, space='box_space', n_jobs=0)
-                y_pred = np.asarray(y_pred).reshape(-1)
-                # print('debug surrgoate predict in aafoss:', y_pred)
-                
-                # compute weights across xi_grid
-                if use_trapezoid:
-                    # trapezoidal weights approximate integral over xi
-                    dx = (xi_max - xi_min) / (n_eval - 1)
-                    w = np.ones(n_eval) * dx
-                    w[0] *= 0.5
-                    w[-1] *= 0.5
-                else:
-                    w = np.ones(n_eval) / n_eval
+                    # normalize weights to sum to 1
+                    w_norm = w / np.sum(w)
 
-                # normalize weights to sum to 1
-                w_norm = w / np.sum(w)
+                    # conditional mean and variance along this slice
+                    fi_mean = np.sum(w_norm * y_pred)
+                    fi_var = np.sum(w_norm * (y_pred - fi_mean)**2)
 
-                # conditional mean and variance along this slice
-                fi_mean = np.sum(w_norm * y_pred)
-                fi_var = np.sum(w_norm * (y_pred - fi_mean)**2)
+                    # convert to Sobol fraction of total variance
+                    sobol_val = fi_var / total_var if total_var > 0 else np.nan
+                    # print('debug sobol_val, fi_var, total_var', sobol_val, fi_var, total_var)
+                    sobol_per_dim.append(sobol_val)
+                    anchor_counts[i] += 1
+                    bar.update(1)
 
-                # convert to Sobol fraction of total variance
-                sobol_val = fi_var / total_var if total_var > 0 else np.nan
-                # print('debug sobol_val, fi_var, total_var', sobol_val, fi_var, total_var)
-                sobol_per_dim.append(sobol_val)
-                anchor_counts[i] += 1
-                bar.update(1)
-
-            sobol_matrix.append(sobol_per_dim)
+                sobol_matrix.append(sobol_per_dim)
 
         sobol_matrix = np.array(sobol_matrix, dtype=float)
         # print('debug, sobol matrix', sobol_matrix)
@@ -1531,6 +1536,65 @@ class SgppSampler(Sampler):
     def register_futures(self, futures):
         return None
 
+if __name__ == "__main__":
+    import sys
+    import yaml
+    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+    from enchanted_surrogates.utils.load_configuration import load_configuration
+    from enchanted_surrogates.utils.precise_imports import import_sampler
+    _, base_run_dir, write_every = sys.argv
+    
+    batch_dirs = get_batch_dirs(base_run_dir)
+    
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
+    
+    # bounds=np.array(config.executor.sampler_config['bounds'])
+    # parameters = config.executor.sampler_config['parameters']
+    
+    print('debug sampler config', config.executor['sampler_config'])
+    
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
+    # bounds = ['bounds']
+    # config.executor['sampler_config'].pop('bounds')
+    # parameters = config.executor['sampler_config']['parameters']
+    # config.executor['sampler_config'].pop('parameters')
+    
+    for i, batch_dir in enumerate(batch_dirs):
+        if i==0 or i==1 or i%write_every==0:
+            assert config.executor['sampler_config']['type'] == 'sgpp_sampler' or config.executor['sampler_config']['type'] == 'SgppSampler'
+            # sgpp = import_sampler(type=config.executor['sampler_config']['type'], sampler_config=config.executor['sampler_config'])
+            # bounds, parameters, test_dir=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6
+            # sgpp = SgppSampler(bounds=sampler_config['bounds'], parameters = sampler_config['parameters'], kwargs=sampler_config)
+            print('debug basis',sampler_config['adaptive_strategy']['basis'])
+            sgpp = SgppSampler(**sampler_config)
+            grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
+            surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
+            train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+            virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
+            anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
+
+            try:
+                with open(grid_file_path, 'r') as file:
+                    serialized_grid = file.read()
+                    sgpp.grid = pysgpp.Grid.unserialize(serialized_grid)
+                    sgpp.gridStorage = sgpp.grid.getStorage()
+                    sgpp.gridGen = sgpp.grid.getGenerator()
+                    surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
+                    sgpp.alpha = surpluses
+            except FileNotFoundError:
+                continue
+
+            with open(train_points_file, 'rb') as file:
+                sgpp.train = pickle.load(file)
+                
+            sgpp.write_batch_info(batch_dir)
 
 # # import pysgpp library
 # import pysgpp

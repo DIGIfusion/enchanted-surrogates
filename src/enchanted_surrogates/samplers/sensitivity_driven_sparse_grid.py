@@ -78,13 +78,19 @@ class SensitivityDrivenSparseGrid(Sampler):
         self.batch_number = 0
         print('FINISHED INITALIZING SENTITIVITY DRIVEN SPARSE GRID SAMPLER')
 
+    def map_unit_to_box(self, unit_points):
+        unit_points = np.array(unit_points)
+        return unit_points * (self.bounds[:, 1] - self.bounds[:, 0]) + self.bounds[:, 0]
+
     def get_initial_samples(self):
         init_grid_points     = self.Grid_obj.get_std_sg_surplus_points(self.init_multiindex_set)
         # init_no_points         = self.Grid_obj.get_no_fg_grid_points(self.current_multiindex_set)
         self.current_grid_points = [init_grid_points]
         self.InterpToSpectral_obj.get_local_global_basis(self.Adaptivity_obj)
         
-        samples = [{key: value for key, value in zip(self.parameters, sample)} for sample in init_grid_points]
+        box_grid_points = self.map_unit_to_box(init_grid_points)
+        
+        samples = [{key: value for key, value in zip(self.parameters, sample)} for sample in box_grid_points]
         
         samples = [{**samp, 'index': ind} for samp, ind in zip(samples, range(self.submitted, self.submitted + len(samples)))]
         self.batch_number += 1
@@ -154,14 +160,18 @@ class SensitivityDrivenSparseGrid(Sampler):
             self.current_grid_points = []
             for multiindex in self.current_multiindices:
                 grid_points_i = self.Grid_obj.get_sg_surplus_points_multiindex(multiindex)
+
+                box_grid_points_i = self.map_unit_to_box(grid_points_i)
+
                 print('debug grid_points_i', type(grid_points_i), grid_points_i)
                 self.current_grid_points.append(grid_points_i)
-                samples_i = [{key: value for key, value in zip(self.parameters, sample)} for sample in grid_points_i]
+                samples_i = [{key: value for key, value in zip(self.parameters, sample)} for sample in box_grid_points_i]
                 print('debug samples_i', samples_i)
                 samples_i = [{**samp, 'index': ind} for samp, ind in zip(samples_i, range(self.submitted, self.submitted + len(samples_i)))]
                 print('debug samples_i', samples_i)
                 self.submitted += len(samples_i)
                 
+
                 samples.extend(samples_i)
             
             self.batch_number += 1
@@ -220,8 +230,11 @@ class SensitivityDrivenSparseGrid(Sampler):
             self.current_grid_points = []
             for multiindex in self.current_multiindices:
                 grid_points_i = self.Grid_obj.get_sg_surplus_points_multiindex(multiindex)
+
+                box_grid_points_i = self.map_unit_to_box(grid_points_i)
+
                 self.current_grid_points.append(grid_points_i)
-                samples_i = [{key: value for key, value in zip(self.parameters, sample)} for sample in grid_points_i]
+                samples_i = [{key: value for key, value in zip(self.parameters, sample)} for sample in box_grid_points_i]
                 samples_i = [{**samp, 'index': ind} for samp, ind in zip(samples_i, range(self.submitted, self.submitted + len(samples_i)))]
                 samples.extend(samples_i)
                 self.submitted += len(samples_i)

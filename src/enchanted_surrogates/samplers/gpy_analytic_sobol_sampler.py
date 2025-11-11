@@ -267,10 +267,10 @@ class GpyAnalyticSobolSampler(Sampler):
 
         if self.do_write_batch_info:
             previous_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
-            if self.submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
+            if self.custom_submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
                 # Now the surrogate is trained we can write batch info
                 self.write_batch_info(previous_batch_dir)
-                self.num_samples_at_last_write = self.submitted
+                self.num_samples_at_last_write = self.custom_submitted
 
                 # optionally save global model
                 try:

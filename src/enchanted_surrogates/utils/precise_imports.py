@@ -127,7 +127,8 @@ def import_sampler(type, sampler_config):
     type_snake, type_pascal = get_snake_and_pascal(type)
     eps = load_plugins()
     if 'type' in sampler_config:
-        sampler_config.pop('type')
+        sampler_conifg = {k: v for k, v in sampler_config.items() if k != 'type'}
+            
     if type_snake in eps:
         sampler = eps[type_snake](**sampler_config)
     else:

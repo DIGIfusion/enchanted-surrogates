@@ -49,6 +49,24 @@ class SimpleProgressBar:
         if enable_ansi and os.name == "nt":
             self._ansi = self._enable_windows_ansi()
 
+        # inside __init__, set _ansi only if the file is a TTY
+        self.file = file or sys.stderr
+        # prefer user's enable_ansi but require the stream to be a TTY
+        _stream_is_tty = getattr(self.file, "isatty", lambda: False)()
+        self._ansi = bool(enable_ansi and _stream_is_tty and os.name != "nt")
+        if enable_ansi and os.name == "nt" and _stream_is_tty:
+            self._ansi = self._enable_windows_ansi()
+
+        # _clear_prev: if not ANSI, do nothing
+        def _clear_prev(self):
+            if self._last_lines <= 0:
+                return
+            if not self._ansi:
+                # non-interactive file: do not emit cursor moves; we append plain blocks instead
+                return
+            # existing ANSI clearing code follows here...
+
+
     def _enable_windows_ansi(self):
         try:
             kernel32 = ctypes.windll.kernel32
@@ -144,11 +162,11 @@ class SimpleProgressBar:
 
         return elapsed_td, eta_dt, expected_total_td, started_dt, last_update_dt
 
-    def _wrap_or_truncate(self, text, width):
+    def _wrap_or_truncate(self, text, width, allow_truncate=True):
         if text is None:
             return None
         text = str(text)
-        if len(text) <= width:
+        if len(text) <= width or not allow_truncate:
             return text
         if width > 3:
             return text[: max(0, width - 3)] + "..."
@@ -237,22 +255,28 @@ class SimpleProgressBar:
             self.current = self.total
 
         new_lines = self._build_lines()
-        self._clear_prev()
-
-        term_w = self._term_width()
-        # Print all lines (each ends with newline). After printing, move cursor up one line
-        # so the next update overwrites the status line in-place.
-        for line in new_lines:
-            padded = line + " " * max(0, term_w - len(line))
-            self.file.write(padded + "\n")
         if self._ansi:
-            # Move up one line (to the start of the last printed line) and carriage return.
+            # existing interactive behavior: clear, print with CSI moves, keep last line as overwrite target
+            self._clear_prev()
+            term_w = self._term_width()
+            for line in new_lines:
+                padded = line + " " * max(0, term_w - len(line))
+                self.file.write(padded + "\n")
+            # move the cursor up one (so further updates overwrite the last printed line)
             self.file.write("\033[1A\r")
+            self.file.flush()
+            self._last_lines = len(new_lines)
         else:
-            # Non-ANSI: nothing to do; we've already printed the lines and cursor is below block.
-            pass
-        self.file.flush()
-        self._last_lines = len(new_lines)
+            # file/non-tty mode: append the block; keep full status and reasonably wrap header/desc if desired
+            for i, line in enumerate(new_lines):
+                # don't truncate status (assume it's the last line)
+                if i == len(new_lines) - 1:
+                    self.file.write(line + "\n")
+                else:
+                    # optional: truncate other lines to a safe width or write as-is
+                    self.file.write(line + "\n")
+            self.file.write("\n")
+            self.file.flush()
 
         # If we reached the total and auto_finish is enabled, finalize now (non-recursive).
         if self.auto_finish and self.total is not None and self.current >= self.total:
