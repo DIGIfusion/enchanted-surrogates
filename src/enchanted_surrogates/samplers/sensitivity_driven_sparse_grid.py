@@ -18,12 +18,15 @@ class SensitivityDrivenSparseGrid(Sampler):
         print('INITALIZING SENTITIVITY DRIVEN SPARSE GRID SAMPLER')
         self.base_run_dir = kwargs.get('base_run_dir',None)
         self.parameters = parameters
-        self.bounds = bounds
+        self.bounds = np.array(bounds)
         self.dim = len(parameters)
         self.budget = kwargs.get('budget',1)
         self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
         self.write_batch_info_every_x_samples = kwargs.get('write_batch_info_every_x_samples', 1)
+        self.do_save_state = kwargs.get('do_save_state', True)
+        self.save_state_every_x_samples = kwargs.get('save_state_every_x_samples', 1)
         self.num_samples_at_last_write = 0
+        self.num_samples_at_last_save_state = 0
         # sparse grid setup
         # here, we consider a uniform input distribution, thus the bounds are [0, 1]^dim
         self.left_bounds     = np.zeros(self.dim)
@@ -138,7 +141,7 @@ class SensitivityDrivenSparseGrid(Sampler):
 
                 self.InterpToSpectral_obj.update_sg_evals_multiindex_lut(multiindex, self.Grid_obj)
             
-            # batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
+            batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
             # self.write_batch_info(batch_dir=batch_dir)
             
             print('debug batch number', self.batch_number)
@@ -192,7 +195,12 @@ class SensitivityDrivenSparseGrid(Sampler):
                 self.InterpToSpectral_obj.update_sg_evals_multiindex_lut(multiindex, self.Grid_obj)
             
             self.current_multiindex_set = self.Adaptivity_obj.multiindex_set          
-            self.save_state(batch_dir=batch_dir)
+            
+            if self.do_save_state:
+                print('debug self. submitted, self.num_samples_at_last_ss, every', self.submitted, self.num_samples_at_last_save_state, self.save_state_every_x_samples)
+                if self.submitted - self.num_samples_at_last_save_state >= self.save_state_every_x_samples or self.batch_number in [0,1,2,3]:
+                    self.save_state(batch_dir=batch_dir)
+                    self.num_samples_at_last_save_state = self.submitted
             if self.do_write_batch_info:
                 if self.submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
                     # Now the surrogate is trained we can write batch info
@@ -280,14 +288,14 @@ class SensitivityDrivenSparseGrid(Sampler):
     
     def save_state(self, batch_dir):
         print('SAVING STATE:', batch_dir)
-
+        start=time.time()
         with open(os.path.join(batch_dir,'multiindex_set.pkl'), 'wb') as file:
             pickle.dump(self.Adaptivity_obj.multiindex_set,file)
         
         spectral_coeff, orth_poly_basis_global = self.InterpToSpectral_obj.get_spectral_coeff_sg(self.current_multiindex_set)
         with open(os.path.join(batch_dir,'spectral_coeff.pkl'), 'wb') as file:
             pickle.dump(spectral_coeff,file)
-    
+        print('SAVING STATE TOOK:', (time.time()-start)/60, 'min')
     def do_one_adaption_step_postproc(self): 
         try:
             self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)

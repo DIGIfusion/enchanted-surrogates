@@ -98,7 +98,8 @@ class SgppSampler(Sampler):
             self.guide_dataset = None
             if self.refinement_type == 'anova_spatially_dimensionally':
                 self.guide_dataset_path = adaptive_strategy.get('guide_dataset_path', None)
-                self.guide_sampler = import_sampler(adaptive_strategy['guide_sampler_config']['type'],adaptive_strategy['guide_sampler_config'])
+                if not self.guide_dataset_path:
+                    self.guide_sampler = import_sampler(adaptive_strategy['guide_sampler_config']['type'],adaptive_strategy['guide_sampler_config'])
             self.infer_bounds = adaptive_strategy.get('infer_bounds', False)
             self.infer_parents = adaptive_strategy.get('infer_parents', False)
             self.mean_recent_surplus_threshold = adaptive_strategy.get('mean_recent_surplus_threshold')

@@ -543,3 +543,58 @@ class GpyAnalyticSobolSampler(Sampler):
 
     def register_futures(self, futures):
         return None
+
+if __name__ == '__main__':
+    import sys
+    import yaml
+    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+    from enchanted_surrogates.utils.load_configuration import load_configuration
+    from enchanted_surrogates.utils.precise_imports import import_sampler
+    _, base_run_dir, write_every = sys.argv
+    
+    batch_dirs = get_batch_dirs(base_run_dir)
+    
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
+    
+    # bounds=np.array(config.executor.sampler_config['bounds'])
+    # parameters = config.executor.sampler_config['parameters']
+    
+    print('debug sampler config', config.executor['sampler_config'])
+    
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
+    # bounds = ['bounds']
+    # config.executor['sampler_config'].pop('bounds')
+    # parameters = config.executor['sampler_config']['parameters']
+    # config.executor['sampler_config'].pop('parameters')
+    
+    for i, batch_dir in enumerate(batch_dirs):
+        if i==0 or i==1 or i%write_every==0:
+            gpy = GpyAnalyticSobolSampler(**sampler_config)
+            # grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
+            # surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
+            # train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+            # virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
+            # anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
+
+            # try:
+            #     with open(grid_file_path, 'r') as file:
+            #         serialized_grid = file.read()
+            #         sgpp.grid = pysgpp.Grid.unserialize(serialized_grid)
+            #         sgpp.gridStorage = sgpp.grid.getStorage()
+            #         sgpp.gridGen = sgpp.grid.getGenerator()
+            #         surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
+            #         sgpp.alpha = surpluses
+            # except FileNotFoundError:
+            #     continue
+
+            # with open(train_points_file, 'rb') as file:
+            #     sgpp.train = pickle.load(file)
+                
+            # sgpp.write_batch_info(batch_dir)

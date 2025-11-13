@@ -524,18 +524,18 @@ class SobolGRunner(Runner):
         # --- For d > 2: heatmap half-matrix with opposite triangle text and separate 3D figure ---
         fig, axes = _plt.subplots(n, n, figsize=(fig_size, fig_size), squeeze=False)
         _plt.subplots_adjust(hspace=0.5, wspace=0.5)
-        for row in range(n):
-            for col in range(n):
-                ax = axes[row, col]
+        for row_idx in range(n):
+            for col_idx in range(n):
+                ax = axes[row_idx, col_idx]
                 ax.set_xticks([])
                 ax.set_yticks([])
 
-                plot_slice = (triangle == 'upper' and row < col) or (triangle == 'lower' and row > col)
+                plot_slice = (triangle == 'upper' and row_idx < col_idx) or (triangle == 'lower' and row_idx > col_idx)
                 if plot_slice:
-                    if row < col:
-                        pair = (row, col)
+                    if row_idx < col_idx:
+                        pair = (row_idx, col_idx)
                     else:
-                        pair = (col, row)
+                        pair = (col_idx, row_idx)
                     data = slice_results.get(pair)
                     if data is None:
                         ax.axis('off')
@@ -585,26 +585,26 @@ class SobolGRunner(Runner):
 
         # 3D surfaces figure (separate)
         fig3d = _plt.figure(figsize=(fig_size, fig_size))
-        for row in range(n):
-            for col in range(n):
-                plot_surface_cell = (triangle == 'upper' and row < col) or (triangle == 'lower' and row > col)
+        for row_idx in range(n):
+            for col_idx in range(n):
+                plot_surface_cell = (triangle == 'upper' and row_idx < col_idx) or (triangle == 'lower' and row_idx > col_idx)
                 if not plot_surface_cell:
                     # mirror textual info in the empty cell
-                    idx = row * n + col + 1
+                    idx = row_idx * n + col_idx + 1
                     ax_info = fig3d.add_subplot(n, n, idx)
                     ax_info.axis('off')
                     txt = sobol_line + "\n" + a_line + "\n" + eq_line
                     ax_info.text(0.0, 1.0, txt, va='top', ha='left', fontsize=7, family='monospace', wrap=True)
                     continue
 
-                if row < col:
-                    pair = (row, col)
+                if row_idx < col_idx:
+                    pair = (row_idx, col_idx)
                 else:
-                    pair = (col, row)
+                    pair = (col_idx, row_idx)
                 data = slice_results.get(pair)
                 if data is None:
                     continue
-                idx = row * n + col + 1
+                idx = row_idx * n + col_idx + 1
                 ax3d = fig3d.add_subplot(n, n, idx, projection='3d')
                 X = data['X']; Y = data['Y']; Z = data['Z']
                 plot_stride = max(1, int(res / 60))
@@ -1027,6 +1027,5 @@ if __name__ == "__main__":
 
     runner.plot_1D_slices_compare(normalize_profiles=True, n_profiles=4, save_path=os.path.join(outdir,'sobol_1d_slices_normalized.png'))
     
-
 
     # Users can now open the HTML in any modern browser.
