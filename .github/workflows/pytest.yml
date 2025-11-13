@@ -35,7 +35,7 @@ jobs:
     - name: Running pytest
       # working-directory: enchanted_surrogates
       run: |
-        coverage run -m pytest tests/automated_tests_no_HPC/ -v -s
+        coverage run -m pytest tests/ -v -s
 
     - name: Generate Coverage Report  
       # working-directory: enchanted_surrogates
