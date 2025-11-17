@@ -50,6 +50,14 @@ pip install -e enchanted-surrogates/
 This will install the core package and its dependencies.
 In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well. See the [Plugins](./plugins/index.md) section for more details.
 
+Note: in some environments, the command python may still point to system-wide Python (e.g. `/usr/bin/python` or `/Library/Frameworks/...`) rather than the virtual environment. You can check which python is active with: 
+
+```bash
+which python
+which python3
+```
+
+If neither is referring to created virtual environment, it can be referred with `.venv/bin/python` instead of `python` in the example below. 
 
 ## How to run
 
