@@ -26,6 +26,7 @@ def main(args: argparse.Namespace, config_path=None):
     executor_type = args.executor.pop("type")
     executor = import_executor(type=executor_type, executor_config=args.executor)
     if not os.path.exists(executor.base_run_dir):
+        print('MAKING BASE RUN DIR:', executor.base_run_dir)
         os.makedirs(executor.base_run_dir)
     
     if config_path is not None:

@@ -40,15 +40,17 @@ from joblib import Parallel, delayed, cpu_count
 # trying to put a double inside a vector causes an error, should be float
 
 class SgppSampler(Sampler):
-    def __init__(self, bounds, parameters, test_dir=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6, **kwargs):
+    def __init__(self, bounds, parameters, test_data_csv=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6, **kwargs):
         self.base_run_dir = kwargs.get('base_run_dir')
         # history
         self.budget = kwargs.get('budget', 100)
+        self.batch_number = 0
+        self.custom_submitted = 0
         self.do_write_batch_info = kwargs.get('do_write_batch_info', True)
         self.write_batch_info_every_x_samples = kwargs.get('write_batch_info_every_x_samples', 1)
         self.do_quad_sobol = kwargs.get('do_quad_sobol', False)
         self.gaussian_input_uncertanties = kwargs.get('gaussian_input_uncertanties', False)
-        self.test_dir = test_dir
+        self.test_data_csv = test_data_csv
         self.bounds = np.array(bounds)
         self.parameters = parameters
         self.num_samples_at_last_write = 0
@@ -100,6 +102,7 @@ class SgppSampler(Sampler):
                 self.guide_dataset_path = adaptive_strategy.get('guide_dataset_path', None)
                 if not self.guide_dataset_path:
                     self.guide_sampler = import_sampler(adaptive_strategy['guide_sampler_config']['type'],adaptive_strategy['guide_sampler_config'])
+                self.guide_samples = self.get_guide_data()
             self.infer_bounds = adaptive_strategy.get('infer_bounds', False)
             self.infer_parents = adaptive_strategy.get('infer_parents', False)
             self.mean_recent_surplus_threshold = adaptive_strategy.get('mean_recent_surplus_threshold')
@@ -116,7 +119,6 @@ class SgppSampler(Sampler):
             self.old_brute_check_predictions = None
         else:
             self.do_brute_check=False
-        self.batch_number = 0
         self.num_samples_by_batch = [0] 
         
         self.train = {}
@@ -129,8 +131,7 @@ class SgppSampler(Sampler):
         self.anchor_boundary_points = {}
         
         self.grid_increase = None
-        self.custom_submitted = 0
-    
+        
     def point_transform_box2unit(self, box_point):
         # min max normalisation
         unit_point = tuple()
@@ -243,10 +244,12 @@ class SgppSampler(Sampler):
 
     
     def get_guide_data(self):
+        # print('DEBUG GUIDE DATASET PATH:', self.guide_dataset_path)
+        # print('debug guide sampler:', self.guide_sampler)
         if self.guide_dataset_path:
             if self.base_run_dir:                    
                 if not os.path.exists(os.path.join(self.base_run_dir, 'batch_00')):
-                    os.mkdir(os.path.join(self.base_run_dir, 'batch_00'))                        
+                    os.makedirs(os.path.join(self.base_run_dir, 'batch_00'))                        
                 shutil.copy(self.guide_dataset_path, os.path.join(self.base_run_dir, 'batch_00', 'enchanted_dataset.csv'))
                 with open(os.path.join(self.base_run_dir, 'batch_00', 'readme.txt'), 'w') as readme:
                     readme.write(f"""
@@ -268,8 +271,6 @@ class SgppSampler(Sampler):
         elif self.guide_sampler is not None:
             samples = self.guide_sampler.get_next_samples()
             self.guide_dataset_size = len(samples)
-            self.custom_submitted += len(samples)
-            self.batch_number += 1
             return samples
         
     
@@ -434,9 +435,10 @@ class SgppSampler(Sampler):
         if self.refinement_type == 'anova_spatially_dimensionally':
             if self.batch_number == 0:
                 print('debug anova_spatiall_dimensionally, batch 0')
-                guide_samples = self.get_guide_data()
-                if guide_samples:
-                    next_samples = guide_samples
+                if self.guide_samples:
+                    next_samples = self.guide_samples
+                    self.custom_submitted += len(next_samples)
+                    self.batch_number += 1
                 else:
                     next_samples = self.get_initial_samples()
             elif self.batch_number == 1 and not self.guide_dataset:
@@ -996,112 +998,146 @@ class SgppSampler(Sampler):
     def write_cycle_info(self, *args, **kwargs):
         return self.write_batch_info(*args, **kwargs)       
     
-    def write_batch_info(self, batch_dir, name='', save_grid=True): #Necessary
+    def write_batch_info(self, batch_dir, name='', save_grid=True, test_data_csv=None, only_test=False): #Necessary
+        df = pd.DataFrame()
         fname = name+'batch_info.csv'
-        # print('debug do boundary tree:', self.do_boundary_tree)
-        # if self.do_boundary_tree:
-        #     self.add_boundary_tree(batch_dir)
-        if self.do_write_batch_info:
-            timer_start = time.time()
-            print(f'+++ \n Write ACTIVE batch: {self.batch_number}')
-            print('+++ \n NUM INNER LEAF POINTS', len(self.train))            
-            print('+++ \n NUM PARENT POINTS', len(self.parent_points))
-            print('+++ \n NUM bounds POINTS', len(self.bounds_points))
-            # df = pd.DataFrame({"num_samples":[self.num_samples_by_batch[-1]], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "quad_expectation":[self.quadrature_expectation()],"quad_double_sigma":[2*np.sqrt(self.quadrature_variance())]})
-            start = time.time()
-            print('TIMING QUAD EXPECTATION')
-            quad_exp = self.quadrature_expectation()
-            print(f'QUAD EXPECTATION TOOK {(time.time()-start)/60} min')
-            start = time.time()
-            print('TIMING QUAD VARIANCE')
-            quad_std = np.sqrt(self.quadrature_variance())
-            print(f'QUAD VARIANCE TOOK {(time.time()-start)/60} min')
-
-            
-            df = pd.DataFrame({"num_samples":[len(self.train)+self.guide_dataset_size], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "quad_mean":[quad_exp],"quad_std":[quad_std],"num_anchor_points":[len(self.anchor_boundary_points)]})
-            if self.grid_increase != None:
-                df['mean_recent_surplus'] = [np.mean( np.abs(np.array(self.alpha.array())[-self.grid_increase : ]) )]
-            else:
-                df['mean_recent_surplus'] = [np.mean( np.abs(np.array(self.alpha.array())) )]
-            df['mean_surplus'] = [np.mean(np.abs(np.array(self.alpha.array())))]
-            df['max_surplus'] = [np.max(np.abs(np.array(self.alpha.array())))]
-            df['do_surplus_based'] = self.do_surplus_based
-
-            data_dir = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
-            data_df = pd.read_csv(data_dir)
-            output_col = [col for col in data_df.columns if 'output' in col]
-            if len(output_col)>1:
-                warnings.warn(f'MORE THAN ONE OUTPUT COL {output_col}. Taking the first')
-            output_col = output_col[0]
-            
-            start = time.time()
-            print('TIMING WEIGHTED MEAN CALC')
-            weighted_mean, weighted_var, weights = self.kde_weighted_mean_var(data_df, value_col=output_col, parameters=self.parameters)
-            print(f'WEIGHTED MEAN CALC TOOK {(time.time()-start)/60} min')
-            df['weighted_mean'] = [weighted_mean]
-            df['weighted_std'] = [np.sqrt(weighted_var)]
-            
-            start = time.time()
-            print('TIMING ANCHORED ANOVA FO SOBOL CALC')
-            sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
-            for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
-                df[f'{param}_anchorAnova_sobolF'] = [si]
-                df[f'{param}_anchorAnova_anchorFrac'] = [af]
-            print(f'ANCHORED ANOVA FO SOBOL CALC TOOK {(time.time()-start)/60} min')
-            
-            start = time.time()
-            print('TIMING ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC')
-            sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol_surrogate(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
-            for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
-                df[f'{param}_anchorAnovaSurr_sobolF'] = [si]
-                df[f'{param}_anchorAnovaSurr_anchorFrac'] = [af]
-            print(f'ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC TOOK {(time.time()-start)/60} min')
-            
-            if self.do_quad_sobol:
-                start = time.time()
-                print('TIMING QUAD FIRST ORDER SOBOL')
-                quad_first_order_sobol = self.quadrature_first_order_sobol(num_points=20)
-                for param, si in zip(self.parameters, quad_first_order_sobol):
-                    df[f'{param}_quad_sobolF'] = [si]
-                print(f'QUAD FIRST ORDER SOBOL TOOK {(time.time()-start)/60} min')
-            # if self.test_dir != None:
-            #     x_test, y_test = self.get_test_set(self.test_dir)
-            #     y_pred = self.surrogate_predict(x_test, n_jobs=self.n_jobs)
-            #     residuals = y_test - y_pred
-            #     me = np.mean(np.abs(residuals))
-            #     df["mean_error"]=[me]
-            #     df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
-            #     df["std_error"] = [np.abs(np.sqrt(np.var(y_test))-quad_std)]
-            # if self.do_brute_check:
-            #     print('DOING BRUTE CHECK')
-            #     predictions = self.surrogate_predict(self.brute_check_sampler.samples, n_jobs=self.n_jobs)
-            #     expectation = self.expectation_approx(predictions)
-            #     double_sigma = self.double_sigma_approx(predictions)
-            #     entropy_diff = self.relative_entropy(self.old_brute_check_predictions, predictions, num_bins=200)
-            #     self.old_brute_check_predictions=predictions
-            #     print('EXPECTATION', expectation)
-            #     df["brute_expectation"]=[expectation]
-            #     df["brute_double_sigma"]=[double_sigma]
-            #     df["brute_entropy_diff"]=[entropy_diff]
-            #     del predictions
-                
-            # if self.do_brute_force_sobol_indicies:
-            #     print('doing brute sobol indicies')
-            #     sobol_first_order, sobol_total_order = self.sobel_indicies_approx()
-            #     for d, sfo in enumerate(sobol_first_order):
-            #         df[f'brute_sobol_first_order_{d}'] = [sfo]
-            #     for d, sto in enumerate(sobol_total_order):
-            #         df[f'brute_sobol_total_order_{d}']= [sto]
-            df.to_csv(os.path.join(batch_dir,fname), header=True, index=False)
-            all_batch_info_path = os.path.join(os.path.dirname(batch_dir), 'batch_info.csv')
-            if os.path.exists(all_batch_info_path):
-                df.to_csv(all_batch_info_path, mode='a', header=False, index=False)
-            else:
-                df.to_csv(all_batch_info_path, mode='w', header=True, index=False)            
-            del df
+        print('debug guide dataset size:', self.guide_dataset_size)
+        df["num_samples"]=[len(self.train)+self.guide_dataset_size]
+        results = {'num_samples':len(self.train)+self.guide_dataset_size}
         
+
+        if not only_test:
+            # print('debug do boundary tree:', self.do_boundary_tree)
+            # if self.do_boundary_tree:
+            #     self.add_boundary_tree(batch_dir)
+            if self.do_write_batch_info:
+                timer_start = time.time()
+                print(f'+++ \n Write ACTIVE batch: {self.batch_number}')
+                print('+++ \n NUM INNER LEAF POINTS', len(self.train))            
+                print('+++ \n NUM PARENT POINTS', len(self.parent_points))
+                print('+++ \n NUM bounds POINTS', len(self.bounds_points))
+                # df = pd.DataFrame({"num_samples":[self.num_samples_by_batch[-1]], "num_parents":[len(self.parent_points)], "num_bounds":[len(self.bounds_points)], "quad_expectation":[self.quadrature_expectation()],"quad_double_sigma":[2*np.sqrt(self.quadrature_variance())]})
+                start = time.time()
+                print('TIMING QUAD EXPECTATION')
+                quad_exp = self.quadrature_expectation()
+                print(f'QUAD EXPECTATION TOOK {(time.time()-start)/60} min')
+                start = time.time()
+                print('TIMING QUAD VARIANCE')
+                quad_std = np.sqrt(self.quadrature_variance())
+                print(f'QUAD VARIANCE TOOK {(time.time()-start)/60} min')
+
+                
+                df["num_samples"]=[len(self.train)+self.guide_dataset_size]
+                df["num_parents"]=[len(self.parent_points)]
+                df["num_bounds"]=[len(self.bounds_points)]
+                df["quad_mean"]=[quad_exp]
+                df["quad_std"]=[quad_std]
+                df["num_anchor_points"]=[len(self.anchor_boundary_points)]
+                
+                if self.grid_increase != None:
+                    df['mean_recent_surplus'] = [np.mean( np.abs(np.array(self.alpha.array())[-self.grid_increase : ]) )]
+                else:
+                    df['mean_recent_surplus'] = [np.mean( np.abs(np.array(self.alpha.array())) )]
+                df['mean_surplus'] = [np.mean(np.abs(np.array(self.alpha.array())))]
+                df['max_surplus'] = [np.max(np.abs(np.array(self.alpha.array())))]
+                df['do_surplus_based'] = self.do_surplus_based
+
+                data_dir = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
+                data_df = pd.read_csv(data_dir)
+                output_col = [col for col in data_df.columns if 'output' in col]
+                if len(output_col)>1:
+                    warnings.warn(f'MORE THAN ONE OUTPUT COL {output_col}. Taking the first')
+                output_col = output_col[0]
+                
+                start = time.time()
+                print('TIMING WEIGHTED MEAN CALC')
+                weighted_mean, weighted_var, weights = self.kde_weighted_mean_var(data_df, value_col=output_col, parameters=self.parameters)
+                print(f'WEIGHTED MEAN CALC TOOK {(time.time()-start)/60} min')
+                df['weighted_mean'] = [weighted_mean]
+                df['weighted_std'] = [np.sqrt(weighted_var)]
+                
+                start = time.time()
+                print('TIMING ANCHORED ANOVA FO SOBOL CALC')
+                sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
+                for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
+                    df[f'{param}_anchorAnova_sobolF'] = [si]
+                    df[f'{param}_anchorAnova_anchorFrac'] = [af]
+                print(f'ANCHORED ANOVA FO SOBOL CALC TOOK {(time.time()-start)/60} min')
+                
+                start = time.time()
+                print('TIMING ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC')
+                sobol_indices, anchor_fraction = self.anchored_anova_firstorder_sobol_surrogate(df_or_path=data_df, parameters=self.parameters, total_var=weighted_var, value_col=output_col, weight_col=None, tol=1e-6, min_slice_size=3)
+                for param, si, af in zip(self.parameters,sobol_indices, anchor_fraction):
+                    df[f'{param}_anchorAnovaSurr_sobolF'] = [si]
+                    df[f'{param}_anchorAnovaSurr_anchorFrac'] = [af]
+                print(f'ANCHORED ANOVA FO SOBOL WITH SURROGATE CALC TOOK {(time.time()-start)/60} min')
+                
+                if self.do_quad_sobol:
+                    start = time.time()
+                    print('TIMING QUAD FIRST ORDER SOBOL')
+                    quad_first_order_sobol = self.quadrature_first_order_sobol(num_points=20)
+                    for param, si in zip(self.parameters, quad_first_order_sobol):
+                        df[f'{param}_quad_sobolF'] = [si]
+                    print(f'QUAD FIRST ORDER SOBOL TOOK {(time.time()-start)/60} min')
+        
+        if not test_data_csv:
+            test_data_csv = self.test_data_csv   
+        if test_data_csv:
+            import matplotlib.pyplot as plt
+            print(f'TESTING: {batch_dir}')
+            x_test, y_test = self.get_test_set(test_file = test_data_csv)
+            y_pred = self.surrogate_predict(x_test, n_jobs=0)
+            results['x_test'] = x_test
+            results['y_test'] = y_test
+            results['y_pred'] = y_pred
+            residuals = y_test - y_pred
+            fig = plt.figure()
+            plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+            residuals_save_dir = os.path.join(os.path.dirname(batch_dir), 'residuals_plots')
+            if not os.path.exists(residuals_save_dir):
+                os.mkdir(residuals_save_dir)
+            fig.savefig(os.path.join(residuals_save_dir, f"N-{df['num_samples'].iloc[0]}_residuals.png"))
+            plt.close(fig)
+            me = np.nanmean(np.abs(residuals))
+            df["mean_error"]=[me]
+            
+            print('debug df', df)
+            # df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
+            # df["std_error"] = [np.abs(np.sqrt(np.var(y_test))-quad_std)]
+        # if self.do_brute_check:
+        #     print('DOING BRUTE CHECK')
+        #     predictions = self.surrogate_predict(self.brute_check_sampler.samples, n_jobs=self.n_jobs)
+        #     expectation = self.expectation_approx(predictions)
+        #     double_sigma = self.double_sigma_approx(predictions)
+        #     entropy_diff = self.relative_entropy(self.old_brute_check_predictions, predictions, num_bins=200)
+        #     self.old_brute_check_predictions=predictions
+        #     print('EXPECTATION', expectation)
+        #     df["brute_expectation"]=[expectation]
+        #     df["brute_double_sigma"]=[double_sigma]
+        #     df["brute_entropy_diff"]=[entropy_diff]
+        #     del predictions
+            
+        # if self.do_brute_force_sobol_indicies:
+        #     print('doing brute sobol indicies')
+        #     sobol_first_order, sobol_total_order = self.sobel_indicies_approx()
+        #     for d, sfo in enumerate(sobol_first_order):
+        #         df[f'brute_sobol_first_order_{d}'] = [sfo]
+        #     for d, sto in enumerate(sobol_total_order):
+        #         df[f'brute_sobol_total_order_{d}']= [sto]
+        print(f'SAVING TO: {os.path.join(batch_dir,fname)}')
+        df.to_csv(os.path.join(batch_dir,fname), header=True, index=False)
+        
+        all_batch_info_path = os.path.join(os.path.dirname(batch_dir), name+'batch_info.csv')        
+        print(f'SAVING TO: {all_batch_info_path}')
+        if os.path.exists(all_batch_info_path):
+            df.to_csv(all_batch_info_path, mode='a', header=False, index=False)
+        else:
+            df.to_csv(all_batch_info_path, mode='w', header=True, index=False)            
+        del df
+    
         if save_grid:
             self.save_grid(batch_dir, name=name)
+        return results
         
     def merge_batch_info(self):
         assert self.base_run_dir
@@ -1493,41 +1529,25 @@ class SgppSampler(Sampler):
     
     def do_quadrature(self, *args, **kwargs):
         return self.safe_run(self._do_quadrature, *args, **kwargs)
-    # def get_test_set(self, test_dir):
-    #     print('RETRIVING TEST SET FROM', test_dir)        
-    #     if os.path.exists(os.path.join(test_dir,'merged_runner_return.csv')):        
-    #         df_test = pd.read_csv(os.path.join(test_dir,'merged_runner_return.csv'))
-    #         print('got runner_return.csv')
-    #     elif os.path.exists(os.path.join(test_dir, 'merged_runner_return.txt')):
-    #         df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
-    #         print('got runner_return.txt')
-    #     # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
-    #     #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
-    #     #     print('got runner_return.txt')    
-    #     else:
-    #         print('NO RUNNER RETURN FOUND, BEGINNIGN PARSING')
-    #         finished_result = find_files(test_dir, 'GENE.finished')
-    #         stopped_result = find_files(test_dir, 'stopped_by_monitor')
-    #         result = finished_result + stopped_result
-    #         run_dirs = [os.path.dirname(path) for path in result]
-    #         if len(result) == 0:        
-    #             raise FileNotFoundError('NO RUNNER RETURN PATH WAS FOUND IN:',test_dir,'\n ALSO THERE SEEM TO BE NO FINNISHED OR EARLY STOPPED GENE RUNS IN:',test_dir)
-    #         else:
-    #             outputs = []
-    #             for i, run_dir in enumerate(run_dirs):
-    #                 if i % 10 == 0:
-    #                     print('NUMBER OF RUN_DIR PARSED:',i)
-    #                 outputs.append(parse_run_dir(run_dir, parameters))
-    #             with open(os.path.join(test_dir, 'merged_runner_return.txt'), 'w') as file:
-    #                 lines = [runner_return_headder] + outputs
-    #                 lines = [line+'\n' for line in lines]
-    #                 file.writelines(lines)
-    #             df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
+    def get_test_set(self, test_file, test_dir=None):
+        if test_file:
+            df_test = pd.read_csv(test_file)
+        else:
+            print('RETRIVING TEST SET FROM', test_dir)        
+            if os.path.exists(os.path.join(test_dir,'merged_runner_return.csv')):        
+                df_test = pd.read_csv(os.path.join(test_dir,'merged_runner_return.csv'))
+                print('got runner_return.csv')
+            elif os.path.exists(os.path.join(test_dir, 'merged_runner_return.txt')):
+                df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
+                print('got runner_return.txt')
+            # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
+            #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
+            #     print('got runner_return.txt')    
                 
-    #     test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
-    #     # print('debug l tx', len(test_x))
-    #     test_y = np.array(df_test.iloc[:,-1].astype('float'))
-    #     return test_x, test_y
+        test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
+        # print('debug l tx', len(test_x))
+        test_y = np.array(df_test.iloc[:,-1].astype('float'))
+        return test_x, test_y
     
         
     def register_future(self, future):
@@ -1539,42 +1559,65 @@ class SgppSampler(Sampler):
 
 if __name__ == "__main__":
     import sys
+    import os
     import yaml
+    import pickle
+    import argparse
+    import pysgpp
     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
     from enchanted_surrogates.utils.load_configuration import load_configuration
-    from enchanted_surrogates.utils.precise_imports import import_sampler
-    _, base_run_dir, write_every = sys.argv
-    
+    # from enchanted_surrogates.utils.precise_imports import import_sampler
+
+    # ---------------------------
+    # Argument parsing
+    # ---------------------------
+    parser = argparse.ArgumentParser(description="Process SGPP batches")
+    parser.add_argument("base_run_dir", help="Base run directory containing batch subdirectories")
+    parser.add_argument("write_every", type=int, help="Write frequency for batch info")
+    parser.add_argument("--test_data_csv", type=str, default=None,
+                        help="Optional path to test data CSV file")
+    parser.add_argument("--batch_info_name", type=str, default=None,
+                        help="Optional output name for results")
+    parser.add_argument("--only_test", type=bool, default=False,
+                        help="Optional to save time by not computing other batch info and only performing test predictions.")
+
+
+    args = parser.parse_args()
+
+    base_run_dir = args.base_run_dir
+    write_every = args.write_every
+    test_data_csv = args.test_data_csv
+    batch_info_name = args.batch_info_name
+    only_test = args.only_test
+
+    # ---------------------------
+    # Load configuration
+    # ---------------------------
     batch_dirs = get_batch_dirs(base_run_dir)
-    
+
     listdir = os.listdir(base_run_dir)
     config_file_name = [name for name in listdir if '.yaml' in name]
     if len(config_file_name) > 1:
         raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
     config_file_name = config_file_name[0]
-    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    print('CONFIG FOUND:', os.path.join(base_run_dir, config_file_name))
     config = load_configuration(os.path.join(base_run_dir, config_file_name))
-    
-    # bounds=np.array(config.executor.sampler_config['bounds'])
-    # parameters = config.executor.sampler_config['parameters']
-    
-    print('debug sampler config', config.executor['sampler_config'])
-    
+
     sampler_config = config.executor['sampler_config']
     sampler_config['base_run_dir'] = base_run_dir
-    # bounds = ['bounds']
-    # config.executor['sampler_config'].pop('bounds')
-    # parameters = config.executor['sampler_config']['parameters']
-    # config.executor['sampler_config'].pop('parameters')
-    
+
+    # ---------------------------
+    # Iterate over batches
+    # ---------------------------
+    all_results = []
     for i, batch_dir in enumerate(batch_dirs):
-        if i==0 or i==1 or i%write_every==0:
-            assert config.executor['sampler_config']['type'] == 'sgpp_sampler' or config.executor['sampler_config']['type'] == 'SgppSampler'
-            # sgpp = import_sampler(type=config.executor['sampler_config']['type'], sampler_config=config.executor['sampler_config'])
-            # bounds, parameters, test_dir=None, do_brute_force_sobol_indicies = False, brute_force_sobol_indicies_num_samples=1e6
-            # sgpp = SgppSampler(bounds=sampler_config['bounds'], parameters = sampler_config['parameters'], kwargs=sampler_config)
-            print('debug basis',sampler_config['adaptive_strategy']['basis'])
+        if i == 0 or i == 1 or i % write_every == 0:
+            if 'batch_00' in batch_dir:
+                continue
+            print('OPERATING ON BATCH DIR:',batch_dir)
+            assert sampler_config['type'] in ('sgpp_sampler', 'SgppSampler')
             sgpp = SgppSampler(**sampler_config)
+            print('debug gds:',sgpp.guide_dataset_size)
             grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
             surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
             train_points_file = os.path.join(batch_dir, 'train_points.pkl')
@@ -1594,8 +1637,85 @@ if __name__ == "__main__":
 
             with open(train_points_file, 'rb') as file:
                 sgpp.train = pickle.load(file)
-                
-            sgpp.write_batch_info(batch_dir)
+            print('debug wbi')
+            results = sgpp.write_batch_info(batch_dir, name=batch_info_name, test_data_csv=test_data_csv, only_test=only_test, save_grid=False)
+            all_results.append(results)
+    
+    for res in all_results:
+        print('debug res num samp', res['num_samples'])
+
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    import numpy as np
+    import os
+
+    if any(all_results):
+        fig, axes = plt.subplots(
+            nrows=1, 
+            ncols=len(all_results), 
+            sharey=True, 
+            figsize=(6*len(all_results), 4)
+        )
+
+        # Ensure axes is iterable even if only one subplot
+        if len(all_results) == 1:
+            axes = [axes]
+
+        hbs = []
+
+        for ax, res in zip(axes, all_results):
+            print('debug res 2 num samples', res['num_samples'])
+            residuals = res['y_pred'] - res['y_test']
+
+            # Hexbin plot
+            hb = ax.hexbin(
+                res['y_test'], residuals,
+                gridsize=50, cmap='viridis', mincnt=1
+            )
+            hbs.append(hb)
+            ax.set_xlabel("y_test")
+            ax.set_ylabel("Residuals (y_pred - y_test)")
+            ax.set_title(f"N-samples: {res['num_samples']}")
+
+            # --- Add histogram on the right ---
+            divider = make_axes_locatable(ax)
+            ax_hist = divider.append_axes("right", size="20%", pad=0.1, sharey=ax)
+
+            # Histogram of residuals (vertical axis = residuals, horizontal = density)
+            ax_hist.hist(
+                residuals, bins=40, orientation='horizontal',
+                density=True, color='gray', alpha=0.7
+            )
+            ax_hist.set_xlabel("PDE")
+            ax_hist.yaxis.set_tick_params(labelleft=False)
+            ax_hist.grid(False)
+
+            # --- Annotate mean and std ---
+            mu = np.nanmean(residuals)
+            sigma = np.nanstd(residuals)
+            # Place text in the histogram axis, aligned to top-right
+            ax_hist.text(
+                0.95, 0.95,
+                f"μ={mu:.2f}\nσ={sigma:.2f}",
+                transform=ax_hist.transAxes,
+                ha='right', va='top',
+                fontsize=8, color='black'
+            )
+
+        cbar_ax = fig.add_axes([1.01, 0.1, 0.02, 0.8])  # right side, tall bar
+        fig.colorbar(hbs[0], cax=cbar_ax, label='Counts')
+        
+        # # Shared colorbar moved to the right of the figure
+        # if hbs:
+        #     cbar = fig.colorbar(
+        #         hbs[0], ax=axes, orientation='vertical',
+        #         label='Counts', location='right'
+        #     )
+
+        plt.tight_layout()
+        save_path = os.path.join(base_run_dir, 'all_residuals.png')
+        fig.savefig(save_path)
+        plt.close(fig)
 
 # # import pysgpp library
 # import pysgpp

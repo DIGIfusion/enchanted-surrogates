@@ -8,11 +8,13 @@ from sklearn.model_selection import KFold
 import numpy as np
 import pandas as pd
 import GPy
-
+import time
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler
 from enchanted_surrogates.utils.timeout import run_with_timeout, FunctionTimeoutError, FunctionExecutionError
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
+
+# This one has some numerical fixes
 
 # ---------------------------
 # Helper functions: RBF 1D integrals
@@ -59,7 +61,13 @@ class GpyAnalyticSobolSampler(Sampler):
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters must match.')
 
+        self.acquisition_mode = kwargs.get("acquisition_mode", "variance")
+        self.alpha = kwargs.get("alpha", 0.5)
+        self.blend_string = kwargs.get("blend_string", None)
+        self.chunk_size = kwargs.get("chunk_size", 5000)
+        
         self.sampling_strategy = kwargs.get('sampling_strategy', 'random')
+        self.n_ensembles = kwargs.get('n_ensembles', 1)
         self.batch_size = kwargs.get('batch_size', None) or 2
         self.initial_batch_size = kwargs.get('initial_batch_size', self.batch_size)
         self.initial_pool_samples_strategy = kwargs.get('initial_pool_samples_strategy', 'random')
@@ -71,6 +79,10 @@ class GpyAnalyticSobolSampler(Sampler):
         self.submitted = 0
         self.custom_submitted = 0
         self.budget = kwargs.get('budget', None) or self.batch_size
+
+        # numerical stabilization options
+        self.use_log_products = kwargs.get('use_log_products', True)  # helps for large D
+        self.small_positive_floor = kwargs.get('small_positive_floor', 1e-15)
 
         # optional sub-sampler (for initial or alternative sampling)
         self.sub_sampler_config = kwargs.get('sub_sampler_config', None)
@@ -85,6 +97,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
         # pool sampler config: provides pool of unlabeled candidate points
         self.pool_sampler_config = kwargs.get('pool_sampler_config', None)
+        self.pool_sampler = import_sampler(self.pool_sampler_config['type'], self.pool_sampler_config) if self.pool_sampler_config else None
         self.initial_pool_size = kwargs.get('initial_pool_size', 5000)
         self.pool = None
         self._init_pool()
@@ -108,6 +121,12 @@ class GpyAnalyticSobolSampler(Sampler):
         
         self.optimize_global = kwargs.get('optimize_global', True)  # optimize global hyperparams by default
 
+    def split_integer(self, total, n):
+        q, r = divmod(total, n)
+        arr = np.full(n, q, dtype=int)
+        arr[:r] += 1
+        return arr
+
     # ---------------------------
     # Pool management
     # ---------------------------
@@ -125,10 +144,7 @@ class GpyAnalyticSobolSampler(Sampler):
                     if len(collected) >= self.initial_pool_size:
                         break
             if len(collected) == 0:
-                raise RuntimeError('Pool sampler did not provide any points for initial pool.')
-                # self.pool = rng.uniform(low=[b[0] for b in self.bounds],
-                #                         high=[b[1] for b in self.bounds],
-                #                         size=(self.initial_pool_size, len(self.bounds)))
+                raise ValueError('THE POOL SAMPLER DID NOT RETURN ANY SAMPLES')
             else:
                 self.pool = np.array(collected, dtype=float)
         else:
@@ -142,31 +158,29 @@ class GpyAnalyticSobolSampler(Sampler):
             return
         if len(self.pool) >= min_size:
             return
-        if not self.pool_sampler_config:
-            return
-        pool_sampler = import_sampler(self.pool_sampler_config['type'], self.pool_sampler_config)
-        collected = []
-        while len(collected) + len(self.pool) < min_size:
-            pts = pool_sampler.get_next_samples()
-            if not pts:
-                break
-            for p in pts:
-                collected.append([p[param] for param in self.parameters])
-        if collected:
-            self.pool = np.vstack([self.pool, np.array(collected, dtype=float)])
+        if self.pool_sampler:
+            collected = []
+            while len(collected) + len(self.pool) < min_size:
+                pts = self.pool_sampler.get_next_samples()
+                if not pts:
+                    break
+                for p in pts:
+                    collected.append([p[param] for param in self.parameters])
+            if collected:
+                self.pool = np.vstack([self.pool, np.array(collected, dtype=float)])
+            else:
+                raise ValueError(f'POOL SAMPLER FAILED TO PROVIDE MORE SAMPLES AFTER THE POOL DROPPED BELOW A MINIMUM SIZE: {min_size}')
 
     # ---------------------------
     # Initial samples
     # ---------------------------
     def get_initial_samples(self, *args, **kwargs):
-        # If a sub-sampler is configured, prefer it for initial samples
         if self.sub_sampler is not None:
             samples = self.sub_sampler.get_next_samples() * self.num_repeats
             if samples:
                 self.batch_number += 1
                 self.submitted += len(samples)
                 self.custom_submitted += len(samples)
-                # remove samples from pool if present
                 self._remove_from_pool(samples)
                 if self.include_index:
                     samples = [
@@ -174,7 +188,6 @@ class GpyAnalyticSobolSampler(Sampler):
                 return samples
             else: return None
 
-        # Otherwise return random points from pool
         if self.pool is None or len(self.pool) == 0:
             self._init_pool()
         
@@ -203,11 +216,9 @@ class GpyAnalyticSobolSampler(Sampler):
     def _remove_from_pool(self, samples):
         if self.pool is None or len(self.pool) == 0:
             return
-        # build array of sample vectors
         vecs = np.array([[s[param] for param in self.parameters] for s in samples], dtype=float)
         to_delete = []
         for v in vecs:
-            # find matching row (exact match)
             matches = np.all(np.isclose(self.pool, v, atol=1e-12, rtol=0.0), axis=1)
             idxs = np.where(matches)[0]
             if idxs.size > 0:
@@ -269,36 +280,37 @@ class GpyAnalyticSobolSampler(Sampler):
         except Exception:
             self.noise_variance = float(self.gp_model.likelihood.variance)
 
-        # cache K Cholesky and solve routine for UQ
-        K_full = self.gp_model.kern.K(X) + np.eye(X.shape[0]) * max(self.noise_variance, 1e-12)
-        jitter = 1e-12
-        K_full_j = K_full + np.eye(K_full.shape[0]) * jitter
+        # cache K Cholesky and solve routine for UQ (with scale-aware jitter)
+        Xn = X.shape[0]
+        noise = max(self.noise_variance, 1e-12)
+        jitter = max(1e-10, 1e-6 * max(self.kernel_variance, noise))
+        K_full = self.gp_model.kern.K(X) + np.eye(Xn) * (noise + jitter)
         try:
-            L = np.linalg.cholesky(K_full_j)
+            L = np.linalg.cholesky(K_full)
             self._K_cholesky = L
             def solve_K(vec):
-                y = np.linalg.solve(L, vec)
-                x = np.linalg.solve(L.T, y)
-                return x
+                y_ = np.linalg.solve(L, vec)
+                x_ = np.linalg.solve(L.T, y_)
+                return x_
             self._solve_K = solve_K
         except np.linalg.LinAlgError:
-            K_inv = np.linalg.pinv(K_full_j)
+            K_inv = np.linalg.pinv(K_full)
             self._K_cholesky = None
             self._solve_K = lambda vec: K_inv.dot(vec)
 
         if self.do_write_batch_info:
+            start_wbi = time.time()
             previous_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
             if self.custom_submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
-                # Now the surrogate is trained we can write batch info
                 self.write_batch_info(previous_batch_dir)
                 self.num_samples_at_last_write = self.custom_submitted
-
-                # optionally save global model
                 try:
                     with open(os.path.join(previous_batch_dir, 'gpy_model.pkl'), 'wb') as f:
                         pickle.dump(self.gp_model, f)
                 except Exception:
                     pass
+            end_wbi = time.time()
+            print('WRITE BATCH INFO TOOK:', (end_wbi - start_wbi)/60, 'min')
 
         # ---------------------------
         # Ensure pool
@@ -311,37 +323,37 @@ class GpyAnalyticSobolSampler(Sampler):
                                     high=[b[1] for b in self.bounds],
                                     size=(self.initial_pool_size, len(self.bounds)))
 
-        # Predictive variance on pool using global model (not used for fold selection but useful fallback)
-        _, var_pool_global = self.gp_model.predict(self.pool)
-        var_pool_global = var_pool_global.flatten()
-
+        print('SELECTING NEW SAMPLES FROM POOL')
         # ---------------------------
         # Select new samples
         # ---------------------------
         samples = []
-        if self.batch_size == 1:
-            idx = int(np.argmax(var_pool_global))
-            chosen = self.pool[idx:idx+1]
-            samples = [{key: float(v) for key, v in zip(self.parameters, chosen[0])}]
+        if self.n_ensembles == 1:
+            print(f'GETTING GLOBAL SCORE MODE:{self.acquisition_mode}')
+            score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string)
+            score_pool_global = score_pool_global.flatten()
+            print(f'BATCH SIZE:{self.batch_size} USING GLOBAL SCORE.')
+            idx = list(np.argsort(-score_pool_global)[:self.batch_size])
+            chosen_points = self.pool[idx]
+            samples = [{key: float(v) for key, v in zip(self.parameters, row)} for row in chosen_points]
             self.pool = np.delete(self.pool, idx, axis=0)
         else:
-            # Use folds but reuse global hyperparams (no re-optimizing)
-            n_folds = min(self.batch_size, max(1, len(self.train)))
+            print(f'SPLITTING DATA INTO FOLDS')
+            n_folds = min(self.n_ensembles, len(self.train))
+            samples_per_fold = self.split_integer(self.batch_size, self.n_ensembles)
             kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
             X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
             Y_all = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
 
             chosen_indices = []
-            for train_idx, _ in kf.split(X_all):
+            for i, (train_idx, _) in enumerate(kf.split(X_all)):
+                print(f'CALCULATING ACQUISITON FUNCTION FOR FOLD {i+1}')
                 X_fold = X_all[train_idx]
                 Y_fold = Y_all[train_idx]
-                # Build kernel with cached hyperparams and do NOT optimize
                 kernel_fold = GPy.kern.RBF(input_dim=input_dim, ARD=True)
-                # assign hyperparameters back to kernel object
                 try:
                     kernel_fold.variance = self.kernel_variance
                     kernel_fold.lengthscale = self.lengthscales.copy()
-                    # fix kernel parameters so they are not re-optimized accidentally
                     kernel_fold.variance.fix(self.kernel_variance)
                     kernel_fold.lengthscale.fix(self.lengthscales.copy())
                 except Exception:
@@ -351,7 +363,6 @@ class GpyAnalyticSobolSampler(Sampler):
                         pass
 
                 model_fold = GPy.models.GPRegression(X_fold, Y_fold, kernel_fold)
-                # set noise to global noise and fix
                 try:
                     model_fold.likelihood.variance = self.noise_variance
                     model_fold.Gaussian_noise.variance.fix(self.noise_variance)
@@ -359,18 +370,14 @@ class GpyAnalyticSobolSampler(Sampler):
                     pass
 
                 try:
-                    # Do not optimize kernel; only allow small local noise adjustment if desired
                     model_fold.optimize_restarts(num_restarts=0, messages=False)
                 except Exception:
-                    # ignore fold optimization failures
                     pass
 
-                _, var_f = model_fold.predict(self.pool)
-                var_f = var_f.flatten()
-                idx_f = int(np.argmax(var_f))
-                chosen_indices.append(idx_f)
+                scores = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, model=model_fold)
+                idx_f = list(np.argsort(-scores)[:samples_per_fold[i]])
+                chosen_indices.extend(idx_f)
 
-            # make unique while preserving order
             seen = set()
             unique_idxs = []
             for idx in chosen_indices:
@@ -378,9 +385,12 @@ class GpyAnalyticSobolSampler(Sampler):
                     seen.add(idx)
                     unique_idxs.append(idx)
 
-            # if we need more points (duplicates), take additional top global var ones
             if len(unique_idxs) < self.batch_size:
-                sorted_idx = list(np.argsort(-var_pool_global))
+                print('THE GPR ENSEMBLE SELECTED SOME OF THE SAME POINTS. USING GLOBAL SCORE TO GET MORE POINTS')
+                print(f'GETTING GLOBAL SCORE MODE:{self.acquisition_mode}')
+                score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string)
+                score_pool_global = score_pool_global.flatten()
+                sorted_idx = list(np.argsort(-score_pool_global))
                 for idx in sorted_idx:
                     if idx not in seen:
                         unique_idxs.append(idx)
@@ -390,10 +400,8 @@ class GpyAnalyticSobolSampler(Sampler):
             chosen_indices_final = unique_idxs[:self.batch_size]
             chosen_points = self.pool[chosen_indices_final]
             samples = [{key: float(v) for key, v in zip(self.parameters, row)} for row in chosen_points]
-            # remove chosen points from pool
             self.pool = np.delete(self.pool, chosen_indices_final, axis=0)
 
-        # increment counters and return
         self.batch_number += 1
         if self.custom_submitted >= self.budget:
             return None
@@ -425,7 +433,7 @@ class GpyAnalyticSobolSampler(Sampler):
         return ypred.flatten()
 
     # ---------------------------
-    # Integrals and analytic UQ (predictor-only: Marrel et al.)
+    # Integrals and analytic UQ (predictor-only with normalization)
     # ---------------------------
     def _integral_k_over_domain(self, X_train):
         n = X_train.shape[0]
@@ -435,9 +443,12 @@ class GpyAnalyticSobolSampler(Sampler):
             a, b = self.bounds[d]
             ls = self.lengthscales[d]
             Xi_d = X_train[:, d]
-            I_d = rbf_kernel_product_integral_1d_vector(Xi_d, ls, a, b)
+            I_d = rbf_kernel_product_integral_1d_vector(Xi_d, ls, a, b) / (b - a)  # normalize by width
             I *= I_d
+            # diagnostics per dimension
+            print(f"[INT-K] dim {d}: I_d(min,max)=({I_d.min():.3e},{I_d.max():.3e}), width={b-a:.3e}, ls={ls:.3e}")
         I *= self.kernel_variance
+        print(f"[INT-K] kernel_variance={self.kernel_variance:.3e}, I(min,max)=({I.min():.3e},{I.max():.3e})")
         return I
 
     def _integral_kk_over_domain(self, X_train):
@@ -448,9 +459,11 @@ class GpyAnalyticSobolSampler(Sampler):
             a, b = self.bounds[d]
             ls = self.lengthscales[d]
             Xi_d = X_train[:, d]
-            C_d = rbf_kernel_product_double_integral_1d_matrix(Xi_d, Xi_d, ls, a, b)
+            C_d = rbf_kernel_product_double_integral_1d_matrix(Xi_d, Xi_d, ls, a, b) / (b - a)  # normalize by width
             C *= C_d
+            print(f"[INT-KK] dim {d}: C_d(min,max)=({C_d.min():.3e},{C_d.max():.3e}), width={b-a:.3e}, ls={ls:.3e}")
         C *= (self.kernel_variance ** 2)
+        print(f"[INT-KK] kernel_variance^2={(self.kernel_variance**2):.3e}, C(min,max)=({C.min():.3e},{C.max():.3e})")
         return C
 
     def uq_analysis(self):
@@ -460,72 +473,100 @@ class GpyAnalyticSobolSampler(Sampler):
         X = np.array([list(k) for k in self.train.keys()], dtype=float)
         y = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
         n, D = X.shape
-        vol = np.prod([b[1] - b[0] for b in self.bounds])
+        widths = np.array([b[1] - b[0] for b in self.bounds], dtype=float)
+        vol = float(np.prod(widths))
+
+        print(f"[UQ] n={n}, D={D}, bounds widths={widths}, vol={vol:.3e}")
+        print(f"[UQ] lengthscales={self.lengthscales}, kernel_var={self.kernel_variance:.3e}, noise_var={self.noise_variance:.3e}")
 
         # integrals
         I = self._integral_k_over_domain(X)
 
-        # Use cached solver to invert K without forming explicit inverse
-        K = self.gp_model.kern.K(X) + np.eye(n) * max(self.noise_variance, 1e-12)
-        try:
-            K_inv_y = self._solve_K(y)
-        except Exception:
-            K_inv = np.linalg.pinv(K)
-            K_inv_y = K_inv.dot(y)
+        # Build stabilized K and its inverse via solves
+        K_base = self.gp_model.kern.K(X)
+        noise = max(self.noise_variance, 1e-12)
+        jitter = max(1e-10, 1e-6 * max(self.kernel_variance, noise))
+        K = K_base + np.eye(n) * (noise + jitter)
+
+        if self._K_cholesky is None:
+            try:
+                L = np.linalg.cholesky(K)
+                self._K_cholesky = L
+                def solve_K(vec):
+                    y_ = np.linalg.solve(L, vec)
+                    x_ = np.linalg.solve(L.T, y_)
+                    return x_
+                self._solve_K = solve_K
+            except np.linalg.LinAlgError:
+                K_inv_fallback = np.linalg.pinv(K)
+                self._solve_K = lambda vec: K_inv_fallback.dot(vec)
+
+        # compute K_inv via solves with identity (more stable than pinv chaining)
+        I_eye = np.eye(n)
+        K_inv_cols = [self._solve_K(I_eye[:, i:i+1]).flatten() for i in range(n)]
+        K_inv = np.column_stack(K_inv_cols)
+        K_inv_y = self._solve_K(y)
 
         integral_m = I.reshape(1, -1).dot(K_inv_y)  # scalar
         mu = float(integral_m / vol)
+        print(f"[UQ] mu={mu:.6e}")
 
-        # C matrix and total predictor variance
+        # Total predictor variance
         C = self._integral_kk_over_domain(X)
-        try:
-            # compute A = K^{-1} C K^{-1} y efficiently: first K^{-1} C
-            # Use K_inv as linear operator via solve if possible
-            # compute K^{-1} C via solving K X = C for X
-            # for stability and simplicity we compute K_inv explicitly if small n
-            K_inv = None
-            if self._K_cholesky is not None:
-                # compute K_inv by solving K * E = I
-                I_eye = np.eye(n)
-                K_inv = np.column_stack([self._solve_K(I_eye[:, i:i+1]).flatten() for i in range(n)])
-            else:
-                K_inv = np.linalg.pinv(K)
-            A = K_inv.dot(C).dot(K_inv)
-            var_pred = float((y.T.dot(A).dot(y)) / vol - mu ** 2)
-        except Exception:
-            var_pred = 0.0
-
-        var_pred = max(var_pred, 0.0)
+        A = K_inv.dot(C).dot(K_inv)
+        var_pred_raw = float((y.T.dot(A).dot(y)) / vol - mu ** 2)
+        var_pred = max(var_pred_raw, 0.0)
+        print(f"[UQ] var_pred_raw={var_pred_raw:.6e}, var_pred(clamped)={var_pred:.6e}")
 
         # first-order Sobol (predictor-only)
         sobol_first = {}
         for j in range(D):
-            prod_other = np.ones(n, dtype=float)
-            for d in range(D):
-                if d == j:
-                    continue
-                a, b = self.bounds[d]
-                ls = self.lengthscales[d]
-                Xi_d = X[:, d]
-                I_d = rbf_kernel_product_integral_1d_vector(Xi_d, ls, a, b)
-                prod_other *= I_d
+            # product over other dims with normalization; optionally in log-space
+            if self.use_log_products:
+                logs = np.zeros(n, dtype=float)
+                for d in range(D):
+                    if d == j:
+                        continue
+                    a, b = self.bounds[d]
+                    ls = self.lengthscales[d]
+                    Xi_d = X[:, d]
+                    I_d = rbf_kernel_product_integral_1d_vector(Xi_d, ls, a, b) / (b - a)
+                    logs += np.log(I_d + 1e-300)  # avoid log(0)
+                    print(f"[UQ:j={j}] I_d(dim {d}) min/max=({I_d.min():.3e},{I_d.max():.3e})")
+                prod_other = np.exp(logs)
+            else:
+                prod_other = np.ones(n, dtype=float)
+                for d in range(D):
+                    if d == j:
+                        continue
+                    a, b = self.bounds[d]
+                    ls = self.lengthscales[d]
+                    Xi_d = X[:, d]
+                    I_d = rbf_kernel_product_integral_1d_vector(Xi_d, ls, a, b) / (b - a)
+                    prod_other *= I_d
+                    print(f"[UQ:j={j}] I_d(dim {d}) min/max=({I_d.min():.3e},{I_d.max():.3e})")
+
+            print(f"[UQ:j={j}] prod_other min/max=({prod_other.min():.3e},{prod_other.max():.3e})")
 
             a_j, b_j = self.bounds[j]
             ls_j = self.lengthscales[j]
             Xi_j = X[:, j]
-            Mj = rbf_kernel_product_double_integral_1d_matrix(Xi_j, Xi_j, ls_j, a_j, b_j)
+            Mj = rbf_kernel_product_double_integral_1d_matrix(Xi_j, Xi_j, ls_j, a_j, b_j) / (b_j - a_j)
+            print(f"[UQ:j={j}] Mj min/max=({Mj.min():.3e},{Mj.max():.3e})")
 
             outer_prod = np.outer(prod_other, prod_other)
             B = (self.kernel_variance ** 2) * outer_prod * Mj
 
-            try:
-                if K_inv is None:
-                    K_inv = np.linalg.pinv(K)
-                num = float((y.T.dot(K_inv.dot(B).dot(K_inv)).dot(y)) / vol - mu ** 2)
-            except Exception:
-                num = 0.0
-            num = max(num, 0.0)
-            sobol_first[self.parameters[j] + '_sobolF'] = float(num / var_pred) if var_pred > 0 else 0.0
+            num_raw = float((y.T.dot(K_inv.dot(B).dot(K_inv)).dot(y)) / vol - mu ** 2)
+            num = num_raw if num_raw >= 0 else 0.0
+            if 0 < num < self.small_positive_floor:
+                num = self.small_positive_floor
+
+            S_j = float(num / var_pred) if var_pred > 0 else 0.0
+            sob_key = self.parameters[j] + '_sobolF'
+
+            print(f"[UQ:j={j}] num_raw={num_raw:.6e}, num(clamped)={num:.6e}, S_j={S_j:.6e}")
+            sobol_first[sob_key] = S_j
 
         batch_info = {
             'num_samples': [n],
@@ -541,7 +582,6 @@ class GpyAnalyticSobolSampler(Sampler):
     def write_batch_info(self, batch_dir):
         print('WRITING BATCH INFO')
         try:
-            # run_with_timeout(self._write_batch_info_inner, self.write_batch_info_timeout, kwargs={'batch_dir': batch_dir})
             self._write_batch_info_inner(batch_dir=batch_dir)
         except FunctionTimeoutError:
             warnings.warn(f"write_batch_info timed out after {self.write_batch_info_timeout} seconds; skipping batch info write for batch {self.batch_number-1}", UserWarning)
@@ -551,12 +591,112 @@ class GpyAnalyticSobolSampler(Sampler):
     def _write_batch_info_inner(self, batch_dir):
         batch_info = self.uq_analysis()
         df = pd.DataFrame({k: v for k, v in batch_info.items()})
+        print("[WRITE] batch_info head:\n", df.head().to_string(index=False))
         df.to_csv(os.path.join(batch_dir, 'batch_info.csv'), index=False)
         all_batch_info_path = os.path.join(os.path.dirname(batch_dir), 'batch_info.csv')
         if os.path.exists(all_batch_info_path):
             df.to_csv(all_batch_info_path, mode='a', header=False, index=False)
         else:
             df.to_csv(all_batch_info_path, mode='w', header=True, index=False)
+
+    def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None):
+        start = time.time()
+        if model is None:
+            model = self.gp_model
+        if mode == "var":
+            mu, var = model.predict(X_pool)
+            end = time.time()
+            print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
+            return var.flatten()
+
+        elif mode == "gradVar":
+            X_pool = np.atleast_2d(X_pool)
+            dmu, _ = model.predictive_gradients(X_pool)
+            grads = np.linalg.norm(dmu, axis=1).squeeze()
+            end = time.time()
+            print('COMPUTING ACQUISITION TOOK:', (end-start)/60, 'min', f'MODE:{mode}')
+            return grads
+
+        elif mode == "intVar":
+            end = time.time()
+            print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
+            return self.integral_variance_reduction(X_pool)
+
+        elif mode == "ensembleDisagreement":
+            preds = []
+            n_folds = min(5, max(2, len(self.train)))
+            kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
+            X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
+            Y_all = np.array(list(self.train.values())).reshape(-1, 1)
+            for train_idx, _ in kf.split(X_all):
+                X_fold, Y_fold = X_all[train_idx], Y_all[train_idx]
+                kernel_fold = GPy.kern.RBF(input_dim=X_fold.shape[1], ARD=True)
+                kernel_fold.variance = self.kernel_variance
+                kernel_fold.lengthscale = self.lengthscales.copy()
+                model_fold = GPy.models.GPRegression(X_fold, Y_fold, kernel_fold)
+                model_fold.likelihood.variance = self.noise_variance
+                mu_f, _ = model_fold.predict(X_pool)
+                preds.append(mu_f.flatten())
+            preds = np.vstack(preds)
+            end = time.time()
+            print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
+            return preds.var(axis=0)
+
+        elif mode == "blend":
+            if blend_string is None:
+                raise ValueError("blend_string must be provided for blend mode")
+            blend = self._parse_blend_string(blend_string)
+
+            total = np.zeros(len(X_pool))
+            for coeff, m in blend:
+                if len(X_pool) > self.chunk_size:
+                    scores = self._compute_acquisition_chunked(X_pool, mode=m, chunk_size=self.chunk_size)
+                else:
+                    scores = self._compute_acquisition(X_pool, mode=m)
+                scores = (scores - scores.mean()) / (scores.std() + 1e-12)
+                total += coeff * scores
+
+            end = time.time()
+            print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
+            return total
+
+        else:
+            raise ValueError(f"Unknown acquisition mode: {mode}")
+
+    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000):
+        results = []
+        for i in range(0, len(X_pool), chunk_size):
+            block = X_pool[i:i+chunk_size]
+            results.append(self._compute_acquisition(block, mode=mode))
+        return np.concatenate(results)
+
+    def _parse_blend_string(self, blend_string):
+        parts = blend_string.split("_")
+        blend = []
+        for part in parts:
+            coeff, mode = part.split("-", 1)
+            blend.append((float(coeff), mode))
+        return blend
+
+    def integral_variance_reduction(self, X_pool):
+        X_train = np.array([list(k) for k in self.train.keys()], dtype=float)
+        n_train = X_train.shape[0]
+
+        K = self.gp_model.kern.K(X_train) + np.eye(n_train) * max(self.noise_variance, 1e-12)
+        K_inv = np.linalg.pinv(K)
+
+        # normalized kernel mean features
+        phi_train = self._integral_k_over_domain(X_train)    # shape (n_train,)
+        phi_pool = self._integral_k_over_domain(X_pool)      # shape (n_pool,)
+
+        K_cross = self.gp_model.kern.K(X_train, X_pool)      # shape (n_train, n_pool)
+        K_self = np.diag(self.gp_model.kern.K(X_pool))       # shape (n_pool,)
+
+        diff = phi_pool - K_cross.T.dot(K_inv).dot(phi_train)
+        num = diff**2
+        denom = K_self - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
+        results = np.where(denom > 1e-12, num / denom, 0.0)
+        return results
 
     # ---------------------------
     # Boilerplate
@@ -588,39 +728,12 @@ if __name__ == '__main__':
     print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
     config = load_configuration(os.path.join(base_run_dir, config_file_name))
     
-    # bounds=np.array(config.executor.sampler_config['bounds'])
-    # parameters = config.executor.sampler_config['parameters']
-    
     print('debug sampler config', config.executor['sampler_config'])
     
     sampler_config = config.executor['sampler_config']
     sampler_config['base_run_dir'] = base_run_dir
-    # bounds = ['bounds']
-    # config.executor['sampler_config'].pop('bounds')
-    # parameters = config.executor['sampler_config']['parameters']
-    # config.executor['sampler_config'].pop('parameters')
-    
+
     for i, batch_dir in enumerate(batch_dirs):
-        if i==0 or i==1 or i%write_every==0:
+        if i==0 or i==1 or i%int(write_every)==0:
             gpy = GpyAnalyticSobolSampler(**sampler_config)
-            # grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
-            # surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
-            # train_points_file = os.path.join(batch_dir, 'train_points.pkl')
-            # virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
-            # anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
-
-            # try:
-            #     with open(grid_file_path, 'r') as file:
-            #         serialized_grid = file.read()
-            #         sgpp.grid = pysgpp.Grid.unserialize(serialized_grid)
-            #         sgpp.gridStorage = sgpp.grid.getStorage()
-            #         sgpp.gridGen = sgpp.grid.getGenerator()
-            #         surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
-            #         sgpp.alpha = surpluses
-            # except FileNotFoundError:
-            #     continue
-
-            # with open(train_points_file, 'rb') as file:
-            #     sgpp.train = pickle.load(file)
-                
-            # sgpp.write_batch_info(batch_dir)
+            gpy.write_batch_info(batch_dir)

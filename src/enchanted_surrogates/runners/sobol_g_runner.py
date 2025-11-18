@@ -199,12 +199,28 @@ class SobolGRunner(Runner):
             "sobol_total_indices": ST
         }
 
+    def sorted_numeric_keys(self, params):
+        """
+        Return parameter keys like 'x1','x2',... sorted numerically by suffix.
+        Example: ['x1','x2','x10'] instead of ['x1','x10','x2'].
+        """
+        def keyfunc(k):
+            if k.startswith("x"):
+                try:
+                    return int(k[1:])
+                except ValueError:
+                    return float("inf")  # push malformed keys to the end
+            return float("inf")
+        return sorted(params.keys(), key=keyfunc)
+
+
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         # Validate input domain
         exclusive_params = [f"x{i+1}" for i in range(len(self.a))]
         if params is None:
             raise AssertionError(f"Parameters must include at least one of {exclusive_params}.")
-        x = [float(params[k]) for k in sorted(params.keys()) if k in exclusive_params]
+        x = [float(params[k]) for k in self.sorted_numeric_keys(params) if k in exclusive_params]
+
         assert len(x) > 0, f"Parameters must include at least one of {exclusive_params}."
         for xi in x:
             if not (0.0 <= xi <= 1.0):
