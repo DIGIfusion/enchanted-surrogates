@@ -288,8 +288,6 @@ class BayesianOptimizationSampler(Sampler):
             if any(skiptags):
                 continue
             else:
-                print(result_dictionary)
-                print(result_dictionary != None)
                 if result_dictionary != None:
                     if (os.path.join(base_run_directory, dirname) in
                         result_dictionary['run_dir']):
@@ -302,7 +300,6 @@ class BayesianOptimizationSampler(Sampler):
                     sample_dict = self.parser.collect_sample_information(
                         os.path.join(base_run_directory, dirname),
                         self.observations)
-                    print(sample_dict)
             if sample_dict['failure'] == 0:
                 if result_dictionary != None:
                     for key in sample_dict.keys():
