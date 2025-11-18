@@ -260,12 +260,10 @@ class DaskExecutor(Executor):
             samples = self.sampler.get_next_samples()
             futures = self.submit_batch(samples)
             if self.sampler_type in {'BayesianOptimizationSampler'}:
-                print("Bayesian Optimization Sampler")
-                print(f"Launching {len(futures)} samples")
                 try: 
                     wait(futures, timeout=self.timeout)
                 except:
-                    print("Timeout of some of the samples")
+                    print("TIMEOUT OF SOME OF THE SAMPLES")
             all_futures.extend(futures)
         print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
         dfs = []

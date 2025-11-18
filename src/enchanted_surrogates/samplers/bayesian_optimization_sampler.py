@@ -89,13 +89,17 @@ class BayesianOptimizationSampler(Sampler):
         """
         # Build the result dictionary
         self.build_result_dictionary(self.base_run_dir)
-        self.collected_samples = len(self.result_dictionary['inputs'])
-        print(str(100*self.collected_samples/self.initial_samples),
-              ' % of initial samples collected')
+        if self.result_dictionary == [None]:
+            self.collected_samples = 0
+        else:
+            self.collected_samples = len(self.result_dictionary['inputs'])
+
         # Assume random sampling if self.collected_samples is below 
         # the number of initial samples.
         batch_samples = []
         if self.collected_samples < self.initial_samples:
+            print(str(100*self.collected_samples/self.initial_samples),
+                  ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
             for _ in range(int(self.acquisition_batch_size)):
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
@@ -192,7 +196,8 @@ class BayesianOptimizationSampler(Sampler):
         self.futures.append(future)
 
     def train_surrogate(self):
-        print('Training the surrogate model')
+        if self.verbose:
+            print('TRAINING THE SURROGATE MODEL')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
         distances = torch.from_numpy(np.sum(
@@ -257,9 +262,10 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
-        result_dictionary = {}
-        result_dictionary_failed = {}
-        print('Building result dictionary')    
+        result_dictionary = None
+        result_dictionary_failed = None
+        if self.verbose:
+            print('BUILDING RESULT DICTIONARY')    
     
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 'result_dictionary.pkl')):
@@ -272,35 +278,33 @@ class BayesianOptimizationSampler(Sampler):
         # Obtain a list of run_directories within the base_run_directory
         dirlist = os.listdir(base_run_directory)
         # Loop over the established runs. This can be streamlined if needed.
-
-        dirlistold = []
-        #for dirname in self.result_dictionary
+        
+        # List of tags to identify entries to skip in dirlist 
+        skiplist = ['yaml', 'worker_out', 'FINISHED', '.pkl', '.csv']
 
         for dirname in dirlist:
-            if dirname in ['CONFIG.yaml', 
-                           'result_dictionary.pkl', 
-                           'worker_out_DaskExecutor', 
-                           'ENCHANTED.FINISHED',
-                           'enchanted_dataset.csv']:
+            # See if the dirname is on the skiplist
+            skiptags = [tag in dirname for tag in skiplist]
+            if any(skiptags):
                 continue
             else:
-                try:
-                    if bool(result_dictionary):
-                        if (os.path.join(base_run_directory, dirname) in
-                            result_dictionary['run_dir']):
-                            continue
-                        else:
-                            sample_dict = self.parser.collect_sample_information(
-                                os.path.join(base_run_directory, dirname),
-                                self.observations)
+                print(result_dictionary)
+                print(result_dictionary != None)
+                if result_dictionary != None:
+                    if (os.path.join(base_run_directory, dirname) in
+                        result_dictionary['run_dir']):
+                        continue
                     else:
                         sample_dict = self.parser.collect_sample_information(
                             os.path.join(base_run_directory, dirname),
                             self.observations)
-                except:
-                    continue
+                else:
+                    sample_dict = self.parser.collect_sample_information(
+                        os.path.join(base_run_directory, dirname),
+                        self.observations)
+                    print(sample_dict)
             if sample_dict['failure'] == 0:
-                if bool(result_dictionary):
+                if result_dictionary != None:
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary[key] = np.concatenate(
@@ -311,7 +315,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in result_dictionary.keys():
                         result_dictionary[key]=[result_dictionary[key]]
             else:
-                if bool(result_dictionary_failed):
+                if result_dictionary_failed != None:
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary_failed[key] = np.concatenate(
@@ -321,17 +325,17 @@ class BayesianOptimizationSampler(Sampler):
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
                         result_dictionary_failed[key]=[result_dictionary_failed[key]]
-        if bool(result_dictionary):
+        if result_dictionary != None:
             self.result_dictionary = result_dictionary
         else:
             self.result_dictionary = [None]
-        if bool(result_dictionary_failed):
+        if result_dictionary_failed != None:
             self.result_dictionary_failed = result_dictionary_failed
         else:
             self.result_dictionary_failed = [None]
         if normalize:
             self.normalize_results()
-        if bool(result_dictionary):
+        if result_dictionary != None:
             res_dict_dump = {'result_dictionary':result_dictionary}
             resdict = open(
                 os.path.join(base_run_directory, 
