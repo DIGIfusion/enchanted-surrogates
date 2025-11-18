@@ -5,12 +5,14 @@ from scipy.stats.qmc import Sobol
 import warnings
 
 class SobolSequence(Sampler):
-    def __init__(self, bounds, budget, parameters, **kwargs):
-        self.budget = budget
-        self.power = int(np.log2(self.budget))
-        if self.budget != 2**self.power:
-            warnings.warn(f'SOBOL SEQUENCE BUDGET MUST BE A POWER OF 2 eg, 2,4,16,32... SETTING BUDGET TO {2**self.power}')
-        self.budget = 2**self.power
+    def __init__(self, bounds, num_samples, parameters, **kwargs):
+        self.num_samples = num_samples
+        self.power = int(np.log2(self.num_samples))
+        if self.num_samples != 2**self.power:
+            warnings.warn(f'SOBOL SEQUENCE NUM_SAMPLES MUST BE A POWER OF 2 eg, 2,4,16,32... SETTING NUM_SAMPLES TO {2**self.power}')
+        self.num_samples = 2**self.power
+        self.num_repeats = kwargs.get("num_repeats", 1)
+        self.budget = self.num_samples * self.num_repeats
         
         self.bounds = bounds
         self.parameters = parameters
@@ -29,6 +31,7 @@ class SobolSequence(Sampler):
         # TODO not use uniform?
         # TODO batch samples
         samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples[self.batch_number*self.batch_size  :  min((self.batch_number+1)*self.batch_size, self.budget)]]
+        samples = samples * self.num_repeats
         # samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples[self.batch_number*self.batch_size  :  (self.batch_number+1)*self.batch_size]]
         
         self.batch_number += 1

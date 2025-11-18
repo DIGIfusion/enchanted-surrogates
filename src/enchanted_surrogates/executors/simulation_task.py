@@ -30,8 +30,8 @@ def run_simulation_task(
         
     except Exception as exc:
         msg = ["=" * 100,
-                f"\nThere was a Python ERROR on when running a simulation task:", exc,
-                "params:", params,
+                f"\nThere was a Python ERROR on when running a simulation task:", str(exc),
+                "params:", str(params),
                 "run_dir:", run_dir,
                 traceback.format_exc()]
         # print the whole traceback and not just the last error
@@ -54,7 +54,7 @@ def run_simulation_task(
             home = os.path.expanduser("~")
             extra_errors_path = os.path.join(home,f'enchanted_extra_{error_id}.txt')            
             with open(extra_errors_path, "w", encoding="utf-8") as f:
-                f.write('\n'.join(msg))
+                f.write(pformat(msg))
                 f.write(pformat(error_info))
         
     runner_output.update(params)

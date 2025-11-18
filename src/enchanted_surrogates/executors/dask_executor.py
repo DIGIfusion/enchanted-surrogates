@@ -66,7 +66,13 @@ class DaskExecutor(Executor):
             self.sampler_config['base_run_dir'] = self.base_run_dir
             self.sampler_type = self.sampler_config.pop("type")
             self.sampler = import_sampler(type=self.sampler_type, sampler_config=self.sampler_config)
-        self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
+        self.scale_n_jobs = kwargs.get('scale_n_jobs', None)
+        self.scale_n_jobs_min = kwargs.get('scale_n_jobs_min', None)
+        self.scale_n_jobs_max = kwargs.get('scale_n_jobs_max', None)
+        assert not (self.scale_n_jobs and (self.scale_n_jobs_min or self.scale_n_jobs_max)), 'EITHER scale_n_jobs OR scale_n_jobs_min/scale_n_jobs_max CAN BE SET, NOT BOTH'
+        
+        self.runner_config = kwargs.get('runner_config')
+        
         self.timeout = kwargs.get('timeout', 1e10)
         self.run_error_log_path = os.path.join(self.base_run_dir, 'runs_error_log.jsonl')
         self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
@@ -98,8 +104,6 @@ class DaskExecutor(Executor):
         """
         print('MAKING CLUSTER')
         if self.SLURMcluster_config:
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
-
             if not slurm_out_dir:
                 slurm_out_dir = os.path.join(self.base_run_dir,'worker_out_DaskExecutor')
             if not os.path.exists(slurm_out_dir):
@@ -115,7 +119,14 @@ class DaskExecutor(Executor):
             if self.submit_command:
                 self.cluster.job_cls.submit_command = self.submit_command
             
-            self.cluster.scale(self.scale_n_jobs)
+            if self.scale_n_jobs:
+                self.cluster.scale(self.scale_n_jobs)
+            elif self.scale_n_jobs_min and self.scale_n_jobs_max:
+                self.cluster.adapt(minimum=self.scale_n_jobs_min, maximum=self.scale_n_jobs_max)
+            else:
+                self.cluster.scale(1)  # Default to 1 worker if no scaling info provided
+                
+            
             print('THE JOB SCRIPT FOR A WORKER IS:')
             print(self.cluster.job_script())
             
@@ -133,6 +144,7 @@ class DaskExecutor(Executor):
             self.client = Client(self.cluster)
             
         if self.block_until_cluster_started:
+            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
             for i in range(1,self.expected_number_of_workers+2):
                 if i == self.expected_number_of_workers+1:
@@ -242,10 +254,10 @@ class DaskExecutor(Executor):
                 count += 1
         return num_alive_workers
 
-    def scale(self, num_workers):
-        if self.count_alive_workers() == self.scale_n_jobs:
-            self.cluster.scale(num_workers)
-        self.scale_n_jobs = num_workers
+    # def scale(self, num_workers):
+    #     if self.count_alive_workers() == self.scale_n_jobs:
+    #         self.cluster.scale(num_workers)
+    #     self.scale_n_jobs = num_workers
 
     def start_runs(self):
         """
@@ -281,7 +293,6 @@ class DaskExecutor(Executor):
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
-        all_futures = []
 
         print(f'SAMPLER: {self.sampler_type}')
         enchanted_dataset_path_success = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
@@ -294,7 +305,6 @@ class DaskExecutor(Executor):
             if self.sampler_type in {'BayesianOptimizationSampler'}:
                 samples = self.sampler.get_next_samples()
                 futures = self.submit_batch(samples, base_run_dir=self.base_run_dir, request_errors=True)
-                all_futures.extend(futures)
                 print(f"Launching {len(futures)} samples")
 
                 try: 
@@ -324,8 +334,10 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     shutil.rmtree(batch_dir)
                     break
                 
-                futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
-                all_futures.extend(futures)
+                _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
+                futures = set(_futures)
+                del _futures
+                num_samp_in_batch = len(futures)
                 print(f"Launching {len(futures)} samples")
 
                 dfs = []
@@ -369,9 +381,10 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                             dfi.to_csv(enchanted_dataset_path_fail, mode='w', header=True, index=False)
                         
 
-                    print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{len(futures)}] Futures Completed ({((i+1)/len(futures))*100:.1f}%)","|",f"[{num_success}/{len(futures)}] Futures Succeded ({(num_success/len(futures))*100:.1f}%)")
+                    print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{num_samp_in_batch}] Futures Completed ({((i+1)/num_samp_in_batch)*100:.1f}%)","|",f"[{num_success}/{num_samp_in_batch}] Futures Succeded ({(num_success/num_samp_in_batch)*100:.1f}%)")
                     print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")
                     print(f"TIME PASSED: {format_sec(time.time()-start)} d - hh:mm:ss \n {'_'*100}")
+                    futures.remove(future)
                     
             self.current_batch += 1
         

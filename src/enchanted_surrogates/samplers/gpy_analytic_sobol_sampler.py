@@ -61,8 +61,12 @@ class GpyAnalyticSobolSampler(Sampler):
 
         self.sampling_strategy = kwargs.get('sampling_strategy', 'random')
         self.batch_size = kwargs.get('batch_size', None) or 2
+        self.initial_batch_size = kwargs.get('initial_batch_size', self.batch_size)
+        self.initial_pool_samples_strategy = kwargs.get('initial_pool_samples_strategy', 'random')
         self.seed = kwargs.get('seed', 42)
         self.base_run_dir = kwargs.get('base_run_dir')
+        self.num_repeats = kwargs.get('num_repeats', 1)
+        self.include_index = kwargs.get('include_index', False)
         self.batch_number = 0
         self.submitted = 0
         self.custom_submitted = 0
@@ -121,9 +125,10 @@ class GpyAnalyticSobolSampler(Sampler):
                     if len(collected) >= self.initial_pool_size:
                         break
             if len(collected) == 0:
-                self.pool = rng.uniform(low=[b[0] for b in self.bounds],
-                                        high=[b[1] for b in self.bounds],
-                                        size=(self.initial_pool_size, len(self.bounds)))
+                raise RuntimeError('Pool sampler did not provide any points for initial pool.')
+                # self.pool = rng.uniform(low=[b[0] for b in self.bounds],
+                #                         high=[b[1] for b in self.bounds],
+                #                         size=(self.initial_pool_size, len(self.bounds)))
             else:
                 self.pool = np.array(collected, dtype=float)
         else:
@@ -156,24 +161,40 @@ class GpyAnalyticSobolSampler(Sampler):
     def get_initial_samples(self, *args, **kwargs):
         # If a sub-sampler is configured, prefer it for initial samples
         if self.sub_sampler is not None:
-            samples = self.sub_sampler.get_next_samples()
+            samples = self.sub_sampler.get_next_samples() * self.num_repeats
             if samples:
                 self.batch_number += 1
                 self.submitted += len(samples)
                 self.custom_submitted += len(samples)
                 # remove samples from pool if present
                 self._remove_from_pool(samples)
+                if self.include_index:
+                    samples = [
+                        {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
                 return samples
+            else: return None
 
         # Otherwise return random points from pool
         if self.pool is None or len(self.pool) == 0:
             self._init_pool()
-        rng = np.random.RandomState(self.seed)
-        n = min(self.batch_size, len(self.pool))
-        idxs = rng.choice(len(self.pool), size=n, replace=False)
-        chosen = self.pool[idxs]
-        self.pool = np.delete(self.pool, idxs, axis=0)
-        samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in chosen]
+        
+        if self.initial_pool_samples_strategy == 'random':
+            rng = np.random.RandomState(self.seed)
+            n = min(self.initial_batch_size, len(self.pool))
+            idxs = rng.choice(len(self.pool), size=n, replace=False)
+            chosen = self.pool[idxs]
+            self.pool = np.delete(self.pool, idxs, axis=0)
+            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in chosen] * self.num_repeats
+        elif self.initial_pool_samples_strategy == 'first':
+            n = min(self.initial_batch_size, len(self.pool))
+            chosen = self.pool[:n]
+            self.pool = self.pool[n:]
+            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in chosen] * self.num_repeats
+
+        if self.include_index:
+            samples = [
+                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+
         self.batch_number += 1
         self.submitted += len(samples)
         self.custom_submitted += len(samples)
@@ -378,6 +399,11 @@ class GpyAnalyticSobolSampler(Sampler):
             return None
         if samples is not None:
             self.custom_submitted += len(samples)
+        samples = samples * self.num_repeats
+        if self.include_index:
+            samples = [
+                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+
         return samples
 
     # ---------------------------

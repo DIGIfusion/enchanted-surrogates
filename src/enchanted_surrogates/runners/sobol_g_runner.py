@@ -348,21 +348,21 @@ class SobolGRunner(Runner):
         if vmax is None:
             vmax = global_max
 
-        # Prepare text info for opposite triangle
-        try:
-            stats = self.analytical_stats()
-            S_list = stats.get('sobol_indices', [])
-        except Exception:
-            a_arr = _np.array(self.a, dtype=float)
-            V = 1.0 / (3.0 * (1.0 + a_arr) ** 2)
-            D = _np.prod(1.0 + V)
-            var = D - 1.0
-            S_list = (V / var).tolist() if var > 0 else [0.0]*len(a_arr)
-        a_list = [float(ai) for ai in _np.array(self.a, dtype=float)]
-        sobol_line = "Sobol S: " + ", ".join([f"{s:.4g}" for s in S_list])
-        a_line = "a: " + ", ".join([f"{ai:.4g}" for ai in a_list])
-        eq_line = "g(x) = ∏ (|4 x_i - 2| + a_i) / (1 + a_i)"
-        note_line = "Other dims fixed at provided values"
+        # # Prepare text info for opposite triangle
+        # try:
+        #     stats = self.analytical_stats()
+        #     S_list = stats.get('sobol_indices', [])
+        # except Exception:
+        #     a_arr = _np.array(self.a, dtype=float)
+        #     V = 1.0 / (3.0 * (1.0 + a_arr) ** 2)
+        #     D = _np.prod(1.0 + V)
+        #     var = D - 1.0
+        #     S_list = (V / var).tolist() if var > 0 else [0.0]*len(a_arr)
+        # a_list = [float(ai) for ai in _np.array(self.a, dtype=float)]
+        # sobol_line = "Sobol S: " + ", ".join([f"{s:.4g}" for s in S_list])
+        # a_line = "a: " + ", ".join([f"{ai:.4g}" for ai in a_list])
+        # eq_line = "g(x) = ∏ (|4 x_i - 2| + a_i) / (1 + a_i)"
+        # note_line = "Other dims fixed at provided values"
 
         # --- Load optional dataset if save_dir provided (look for enchanted_dataset.csv in save_dir or its parent) ---
         dataset_df = None
@@ -562,12 +562,12 @@ class SobolGRunner(Runner):
                             _ys_plot = dataset_df[y_col]
                         ax.scatter(_xs_plot, _ys_plot, s=12, c='k', alpha=0.6, edgecolor='white', linewidth=0.2, zorder=10)
 
-                else:
-                    ax.axis('off')
-                    txt = sobol_line + "\n" + a_line + "\n" + eq_line + "\n" + note_line
-                    ax_text = ax.inset_axes([0.05, 0.05, 0.9, 0.9])
-                    ax_text.axis('off')
-                    ax_text.text(0.0, 1.0, txt, va='top', ha='left', fontsize=7, family='monospace', wrap=True)
+                # else:
+                #     ax.axis('off')
+                #     txt = sobol_line + "\n" + a_line + "\n" + eq_line + "\n" + note_line
+                #     ax_text = ax.inset_axes([0.05, 0.05, 0.9, 0.9])
+                #     ax_text.axis('off')
+                #     ax_text.text(0.0, 1.0, txt, va='top', ha='left', fontsize=7, family='monospace', wrap=True)
 
         # shared colorbar for heatmaps
         cbar_ax = fig.add_axes([0.92, 0.12, 0.02, 0.76])
