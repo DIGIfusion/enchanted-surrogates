@@ -271,6 +271,13 @@ class DaskExecutor(Executor):
         if self.sampler_type in {'BayesianOptimizationSampler'}:
             try: 
                 wait(futures, timeout=self.timeout)
+                if self.sampler.plot_GPR_flag:
+                    # Build the result dictionary and set plot frequency to 1 to 
+                    # plot the GPR for the final state of the optimization.
+                    # Plotting is presently implemented in the train_surrogate function.
+                    self.sampler.build_result_dictionary(self.sampler.base_run_dir)
+                    self.sampler.plot_frequency = 1
+                    self.sampler.train_surrogate()
             except:
                 print("Timeout of some of the samples")
         else:
