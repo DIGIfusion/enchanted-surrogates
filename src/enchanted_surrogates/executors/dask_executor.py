@@ -375,6 +375,13 @@ class DaskExecutor(Executor):
         total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
         print(f"Total CPU hours used: {total_cpu_time}")
 
+        cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if cpu_ps.returncode == 0:
+            nanny_secs = int(cpu_ps.stdout.strip())
+            print(f"Total CPU time used by nanny: {nanny_secs/3600}")
+        else:
+            print(f"Fetching nanny CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
+
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
 
