@@ -17,6 +17,7 @@ dependencies = [
     "pandas",
     "pylint",
     "coverage",
+    "scipy",
 ]
 
 [tool.setuptools]
