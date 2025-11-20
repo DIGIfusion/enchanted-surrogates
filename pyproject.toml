@@ -20,44 +20,23 @@ dependencies = [
     "matplotlib",
     "plotly",
     "PyYAML",
+    "scipy",
 ]
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [project.optional-dependencies]
-bo = [
-    "matplotlib",
-    "scienceplots",
-    "botorch",
-    "gpytorch",
-    "torch",
-]
+bo = ["matplotlib", "scienceplots", "botorch", "gpytorch", "torch"]
 
 sdsg = [
-  "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
+    "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git",
 ]
-sobol_sequence = [
-    "scipy",
-]
-pysgpp = [
-    "numpy<2.0",
-    "pysgpp",
-    "scikit-learn",
-]
-chaospy = [
-    "chaospy",
-    "numpy>2.0"
-]
-hdf5 = [
-    "h5py",
-    "ipykernel",
-    "ipywidgets",
-]
-GPy = [
-    "GPy",
-    "scikit-learn",
-]
+sobol_sequence = ["scipy"]
+pysgpp = ["numpy<2.0", "pysgpp", "scikit-learn"]
+chaospy = ["chaospy", "numpy>2.0"]
+hdf5 = ["h5py", "ipykernel", "ipywidgets"]
+GPy = ["GPy", "scikit-learn"]
