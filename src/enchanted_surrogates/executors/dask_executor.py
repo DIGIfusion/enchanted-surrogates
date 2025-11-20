@@ -104,7 +104,6 @@ class DaskExecutor(Executor):
                     'cpu_time': cpu_time,
                     'cpu_time_seconds': cpu_secs,
                     'cpu_efficiency': cpu_efficiency,
-                    'memory_used': memory_used,
                     'memory_efficiency': memory_efficiency,
                     'memory_used': memory_used,
                     'job_id': job_id
