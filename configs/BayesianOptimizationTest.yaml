@@ -4,7 +4,7 @@ sampler:
   acquisition_batch_size: 1
   bounds: [[0.001, 1.0]]
   parameters: ['x']
-  base_run_dir: /scratch/project_2004389/aarojarvinen/BO_test
+  base_run_dir: /path/to/dir
   dry_run: False
   parser: ExampleBayesianOptimizationParser
   verbose: True
@@ -20,21 +20,21 @@ runner:
 
 executor:
   type: DaskExecutor
-  base_run_dir: /scratch/project_2004389/aarojarvinen/BO_test
+  base_run_dir: /path/to/dir
   SLURMcluster_config: 
-      account: "project_2004389"
+      account: "project_xxxxxx"
       queue: "small"
       cores: 1
       memory: "8GB"
       processes: 1
       walltime: "6:00:00" 
       interface: "ib0"
-      local_directory: "/scratch/project_2004389/aarojarvinen/BO_test/ENCHSUR_RUN/SLURMlog_primary"
+      local_directory: "/path/to/dir/ENCHSUR_RUN/SLURMlog_primary"
       job_script_prologue: 
         - 'export OMP_NUM_THREADS=1'
         - 'module load python-data'
         - 'module load gsl'
         - 'module load hdf5'
-        - 'source /scratch/project_2004389/aarojarvinen/env/bin/activate'
-        - 'export PYTHONPATH=$PYTHONPATH:/scratch/project_2004389/aarojarvinen/enchanted-surrogates/src' 
-        - 'cd /scratch/project_2004389/aarojarvinen/BO_test/ENCHSUR_RUN'
+        - 'source /path/to/venv/bin/activate'
+        - 'export PYTHONPATH=$PYTHONPATH:/path/to/enchanted-surrogates/src' 
+        - 'cd /path/to/dir/ENCHSUR_RUN'
