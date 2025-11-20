@@ -11,6 +11,7 @@ import numpy as np
 import pickle as pkl
 import os
 import matplotlib.pyplot as plt
+import scienceplots
 
 try:
     import botorch, gpytorch, torch
@@ -68,6 +69,10 @@ class BayesianOptimizationSampler(Sampler):
         self.parameters = kwargs.get('parameters', [])  # List of parameter names
         self.parser_type = kwargs.get('parser', None)  # Parser type for sample information
         self.parser_config = kwargs.get('parser_config',{})
+        self.plot_GPR_flag = kwargs.get('plot_GPR', False)
+        self.GPR_plot_dim = kwargs.get('GPR_plot_dim', [0])
+        self.plot_GPR_file = kwargs.get('plot_file', False)
+        self.plot_frequency = kwargs.get('plot_frequency', 10)
         #if self.parser_config == None:
         if self.parser_type == None:
             self.parser = None
@@ -89,13 +94,18 @@ class BayesianOptimizationSampler(Sampler):
         """
         # Build the result dictionary
         self.build_result_dictionary(self.base_run_dir)
-        self.collected_samples = len(self.result_dictionary['inputs'])
-        print(str(100*self.collected_samples/self.initial_samples),
-              ' % of initial samples collected')
+        
+        if self.result_dictionary == [None]:
+            self.collected_samples = 0
+        else:
+            self.collected_samples = len(self.result_dictionary['inputs'])
+
         # Assume random sampling if self.collected_samples is below 
         # the number of initial samples.
         batch_samples = []
         if self.collected_samples < self.initial_samples:
+            print(str(100*self.collected_samples/self.initial_samples),
+                  ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
             for _ in range(int(self.acquisition_batch_size)):
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
@@ -123,6 +133,14 @@ class BayesianOptimizationSampler(Sampler):
                 acq = botorch.acquisition.qProbabilityOfImprovement(
                     model=self.model, 
                     best_f=self.best_f)
+            elif self.acquisition_function == 'EI':
+                acq = botorch.acquisition.ExpectedImprovement(
+                    model=self.model,
+                    best_f=self.best_f)
+            elif self.acquisition_function == 'LEI':
+                acq = botorch.acquisition.LogExpectedImprovement(
+                    model=self.model,
+                    best_f=self.best_f)
             if acq is None:
                 raise ValueError(f"Unsupported acquisition function: {self.acquisition_function}")
 
@@ -134,6 +152,7 @@ class BayesianOptimizationSampler(Sampler):
                     ]
                     param_dict = dict(zip(self.parameters, params))
                     batch_samples.append(param_dict)
+                    self.submitted += len(batch_samples)
                     return batch_samples
                 else:
                     qval = 1
@@ -147,9 +166,11 @@ class BayesianOptimizationSampler(Sampler):
                     param_dict = dict(zip(self.parameters, params))
                     batch_samples.append(param_dict)
 
+            boundtensor = torch.DoubleTensor(self.bounds).T
+            
             candidates, acq_values = botorch.optim.optimize_acqf(
                 acq, 
-                bounds=torch.FloatTensor(self.bounds).T,
+                bounds=boundtensor,
                 sequential=False, 
                 q=qval,
                 num_restarts=10,
@@ -192,12 +213,16 @@ class BayesianOptimizationSampler(Sampler):
         self.futures.append(future)
 
     def train_surrogate(self):
-        print('Training the surrogate model')
+        if self.verbose:
+            print('TRAINING THE SURROGATE MODEL')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
-        distances = torch.from_numpy(np.sum(
-            self.result_dictionary_norm['distances'][:],
-            axis=1))
+        if np.array(self.result_dictionary_norm).ndim > 1:
+            distances = torch.from_numpy(np.sum(
+                self.result_dictionary_norm['distances'][:],
+                axis=1))
+        else:
+            distances = torch.from_numpy(self.result_dictionary['distances'][:])
         distances = (distances - torch.mean(distances))/torch.std(distances)
         distances = distances.unsqueeze(distances.ndim)
 
@@ -238,6 +263,9 @@ class BayesianOptimizationSampler(Sampler):
                 model=gp_failed)
             botorch.fit.fit_gpytorch_mll(mll_gp_failed)
             self.model_failed = gp_failed
+        if self.plot_GPR_flag:
+            if len(self.result_dictionary['distances']) % self.plot_frequency == 0:
+                self.plot_GPR(plot_dims=self.GPR_plot_dim)
    
     def build_result_dictionary(self, base_run_directory: str, normalize=True): 
         """
@@ -257,9 +285,10 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
-        result_dictionary = {}
-        result_dictionary_failed = {}
-        print('Building result dictionary')    
+        result_dictionary = None
+        result_dictionary_failed = None
+        if self.verbose:
+            print('BUILDING RESULT DICTIONARY')    
     
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 'result_dictionary.pkl')):
@@ -272,35 +301,31 @@ class BayesianOptimizationSampler(Sampler):
         # Obtain a list of run_directories within the base_run_directory
         dirlist = os.listdir(base_run_directory)
         # Loop over the established runs. This can be streamlined if needed.
-
-        dirlistold = []
-        #for dirname in self.result_dictionary
+        
+        # List of tags to identify entries to skip in dirlist 
+        skiplist = ['yaml', 'worker_out', 'FINISHED', '.pkl', '.csv', '_RUN',
+                    'GPR']
 
         for dirname in dirlist:
-            if dirname in ['CONFIG.yaml', 
-                           'result_dictionary.pkl', 
-                           'worker_out_DaskExecutor', 
-                           'ENCHANTED.FINISHED',
-                           'enchanted_dataset.csv']:
+            # See if the dirname is on the skiplist
+            skiptags = [tag in dirname for tag in skiplist]
+            if any(skiptags):
                 continue
             else:
-                try:
-                    if bool(result_dictionary):
-                        if (os.path.join(base_run_directory, dirname) in
-                            result_dictionary['run_dir']):
-                            continue
-                        else:
-                            sample_dict = self.parser.collect_sample_information(
-                                os.path.join(base_run_directory, dirname),
-                                self.observations)
+                if result_dictionary != None:
+                    if (os.path.join(base_run_directory, dirname) in
+                        result_dictionary['run_dir']):
+                        continue
                     else:
                         sample_dict = self.parser.collect_sample_information(
                             os.path.join(base_run_directory, dirname),
                             self.observations)
-                except:
-                    continue
+                else:
+                    sample_dict = self.parser.collect_sample_information(
+                        os.path.join(base_run_directory, dirname),
+                        self.observations)
             if sample_dict['failure'] == 0:
-                if bool(result_dictionary):
+                if result_dictionary != None:
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary[key] = np.concatenate(
@@ -311,7 +336,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in result_dictionary.keys():
                         result_dictionary[key]=[result_dictionary[key]]
             else:
-                if bool(result_dictionary_failed):
+                if result_dictionary_failed != None:
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each key.
                         result_dictionary_failed[key] = np.concatenate(
@@ -321,17 +346,17 @@ class BayesianOptimizationSampler(Sampler):
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
                         result_dictionary_failed[key]=[result_dictionary_failed[key]]
-        if bool(result_dictionary):
+        if result_dictionary != None:
             self.result_dictionary = result_dictionary
         else:
             self.result_dictionary = [None]
-        if bool(result_dictionary_failed):
+        if result_dictionary_failed != None:
             self.result_dictionary_failed = result_dictionary_failed
         else:
             self.result_dictionary_failed = [None]
         if normalize:
             self.normalize_results()
-        if bool(result_dictionary):
+        if result_dictionary != None:
             res_dict_dump = {'result_dictionary':result_dictionary}
             resdict = open(
                 os.path.join(base_run_directory, 
@@ -458,10 +483,10 @@ class BayesianOptimizationSampler(Sampler):
             if i not in plot_dims:
                 xtt_vals[:,i] = torch.ones(10000)*input_scaled[0][i]
 
-        pred = self.model.likelihood(self.model(xtt_vals))
-        if len(plot_dims) == 2:
-            pred = torch.reshape(pred.mean, (100, 100))
         with torch.no_grad():
+            pred = self.model.likelihood(self.model(xtt_vals))
+            if len(plot_dims) == 2:
+                pred = torch.reshape(pred.mean, (100, 100))
             plt.style.use(['science','no-latex'])
             if len(plot_dims) == 2:
                 plt.contourf(xt1, xt2, pred, cmap='jet')
@@ -475,7 +500,12 @@ class BayesianOptimizationSampler(Sampler):
                 lower, upper = pred.confidence_region()
                 plt.fill_between(xt1, -lower, y2=-upper, alpha=0.5) 
                 plt.xlabel(self.parameters[plot_dims[0]])
-            plt.show()
+            if self.plot_GPR_file:
+                plt.savefig(os.path.join(self.base_run_dir,
+                            'GPR_'+str(len(self.result_dictionary['distances']))+'.svg'))
+                plt.close()
+            else:
+                plt.show()
 
     def plot_posterior(self, plot_dims=[0,1], base_point=0, threshold=0):
         """
