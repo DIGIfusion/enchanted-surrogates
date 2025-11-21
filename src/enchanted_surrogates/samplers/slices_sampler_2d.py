@@ -105,32 +105,38 @@ class SlicesSampler2D(Sampler):
                             (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
                         )
                         vals = df.loc[mask, ycol].values
-                        Z[u,v] = vals[0] if len(vals) else np.nan
+                        if vals[0] == 0.0:
+                            Z[u,v] = np.nan
+                        else:
+                            Z[u,v] = vals[0] if len(vals) else np.nan
+    
+                import matplotlib.gridspec as gridspec
 
-                # --- Plotting ---
-                fig, axs = plt.subplots(1,2,figsize=(10,4))
-                cs = axs[0].contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
-                axs[0].set_aspect('equal')
-                fig.colorbar(cs, ax=axs[0])
-                axs[0].set_xlabel(self.parameters[j])
-                axs[0].set_ylabel(self.parameters[i])
+                fig = plt.figure(figsize=(10,4))
+                gs = gridspec.GridSpec(1, 3, width_ratios=[1,1,0.05], figure=fig)
+                # gs = gridspec.GridSpec(1, 2, width_ratios=[1,1])  # equal widths
 
-                ax3d = fig.add_subplot(1,2,2,projection='3d')
+                ax1 = fig.add_subplot(gs[0])
+                # pos = ax1.get_position()   # [left, bottom, width, height]
+                # ax1.set_position([pos.x0, pos.y0, pos.width*0.7, pos.height])  # shrink width
+                cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
+                ax1.set_aspect('equal')       # equal data scaling
+                ax1.set_box_aspect(1)         # force the axes box to be square
+
+                # fig.colorbar(cs, ax=ax1)
+                ax1.set_xlabel(self.parameters[j])
+                ax1.set_ylabel(self.parameters[i])
+
+                ax3d = fig.add_subplot(gs[1], projection='3d')
                 ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha, vmin=ymin, vmax=ymax)
                 ax3d.set_xlabel(self.parameters[j])
                 ax3d.set_ylabel(self.parameters[i])
                 ax3d.set_zlabel(ycol)
-                fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"
-                
-                # Remove any leftover 2D axes that overlap this cell
-                from matplotlib.transforms import Bbox as _Bbox
-                for a in list(fig.axes):
-                    if a is axs[0] or getattr(a, "name", "").lower().startswith("axes3d"):
-                        continue
-                    if _Bbox.intersection(a.get_position(), axs[0].get_position()) is not None:
-                        fig.delaxes(a)
+                fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"                
 
-                fig.colorbar(cs, ax=fig.axes, orientation='vertical', fraction=0.02, pad=0.04)
+                cax = fig.add_subplot(gs[2])   # colorbar axis
+                cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
+                fig.colorbar(cs, cax=cax)
                 fig.tight_layout()
                 fig.savefig(os.path.join(self.base_run_dir, fname))
                 plt.close(fig)
@@ -192,7 +198,8 @@ class SlicesSampler2D(Sampler):
                             diffs += np.abs(df[q] - val)
                         idx = np.argmin(diffs.values)
                         yvals.append(float(df.iloc[idx][ycol]))
-
+                    yvals = np.array(yvals)
+                    yvals[yvals==0.0] = np.nan
                     ax.plot(xi_lin, yvals, '-', color='tab:blue', linewidth=1.5)
                     ax.set_xlabel(p)
                     ax.set_ylabel(ycol)
@@ -209,7 +216,10 @@ class SlicesSampler2D(Sampler):
                                 (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
                             )
                             vals = df.loc[mask, ycol].values
-                            Z[u,v] = vals[0] if len(vals) else np.nan
+                            if vals[0] == 0.0:
+                                Z[u,v] = np.nan
+                            else:
+                                Z[u,v] = vals[0] if len(vals) else np.nan
                     cs = ax.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
                     ax.set_aspect('equal')
                     ax.set_xlabel(self.parameters[j])
@@ -228,7 +238,10 @@ class SlicesSampler2D(Sampler):
                                 (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
                             )
                             vals = df.loc[mask, ycol].values
-                            Z[u,v] = vals[0] if len(vals) else np.nan
+                            if vals[0] == 0.0:
+                                Z[u,v] = np.nan
+                            else:
+                                Z[u,v] = vals[0] if len(vals) else np.nan
                     ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha, vmin=ymin, vmax=ymax)
                     ax3d.set_xlabel(self.parameters[j])
                     ax3d.set_ylabel(self.parameters[i])

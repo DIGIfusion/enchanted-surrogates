@@ -51,6 +51,7 @@ class SgppSampler(Sampler):
         self.do_quad_sobol = kwargs.get('do_quad_sobol', False)
         self.gaussian_input_uncertanties = kwargs.get('gaussian_input_uncertanties', False)
         self.test_data_csv = test_data_csv
+        self.test_data_name = kwargs.get('test_data_name', 'sobolseq')
         self.bounds = np.array(bounds)
         self.parameters = parameters
         self.num_samples_at_last_write = 0
@@ -1098,8 +1099,8 @@ class SgppSampler(Sampler):
                 os.mkdir(residuals_save_dir)
             fig.savefig(os.path.join(residuals_save_dir, f"N-{df['num_samples'].iloc[0]}_residuals.png"))
             plt.close(fig)
-            me = np.nanmean(np.abs(residuals))
-            df["mean_error"]=[me]
+            rmse = np.sqrt(np.nanmean(residuals**2))
+            df[f"rmse_{len(y_test)}-{self.test_data_name}"]=[rmse]
             
             print('debug df', df)
             # df["expectation_error"] = [np.abs(np.mean(y_test)-quad_exp)]
@@ -1557,165 +1558,187 @@ class SgppSampler(Sampler):
     def register_futures(self, futures):
         return None
 
-if __name__ == "__main__":
-    import sys
-    import os
-    import yaml
-    import pickle
-    import argparse
-    import pysgpp
-    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-    from enchanted_surrogates.utils.load_configuration import load_configuration
-    # from enchanted_surrogates.utils.precise_imports import import_sampler
+# if __name__ == "__main__":
+#     import sys
+#     import os
+#     import yaml
+#     import pickle
+#     import argparse
+#     import pysgpp
+#     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+#     from enchanted_surrogates.utils.load_configuration import load_configuration
+#     # from enchanted_surrogates.utils.precise_imports import import_sampler
 
-    # ---------------------------
-    # Argument parsing
-    # ---------------------------
-    parser = argparse.ArgumentParser(description="Process SGPP batches")
-    parser.add_argument("base_run_dir", help="Base run directory containing batch subdirectories")
-    parser.add_argument("write_every", type=int, help="Write frequency for batch info")
-    parser.add_argument("--test_data_csv", type=str, default=None,
-                        help="Optional path to test data CSV file")
-    parser.add_argument("--batch_info_name", type=str, default=None,
-                        help="Optional output name for results")
-    parser.add_argument("--only_test", type=bool, default=False,
-                        help="Optional to save time by not computing other batch info and only performing test predictions.")
+#     # ---------------------------
+#     # Argument parsing
+#     # ---------------------------
+#     parser = argparse.ArgumentParser(description="Process SGPP batches")
+#     parser.add_argument("base_run_dir", help="Base run directory containing batch subdirectories")
+#     # parser.add_argument("write_every", type=int, help="Write frequency for batch info")
+#     parser.add_argument("--test_data_csv", type=str, default=None,
+#                         help="Optional path to test data CSV file")
+#     parser.add_argument("--batch_info_name", type=str, default=None,
+#                         help="Optional output name for results")
+#     parser.add_argument("--only_test", type=bool, default=False,
+#                         help="Optional to save time by not computing other batch info and only performing test predictions.")
 
 
-    args = parser.parse_args()
+#     args = parser.parse_args()
 
-    base_run_dir = args.base_run_dir
-    write_every = args.write_every
-    test_data_csv = args.test_data_csv
-    batch_info_name = args.batch_info_name
-    only_test = args.only_test
+#     base_run_dir = args.base_run_dir
+#     # write_every = args.write_every
+#     test_data_csv = args.test_data_csv
+#     batch_info_name = args.batch_info_name
+#     only_test = args.only_test
 
-    # ---------------------------
-    # Load configuration
-    # ---------------------------
-    batch_dirs = get_batch_dirs(base_run_dir)
+#     # ---------------------------
+#     # Load configuration
+#     # ---------------------------
+#     batch_dirs = get_batch_dirs(base_run_dir)
+#     # print('\n\nBATCH DIRS FOUND:', batch_dirs)
+#     listdir = os.listdir(base_run_dir)
+#     config_file_name = [name for name in listdir if '.yaml' in name]
+#     if len(config_file_name) > 1:
+#         raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+#     config_file_name = config_file_name[0]
+#     print('CONFIG FOUND:', os.path.join(base_run_dir, config_file_name))
+#     config = load_configuration(os.path.join(base_run_dir, config_file_name))
 
-    listdir = os.listdir(base_run_dir)
-    config_file_name = [name for name in listdir if '.yaml' in name]
-    if len(config_file_name) > 1:
-        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
-    config_file_name = config_file_name[0]
-    print('CONFIG FOUND:', os.path.join(base_run_dir, config_file_name))
-    config = load_configuration(os.path.join(base_run_dir, config_file_name))
+#     sampler_config = config.executor['sampler_config']
+#     sampler_config['base_run_dir'] = base_run_dir
 
-    sampler_config = config.executor['sampler_config']
-    sampler_config['base_run_dir'] = base_run_dir
+#     # ---------------------------
+#     # Iterate over batches
+#     # ---------------------------
+#     all_results = []
+#     for i, batch_dir in enumerate(batch_dirs):
+#         print('CONSIDERING BATCH DIR:', batch_dir)
+#         # if i == 0 or i == 1 or i % write_every == 0:
+#         if os.path.exists(os.path.join(batch_dir, 'train_points.pkl')):
+#             if 'batch_00' in batch_dir:
+#                 continue
+#             print('OPERATING ON BATCH DIR:',batch_dir)
+#             assert sampler_config['type'] in ('sgpp_sampler', 'SgppSampler')
+#             sgpp = SgppSampler(**sampler_config)
+#             print('debug gds:',sgpp.guide_dataset_size)
+#             grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
+#             surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
+#             train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+            
+#             with open(train_points_file, 'rb') as file:
+#                 sgpp.train = pickle.load(file)
+#             print('len(train)', len(sgpp.train),'batch_dir', batch_dir)
+            
+#             virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
+#             anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
 
-    # ---------------------------
-    # Iterate over batches
-    # ---------------------------
-    all_results = []
-    for i, batch_dir in enumerate(batch_dirs):
-        if i == 0 or i == 1 or i % write_every == 0:
-            if 'batch_00' in batch_dir:
-                continue
-            print('OPERATING ON BATCH DIR:',batch_dir)
-            assert sampler_config['type'] in ('sgpp_sampler', 'SgppSampler')
-            sgpp = SgppSampler(**sampler_config)
-            print('debug gds:',sgpp.guide_dataset_size)
-            grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
-            surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
-            train_points_file = os.path.join(batch_dir, 'train_points.pkl')
-            virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
-            anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
+#             try:
+#                 with open(grid_file_path, 'r') as file:
+#                     serialized_grid = file.read()
+#                     sgpp.grid = pysgpp.Grid.unserialize(serialized_grid)
+#                     sgpp.gridStorage = sgpp.grid.getStorage()
+#                     sgpp.gridGen = sgpp.grid.getGenerator()
+#                     surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
+#                     sgpp.alpha = surpluses
+#             except FileNotFoundError:
+#                 continue
 
-            try:
-                with open(grid_file_path, 'r') as file:
-                    serialized_grid = file.read()
-                    sgpp.grid = pysgpp.Grid.unserialize(serialized_grid)
-                    sgpp.gridStorage = sgpp.grid.getStorage()
-                    sgpp.gridGen = sgpp.grid.getGenerator()
-                    surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
-                    sgpp.alpha = surpluses
-            except FileNotFoundError:
-                continue
-
-            with open(train_points_file, 'rb') as file:
-                sgpp.train = pickle.load(file)
-            print('debug wbi')
-            results = sgpp.write_batch_info(batch_dir, name=batch_info_name, test_data_csv=test_data_csv, only_test=only_test, save_grid=False)
-            all_results.append(results)
+#             with open(train_points_file, 'rb') as file:
+#                 sgpp.train = pickle.load(file)
+#             print('debug wbi')
+#             results = sgpp.write_batch_info(batch_dir, name=batch_info_name, test_data_csv=test_data_csv, only_test=only_test, save_grid=False)
+#             all_results.append(results)
     
-    for res in all_results:
-        print('debug res num samp', res['num_samples'])
+#     for res in all_results:
+#         print('debug res num samp', res['num_samples'])
 
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-    import numpy as np
-    import os
+#     import matplotlib.pyplot as plt
+#     from mpl_toolkits.axes_grid1 import make_axes_locatable
+#     import numpy as np
+#     import os
 
-    if any(all_results):
-        fig, axes = plt.subplots(
-            nrows=1, 
-            ncols=len(all_results), 
-            sharey=True, 
-            figsize=(6*len(all_results), 4)
-        )
+#     if any(all_results):
+#         fig, axes = plt.subplots(
+#             nrows=1, 
+#             ncols=len(all_results), 
+#             sharey=True, 
+#             figsize=(6*len(all_results), 4)
+#         )
 
-        # Ensure axes is iterable even if only one subplot
-        if len(all_results) == 1:
-            axes = [axes]
+#         # Ensure axes is iterable even if only one subplot
+#         if len(all_results) == 1:
+#             axes = [axes]
 
-        hbs = []
+#         hbs = []
 
-        for ax, res in zip(axes, all_results):
-            print('debug res 2 num samples', res['num_samples'])
-            residuals = res['y_pred'] - res['y_test']
+#         for ax, res in zip(axes, all_results):
+#             print('debug res 2 num samples', res['num_samples'])
+#             residuals = res['y_pred'] - res['y_test']
 
-            # Hexbin plot
-            hb = ax.hexbin(
-                res['y_test'], residuals,
-                gridsize=50, cmap='viridis', mincnt=1
-            )
-            hbs.append(hb)
-            ax.set_xlabel("y_test")
-            ax.set_ylabel("Residuals (y_pred - y_test)")
-            ax.set_title(f"N-samples: {res['num_samples']}")
+#             # Hexbin plot
+#             hb = ax.hexbin(
+#                 res['y_test'], residuals,
+#                 gridsize=50, cmap='viridis', mincnt=1
+#             )
+#             hbs.append(hb)
+#             ax.set_xlabel("y_test")
+#             ax.set_ylabel("Residuals (y_pred - y_test)")
+#             ax.set_title(f"N-samples: {res['num_samples']}")
 
-            # --- Add histogram on the right ---
-            divider = make_axes_locatable(ax)
-            ax_hist = divider.append_axes("right", size="20%", pad=0.1, sharey=ax)
+#             # --- Add histogram on the right ---
+#             divider = make_axes_locatable(ax)
+#             ax_hist = divider.append_axes("right", size="20%", pad=0.1, sharey=ax)
 
-            # Histogram of residuals (vertical axis = residuals, horizontal = density)
-            ax_hist.hist(
-                residuals, bins=40, orientation='horizontal',
-                density=True, color='gray', alpha=0.7
-            )
-            ax_hist.set_xlabel("PDE")
-            ax_hist.yaxis.set_tick_params(labelleft=False)
-            ax_hist.grid(False)
+#             # Histogram of residuals (vertical axis = residuals, horizontal = density)
+#             ax_hist.hist(
+#                 residuals, bins=40, orientation='horizontal',
+#                 density=True, color='gray', alpha=0.7
+#             )
+#             ax_hist.set_xlabel("PDE")
+#             ax_hist.yaxis.set_tick_params(labelleft=False)
+#             ax_hist.grid(False)
 
-            # --- Annotate mean and std ---
-            mu = np.nanmean(residuals)
-            sigma = np.nanstd(residuals)
-            # Place text in the histogram axis, aligned to top-right
-            ax_hist.text(
-                0.95, 0.95,
-                f"μ={mu:.2f}\nσ={sigma:.2f}",
-                transform=ax_hist.transAxes,
-                ha='right', va='top',
-                fontsize=8, color='black'
-            )
+#             # --- Annotate mean and std ---
+#             mu = np.nanmean(residuals)
+#             sigma = np.nanstd(residuals)
+#             # Place text in the histogram axis, aligned to top-right
+#             ax_hist.text(
+#                 0.95, 0.95,
+#                 f"μ={mu:.2f}\nσ={sigma:.2f}",
+#                 transform=ax_hist.transAxes,
+#                 ha='right', va='top',
+#                 fontsize=8, color='black'
+#             )
 
-        cbar_ax = fig.add_axes([1.01, 0.1, 0.02, 0.8])  # right side, tall bar
-        fig.colorbar(hbs[0], cax=cbar_ax, label='Counts')
+#         cbar_ax = fig.add_axes([1.01, 0.1, 0.02, 0.8])  # right side, tall bar
+#         fig.colorbar(hbs[0], cax=cbar_ax, label='Counts')
         
-        # # Shared colorbar moved to the right of the figure
-        # if hbs:
-        #     cbar = fig.colorbar(
-        #         hbs[0], ax=axes, orientation='vertical',
-        #         label='Counts', location='right'
-        #     )
+#         # # Shared colorbar moved to the right of the figure
+#         # if hbs:
+#         #     cbar = fig.colorbar(
+#         #         hbs[0], ax=axes, orientation='vertical',
+#         #         label='Counts', location='right'
+#         #     )
 
-        plt.tight_layout()
-        save_path = os.path.join(base_run_dir, 'all_residuals.png')
-        fig.savefig(save_path)
-        plt.close(fig)
+#         plt.tight_layout()
+#         save_path = os.path.join(base_run_dir, 'all_residuals.png')
+#         fig.savefig(save_path)
+#         plt.close(fig)
+
+if __name__ == "__main__":
+    import sys, os
+    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+
+    _, base_run_dir = sys.argv
+    
+    batch_dirs = get_batch_dirs(base_run_dir)
+    for batch_dir in batch_dirs:
+        train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+        if os.path.exists(train_points_file):                
+            with open(train_points_file, 'rb') as file:
+                train = pickle.load(file)
+            print('len(train)', len(train)+32,'batch_dir', batch_dir)
+    
 
 # # import pysgpp library
 # import pysgpp

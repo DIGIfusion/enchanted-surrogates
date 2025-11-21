@@ -10,6 +10,7 @@ from sg_lib.adaptivity.spectral_scores import SpectralScores
 import time
 import pickle
 import warnings
+import traceback
 
 class SensitivityDrivenSparseGrid(Sampler):
     def __init__(self, parameters, bounds, tol=1e-6, max_level=20, *args, **kwargs):
@@ -301,8 +302,13 @@ class SensitivityDrivenSparseGrid(Sampler):
             self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
             return True
         except Exception as e:
-            print('ADAPTIVITY POSTPROC FAILED. STOPPING SAMPLING. \n',e)
-            return False
+            print(f'ADAPTIVITY POSTPROC FAILED. TRYING AGAIN. \n current_multiindices: {self.current_multiindices} \n error: {e} \n traceback: {traceback.format_exc()}')
+            try:
+                self.Adaptivity_obj.do_one_adaption_step_postproc(self.current_multiindices)
+                return True
+            except Exception as e:
+                print(f'ADAPTIVITY POSTPROC FAILED. STOPPING SAMPLING.  \n current_multiindices: {self.current_multiindices}  \n error: {e} \n traceback: {traceback.format_exc()}')
+                return False
             
     
     def register_future(self, future):

@@ -606,11 +606,11 @@ class SobolGRunner(Runner):
                 plot_surface_cell = (triangle == 'upper' and row_idx < col_idx) or (triangle == 'lower' and row_idx > col_idx)
                 if not plot_surface_cell:
                     # mirror textual info in the empty cell
-                    idx = row_idx * n + col_idx + 1
-                    ax_info = fig3d.add_subplot(n, n, idx)
-                    ax_info.axis('off')
-                    txt = sobol_line + "\n" + a_line + "\n" + eq_line
-                    ax_info.text(0.0, 1.0, txt, va='top', ha='left', fontsize=7, family='monospace', wrap=True)
+                    # idx = row_idx * n + col_idx + 1
+                    # ax_info = fig3d.add_subplot(n, n, idx)
+                    # ax_info.axis('off')
+                    # txt = sobol_line + "\n" + a_line + "\n" + eq_line
+                    # ax_info.text(0.0, 1.0, txt, va='top', ha='left', fontsize=7, family='monospace', wrap=True)
                     continue
 
                 if row_idx < col_idx:

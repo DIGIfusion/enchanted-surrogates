@@ -355,6 +355,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     # print('FUTURE RESULT',result, type(result))
                     success = result['success']
                     result = {k:[v] for k,v in result.items()}
+                    result['batch_num'] = self.current_batch
                     dfi = pd.DataFrame(result)
                     dfs.append(dfi)
                     
