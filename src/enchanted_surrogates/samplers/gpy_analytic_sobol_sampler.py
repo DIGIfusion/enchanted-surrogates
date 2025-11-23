@@ -710,7 +710,7 @@ class GpyAnalyticSobolSampler(Sampler):
             mu, var = model.predict(X_pool)
             return var.flatten()
 
-        elif mode == "gradVar":
+        elif mode == "gradVar" or mode == 'grad':
             # Ensure X_pool is 2D
             X_pool = np.atleast_2d(X_pool)
 
