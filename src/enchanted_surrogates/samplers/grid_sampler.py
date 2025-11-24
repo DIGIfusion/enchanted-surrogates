@@ -48,9 +48,13 @@ class GridSampler(Sampler):
         self.bounds = bounds
         self.num_samples = num_samples
         # check for stupidity
-        self.budget = np.prod(np.array(num_samples))
         self.batch_size = kwargs.get("batch_size", self.budget)
 
+        self.num_repeats = kwargs.get('num_repeats', 1)
+        self.budget = np.prod(np.array(num_samples))*self.num_repeats
+        
+        self.include_index = kwargs.get('include_index', False)
+        
         if self.budget > 100000:
             raise Exception(
                 (
@@ -95,6 +99,12 @@ class GridSampler(Sampler):
             self.current_index += 1
             param_dict = {k: v for k, v in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
+
+        list_param_dicts = list_param_dicts * self.num_repeats
+
+        if self.include_index:
+            list_param_dicts = [
+                {**samp, 'index': ind} for samp, ind in zip(list_param_dicts, range(self.submitted, self.submitted + len(list_param_dicts)))]
 
         self.submitted += len(list_param_dicts)
         return list_param_dicts
