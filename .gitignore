@@ -41,8 +41,9 @@ __pycache__/
 data_store/*
 core
 *images*
+*out.txt
+*.png
 *.jpg
-*out*
 tests/example/
 *example_base_run_dir*
 *example_nested_base_run_dir*
