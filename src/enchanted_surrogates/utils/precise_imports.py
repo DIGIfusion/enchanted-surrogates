@@ -127,7 +127,8 @@ def import_sampler(type, sampler_config):
     type_snake, type_pascal = get_snake_and_pascal(type)
     eps = load_plugins()
     if 'type' in sampler_config:
-        sampler_config.pop('type')
+        sampler_conifg = {k: v for k, v in sampler_config.items() if k != 'type'}
+            
     if type_snake in eps:
         sampler = eps[type_snake](**sampler_config)
     else:
@@ -192,11 +193,14 @@ def import_executor(type, executor_config):
         If the module or class cannot be found.
     """
     type_snake, type_pascal = get_snake_and_pascal(type)
+    print('loading plugins')
     eps = load_plugins()
 
     if type_snake in eps:
+        print('getting executor from plugins')
         cls = eps[type_snake](**executor_config)
     else:
+        print('getting executor from enchanted_surrogates')
         cls = getattr(
             importlib.import_module(
                 f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_config)
