@@ -1,6 +1,7 @@
 name: Unit testing with Pytest
 
 on: 
+  workflow_call:
   push:
     branches:
       - main
