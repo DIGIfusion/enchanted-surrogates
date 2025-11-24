@@ -11,7 +11,6 @@ from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
 from enchanted_surrogates.utils.load_configuration import load_configuration
 import shutil
 
-
 def main(args: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
