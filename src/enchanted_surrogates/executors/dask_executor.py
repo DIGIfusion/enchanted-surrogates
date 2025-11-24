@@ -14,11 +14,8 @@ from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 from dask.distributed import print as dask_print
 from enchanted_surrogates.utils.time_format import format_sec
-<<<<<<< HEAD
 
 from enchanted_surrogates.utils.precise_imports import import_runner
-=======
->>>>>>> feature/hdf5_data_pack
 
 from .base_executor import Executor
 from enchanted_surrogates.executors import simulation_task
@@ -69,7 +66,6 @@ class DaskExecutor(Executor):
             self.sampler_config['base_run_dir'] = self.base_run_dir
             self.sampler_type = self.sampler_config.pop("type")
             self.sampler = import_sampler(type=self.sampler_type, sampler_config=self.sampler_config)
-<<<<<<< HEAD
         self.scale_n_jobs = kwargs.get('scale_n_jobs', None)
         self.scale_n_jobs_min = kwargs.get('scale_n_jobs_min', None)
         self.scale_n_jobs_max = kwargs.get('scale_n_jobs_max', None)
@@ -77,9 +73,6 @@ class DaskExecutor(Executor):
         
         self.runner_config = kwargs.get('runner_config')
         
-=======
-        self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
->>>>>>> feature/hdf5_data_pack
         self.timeout = kwargs.get('timeout', 1e10)
         self.run_error_log_path = os.path.join(self.base_run_dir, 'runs_error_log.jsonl')
         self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
@@ -89,14 +82,11 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
         self.current_batch = 0
-<<<<<<< HEAD
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
         self.submit_command = kwargs.get('submit_command', None)
         
         self.psudo_runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
 
-=======
->>>>>>> feature/hdf5_data_pack
 
     def start_cluster(self, slurm_out_dir=None):
         """
@@ -264,18 +254,6 @@ class DaskExecutor(Executor):
                 count += 1
         return num_alive_workers
 
-<<<<<<< HEAD
-    # def scale(self, num_workers):
-    #     if self.count_alive_workers() == self.scale_n_jobs:
-    #         self.cluster.scale(num_workers)
-    #     self.scale_n_jobs = num_workers
-=======
-    def scale(self, num_workers):
-        if self.count_alive_workers() == self.scale_n_jobs:
-            self.cluster.scale(num_workers)
-        self.scale_n_jobs = num_workers
->>>>>>> feature/hdf5_data_pack
-
     def start_runs(self):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
@@ -294,15 +272,11 @@ class DaskExecutor(Executor):
         if not os.path.exists(self.base_run_dir):
             print('MAKING BASE RUN DIR:',self.base_run_dir)
             os.makedirs(self.base_run_dir)
-<<<<<<< HEAD
         
         if hasattr(self.psudo_runner,'light_pre_processing'):
             print('PERFORMING LIGHT PRE PROCESSING FROM THE RUNNER:',self.runner_config['type'])
             self.psudo_runner.light_pre_processing(self.base_run_dir)
         
-=======
-                
->>>>>>> feature/hdf5_data_pack
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
             if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
                 raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
@@ -326,10 +300,6 @@ class DaskExecutor(Executor):
             if self.sampler_type in {'BayesianOptimizationSampler'}:
                 samples = self.sampler.get_next_samples()
                 futures = self.submit_batch(samples, base_run_dir=self.base_run_dir, request_errors=True)
-<<<<<<< HEAD
-=======
-                all_futures.extend(futures)
->>>>>>> feature/hdf5_data_pack
                 print(f"Launching {len(futures)} samples")
 
                 try: 
@@ -351,7 +321,6 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     os.makedirs(batch_dir)        
                 samples = self.sampler.get_next_samples()
                 if not samples:
-<<<<<<< HEAD
                     print("SAMPLER DID NOT RETURN ANY SAMPLES, EXITING")
                     shutil.rmtree(batch_dir)
                     break
@@ -364,16 +333,6 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                 futures = set(_futures)
                 del _futures
                 num_samp_in_batch = len(futures)
-=======
-                    shutil.rmtree(batch_dir)
-                    break
-                if self.sampler.submitted > self.sampler.budget:
-                    shutil.rmtree(batch_dir)
-                    break
-                
-                futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
-                all_futures.extend(futures)
->>>>>>> feature/hdf5_data_pack
                 print(f"Launching {len(futures)} samples")
 
                 dfs = []
@@ -391,10 +350,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     # print('FUTURE RESULT',result, type(result))
                     success = result['success']
                     result = {k:[v] for k,v in result.items()}
-<<<<<<< HEAD
                     result['batch_num'] = self.current_batch
-=======
->>>>>>> feature/hdf5_data_pack
                     dfi = pd.DataFrame(result)
                     dfs.append(dfi)
                     
@@ -421,16 +377,10 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                             dfi.to_csv(enchanted_dataset_path_fail, mode='w', header=True, index=False)
                         
 
-<<<<<<< HEAD
                     print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{num_samp_in_batch}] Futures Completed ({((i+1)/num_samp_in_batch)*100:.1f}%)","|",f"[{num_success}/{num_samp_in_batch}] Futures Succeded ({(num_success/num_samp_in_batch)*100:.1f}%)")
                     print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")
                     print(f"TIME PASSED: {format_sec(time.time()-start)} d - hh:mm:ss \n {'_'*100}")
                     futures.remove(future)
-=======
-                    print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{len(futures)}] Futures Completed ({((i+1)/len(futures))*100:.1f}%)","|",f"[{num_success}/{len(futures)}] Futures Succeded ({(num_success/len(futures))*100:.1f}%)")
-                    print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")
-                    print(f"TIME PASSED: {format_sec(time.time()-start)} d - hh:mm:ss \n {'_'*100}")
->>>>>>> feature/hdf5_data_pack
                     
             self.current_batch += 1
         
@@ -447,10 +397,6 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
             print('PERFORMING LIGHT POST PROCESSING FROM THE RUNNER:',self.runner_config['type'])
             self.psudo_runner.light_post_processing(self.base_run_dir)
 
-<<<<<<< HEAD
-=======
-
->>>>>>> feature/hdf5_data_pack
     def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False, request_errors=False):
         """
         Submits a batch of simulation tasks to the Dask cluster.
