@@ -8,9 +8,9 @@ on:
 jobs:
 
   lint:
-    uses: ./.github/workflows/lint.yaml
+    uses: ./lint.yaml
   test:
-    uses: ./.github/workflows/test.yaml
+    uses: ./test.yaml
   build:
     runs-on: ubuntu-latest
     needs: [lint, test]
