@@ -76,23 +76,22 @@ class SgppSampler(Sampler):
         self.n_jobs = kwargs.get('n_jobs', 0)
         self.alpha = None
         
-        adaptive_strategy = kwargs.get('adaptive_strategy',None)
+        self.adaptive_strategy = kwargs.get('adaptive_strategy',None)
         self.guide_dataset_size = 0
         # needed for active sampling but useful to opt out when using the samplers model for a predictor in post processing
         self.do_surplus_based=True
-        self.adaptive_strategy = adaptive_strategy
-        if adaptive_strategy:
-            print('debug: adapt strat', adaptive_strategy)
-            basis_type = adaptive_strategy['basis']['type']
-            basis_args = {k: v for k, v in adaptive_strategy['basis'].items() if k != 'type'}
+        if self.adaptive_strategy:
+            print('debug: adapt strat', self.adaptive_strategy)
+            basis_type = self.adaptive_strategy['basis']['type']
+            basis_args = {k: v for k, v in self.adaptive_strategy['basis'].items() if k != 'type'}
             self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **basis_args)
             self.gridStorage = self.grid.getStorage()
             self.gridGen = self.grid.getGenerator()
-            self.initial_level = adaptive_strategy.get('initial_level', 2)
+            self.initial_level = self.adaptive_strategy.get('initial_level', 2)
             self.gridGen.regular(self.initial_level)
 
-            self.point_refinements_per_batch = adaptive_strategy.get('point_refinements_per_batch', 2)
-            self.refinement_type = adaptive_strategy.get('refinement_type', 'surplus')
+            self.point_refinements_per_batch = self.adaptive_strategy.get('point_refinements_per_batch', 2)
+            self.refinement_type = self.adaptive_strategy.get('refinement_type', 'surplus')
             if self.refinement_type == 'static_grid':
                 self.level = self.initial_level
                 self.final_level = self.adaptive_strategy.kwargs.get('final_level')
@@ -100,13 +99,13 @@ class SgppSampler(Sampler):
             self.guide_dataset_path = None
             self.guide_dataset = None
             if self.refinement_type == 'anova_spatially_dimensionally':
-                self.guide_dataset_path = adaptive_strategy.get('guide_dataset_path', None)
+                self.guide_dataset_path = self.adaptive_strategy.get('guide_dataset_path', None)
                 if not self.guide_dataset_path:
-                    self.guide_sampler = import_sampler(adaptive_strategy['guide_sampler_config']['type'],adaptive_strategy['guide_sampler_config'])
+                    self.guide_sampler = import_sampler(self.adaptive_strategy['guide_sampler_config']['type'],self.adaptive_strategy['guide_sampler_config'])
                 self.guide_samples = self.get_guide_data()
-            self.infer_bounds = adaptive_strategy.get('infer_bounds', False)
-            self.infer_parents = adaptive_strategy.get('infer_parents', False)
-            self.mean_recent_surplus_threshold = adaptive_strategy.get('mean_recent_surplus_threshold')
+            self.infer_bounds = self.adaptive_strategy.get('infer_bounds', False)
+            self.infer_parents = self.adaptive_strategy.get('infer_parents', False)
+            self.mean_recent_surplus_threshold = self.adaptive_strategy.get('mean_recent_surplus_threshold')
         
         self.mean_recent_surplus = np.inf
          
@@ -569,7 +568,8 @@ class SgppSampler(Sampler):
         elif self.refinement_type == "static_grid":
             self.level += 1
             # basis_type = self.adaptive_strategy['basis'].pop('type')
-            basis_args = {k: v for k, v in adaptive_strategy['basis'].items() if k != 'type'}
+            basis_args = {k: v for k, v in self.adaptive_strategy['basis'].items() if k != 'type'}
+            basis_type = self.adaptive_strategy['basis']['type']
             self.grid = getattr(pysgpp.Grid, basis_type)(self.dim, **basis_args)
             self.gridStorage = self.grid.getStorage()
             self.gridGen = self.grid.getGenerator()
@@ -1531,6 +1531,7 @@ class SgppSampler(Sampler):
     def do_quadrature(self, *args, **kwargs):
         return self.safe_run(self._do_quadrature, *args, **kwargs)
     def get_test_set(self, test_file, test_dir=None):
+        df_test = None
         if test_file:
             df_test = pd.read_csv(test_file)
         else:
@@ -1544,11 +1545,14 @@ class SgppSampler(Sampler):
             # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
             #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
             #     print('got runner_return.txt')    
-                
-        test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
-        # print('debug l tx', len(test_x))
-        test_y = np.array(df_test.iloc[:,-1].astype('float'))
-        return test_x, test_y
+        
+        if df_test:
+            test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
+            # print('debug l tx', len(test_x))
+            test_y = np.array(df_test.iloc[:,-1].astype('float'))
+            return test_x, test_y
+        else:
+            return None, None
     
         
     def register_future(self, future):

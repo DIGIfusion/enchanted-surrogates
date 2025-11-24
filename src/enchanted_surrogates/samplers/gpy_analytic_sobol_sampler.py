@@ -3,16 +3,14 @@ import math
 import pickle
 import warnings
 import time
+import traceback   # <-- added
 from scipy.special import erf
 from sklearn.model_selection import KFold
 import numpy as np
 import pandas as pd
 import GPy
-import time
-from enchanted_surrogates.samplers.base_sampler import Sampler
-from enchanted_surrogates.utils.precise_imports import import_sampler
-from enchanted_surrogates.utils.timeout import run_with_timeout, FunctionTimeoutError, FunctionExecutionError
-from enchanted_surrogates.utils.print_stats_table import print_stats_table
+from numpy.random import RandomState   # <-- added
+
 
 # ---------------------------
 # Helper functions: RBF 1D integrals
@@ -153,7 +151,7 @@ class GpyAnalyticSobolSampler(Sampler):
     # Pool management
     # ---------------------------
     def _init_pool(self):
-        rng = np.random.RandomState(self.seed)
+        rng = RandomState(self.seed)   # <-- fixed
         if self.pool_sampler_config:
             pool_sampler = import_sampler(self.pool_sampler_config['type'], self.pool_sampler_config)
             collected = []
@@ -214,9 +212,9 @@ class GpyAnalyticSobolSampler(Sampler):
         # Otherwise return random points from pool
         if self.pool is None or len(self.pool) == 0:
             self._init_pool()
-        
+
         if self.initial_pool_samples_strategy == 'random':
-            rng = np.random.RandomState(self.seed)
+            rng = RandomState(self.seed)   # <-- fixed
             n = min(self.initial_batch_size, len(self.pool))
             idxs = rng.choice(len(self.pool), size=n, replace=False)
             chosen = self.pool[idxs]
@@ -356,12 +354,12 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             print(f'SPLITTING DATA INTO FOLDS')
             # Use folds but reuse global hyperparams (no re-optimizing)
-            n_folds = min(self.n_ensembles,len(self.train)) #min(self.batch_size, max(1, len(self.train)))
+
             samples_per_fold = self.split_integer(self.batch_size, self.n_ensembles)
-            kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
+            n_folds = min(self.n_ensembles,len(self.train)) #min(self.batch_size, max(1, len(self.train)))            
             X_all, Y_all = self._get_unitXY()
-            # X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
-            # Y_all = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
+            input_dim = X_all.shape[1]   # <-- added
+            kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
 
             chosen_indices = []
             for i, train_idx, _ in enumerate(kf.split(X_all)):
