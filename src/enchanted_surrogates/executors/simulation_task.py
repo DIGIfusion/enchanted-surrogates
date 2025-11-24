@@ -4,8 +4,11 @@ import os
 import pandas as pd
 import uuid
 import sys
+<<<<<<< HEAD
 from pprint import pformat
             
+=======
+>>>>>>> feature/hdf5_data_pack
 
 def run_simulation_task(
         runner_config: dict, run_dir: str, params: dict = None, future=None, return_errors=False) -> dict:
@@ -48,6 +51,7 @@ def run_simulation_task(
             "module": exc.__class__.__module__,
         }
         runner_output = {"success": False, "error_id": error_id}
+<<<<<<< HEAD
         try:   
             print('\n'.join(msg), flush=True) # This can return a broken pipe error.
         except Exception as exc2:
@@ -63,6 +67,13 @@ def run_simulation_task(
     if os.path.exists(run_dir):
         df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
         df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
+=======
+        
+    runner_output.update(params)
+    runner_output['run_dir'] = run_dir
+    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
+    df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
+>>>>>>> feature/hdf5_data_pack
     
     if return_errors:
         return runner_output, error_info
