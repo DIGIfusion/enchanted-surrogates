@@ -3,13 +3,17 @@ import math
 import pickle
 import warnings
 import time
-import traceback   # <-- added
 from scipy.special import erf
 from sklearn.model_selection import KFold
 import numpy as np
 import pandas as pd
 import GPy
-from numpy.random import RandomState   # <-- added
+import time
+from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.utils.precise_imports import import_sampler
+from enchanted_surrogates.utils.timeout import run_with_timeout, FunctionTimeoutError, FunctionExecutionError
+from enchanted_surrogates.utils.print_stats_table import print_stats_table
+import traceback
 
 
 # ---------------------------
@@ -55,6 +59,8 @@ class GpyAnalyticSobolSampler(Sampler):
             raise ValueError("parameters and bounds must be provided")
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters must match.')
+
+        self.input_dim = len(self.parameters)
 
         # store scaling factors
         self._lb = np.array([b[0] for b in self.bounds], dtype=float)
@@ -151,7 +157,7 @@ class GpyAnalyticSobolSampler(Sampler):
     # Pool management
     # ---------------------------
     def _init_pool(self):
-        rng = RandomState(self.seed)   # <-- fixed
+        rng = np.random.RandomState(self.seed)  # pylint: disable=no-member
         if self.pool_sampler_config:
             pool_sampler = import_sampler(self.pool_sampler_config['type'], self.pool_sampler_config)
             collected = []
@@ -212,9 +218,9 @@ class GpyAnalyticSobolSampler(Sampler):
         # Otherwise return random points from pool
         if self.pool is None or len(self.pool) == 0:
             self._init_pool()
-
+        
         if self.initial_pool_samples_strategy == 'random':
-            rng = RandomState(self.seed)   # <-- fixed
+            rng = np.random.RandomState(self.seed)  # pylint: disable=no-member
             n = min(self.initial_batch_size, len(self.pool))
             idxs = rng.choice(len(self.pool), size=n, replace=False)
             chosen = self.pool[idxs]
@@ -282,8 +288,8 @@ class GpyAnalyticSobolSampler(Sampler):
         # ---------------------------
         # Global GP fit (optimize hyperparameters once)
         # ---------------------------
-        input_dim = X.shape[1]
-        kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
+        self.input_dim = X.shape[1]
+        kernel = GPy.kern.RBF(input_dim=self.input_dim, ARD=True)
         self.gp_model = GPy.models.GPRegression(X, Y, kernel)
         self.gp_model.Gaussian_noise.variance.constrain_positive()
         if self.optimize_global:
@@ -354,12 +360,12 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             print(f'SPLITTING DATA INTO FOLDS')
             # Use folds but reuse global hyperparams (no re-optimizing)
-
+            n_folds = min(self.n_ensembles,len(self.train)) #min(self.batch_size, max(1, len(self.train)))
             samples_per_fold = self.split_integer(self.batch_size, self.n_ensembles)
-            n_folds = min(self.n_ensembles,len(self.train)) #min(self.batch_size, max(1, len(self.train)))            
-            X_all, Y_all = self._get_unitXY()
-            input_dim = X_all.shape[1]   # <-- added
             kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
+            X_all, Y_all = self._get_unitXY()
+            # X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
+            # Y_all = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
 
             chosen_indices = []
             for i, train_idx, _ in enumerate(kf.split(X_all)):
@@ -367,7 +373,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 X_fold = X_all[train_idx]
                 Y_fold = Y_all[train_idx]
                 # Build kernel with cached hyperparams and do NOT optimize
-                kernel_fold = GPy.kern.RBF(input_dim=input_dim, ARD=True)
+                kernel_fold = GPy.kern.RBF(input_dim=self.input_dim, ARD=True)
                 # assign hyperparameters back to kernel object
                 try:
                     kernel_fold.variance = self.kernel_variance
@@ -715,8 +721,8 @@ class GpyAnalyticSobolSampler(Sampler):
             # Predictive gradients for the whole pool
             dmu, _ = model.predictive_gradients(X_pool)
 
-            # dmu shape is (N, input_dim, output_dim)
-            # Take the norm across the input_dim axis
+            # dmu shape is (N, self.input_dim, output_dim)
+            # Take the norm across the self.input_dim axis
             grads = np.linalg.norm(dmu, axis=1).squeeze()
             return grads
 
