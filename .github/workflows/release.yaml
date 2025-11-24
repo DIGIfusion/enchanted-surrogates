@@ -21,7 +21,7 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v6
           with:
-            fetch-depth: 0
+            fetch-depth: 0 # Fetch all history for tags
         - name: Set up ${{ matrix.python-version }}
           uses: actions/setup-python@v6
           with:
@@ -34,6 +34,7 @@ jobs:
           run: python -m build
         - name: Upload artifacts
           uses: actions/upload-artifact@v4
+          # Use dist folder created by build step
           with:
             name: dist
             path: dist/*
@@ -48,8 +49,10 @@ jobs:
             path: dist
         
         - name: Create GitHub Release
+          # GITHUB_TOKEN is automatically created by GitHub Actions
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # github.ref_name contains the tag name that triggered the workflow
           run: |
             gh release create ${{ github.ref_name }} dist/* \
             --title "${{ github.ref_name }}" \
