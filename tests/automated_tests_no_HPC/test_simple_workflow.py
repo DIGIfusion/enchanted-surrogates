@@ -35,7 +35,7 @@ def test_full_workflow_local(tmp_path):
     executor.start_runs()
     # This should create {budget} folders with ??? inside
 
-    assert len(glob.glob(os.path.join(base_run_dir, 'batch_0', "*"))) == budget
+    assert len(glob.glob(os.path.join(base_run_dir, "*"))) == budget
     executor.clean()
 
     # Clean up test
@@ -67,7 +67,7 @@ def test_full_workflow_joblib(tmp_path):
     executor.start_runs()
     # This should create {budget} folders with ??? inside
 
-    created_rundirs = glob.glob(os.path.join(base_run_dir, 'batch_0', "*"))
+    created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
     assert len(created_rundirs) == budget
     executor.clean()
 
