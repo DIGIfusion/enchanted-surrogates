@@ -1,11 +1,10 @@
-import traceback
-from enchanted_surrogates.utils.precise_imports import import_runner
 import os
 import pandas as pd
 import uuid
 import sys
 from pprint import pformat
-            
+import traceback
+from enchanted_surrogates.utils.precise_imports import import_runner        
 
 def run_simulation_task(
         runner_config: dict, run_dir: str, params: dict = None, future=None, return_errors=False, rm_run_dir=False) -> dict:
@@ -62,7 +61,8 @@ def run_simulation_task(
     
     if rm_run_dir and os.path.exists(run_dir):
         os.system(f'rm -r {run_dir}')
-    
+
+    # Create datapoint .csv file in the run directory
     if os.path.exists(run_dir):
         df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
         df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
