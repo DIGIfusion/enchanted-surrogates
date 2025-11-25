@@ -43,6 +43,7 @@ This requires user to create tag name `vX.Y.Z` according to semantic versioning 
 
 In `release.yaml` file linting and testing is run, then if those succeed package is built, and if build succeeds content of  `dist/*` folder is included in release. 
 
+Triggering is done in the branch, that is to be released.
 Use below commands to trigger first part of release workflow:
 ```bash
 git tag vX.Y.Z
