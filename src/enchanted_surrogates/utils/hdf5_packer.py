@@ -17,6 +17,8 @@ def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=No
     - skip_patterns (iterable[str] | None): Glob-style patterns matched against relative paths.
     - uuid_only (bool): If True, only include files located in directories with UUIDs in their path.
     - delete_packed (bool): If True, delete files and directories that were packed.
+    
+    This code was largely created by co-pilot, supervised by Daniel Jordan
     """
     print('PACKING DATA INTO hdf5 FILE')
     hdf5_path = os.path.join(source_dir, hdf5_name)
