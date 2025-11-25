@@ -11,7 +11,6 @@ from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
 from enchanted_surrogates.utils.load_configuration import load_configuration
 import shutil
 
-
 def main(args: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
@@ -46,11 +45,11 @@ def main(args: argparse.Namespace, config_path=None):
     if hasattr(args, 'general'):
         if args.general.get('pack_data_hdf5', True):
             # the import is placed here so that users don't need h5py installed in their enviroment to use run.py
-            from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
+            from enchanted_surrogates.utils.hdf5_packer import convert_directory_to_hdf5
             # reduce num files with hdf5
             batch_dirs = get_batch_dirs(args.executor['base_run_dir'])
             for batch_dir in batch_dirs:
-                convert_directory_to_hdf5(batch_dir, skip_delete=['enchanted_dataset.csv', 'batch_info.csv'])
+                convert_directory_to_hdf5(batch_dir, uuid_only=True, delete_packed=True)
     return
 
 

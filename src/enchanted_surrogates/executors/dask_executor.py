@@ -254,11 +254,6 @@ class DaskExecutor(Executor):
                 count += 1
         return num_alive_workers
 
-    # def scale(self, num_workers):
-    #     if self.count_alive_workers() == self.scale_n_jobs:
-    #         self.cluster.scale(num_workers)
-    #     self.scale_n_jobs = num_workers
-
     def start_runs(self):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
