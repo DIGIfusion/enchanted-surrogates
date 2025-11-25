@@ -8,7 +8,7 @@ from pprint import pformat
             
 
 def run_simulation_task(
-        runner_config: dict, run_dir: str, params: dict = None, future=None, return_errors=False) -> dict:
+        runner_config: dict, run_dir: str, params: dict = None, future=None, return_errors=False, rm_run_dir=False) -> dict:
     """
     Runs a single simulation task using the specified runner and parameters.
     Args:
@@ -60,7 +60,7 @@ def run_simulation_task(
     runner_output.update(params)
     runner_output['run_dir'] = run_dir
     
-    if '/tmp/' in run_dir and os.path.exists(run_dir):
+    if rm_run_dir and os.path.exists(run_dir):
         os.system(f'rm -r {run_dir}')
     
     if os.path.exists(run_dir):

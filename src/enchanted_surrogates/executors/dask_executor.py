@@ -331,7 +331,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     shutil.rmtree(batch_dir)
                     break
                 
-                _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
+                _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True, rm_run_dir=~self.save_run_dirs)
                 futures = set(_futures)
                 del _futures
                 num_samp_in_batch = len(futures)
