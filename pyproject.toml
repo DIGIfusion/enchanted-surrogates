@@ -22,6 +22,12 @@ dependencies = [
     "PyYAML",
 ]
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [project.optional-dependencies]
 bo = [
     "matplotlib",
@@ -31,13 +37,6 @@ bo = [
     "torch",
 ]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[project.optional-dependencies]
 sdsg = [
   "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
 ]
