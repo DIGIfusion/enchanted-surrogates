@@ -179,18 +179,6 @@ class DaskNestedExecutor(Executor):
                                 previous_success = True
                                 print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
-                        # if all(done_status):
-                        #     prelim_results = [self.get_result(future, timeout=2, silent=False)[0] for future in self.all_futures[i-1]]
-                        #     suc = [] 
-                        #     for pr in prelim_results:
-                        #         if pr:
-                        #             suc.append(pr['success'])
-                        #     if not any(suc):
-                        #         print(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
-                        #         print('SHUTTING DOWN DASK WORKERS')
-                        #         self.clean()
-                        #         raise RuntimeError(f'THERE HAS BEEN NO SUCESSFULL FUTURES AT DEPTH: {i-1}')
-
                 
                 print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 # start cluster or assign client when reusing
