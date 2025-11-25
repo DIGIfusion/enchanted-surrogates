@@ -1,8 +1,4 @@
-import os
-#!/usr/bin/env python3
-import glob
-import os
-            
+import os            
 import subprocess
 import time
 import warnings
@@ -83,6 +79,9 @@ class DaskExecutor(Executor):
         self.expected_number_of_workers = None
         self.current_batch = 0
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
+        if not self.save_run_dirs:
+            warnings.warn('PLEASE DO NOT SET save_run_dirs TO False WHEN YOU ARE RUNNING ON PARTIAL NODES, AS THE run_dirs ARE PUT IN /tmp/ WHICH IS OFTEN ON LOCAL NODE STORAGE AND IF FILLED CAN DISRUPT OTHER USERS RUNS. \nSETTING save_run_dirs TO False WILL MEAN ALL YOUR RUN DATA WILL BE DELETED EXCEPT WHAT IS PARSED AND RETURNED BY YOUR RUNNER. ')
+        
         self.submit_command = kwargs.get('submit_command', None)
         
         self.psudo_runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)

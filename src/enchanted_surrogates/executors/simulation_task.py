@@ -60,6 +60,9 @@ def run_simulation_task(
     runner_output.update(params)
     runner_output['run_dir'] = run_dir
     
+    if '/tmp/' in run_dir and os.path.exists(run_dir):
+        os.system(f'rm -r {run_dir}')
+    
     if os.path.exists(run_dir):
         df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
         df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
