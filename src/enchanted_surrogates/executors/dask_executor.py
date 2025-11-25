@@ -331,7 +331,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     shutil.rmtree(batch_dir)
                     break
                 
-                _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True, rm_run_dir=~self.save_run_dirs)
+                _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)
                 futures = set(_futures)
                 del _futures
                 num_samp_in_batch = len(futures)
@@ -430,7 +430,7 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                 sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
             run_dirs.append(sample_run_dir)
             new_future = client.submit(
-                run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors, retries=0
+                run_simulation_task, self.runner_config, sample_run_dir, sample_params, return_errors=request_errors, rm_run_dir=~self.save_run_dirs, retries=0
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir
