@@ -144,27 +144,30 @@ class DaskExecutor(Executor):
             self.client = Client(self.cluster)
             
         if self.block_until_cluster_started:
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
-            print(f"Waiting for {self.expected_number_of_workers} workers to start...")
-            for i in range(1,self.expected_number_of_workers+2):
-                if i == self.expected_number_of_workers+1:
-                    timeout_ = 3
-                    try:
-                        self.client.wait_for_workers(i, timeout=timeout_)
-                        warnings.warn(f'MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}')
-                    except TimeoutError:
-                        print(f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n")
-                else:
-                    self.client.wait_for_workers(i, timeout=self.expected_number_of_workers+120)
-                    print(f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n")
-                
-            workers = self.client.scheduler_info()["workers"]            
-            print('SOME WORKER INFORMATION:')
-            for addr, info in workers.items():
-                print(f"Worker {addr}:")
-                print(f"  CPUs: {info['nthreads']}")
-                print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
-                print(f"  Resources: {info.get('resources', {})}\n")
+            if self.scale_n_jobs:
+                self.expected_number_of_workers = self.scale_n_jobs
+                print(f"Waiting for {self.expected_number_of_workers} workers to start...")
+                for i in range(1,self.expected_number_of_workers+2):
+                    if i == self.expected_number_of_workers+1:
+                        timeout_ = 3
+                        try:
+                            self.client.wait_for_workers(i, timeout=timeout_)
+                            warnings.warn(f'MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}')
+                        except TimeoutError:
+                            print(f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n")
+                    else:
+                        self.client.wait_for_workers(i, timeout=self.expected_number_of_workers+120)
+                        print(f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n")
+                    
+                workers = self.client.scheduler_info()["workers"]            
+                print('SOME WORKER INFORMATION:')
+                for addr, info in workers.items():
+                    print(f"Worker {addr}:")
+                    print(f"  CPUs: {info['nthreads']}")
+                    print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
+                    print(f"  Resources: {info.get('resources', {})}\n")
+            else: 
+                warnings.warn('BLOCK UNTIL CLUSTER STARTED WAS True BUT scale_n_jobs WAS NOT DEFINED SO expected_number_of_workers COULD NOT BE DEFINED AND THE BLOCK WAS SKIPPED')
         
         bash_command = "scancel $(squeue -u $USER -o '%i %j' | awk '$2 ~ /dask/ {print $1}')"
         print(f"**TOP TIP** USE THIS SLURM BASH COMMAND TO CANCEL ALL JOBS WITH dask IN THE NAME\n{bash_command}")
