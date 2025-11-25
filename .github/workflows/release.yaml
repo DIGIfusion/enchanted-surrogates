@@ -8,9 +8,9 @@ on:
 jobs:
 
   lint:
-    uses: DIGIfusion/enchanted-surrogates/.github/workflows/lint.yaml@develop
+    uses: DIGIfusion/enchanted-surrogates/.github/workflows/pylint.yml@feature/enc-59-develop-a-release-workflow # Change for production
   test:
-    uses: DIGIfusion/enchanted-surrogates/.github/workflows/test.yaml@develop
+    uses: DIGIfusion/enchanted-surrogates/.github/workflows/pytest.yml@feature/enc-59-develop-a-release-workflow # Change for production
   build:
     runs-on: ubuntu-latest
     needs: [lint, test]
