@@ -7,7 +7,7 @@ name = "enchanted-surrogates"
 version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "joblib",
     "numpy",
