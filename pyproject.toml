@@ -19,6 +19,16 @@ dependencies = [
     "coverage",
     "matplotlib",
     "plotly",
+    "PyYAML",
+]
+
+[project.optional-dependencies]
+bo = [
+    "matplotlib",
+    "scienceplots",
+    "botorch",
+    "gpytorch",
+    "torch",
 ]
 
 [tool.setuptools]
