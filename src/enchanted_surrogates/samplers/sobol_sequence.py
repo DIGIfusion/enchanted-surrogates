@@ -43,7 +43,7 @@ class SobolSequence(Sampler):
         # Create a Sobol sequence generator
         try:
             sobol = Sobol(d=dim, scramble=self.scramble, rng=self.seed)
-        except AttributeError:
+        except:
             sobol = Sobol(d=dim, scramble=self.scramble, seed=self.seed)
                         
         # Generate points in the unit hypercube [0, 1]^d
