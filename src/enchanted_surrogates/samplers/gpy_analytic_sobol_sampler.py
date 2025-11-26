@@ -888,66 +888,66 @@ if __name__ == '__main__':
     from enchanted_surrogates.utils.precise_imports import import_sampler
     _, base_run_dir = sys.argv
     
-    # batch_dirs = get_batch_dirs(base_run_dir)
+    batch_dirs = get_batch_dirs(base_run_dir)
     
-    # listdir = os.listdir(base_run_dir)
-    # config_file_name = [name for name in listdir if '.yaml' in name]
-    # if len(config_file_name) > 1:
-    #     raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
-    # config_file_name = config_file_name[0]
-    # print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
-    # config = load_configuration(os.path.join(base_run_dir, config_file_name))
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
     
     # # bounds=np.array(config.executor.sampler_config['bounds'])
     # # parameters = config.executor.sampler_config['parameters']
     
     # # print('debug sampler config', config.executor['sampler_config'])
     
-    # sampler_config = config.executor['sampler_config']
-    # sampler_config['base_run_dir'] = base_run_dir
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
     # # bounds = ['bounds']
     # # config.executor['sampler_config'].pop('bounds')
     # # parameters = config.executor['sampler_config']['parameters']
     # # config.executor['sampler_config'].pop('parameters')
     
-    # gpy = GpyAnalyticSobolSampler(**sampler_config)    
-    # for i, batch_dir in enumerate(batch_dirs):
-    #     gpy.append_train_data(batch_dir)
-    #     # # if len(gpy.train) <= 680:
-    #     #     continue
-    #     if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
-    #         if len(gpy.train) > 510:
-    #             print('WRITING BATCH INFO FOR:',batch_dir)
-    #             with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
-    #                 # gpy.gp_model = pickle.load(file)
-    #                 gpy.fit()
-    #                 gpy.cache_hypers()
-    #                 gpy.cache_K()
-    #             print("\n\n\n ================================== \n\n\n")
-    #             gpy._write_batch_info_inner(batch_dir, name='post2_')
+    gpy = GpyAnalyticSobolSampler(**sampler_config)    
+    for i, batch_dir in enumerate(batch_dirs):
+        gpy.append_train_data(batch_dir)
+        # # if len(gpy.train) <= 680:
+        #     continue
+        if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
+            # if len(gpy.train) > 510:
+                print('WRITING BATCH INFO FOR:',batch_dir)
+                with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
+                    # gpy.gp_model = pickle.load(file)
+                    gpy.fit()
+                    gpy.cache_hypers()
+                    gpy.cache_K()
+                print("\n\n\n ================================== \n\n\n")
+                # gpy._write_batch_info_inner(batch_dir, name='post2_')
             
-    #         # reg_results = gpy.regression_test()
-    #         # reg_results['num_samples'] = len(gpy.train)
-    #         # df = pd.DataFrame({k: v for k, v in reg_results.items()})
-    #         # reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
-    #         # if os.path.exists(reg_path):
-    #         #     df.to_csv(reg_path, mode='a', header=False, index=False)
-    #         # else:
-    #         #     df.to_csv(reg_path, mode='w', header=True, index=False)
+                reg_results = gpy.regression_test()
+                reg_results['num_samples'] = len(gpy.train)
+                df = pd.DataFrame({k: v for k, v in reg_results.items()})
+                reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
+                if os.path.exists(reg_path):
+                    df.to_csv(reg_path, mode='a', header=False, index=False)
+                else:
+                    df.to_csv(reg_path, mode='w', header=True, index=False)
          
     #     # if i == 4:
     #     #     break
    
  
-    # merge_secondary_into_primary(
-    #     primary_csv=os.path.join(base_run_dir, 'batch_info.csv'),
-    #     secondary_csv=os.path.join(base_run_dir, 'regression_info.csv'),
-    #     out_csv=os.path.join(base_run_dir, 'merged_batch_info.csv'),
-    #     key='num_samples')
+    merge_secondary_into_primary(
+        primary_csv=os.path.join(base_run_dir, 'batch_info.csv'),
+        secondary_csv=os.path.join(base_run_dir, 'regression_info.csv'),
+        out_csv=os.path.join(base_run_dir, 'merged_batch_info.csv'),
+        key='num_samples')
  
 
-    merge_secondary_into_primary(
-        primary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/batch_info.csv',
-        secondary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/post3batch_info.csv',
-        out_csv=os.path.join('/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/', 'merged_batch_info.csv'),
-        key='num_samples')
+    # merge_secondary_into_primary(
+    #     primary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/batch_info.csv',
+    #     secondary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/post3batch_info.csv',
+    #     out_csv=os.path.join('/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/', 'merged_batch_info.csv'),
+    #     key='num_samples')
