@@ -78,7 +78,7 @@ class ExampleBayesianOptimizationParser(Parser):
         # This computes a distance metric for the current.
         # Mean absolute error is chosen here.
         outputdict = self.read_output_file(run_dir)
-        distances = 2.0 - outputdict['output']
+        distances = np.array([2.0 - outputdict['output']])
         inputnd = []
         for key in inputs:
             inputnd.append(inputs[key])

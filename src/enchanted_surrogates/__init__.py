@@ -1,4 +1,4 @@
-from importlib_metadata import entry_points
+from importlib.metadata import entry_points
 
 def load_plugins():
     """Load all plugins registered under the 'enchanted_surrogates' entry points."""

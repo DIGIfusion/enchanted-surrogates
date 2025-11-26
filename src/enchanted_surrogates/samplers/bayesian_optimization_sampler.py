@@ -2,8 +2,8 @@
 samplers/bayesian_optimization_sampler.py
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
-sample through the search space to yield optimial information gain as specified 
-by the acquisition strategy.
+sample through the search space to yield optimial information gain as 
+specified by the acquisition strategy.
 """
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
@@ -15,10 +15,12 @@ import scienceplots
 
 try:
     import botorch, gpytorch, torch
+    from botorch.optim import optimize_acqf
 except:
     print(
         "import botorch, gpytorch, torch failed.",
-        "Please make sure that you have torch, botorch, and gpytorch installed",
+        "Please make sure that you have torch, botorch,",
+        "and gpytorch installed",
     )
 
 
@@ -27,20 +29,24 @@ class BayesianOptimizationSampler(Sampler):
     Bayesian Optimization sampler using the BoTorch library.
 
     Attributes:
-        initial_samples (int): Number of initial samples required.
-        verbose (bool): Whether to print verbose output.
-        fully_bayesian (bool): Whether to use fully Bayesian models.
-        acquisition_batch_size (int): Number of samples in each acquisition batch.
-        observations (list): List of observations.
-        bounds (list): Bounds for the search space.
-        acquisition_function (str): Acquisition function to use.
-        random_fraction (float): Fraction of random samples.
-        failure_prob_filter (bool): Whether to filter based on failure probability.
-        ucb_beta (float): Beta parameter for UCB acquisition function.
-        async_samp (bool): Whether to use asynchronous sampling.
-        parameters (list): List of parameter names.
-        parser (type): Parser type for collecting sample information.
-        parser_config: Parser kwargs
+        initial_samples (int):        Number of initial samples.
+        verbose (bool):               True for detailed output.
+        fully_bayesian (bool):        True for fully Bayesian models.
+        acquisition_batch_size (int): Number of samples in each 
+                                      acquisition batch.
+        observations (list):          List of observations.
+        bounds (list):                Bounds for the search space.
+        acquisition_function (str):   Acquisition function to use.
+        random_fraction (float):      Fraction of random samples.
+        failure_prob_filter (bool):   True for using failure information
+                                      to filter samples.
+        ucb_beta (float):             Beta parameter for the UCB 
+                                      acquisition function.
+        async_samp (bool):            True for asynchronous sampling.
+        parameters (list):            List of parameter names.
+        parser (type):                Parser type for collecting 
+                                      sample information.
+        parser_config:                Parser kwargs
     """
 
     def __init__(
@@ -49,7 +55,8 @@ class BayesianOptimizationSampler(Sampler):
         **kwargs,
     ):
         """
-        Initializes the BayesianOptimization sampler with the given parameters.
+        Initializes the BayesianOptimization sampler 
+        with the given parameters.
         """
         print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
         self._budget = kwargs.get('budget', 20)
@@ -64,15 +71,16 @@ class BayesianOptimizationSampler(Sampler):
         self.acquisition_function = kwargs.get('acquisition_function', 'qLEI')
         self.random_fraction = kwargs.get('random_fraction', 0.2)
         self.failure_prob_filter = kwargs.get('failure_prob_filter', False)
-        self.ucb_beta = kwargs.get('ucb_beta', 2.0)  # Default value for UCB beta
-        self.async_samp = kwargs.get('async_samp', False)  # Default value for async sampling
-        self.parameters = kwargs.get('parameters', [])  # List of parameter names
-        self.parser_type = kwargs.get('parser', None)  # Parser type for sample information
+        self.ucb_beta = kwargs.get('ucb_beta', 2.0)  
+        self.async_samp = kwargs.get('async_samp', False)  
+        self.parameters = kwargs.get('parameters', [])  
+        self.parser_type = kwargs.get('parser', None)  
         self.parser_config = kwargs.get('parser_config',{})
         self.plot_GPR_flag = kwargs.get('plot_GPR', False)
         self.GPR_plot_dim = kwargs.get('GPR_plot_dim', [0])
         self.plot_GPR_file = kwargs.get('plot_file', False)
-        self.plot_frequency = kwargs.get('plot_frequency', 10)
+        self.plot_frequency = kwargs.get('plot_frequency', 1)
+        self.plot_debug = kwargs.get('plot_debug', False)
         #if self.parser_config == None:
         if self.parser_type == None:
             self.parser = None
@@ -85,8 +93,8 @@ class BayesianOptimizationSampler(Sampler):
 
     def get_next_samples(self):
         """
-        Generates the next parameter samples based on the model and the 
-        acquisition function. 
+        Generates the next parameter samples based on the probabilistic 
+        surrogate model and the acquisition function. 
 
         Returns:
             list: List of dictionaries containing next parameter samples.
@@ -116,7 +124,9 @@ class BayesianOptimizationSampler(Sampler):
         else:
             # Fit the surrogate model
             self.train_surrogate()
-            acq = None  # Initialize acq to avoid possibly-used-before-assignment error
+            # The acquisition stragety is chosen here.  
+            acq = None  # Initialize acq to avoid 
+                        # possibly-used-before-assignment error
             if self.acquisition_function == 'qLEI':
                 acq = botorch.acquisition.qLogExpectedImprovement(
                     model=self.model, 
@@ -142,7 +152,8 @@ class BayesianOptimizationSampler(Sampler):
                     model=self.model,
                     best_f=self.best_f)
             if acq is None:
-                raise ValueError(f"Unsupported acquisition function: {self.acquisition_function}")
+                raise ValueError("Unsupported acquisition function:", 
+                                  f"{self.acquisition_function}")
 
             if self.async_samp:
                 if torch.rand(1) < self.random_fraction:
@@ -156,9 +167,11 @@ class BayesianOptimizationSampler(Sampler):
                     return batch_samples
                 else:
                     qval = 1
-            else:  
-                qval = int((1 - self.random_fraction)*self.acquisition_batch_size)
-                for _ in range(int(self.random_fraction*self.acquisition_batch_size)):
+            else:
+                acq_f =  (1 - self.random_fraction) 
+                rand_f = self.random_fraction
+                qval = int(acq_f*self.acquisition_batch_size)
+                for _ in range(int(rand_f*self.acquisition_batch_size)):
                     params = [
                         torch.distributions.Uniform(lb, ub).sample().item()
                         for (lb, ub) in self.bounds
@@ -168,7 +181,7 @@ class BayesianOptimizationSampler(Sampler):
 
             boundtensor = torch.DoubleTensor(self.bounds).T
             
-            candidates, acq_values = botorch.optim.optimize_acqf(
+            candidates, acq_values = optimize_acqf(
                 acq, 
                 bounds=boundtensor,
                 sequential=False, 
@@ -177,19 +190,22 @@ class BayesianOptimizationSampler(Sampler):
                 raw_samples=1024
                 )
 
+            # This part of the code can be cleaned by implementing 
+            # failure probability in the acquisition function. 
             if self.failure_prob_filter:
                 if self.result_dictionary_failed != [None]:
                     cand_accept = []
                     not_enough = True
                     target_len = len(candidates[:,0])
                     while not_enough:
-                        pred = self.model_failed(self.normalize_input(candidates))
+                        norm_inp = self.normalize_input(candidates)
+                        pred = self.model_failed(norm_inp)
                         pred = pred.mean
                         for i in range(len(pred)):
                             if torch.rand(1) > pred[i]:
                                 cand_accept.append(candidates[i,:].numpy())
                         if len(cand_accept) < target_len:
-                            candidates, acq_values = botorch.optim.optimize_acqf(
+                            candidates, acq_values = optimize_acqf(
                                 acq, 
                                 bounds=torch.FloatTensor(self.bounds).T,
                                 sequential=False, 
@@ -203,7 +219,8 @@ class BayesianOptimizationSampler(Sampler):
                             candidates = torch.tensor(candidates)
                 
             for index, _ in enumerate(range(candidates.size(dim=0))):
-                params_dict = dict(zip(self.parameters, candidates[index,:].numpy()))
+                params_dict = dict(zip(self.parameters, 
+                                       candidates[index,:].numpy()))
                 batch_samples.append(params_dict)  
 
         self.submitted += len(batch_samples)
@@ -212,37 +229,44 @@ class BayesianOptimizationSampler(Sampler):
     def register_future(self, future):
         self.futures.append(future)
 
+    # Fitting the GPR.
+
     def train_surrogate(self):
         if self.verbose:
-            print('TRAINING THE SURROGATE MODEL')
+            print('FITTING THE GPR')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
-        if np.array(self.result_dictionary_norm).ndim > 1:
-            distances = torch.from_numpy(np.sum(
+        distances = torch.from_numpy(np.sum(
                 self.result_dictionary_norm['distances'][:],
                 axis=1))
-        else:
-            distances = torch.from_numpy(self.result_dictionary['distances'][:])
         distances = (distances - torch.mean(distances))/torch.std(distances)
+        
+        # Filter those parts of the result-dictionary that 
+        # are outside the bounds.
+        input_vector = self.result_dictionary_norm['inputs'][:]
+        idx = np.where(np.max(np.abs(input_vector-0.5), axis=1)>0.5) 
+        input_vector = torch.from_numpy(input_vector[idx])
+        distances = distances[idx]
         distances = distances.unsqueeze(distances.ndim)
-
         # Multiply by -1 the task to a maximization problem.
         distances = -distances
+
 
         if self.fully_bayesian:
             if self.verbose:
                 print('SaasFullyBayesianSingleTaskGP')
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
-                torch.from_numpy(self.result_dictionary_norm['inputs'][:]), 
-                distances)
+                     input_vector, 
+                     distances)
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
         else:
             if self.verbose:
                 print('SingleTaskGP')
             covar_module = gpytorch.kernels.MaternKernel(nu=0.5)
             gp = botorch.models.SingleTaskGP(
-                torch.from_numpy(self.result_dictionary_norm['inputs'][:]),
-                                 distances, covar_module=covar_module)
+                                             input_vector,
+                                             distances, 
+                                             covar_module=covar_module)
             mll = gpytorch.mlls.ExactMarginalLogLikelihood(
                 likelihood=gp.likelihood, 
                 model=gp)
@@ -250,24 +274,35 @@ class BayesianOptimizationSampler(Sampler):
         self.model = gp
         self.best_f = torch.max(distances)
         if self.result_dictionary_failed != [None]:
+
+            inp = self.result_dictionary['inputs']
+            inp_f = self.result_dictionary_failed['inputs']
+            f_0 = self.result_dictionary['failure']
+            f_1 = self.result_dictionary_failed['failure'][:].astype(float)
+
             gp_failed = botorch.models.SingleTaskGP(torch.from_numpy(
-                self.normalize_input(np.concatenate([
-                self.result_dictionary['inputs'],
-                self.result_dictionary_failed['inputs']]))),
-                torch.from_numpy(np.concatenate([
-                self.result_dictionary['failure'],
-                self.result_dictionary_failed['failure'][:].astype(float)])).unsqueeze(0).T
-                                                    )
+                self.normalize_input(np.concatenate([inp, inp_f]))),
+                torch.from_numpy(np.concatenate([f_0, f_1])).unsqueeze(0).T)
             mll_gp_failed = gpytorch.mlls.ExactMarginalLogLikelihood(
                 likelihood=gp_failed.likelihood, 
                 model=gp_failed)
+
             botorch.fit.fit_gpytorch_mll(mll_gp_failed)
             self.model_failed = gp_failed
         if self.plot_GPR_flag:
-            if len(self.result_dictionary['distances']) % self.plot_frequency == 0:
+            if (len(self.result_dictionary['distances']) % 
+                self.plot_frequency == 0):
                 self.plot_GPR(plot_dims=self.GPR_plot_dim)
-   
-    def build_result_dictionary(self, base_run_directory: str, normalize=True): 
+
+        if self.plot_debug:
+            self.plot_distances()
+            self.plot_result_sequence()
+
+    # Result dictionary building features. This function will be moved to the
+    # supervisory module in future developments.
+
+    def build_result_dictionary(self, base_run_directory: str, 
+                                normalize=True): 
         """
         This function can be used to build the result_dictionary based on the
         existing runs in the base_run_directory.
@@ -280,8 +315,8 @@ class BayesianOptimizationSampler(Sampler):
                        This is True by default.
 
         Returns:
-            This function does not return anything directly. However, the function 
-            establishes self.result_dictionary as well as
+            This function does not return anything directly. However, 
+            the function establishes self.result_dictionary as well as
             self.result_dictionary_norm, if normalize is set to True.         
 
         """
@@ -291,18 +326,25 @@ class BayesianOptimizationSampler(Sampler):
             print('BUILDING RESULT DICTIONARY')    
     
         # Load a stored result_dictionary file, if such a file exists.
-        if os.path.isfile(os.path.join(base_run_directory, 'result_dictionary.pkl')):
+        if os.path.isfile(os.path.join(base_run_directory, 
+                                       'result_dictionary.pkl')):
             resdict = open(os.path.join(base_run_directory,  
                                         'result_dictionary.pkl'),'rb')
             result_dict = pkl.load(resdict)
             result_dictionary = result_dict['result_dictionary']
+            # To be implemented. Presently just reconstruct the dictionary 
+            # of failed cases everytime. This works but is a bit inefficient. 
+            #result_dictionary_failed = result_dict['result_dictionary_failed']
             resdict.close()
 
         # Obtain a list of run_directories within the base_run_directory
         dirlist = os.listdir(base_run_directory)
         # Loop over the established runs. This can be streamlined if needed.
         
-        # List of tags to identify entries to skip in dirlist 
+        # List of tags to identify entries to skip in dirlist. 
+        # Present implementation loops through the run-directory.
+        # This list gives identifiers to recognize files & directories that
+        # do not represent samples. 
         skiplist = ['yaml', 'worker_out', 'FINISHED', '.pkl', '.csv', '_RUN',
                     'GPR']
 
@@ -327,7 +369,8 @@ class BayesianOptimizationSampler(Sampler):
             if sample_dict['failure'] == 0:
                 if result_dictionary != None:
                     for key in sample_dict.keys():
-                        # Append values to the lists corresponding to each key.
+                        # Append values to the lists corresponding to each 
+                        # key.
                         result_dictionary[key] = np.concatenate(
                             (result_dictionary[key], 
                              [sample_dict[key]])) 
@@ -338,14 +381,16 @@ class BayesianOptimizationSampler(Sampler):
             else:
                 if result_dictionary_failed != None:
                     for key in sample_dict.keys():
-                        # Append values to the lists corresponding to each key.
+                        # Append values to the lists corresponding to each 
+                        # key.
                         result_dictionary_failed[key] = np.concatenate(
                             (result_dictionary_failed[key], 
                              [sample_dict[key]])) 
                 else:
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
-                        result_dictionary_failed[key]=[result_dictionary_failed[key]]
+                        result_dictionary_failed[key]=\
+                            [result_dictionary_failed[key]]
         if result_dictionary != None:
             self.result_dictionary = result_dictionary
         else:
@@ -356,12 +401,14 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_failed = [None]
         if normalize:
             self.normalize_results()
+        # Save the result_dictionary into a pickle file.
         if result_dictionary != None:
-            res_dict_dump = {'result_dictionary':result_dictionary}
+            res_dump = {'result_dictionary':result_dictionary,
+                        'result_dictionary_failed':result_dictionary_failed}
             resdict = open(
                 os.path.join(base_run_directory, 
                 'result_dictionary.pkl'),'wb')
-            pkl.dump(res_dict_dump, resdict)
+            pkl.dump(res_dump, resdict)
             resdict.close()
 
     def normalize_results(self):
@@ -398,6 +445,12 @@ class BayesianOptimizationSampler(Sampler):
         inprang = inpmax - inpmin
         input_scaled = x*inprang + inpmin
         return input_scaled
+
+    # Plotting functionalities
+
+    def plot_result_sequence(self):
+        plt.plot(self.result_dictionary['distances'][:],'k.')
+        plt.show()
 
     def plot_distances(self):
         """
@@ -502,7 +555,8 @@ class BayesianOptimizationSampler(Sampler):
                 plt.xlabel(self.parameters[plot_dims[0]])
             if self.plot_GPR_file:
                 plt.savefig(os.path.join(self.base_run_dir,
-                            'GPR_'+str(len(self.result_dictionary['distances']))+'.svg'))
+                            'GPR_'+\
+                            str(len(self.result_dictionary['distances']))+'.svg'))
                 plt.close()
             else:
                 plt.show()
