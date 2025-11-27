@@ -204,8 +204,13 @@ class BayesianOptimizationSampler(Sampler):
                     param_dict = dict(zip(self.parameters, params))
                     batch_samples.append(param_dict)
 
-            boundtensor = torch.DoubleTensor(self.bounds).T
-            
+            # Acquisition function is optimized in [0, 1]**d domain
+            #boundtensor = torch.DoubleTensor(self.bounds).T
+            lower_bound = torch.zeros(len(self.bounds), dtype=float)
+            upper_bound = torch.ones(len(self.bounds), dtype=float)
+            lower_bound = lower_bound.unsqueeze(0)
+            upper_bound = upper_bound.unsqueeze(0)
+            boundtensor = torch.cat((lower_bound, upper_bound))
             candidates, acq_values = optimize_acqf(
                 acq, 
                 bounds=boundtensor,
@@ -215,6 +220,8 @@ class BayesianOptimizationSampler(Sampler):
                 raw_samples=1024
                 )
 
+            bounds = torch.tensor(self.bounds)
+            candidates = unnormalize(candidates, bounds.T)
             # This part of the code can be cleaned by implementing 
             # failure probability in the acquisition function. 
             if self.fail_p_filter:
@@ -223,7 +230,7 @@ class BayesianOptimizationSampler(Sampler):
                     not_enough = True
                     target_len = len(candidates[:,0])
                     while not_enough:
-                        norm_inp = normalize(candidates, self.bounds.T)
+                        norm_inp = normalize(candidates, bounds.T)
                         pred = self.model_failed(norm_inp)
                         pred = pred.mean
                         for i in range(len(pred)):
@@ -232,12 +239,13 @@ class BayesianOptimizationSampler(Sampler):
                         if len(cand_accept) < target_len:
                             candidates, acq_values = optimize_acqf(
                                 acq, 
-                                bounds=torch.FloatTensor(self.bounds).T,
+                                bounds=boundtensor,
                                 sequential=False, 
                                 q=target_len - len(cand_accept),
                                 num_restarts=10,
                                 raw_samples=1024
                                 )
+                            candidates = unnormalize(candidates, bounds.T)
                         else:
                             not_enough = False
                             candidates = torch.tensor(cand_accept)
@@ -262,19 +270,18 @@ class BayesianOptimizationSampler(Sampler):
         distances = torch.tensor(self.result_dictionary['distances'][:])
         distances = torch.sum(distances, axis=1)
         distances = standardize(distances)
-        # Filter those parts of the result-dictionary that 
-        # are outside the bounds.
+
         inputs = torch.tensor(self.result_dictionary['inputs'][:])
         bounds = torch.tensor(self.bounds)
         input_vector = normalize(inputs, bounds.T)
 
         # Check if normzalized inputs are below 0 or larger than 1.
-        dummy = torch.abs(input_vector - 0.5)
-        dummy = torch.max(dummy, axis=1).values < 0.5
-        idx = torch.where(dummy)
- 
-        input_vector = input_vector[idx]
-        distances = distances[idx]
+        #dummy = torch.abs(input_vector - 0.5)
+        #dummy = torch.max(dummy, axis=1).values < 0.5
+        #idx = torch.where(dummy) 
+        #input_vector = input_vector[idx]
+        #distances = distances[idx]
+
         distances = distances.unsqueeze(distances.ndim)
         # Multiply by -1 the task to a maximization problem.
         distances = -distances
