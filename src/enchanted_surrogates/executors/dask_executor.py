@@ -64,6 +64,19 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
 
+    def find_line_in_seff_output(self, lines, entry):
+        """
+        Helper function to quickly find the required line in the seff output
+
+        Params:
+            lines (list): list of lines
+            entry (str): the entry that is being looked for
+        Returns:
+            str: time or percentage from the corresponding line, defaults to ""
+        """
+        return next((line.replace(entry,"").strip() for line in lines if line.startswith(entry)),"")
+
+
     def get_slurm_usage_info(self, job_id=None):
         """
         Params:
@@ -74,28 +87,16 @@ class DaskExecutor(Executor):
         job_ids = [job_id] if job_id else self.get_all_dask_job_ids()
         job_info = []
 
-        def find_line_in_seff(lines, entry):
-            """
-            Inner function to quickly find the required line in the seff output
-
-            Params:
-                lines (list): list of lines
-                entry (str): the entry that is being looked for
-            Returns:
-                str: time or percentage from the corresponding line, defaults to ""
-            """
-            return next((line.replace(entry,"").strip() for line in lines if line.startswith(entry)),"")
-
         for job_id in job_ids:
             try:
                 result = subprocess.run(['seff', job_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 output = result.stdout
                 seff_lines = output.splitlines()
                 
-                cpu_time = find_line_in_seff(seff_lines, "CPU Utilized:")
-                cpu_efficiency = find_line_in_seff(seff_lines, "CPU Efficiency:")
-                memory_used = find_line_in_seff(seff_lines, "Memory Utilized:")
-                memory_efficiency = find_line_in_seff(seff_lines, "Memory Efficiency:")
+                cpu_time = self.find_line_in_seff_output(seff_lines, "CPU Utilized:")
+                cpu_efficiency = self.find_line_in_seff_output(seff_lines, "CPU Efficiency:")
+                memory_used = self.find_line_in_seff_output(seff_lines, "Memory Utilized:")
+                memory_efficiency = self.find_line_in_seff_output(seff_lines, "Memory Efficiency:")
 
                 hours, minutes, seconds = map(int, cpu_time.split(":"))
                 cpu_secs = hours * 3600 + minutes * 60 + seconds
