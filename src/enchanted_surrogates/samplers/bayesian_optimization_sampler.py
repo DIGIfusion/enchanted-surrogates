@@ -459,6 +459,12 @@ class BayesianOptimizationSampler(Sampler):
         plt.plot(self.result_dictionary['distances'][:],'k.')
         plt.show()
 
+    # Plotting functionalities
+
+    def plot_result_sequence(self):
+        plt.plot(self.result_dictionary['distances'][:],'k.')
+        plt.show()
+
     def plot_distances(self):
         """
         This is a helper function for plotting the sample distributions.
