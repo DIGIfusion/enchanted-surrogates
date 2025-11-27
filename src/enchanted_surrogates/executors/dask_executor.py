@@ -80,11 +80,11 @@ class DaskExecutor(Executor):
     def get_slurm_usage_info(self, job_id=None):
         """
         Params:
-            job_id (int): If you wish to only find the slurm usage info from one specific job pass this
+            job_id (list[int]): If you wish to only find the slurm usage info from one specific job pass this
         Returns:
             list: dictionary containing the output info from running seff
         """
-        job_ids = [job_id] if job_id else self.get_all_dask_job_ids()
+        job_ids = job_id if job_id else self.get_all_dask_job_ids()
         job_info = []
 
         for job_id in job_ids:
@@ -92,6 +92,9 @@ class DaskExecutor(Executor):
                 result = subprocess.run(['seff', job_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 output = result.stdout
                 seff_lines = output.splitlines()
+
+                if len(output.strip()) == 0:
+                    continue
                 
                 cpu_time = self.find_line_in_seff_output(seff_lines, "CPU Utilized:")
                 cpu_efficiency = self.find_line_in_seff_output(seff_lines, "CPU Efficiency:")
@@ -124,7 +127,7 @@ class DaskExecutor(Executor):
         try:
             jobs = []
             result = subprocess.run(['squeue', '--me'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            dask_lines = [line for line in result.stdout.splitlines() if 'dask-wor' in line]
+            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "SURROGAT" not in line]
 
             if not dask_lines:
                 print("No Dask jobs found in queue.")
@@ -330,6 +333,7 @@ class DaskExecutor(Executor):
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
+        all_job_ids = self.get_all_dask_job_ids()
         all_futures = []
 
         while self.sampler.has_budget:
@@ -371,7 +375,7 @@ class DaskExecutor(Executor):
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
 
-        job_info = self.get_slurm_usage_info()
+        job_info = self.get_slurm_usage_info(all_job_ids)
         total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
         print(f"Total CPU hours used: {total_cpu_time}")
 
