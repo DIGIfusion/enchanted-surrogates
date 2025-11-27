@@ -223,7 +223,7 @@ class BayesianOptimizationSampler(Sampler):
                     not_enough = True
                     target_len = len(candidates[:,0])
                     while not_enough:
-                        norm_inp = normalize(candidates, bounds.T)
+                        norm_inp = normalize(candidates, self.bounds.T)
                         pred = self.model_failed(norm_inp)
                         pred = pred.mean
                         for i in range(len(pred)):
