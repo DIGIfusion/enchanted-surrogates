@@ -178,7 +178,7 @@ class BayesianOptimizationSampler(Sampler):
                     best_f=self.best_f)
             if acq is None:
                 raise ValueError("Unsupported acquisition function:", 
-                                  f"{self.acquisition_function}")
+                                  f"{self.acq_function}")
 
             if self.async_samp:
                 if torch.rand(1) < self.random_fraction:
@@ -223,7 +223,7 @@ class BayesianOptimizationSampler(Sampler):
                     not_enough = True
                     target_len = len(candidates[:,0])
                     while not_enough:
-                        norm_inp = self.normalize_input(candidates)
+                        norm_inp = normalize(candidates, bounds.T)
                         pred = self.model_failed(norm_inp)
                         pred = pred.mean
                         for i in range(len(pred)):
@@ -279,6 +279,8 @@ class BayesianOptimizationSampler(Sampler):
         # Multiply by -1 the task to a maximization problem.
         distances = -distances
 
+        # Default covar module
+        covar_module = gpytorch.kernels.MaternKernel(nu=1.5)
 
         if self.covar == 'Matern-5/2':
             covar_module = gpytorch.kernels.MaternKernel(nu=2.5)
@@ -518,6 +520,8 @@ class BayesianOptimizationSampler(Sampler):
         input_scaled = (base_point - inpmin)/inprang
         # Establish the plotting axes.
         xtt_vals = torch.zeros((10000,len(self.bounds)))
+        xt1 = 0
+        xt2 = 0
         if len(plot_dims) == 2:
             xt1 = torch.linspace(
                 self.bounds[plot_dims[0]][0], 
