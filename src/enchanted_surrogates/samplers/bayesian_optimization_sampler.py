@@ -7,7 +7,6 @@ specified by the acquisition strategy.
 """
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
-import numpy as np
 import pickle as pkl
 import os
 import matplotlib.pyplot as plt
@@ -16,6 +15,7 @@ import scienceplots
 try:
     import botorch, gpytorch, torch
     from botorch.optim import optimize_acqf
+    from botorch.utils.transforms import standardize, normalize, unnormalize
 except:
     print(
         "import botorch, gpytorch, torch failed.",
@@ -29,24 +29,38 @@ class BayesianOptimizationSampler(Sampler):
     Bayesian Optimization sampler using the BoTorch library.
 
     Attributes:
-        initial_samples (int):        Number of initial samples.
-        verbose (bool):               True for detailed output.
-        fully_bayesian (bool):        True for fully Bayesian models.
-        acquisition_batch_size (int): Number of samples in each 
-                                      acquisition batch.
-        observations (list):          List of observations.
-        bounds (list):                Bounds for the search space.
-        acquisition_function (str):   Acquisition function to use.
-        random_fraction (float):      Fraction of random samples.
-        failure_prob_filter (bool):   True for using failure information
-                                      to filter samples.
-        ucb_beta (float):             Beta parameter for the UCB 
-                                      acquisition function.
-        async_samp (bool):            True for asynchronous sampling.
-        parameters (list):            List of parameter names.
+        base_run_dir (str):           Base run directory
+        budget (int):                 Sampling budget
+        bounds (list):                List of search bounds     
+        parameters (list):            List of parameter names
+
+        observations (dict):          Dictionary of observations
+                                      for distance calculation
         parser (type):                Parser type for collecting 
-                                      sample information.
+                                      sample information
         parser_config:                Parser kwargs
+
+        initial_samples (int):        Number of initial samples
+        acquisition_batch_size (int): Number of samples in each 
+                                      acquisition batch
+        acquisition_function (str):   Acquisition function to use
+        random_fraction (float):      Fraction of random samples
+        failure_prob_filter (bool):   True for using failure information
+                                      to filter samples
+        ucb_beta (float):             Beta parameter for the UCB 
+                                      acquisition function
+        async_samp (bool):            True for asynchronous sampling
+
+        fully_bayesian (bool):        True for fully Bayesian models
+        covar_kernel (str):           Covariance kernel to be used
+
+        verbose (bool):               True for detailed output
+        plot_GPR (bool):              True for plotting GPR
+        GPR_plot_dim (list):          List of dimensions to plot for GPR
+        plot_file (bool):             True for plottining in file (vs. screen)
+        plot_frequency (int):         Frequency of plotting (vs. # samples)
+        plot_debug (bool):            True for debugging plotting
+
     """
 
     def __init__(
@@ -59,28 +73,39 @@ class BayesianOptimizationSampler(Sampler):
         with the given parameters.
         """
         print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
-        self._budget = kwargs.get('budget', 20)
-        self.initial_samples = kwargs.get('initial_samples', 50)
-        self.collected_samples = 0
-        self.base_run_dir = kwargs.get('base_run_dir', '')
-        self.verbose = kwargs.get('verbose', False)
-        self.fully_bayesian = kwargs.get('fully_bayesian', False)
-        self.acquisition_batch_size = kwargs.get('acquisition_batch_size', 20)
-        self.observations = kwargs.get('observations', [None])
-        self.bounds = kwargs.get('bounds', [None])
-        self.acquisition_function = kwargs.get('acquisition_function', 'qLEI')
-        self.random_fraction = kwargs.get('random_fraction', 0.2)
-        self.failure_prob_filter = kwargs.get('failure_prob_filter', False)
-        self.ucb_beta = kwargs.get('ucb_beta', 2.0)  
-        self.async_samp = kwargs.get('async_samp', False)  
-        self.parameters = kwargs.get('parameters', [])  
-        self.parser_type = kwargs.get('parser', None)  
-        self.parser_config = kwargs.get('parser_config',{})
-        self.plot_GPR_flag = kwargs.get('plot_GPR', False)
-        self.GPR_plot_dim = kwargs.get('GPR_plot_dim', [0])
-        self.plot_GPR_file = kwargs.get('plot_file', False)
-        self.plot_frequency = kwargs.get('plot_frequency', 1)
-        self.plot_debug = kwargs.get('plot_debug', False)
+        self.base_run_dir      = kwargs.get('base_run_dir', '')
+        self._budget           = kwargs.get('budget', 20)
+        self.bounds            = kwargs.get('bounds', [None])
+        self.parameters        = kwargs.get('parameters', [])  
+   
+        # Observations and parser configs
+        self.observations      = kwargs.get('observations', [None])
+        self.parser_type       = kwargs.get('parser', None)  
+        self.parser_config     = kwargs.get('parser_config',{})
+
+        # Sampling parameters
+        self.initial_samples   = kwargs.get('initial_samples', 50)
+        self.acq_batch_size    = kwargs.get('acquisition_batch_size', 20)
+        self.acq_function      = kwargs.get('acquisition_function', 'qLEI')
+        self.random_fraction   = kwargs.get('random_fraction', 0.2)
+        self.fail_p_filter     = kwargs.get('failure_prob_filter', False)
+        self.ucb_beta          = kwargs.get('ucb_beta', 2.0)  
+        self.async_samp        = kwargs.get('async_samp', False)  
+
+        # GPR parameters
+        self.fully_bayesian    = kwargs.get('fully_bayesian', False)
+        self.covar             = kwargs.get('covar_kernel', 'Matern-3/2')
+
+        # Plotting and printing flags
+        self.verbose           = kwargs.get('verbose', False)
+        self.plot_GPR_flag     = kwargs.get('plot_GPR', False)
+        self.GPR_plot_dim      = kwargs.get('GPR_plot_dim', [0])
+        self.plot_GPR_file     = kwargs.get('plot_file', False)
+        self.plot_frequency    = kwargs.get('plot_frequency', 1)
+        self.plot_debug        = kwargs.get('plot_debug', False)
+
+
+
         #if self.parser_config == None:
         if self.parser_type == None:
             self.parser = None
@@ -114,7 +139,7 @@ class BayesianOptimizationSampler(Sampler):
         if self.collected_samples < self.initial_samples:
             print(str(100*self.collected_samples/self.initial_samples),
                   ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
-            for _ in range(int(self.acquisition_batch_size)):
+            for _ in range(int(self.acq_batch_size)):
                 params = [
                     torch.distributions.Uniform(lb, ub).sample().item()
                     for (lb, ub) in self.bounds
@@ -127,27 +152,27 @@ class BayesianOptimizationSampler(Sampler):
             # The acquisition stragety is chosen here.  
             acq = None  # Initialize acq to avoid 
                         # possibly-used-before-assignment error
-            if self.acquisition_function == 'qLEI':
+            if self.acq_function == 'qLEI':
                 acq = botorch.acquisition.qLogExpectedImprovement(
                     model=self.model, 
                     best_f=self.best_f)
-            elif self.acquisition_function == 'qUCB':
+            elif self.acq_function == 'qUCB':
                 acq = botorch.acquisition.qUpperConfidenceBound(
                     model=self.model, 
                     beta=self.ucb_beta)
-            elif self.acquisition_function == 'qEI':
+            elif self.acq_function == 'qEI':
                 acq = botorch.acquisition.qExpectedImprovement(
                     model=self.model, 
                     best_f=self.best_f)
-            elif self.acquisition_function == 'qPI':
+            elif self.acq_function == 'qPI':
                 acq = botorch.acquisition.qProbabilityOfImprovement(
                     model=self.model, 
                     best_f=self.best_f)
-            elif self.acquisition_function == 'EI':
+            elif self.acq_function == 'EI':
                 acq = botorch.acquisition.ExpectedImprovement(
                     model=self.model,
                     best_f=self.best_f)
-            elif self.acquisition_function == 'LEI':
+            elif self.acq_function == 'LEI':
                 acq = botorch.acquisition.LogExpectedImprovement(
                     model=self.model,
                     best_f=self.best_f)
@@ -170,8 +195,8 @@ class BayesianOptimizationSampler(Sampler):
             else:
                 acq_f =  (1 - self.random_fraction) 
                 rand_f = self.random_fraction
-                qval = int(acq_f*self.acquisition_batch_size)
-                for _ in range(int(rand_f*self.acquisition_batch_size)):
+                qval = int(acq_f*self.acq_batch_size)
+                for _ in range(int(rand_f*self.acq_batch_size)):
                     params = [
                         torch.distributions.Uniform(lb, ub).sample().item()
                         for (lb, ub) in self.bounds
@@ -192,7 +217,7 @@ class BayesianOptimizationSampler(Sampler):
 
             # This part of the code can be cleaned by implementing 
             # failure probability in the acquisition function. 
-            if self.failure_prob_filter:
+            if self.fail_p_filter:
                 if self.result_dictionary_failed != [None]:
                     cand_accept = []
                     not_enough = True
@@ -215,8 +240,7 @@ class BayesianOptimizationSampler(Sampler):
                                 )
                         else:
                             not_enough = False
-                            candidates = np.array(cand_accept)
-                            candidates = torch.tensor(candidates)
+                            candidates = torch.tensor(cand_accept)
                 
             for index, _ in enumerate(range(candidates.size(dim=0))):
                 params_dict = dict(zip(self.parameters, 
@@ -230,39 +254,52 @@ class BayesianOptimizationSampler(Sampler):
         self.futures.append(future)
 
     # Fitting the GPR.
-
     def train_surrogate(self):
         if self.verbose:
             print('FITTING THE GPR')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
-        distances = torch.from_numpy(np.sum(
-                self.result_dictionary_norm['distances'][:],
-                axis=1))
-        distances = (distances - torch.mean(distances))/torch.std(distances)
-        
+        distances = torch.tensor(self.result_dictionary['distances'][:])
+        distances = torch.sum(distances, axis=1)
+        distances = standardize(distances)
         # Filter those parts of the result-dictionary that 
         # are outside the bounds.
-        input_vector = self.result_dictionary_norm['inputs'][:]
-        idx = np.where(np.max(np.abs(input_vector-0.5), axis=1)>0.5) 
-        input_vector = torch.from_numpy(input_vector[idx])
+        inputs = torch.tensor(self.result_dictionary['inputs'][:])
+        bounds = torch.tensor(self.bounds)
+        input_vector = normalize(inputs, bounds.T)
+
+        # Check if normzalized inputs are below 0 or larger than 1.
+        dummy = torch.abs(input_vector - 0.5)
+        dummy = torch.max(dummy, axis=1).values < 0.5
+        idx = torch.where(dummy)
+ 
+        input_vector = input_vector[idx]
         distances = distances[idx]
         distances = distances.unsqueeze(distances.ndim)
         # Multiply by -1 the task to a maximization problem.
         distances = -distances
 
 
+        if self.covar == 'Matern-5/2':
+            covar_module = gpytorch.kernels.MaternKernel(nu=2.5)
+        if self.covar == 'Matern-3/2':
+            covar_module = gpytorch.kernels.MaternKernel(nu=1.5)
+        if self.covar == 'Matern-1/2':
+            covar_module = gpytorch.kernels.MaternKernel(nu=0.5)
+        if self.covar == 'RBF':
+            covar_module = gpytorch.kernels.RBFKernel(ard_num_dims=len(bounds.T))
         if self.fully_bayesian:
             if self.verbose:
                 print('SaasFullyBayesianSingleTaskGP')
+            # Default kernel is Matern-5/2
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
                      input_vector, 
                      distances)
+            gp.covar_module = covar_module
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
         else:
             if self.verbose:
                 print('SingleTaskGP')
-            covar_module = gpytorch.kernels.MaternKernel(nu=0.5)
             gp = botorch.models.SingleTaskGP(
                                              input_vector,
                                              distances, 
@@ -275,14 +312,16 @@ class BayesianOptimizationSampler(Sampler):
         self.best_f = torch.max(distances)
         if self.result_dictionary_failed != [None]:
 
-            inp = self.result_dictionary['inputs']
-            inp_f = self.result_dictionary_failed['inputs']
-            f_0 = self.result_dictionary['failure']
-            f_1 = self.result_dictionary_failed['failure'][:].astype(float)
+            inp = torch.tensor(self.result_dictionary['inputs'])
+            inp_f = torch.tensor(self.result_dictionary_failed['inputs'])
+            f_0 = torch.tensor(self.result_dictionary['failure'],
+                               dtype=torch.float64)
+            f_1 = torch.tensor(self.result_dictionary_failed['failure'],
+                               dtype=torch.float64)
 
-            gp_failed = botorch.models.SingleTaskGP(torch.from_numpy(
-                self.normalize_input(np.concatenate([inp, inp_f]))),
-                torch.from_numpy(np.concatenate([f_0, f_1])).unsqueeze(0).T)
+            gp_failed = botorch.models.SingleTaskGP(
+                normalize(torch.cat([inp, inp_f]), bounds.T),
+                torch.cat([f_0, f_1]).unsqueeze(0).T)
             mll_gp_failed = gpytorch.mlls.ExactMarginalLogLikelihood(
                 likelihood=gp_failed.likelihood, 
                 model=gp_failed)
@@ -371,9 +410,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each 
                         # key.
-                        result_dictionary[key] = np.concatenate(
-                            (result_dictionary[key], 
-                             [sample_dict[key]])) 
+                        result_dictionary[key].append(sample_dict[key]) 
                 else:
                     result_dictionary = sample_dict
                     for key in result_dictionary.keys():
@@ -383,9 +420,7 @@ class BayesianOptimizationSampler(Sampler):
                     for key in sample_dict.keys():
                         # Append values to the lists corresponding to each 
                         # key.
-                        result_dictionary_failed[key] = np.concatenate(
-                            (result_dictionary_failed[key], 
-                             [sample_dict[key]])) 
+                        result_dictionary_failed[key].append(sample_dict[key]) 
                 else:
                     result_dictionary_failed = sample_dict
                     for key in result_dictionary_failed.keys():
@@ -399,8 +434,6 @@ class BayesianOptimizationSampler(Sampler):
             self.result_dictionary_failed = result_dictionary_failed
         else:
             self.result_dictionary_failed = [None]
-        if normalize:
-            self.normalize_results()
         # Save the result_dictionary into a pickle file.
         if result_dictionary != None:
             res_dump = {'result_dictionary':result_dictionary,
@@ -410,41 +443,6 @@ class BayesianOptimizationSampler(Sampler):
                 'result_dictionary.pkl'),'wb')
             pkl.dump(res_dump, resdict)
             resdict.close()
-
-    def normalize_results(self):
-        # Scale input domain to [0,1]**d
-        if self.result_dictionary == [None]:
-            self.result_dictionary_norm = [None]
-        else:
-	    ## Scale the inputs.
-            input_scaled = self.normalize_input(self.result_dictionary['inputs'])
-            # Scale output N(0, 1)
-            outputs = self.result_dictionary['distances']
-            means = np.mean(outputs, axis=0)
-            stds = np.std(outputs, axis=0)
-            if np.min(stds) > 0:
-                output_scaled = (outputs - means)/stds
-            else:
-                output_scaled = outputs - means
-            result_dictionary_norm = {'inputs':input_scaled, 
-                                      'distances':output_scaled}
-            self.result_dictionary_norm = result_dictionary_norm
-
-    def normalize_input(self, x):
-        # Scale the inputs based on the bounds of the search domain.
-        inpmin = np.min(self.bounds, axis=1)
-        inpmax = np.max(self.bounds, axis=1)
-        inprang = inpmax - inpmin
-        input_scaled = (x - inpmin)/inprang
-        return input_scaled
-
-    def denormalize_input(self, x):
-        # Scale the inputs based on the bounds of the search domain.
-        inpmin = np.min(self.bounds, axis=1)
-        inpmax = np.max(self.bounds, axis=1)
-        inprang = inpmax - inpmin
-        input_scaled = x*inprang + inpmin
-        return input_scaled
 
     # Plotting functionalities
 
@@ -457,28 +455,33 @@ class BayesianOptimizationSampler(Sampler):
         This is a helper function for plotting the sample distributions.
         The coding is not particularly elegant and can certainly be improved.
         """
-        numdist = np.shape(self.result_dictionary['distances'])[1]
-        numinp = np.shape(self.result_dictionary['inputs'])[1]
+        inputs = torch.tensor(self.result_dictionary['inputs'])
+        distances = torch.tensor(self.result_dictionary['distances'])
+
+        numdist = distances[1].shape[0]
+        numinp = inputs[1].shape[0]
         ncols = int(numinp)
         nrows = int(numdist)
         if ncols == 1:
             if nrows == 1:
-                plt.plot(self.result_dictionary['inputs'][:], 
-                         self.result_dictionary['distances'][:],'ko')
+                plt.plot(inputs[:], 
+                         distances[:],'ko')
                 plt.xlabel(self.parameters[0])
             else:
-                fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='col')
+                fig, axs = plt.subplots(nrows=nrows, 
+                                        ncols=ncols, 
+                                        sharex='col')
                 for i in range(numdist):
                     axs[int(i)].plot(
-                        self.result_dictionary['inputs'][:], 
-                        self.result_dictionary['distances'][:,i],'ko')
+                        inputs[:], 
+                        distances[:,i],'ko')
                     if i == numdist - 1:
                         axs[int(i)].set_xlabel(self.parameters[0])
         elif nrows == 1:
             fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharey='row')
             for j in range(numinp):
-                axs[int(j)].plot(self.result_dictionary['inputs'][:,j], 
-                                 self.result_dictionary['distances'][:],'ko')
+                axs[int(j)].plot(inputs[:,j], 
+                                 distances[:],'ko')
                 axs[int(j)].set_xlabel(self.parameters[j])
         else:
             fig, axs = plt.subplots(
@@ -489,27 +492,28 @@ class BayesianOptimizationSampler(Sampler):
             for i in range(numdist):
                 for j in range(numinp):
                     axs[int(i), int(j)].plot(
-                        self.result_dictionary['inputs'][:,j], 
-                        self.result_dictionary['distances'][:,i], 'ko')
+                        inputs[:,j], 
+                        distances[:,i], 'ko')
                     if i == numdist - 1:
                         axs[int(i), int(j)].set_xlabel(self.parameters[j])
         plt.show()
 
-    def plot_GPR(self, plot_dims=[0, 1], base_point = 0):
-        """
-        This is a helper function for plotting the GPR.
-        """
+    def initialize_plot(self, plot_dims=[0, 1], base_point = 0):
+        distances = torch.tensor(self.result_dictionary['distances'])
+        distances = torch.sum(distances, axis=1)
+        distances = standardize(distances)
+        inputs = torch.tensor(self.result_dictionary['inputs'])
+        bounds = torch.tensor(self.bounds)
+
         if base_point == 0:
-            idx = np.where(
-               self.result_dictionary['distances'] ==
-               np.min(self.result_dictionary['distances']))
+            idx = torch.where(distances == torch.min(distances))
             idx = idx[0]
-            base_point = self.result_dictionary['inputs'][idx]
+            base_point = inputs[idx]
 
         # GP is operating in [0,1]^d domain.
         base_point = base_point
-        inpmin = np.min(self.bounds, axis=1)
-        inpmax = np.max(self.bounds, axis=1)
+        inpmin = torch.min(bounds, axis=1).values
+        inpmax = torch.max(bounds, axis=1).values
         inprang = inpmax - inpmin
         input_scaled = (base_point - inpmin)/inprang
         # Establish the plotting axes.
@@ -530,11 +534,22 @@ class BayesianOptimizationSampler(Sampler):
             xt1 = torch.linspace(
                 self.bounds[plot_dims[0]][0], 
                 self.bounds[plot_dims[0]][1], 10000)
+            xt2 = 0
             xtt_vals[:,plot_dims[0]] = torch.linspace(0,1,10000)
 
         for i in range(len(self.bounds)):
             if i not in plot_dims:
                 xtt_vals[:,i] = torch.ones(10000)*input_scaled[0][i]
+
+        return xt1, xt2, xtt_vals, inputs, distances
+
+    def plot_GPR(self, plot_dims=[0, 1], base_point = 0):
+        """
+        This is a helper function for plotting the GPR.
+        """
+
+        xt1, xt2, xtt_vals, inputs, distances = \
+            self.initialize_plot(plot_dims=plot_dims, base_point=base_point)
 
         with torch.no_grad():
             pred = self.model.likelihood(self.model(xtt_vals))
@@ -547,8 +562,8 @@ class BayesianOptimizationSampler(Sampler):
                 plt.ylabel(self.parameters[plot_dims[1]])
             if len(plot_dims) == 1:
                 plt.plot(
-                    self.result_dictionary['inputs'][:,plot_dims[0]], 
-                    self.result_dictionary_norm['distances'][:],'k.')
+                    inputs[:,plot_dims[0]], 
+                    standardize(distances),'k.')
                 plt.plot(xt1, -pred.mean, 'r-')
                 lower, upper = pred.confidence_region()
                 plt.fill_between(xt1, -lower, y2=-upper, alpha=0.5) 
@@ -556,7 +571,8 @@ class BayesianOptimizationSampler(Sampler):
             if self.plot_GPR_file:
                 plt.savefig(os.path.join(self.base_run_dir,
                             'GPR_'+\
-                            str(len(self.result_dictionary['distances']))+'.svg'))
+                            str(len(self.result_dictionary['distances']))+\
+                            '.svg'))
                 plt.close()
             else:
                 plt.show()
@@ -565,41 +581,8 @@ class BayesianOptimizationSampler(Sampler):
         """
         This is a helper function for plotting the posterior.
         """
-        if base_point == 0:
-            idx = np.where(self.result_dictionary['distances'] == \
-                           np.min(self.result_dictionary['distances']))
-            idx = idx[0]
-            base_point = self.result_dictionary['inputs'][idx]
-
-        # GP is operating in [0,1]^d domain.
-        base_point = base_point
-        inpmin = np.min(self.bounds, axis=1)
-        inpmax = np.max(self.bounds, axis=1)
-        inprang = inpmax - inpmin
-        input_scaled = (base_point - inpmin)/inprang
-        # Establish the plotting axes.
-        xtt_vals = torch.zeros((10000,len(self.bounds)))
-        if len(plot_dims) == 2:
-            xt1 = torch.linspace(
-                self.bounds[plot_dims[0]][0], 
-                self.bounds[plot_dims[0]][1], 100)
-            xt2 = torch.linspace(
-                self.bounds[plot_dims[1]][0], 
-                self.bounds[plot_dims[1]][1], 100)
-            xtt1, xtt2 = torch.meshgrid(
-                torch.linspace(0,1,100), 
-                torch.linspace(0,1,100))
-            xtt_vals[:,plot_dims[0]] = xtt1.flatten()
-            xtt_vals[:,plot_dims[1]] = xtt2.flatten()
-        if len(plot_dims) == 1:
-            xt1 = torch.linspace(
-                self.bounds[plot_dims[0]][0], 
-                self.bounds[plot_dims[0]][1], 10000)
-            xtt_vals[:,plot_dims[0]] = torch.linspace(0,1,10000)
-
-        for i in range(len(self.bounds)):
-            if i not in plot_dims:
-                xtt_vals[:,i] = torch.ones(10000)*input_scaled[0][i]
+        xt1, xt2, xtt_vals, inputs, distances = \
+            self.initialize_plot(plot_dims=plot_dims, base_point=base_point)
         
         posterior = self.posterior(xtt_vals, threshold=threshold)
 
