@@ -1,6 +1,5 @@
 # run.py
 import os
-import warnings
 import yaml
 import argparse
 from datetime import datetime
@@ -64,9 +63,9 @@ def main(args: argparse.Namespace, config_path=None):
         try:
             shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
         except Exception as exe:
-            warnings.warn(f"Copying the config file to the base run dir failed.\n \
-                            Try using the full path to the config file.\n \
-                            Here is the exception raised:\n {exe}")
+            log.error(f"Copying the config file to the base run dir failed.\n \
+                        Try using the full path to the config file.\n \
+                        Here is the exception raised:\n {exe}")
     
     log.info("Starting runs...")
     executor.start_runs()
