@@ -4,10 +4,13 @@ import warnings
 import yaml
 import argparse
 from datetime import datetime
-from dask.distributed import print
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
+from enchanted_surrogates.utils.logger import get_logger, setup_logging
 import shutil
+
+log = get_logger(__name__)
+
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
     Loads configuration from a YAML file.
@@ -35,7 +38,7 @@ def load_configuration(config_path: str) -> argparse.Namespace:
             config.executor['runner_config'] = config.runner
         elif 'runner' in config.executor:
             config.executor['runner_config'] = config.executor.pop('runner')
-    print(config)
+    log.debug(config)
     return config
 
 
@@ -53,9 +56,11 @@ def main(args: argparse.Namespace, config_path=None):
     executor = import_executor(type=executor_type, executor_config=args.executor)
     if not os.path.exists(executor.base_run_dir):
         os.makedirs(executor.base_run_dir)
+
+    setup_logging(args.log_level, executor.base_run_dir)
     
     if config_path is not None:
-        print(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
+        log.info(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
         try:
             shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
         except Exception as exe:
@@ -63,14 +68,14 @@ def main(args: argparse.Namespace, config_path=None):
                             Try using the full path to the config file.\n \
                             Here is the exception raised:\n {exe}")
     
-    print("Starting runs...")
+    log.info("Starting runs...")
     executor.start_runs()
-    print("Shutting down scheduler and workers...")
+    log.info("Shutting down scheduler and workers...")
     executor.clean()
     return
 
 if __name__ == "__main__":
-    print(f'{datetime.now()} - Starting Enchanted surrogates.')
+    log.info(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
         "-cf",
@@ -82,4 +87,4 @@ if __name__ == "__main__":
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
     main(args, config_path=config_args.config_file)
-    print(f'{datetime.now()} - Enchanted surrogates finished.')
+    log.info(f'{datetime.now()} - Enchanted surrogates finished.')

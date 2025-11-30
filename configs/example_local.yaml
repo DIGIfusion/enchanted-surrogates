@@ -9,3 +9,4 @@ sampler:
 runner:
   type: ExampleRunner
   other_params: {}
+log_level: "debug"
