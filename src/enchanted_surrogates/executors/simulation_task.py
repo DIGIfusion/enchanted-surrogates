@@ -1,8 +1,10 @@
 import traceback
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.precise_imports import import_runner
 import os
 import pandas as pd
 
+log = get_logger(__name__)
 
 def run_simulation_task(
         runner_config: dict, run_dir: str, params: dict = None, future=None) -> dict:
@@ -21,12 +23,12 @@ def run_simulation_task(
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 
     except Exception as exc:
-        print(
-            "=" * 100,
-            f"\nThere was a Python ERROR on when running a simulation task:\n{exc}\n",
-            "params:", params, "\n",
-            "run_dir:", run_dir, "\n",
-            traceback.format_exc(), flush=True)
+        log.error("=" * 100)
+        log.error("There was a Python ERROR on when running a simulation task:")
+        log.error(exc)
+        log.error(f"params: {params}")
+        log.error(f"run_dir: {run_dir}")
+        log.error(traceback.format_exc())
         # print the whole traceback and not just the last error
         runner_output = {"success": False} 
     if 'success' not in runner_output or not isinstance(runner_output.get('success'), bool):

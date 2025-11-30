@@ -1,9 +1,11 @@
 import os
 import uuid
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.executors.base_executor import Executor
 from enchanted_surrogates.executors.simulation_task import run_simulation_task
 from enchanted_surrogates.utils.precise_imports import import_sampler
 
+log = get_logger(__name__)
 
 class LocalExecutor(Executor):
 
@@ -20,5 +22,5 @@ class LocalExecutor(Executor):
                 self.sampler.register_future(new_future)
 
     def clean(self):
-        print('Local runner doesn\'t clean up any resources')
+        log.warning('Local runner doesn\'t clean up any resources')
         return

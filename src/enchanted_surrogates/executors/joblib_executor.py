@@ -4,8 +4,10 @@ import uuid
 import joblib
 from .base_executor import Executor
 from .simulation_task import run_simulation_task
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.precise_imports import import_sampler
 
+log = get_logger(__name__)
 
 class JoblibExecutor(Executor):
     def __init__(self, *args, **kwargs):
@@ -25,5 +27,5 @@ class JoblibExecutor(Executor):
             self.sampler.register_futures(new_futures)
 
     def clean(self):
-        print('Joblib runner doesn\'t clean up any resources')
+        log.warning('Joblib runner doesn\'t clean up any resources')
         return

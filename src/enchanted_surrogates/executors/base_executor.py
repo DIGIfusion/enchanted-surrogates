@@ -2,7 +2,9 @@
 import os
 import shutil
 from abc import ABC, abstractmethod
+from enchanted_surrogates.utils.logger import get_logger
 
+log = get_logger(__name__)
 
 class Executor(ABC):
     def __init__(
@@ -14,9 +16,9 @@ class Executor(ABC):
         self.output_dir = output_dir  # TODO rename
 
     def create_base_run_dir(self, base_run_dir, config_filepath):
-        print(
+        log.info(
             f"Making directory of simulations at: {base_run_dir}.",
-            "Copying {config_filepath} to CONFIG.yaml."
+            f"Copying {config_filepath} to CONFIG.yaml."
         )
 
         os.makedirs(base_run_dir, exist_ok=True)

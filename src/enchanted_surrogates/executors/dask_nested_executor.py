@@ -3,11 +3,11 @@ TODO: Add module docstring
 """
 import os
 import time
-import warnings
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from dask.distributed import print, as_completed, wait
+from dask.distributed import as_completed, wait
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.precise_imports import import_sampler
 from enchanted_surrogates.utils.precise_imports import import_executor
 from .base_executor import Executor
@@ -18,6 +18,8 @@ from enchanted_surrogates.utils.print_stats_table import print_stats_table
 # Then using cluster.scale().also call future.cancel() and future.release() del future
 # to be sure it is not holding back the dynamic scaling
 
+log = get_logger(__name__)
+
 class DaskNestedExecutor(Executor):
     """
     TODO: add docstring
@@ -27,7 +29,7 @@ class DaskNestedExecutor(Executor):
         """
         TODO: add docstring
         """
-        print('INITIALISING NESTED EXECUTOR')
+        log.info('INITIALISING NESTED EXECUTOR')
         self.type = kwargs.get('type')
         self.base_run_dir=base_run_dir
         self.executor_names = list(executors.keys())
@@ -35,7 +37,7 @@ class DaskNestedExecutor(Executor):
         self.executor_types = [exe_config['type'] for exe_config in self.executors_config]
         self.runner_types = [executor_config['runner_config']['type'] for executor_config in self.executors_config]
         self.dask_worker_std_out_dirs = [os.path.join(self.base_run_dir, f'worker_out_{self.runner_types[i]}_{i}') for i in range(len(executors))]
-        print('THE EXECUTORS WILL BE RAN WITH THESE CODES IN THE FOLLOWING ORDER:\n',
+        log.info('THE EXECUTORS WILL BE RAN WITH THESE CODES IN THE FOLLOWING ORDER:\n',
               self.runner_types)
         self.executors = []
         self.reuse_bool = []
@@ -72,7 +74,7 @@ class DaskNestedExecutor(Executor):
         self.shutdown_finished_clusters = kwargs.get('shutdown_finished_clusters', False)
         self.do_dynamic_scale_down = kwargs.get('do_dynamic_scale_down', False)
         if self.do_dynamic_scale_down:
-            warnings.warn('DYNAMIC SCALE DOWN IS NOT YET IMPLIMENTED')
+            log.warning('DYNAMIC SCALE DOWN IS NOT YET IMPLIMENTED')
         # self.stop_dynamic_scale_events = [[threading.Event() for _ in self.executors]]
         
         self.current_samples_df = None
@@ -102,9 +104,9 @@ class DaskNestedExecutor(Executor):
         """
         
         start = time.time()
-        print('BASE RUN DIR:', self.base_run_dir)
+        log.info('BASE RUN DIR:', self.base_run_dir)
         if not os.path.exists(self.base_run_dir):
-            print('MAKING BASE RUN DIR:',self.base_run_dir)
+            log.info('MAKING BASE RUN DIR:',self.base_run_dir)
             os.makedirs(self.base_run_dir)
 
         # if self.do_dynamic_scale_down:
@@ -139,13 +141,13 @@ class DaskNestedExecutor(Executor):
         
         samples = self.sampler.get_next_samples()
         self.current_samples_df = pd.DataFrame(samples)
-        print('TOTAL NUMBER OF SAMPLES TO BE RAN:', len(self.current_samples_df))
+        log.info('TOTAL NUMBER OF SAMPLES TO BE RAN:', len(self.current_samples_df))
         sampler_cumulative_params = []
         for i, executor in enumerate(self.executors):
             # if self.do_dynamic_scale_down:
             #     self.start_dynamic_scale_down_background(exe_i=i, batch_num=batch_num)
             if i == 0:
-                print(f"STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
+                log.info(f"STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 executor.start_cluster(slurm_out_dir=self.dask_worker_std_out_dirs[i])
                 sampler_i_params = self.sampler.all_samplers[i].parameters
                 sampler_cumulative_params += sampler_i_params
@@ -163,7 +165,7 @@ class DaskNestedExecutor(Executor):
                 if self.start_cluster_when_needed:
                     # This will wait untill atleast one future is finished of the first sub executor
                     previous_success = False
-                    print('*'*100,f'\n\nTIME: {datetime.now()}\nWAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}\n\n','*'*100)
+                    log.info('*'*100,f'\n\nTIME: {datetime.now()}\nWAITING FOR ONE FUTURE TO COMPLETE WITH SUCCESS FROM RUNNER {i-1}: {self.runner_types[i-1]}\n\n','*'*100)
                     start = time.time()
                     while not previous_success:
                         done_status = [future.done() for future in self.all_futures[i-1]]
@@ -175,10 +177,10 @@ class DaskNestedExecutor(Executor):
                                     suc.append(pr['success'])
                             if any(suc):
                                 previous_success = True
-                                print(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
+                                log.info(f'{datetime.now()} ONE FUTURE HAS COMPLETED WITH SUCCESS FOR NESTED DEPTH:',i-1)
                         time.sleep(1)
                 
-                print(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
+                log.info(f"{datetime.now()} STARTING CLUSTER: {i} FOR {executor.runner_config['type']}")
                 # start cluster or assign client when reusing
                 if self.reuse_bool[i]:
                     executor.client = self.executors[self.reuse_index[i]].client
@@ -229,9 +231,9 @@ class DaskNestedExecutor(Executor):
                         
                 if self.shutdown_finished_clusters:
                     cluster_status = [future.done() for future in self.all_futures[i-1]]
-                    print(f"STATUS OF CLUSTER: {i-1} | {self.executors[i-1].runner_config['type']} | {cluster_status}")
+                    log.info(f"STATUS OF CLUSTER: {i-1} | {self.executors[i-1].runner_config['type']} | {cluster_status}")
                     if all(cluster_status) and not i-1 in self.keep_alive:
-                        print(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
+                        log.info(f'CLOSING WORKERS FOR EXECUTOR: {i-1}')
                         self.executors[i-1].clean()
                             
         # write the results for the last set of futures.
@@ -242,7 +244,7 @@ class DaskNestedExecutor(Executor):
             for j, future in enumerate(done):
                 result = self.get_result(future, timeout=5)
                 if not result:
-                    print('NO RESULT FOUND SKIPPING FOR NOW')
+                    log.info('NO RESULT FOUND SKIPPING FOR NOW')
                     continue
                 
                 self.update_completion_stats(result,len(self.executors)-1)
@@ -267,19 +269,19 @@ class DaskNestedExecutor(Executor):
             
         if self.shutdown_finished_clusters:
             cluster_status = [future.done() for future in self.all_futures[-1]]
-            print(f"STATUS OF CLUSTER: {len(self.executors)-1} | {executor.runner_config['type']} | {cluster_status}")
+            log.info(f"STATUS OF CLUSTER: {len(self.executors)-1} | {executor.runner_config['type']} | {cluster_status}")
             if all(cluster_status) and not len(self.executors) in self.keep_alive:
-                print('CLOSING WORKERS FOR EXECUTOR:', len(self.executors)-1)
+                log.info('CLOSING WORKERS FOR EXECUTOR:', len(self.executors)-1)
                 self.executors[-1].clean()
         
         print_stats_table(self.log_stats)
                             
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
-        print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
+        log.info('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
+        log.info('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        log.info('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
-        print('CLUSTER SHUTDOWN')
+        log.info('CLUSTER SHUTDOWN')
         self.clean()
         
     def get_results(self, futures):
@@ -366,15 +368,15 @@ class DaskNestedExecutor(Executor):
                             result = df.iloc[0].to_dict()
                             self.log_stats['fut_res_not_available'] += 1
                         except pd.errors.EmptyDataError as e:
-                            print('EMPTY DATA ERROR: WAITING LONGER\n',e)
+                            log.error('EMPTY DATA ERROR: WAITING LONGER\n',e)
                     else:
-                        if not silent: print('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
+                        if not silent: log.warning('ENCHANTED DATA POINT FILE DOES NOT EXIST, FUTURE NOT FINISHED:', result_dir)
                 else:
                     raise RuntimeError(f'THIS FUTURE HAS BEEN SUBMITTED BUT THE RUN_DIR WAS NOT ADDED TO fut_to_rundir, future.key: {future.key}')
                 if not result:
                     if timeout == 0:
                         break
-                    if not silent: print('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
+                    if not silent: log.info('SLEEPING TO SEE IF THE RESULT WILL BECOME AVAILABLE, sec passed:', time.time()-started)
                     time.sleep(1)
         return result
     

@@ -8,10 +8,10 @@ from time import sleep
 import numpy as np
 
 from .base_runner import Runner
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.is_package_available import is_package_available
 
-if is_package_available('dask'):
-    from dask.distributed import print
+log = get_logger(__name__)
 
 
 def is_number(x):
@@ -216,7 +216,7 @@ class ExampleRunner(Runner):
 
         # Sleep for configured duration
         sleep_sec = self.get_sleep_sec()
-        print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+        log.info(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
         sleep(sleep_sec)
 
         result = {"output": output, "success": True}

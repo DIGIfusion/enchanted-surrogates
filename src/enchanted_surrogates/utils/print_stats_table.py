@@ -1,14 +1,16 @@
 import shutil
 from datetime import datetime
+from enchanted_surrogates.utils.logger import get_logger
 
+log = get_logger(__name__)
 
 def print_stats_table(stats):
     """
-    Prints a formatted, bordered, and centered table of run statistics in the terminal.
+    Logs a formatted and bordered table of run statistics.
 
     This function takes a dictionary containing metadata and statistics for a run (such as a game session,
     simulation, or process) and displays it in a visually appealing format. It includes a bold header,
-    optional subheader, and a bordered list of key-value pairs, all centered within the terminal window.
+    optional subheader, and a bordered list of key-value pairs.
 
     Parameters:
     -----------
@@ -34,7 +36,7 @@ def print_stats_table(stats):
 
     Output:
     -------
-    A centered, bordered block in the terminal that looks like:
+    A bordered block that looks like:
 
     +---------------------------------------------+
     |           ** ENCHANTED SURROGATES **        |
@@ -47,11 +49,6 @@ def print_stats_table(stats):
     |  Final Score         : 9820                 |
     +---------------------------------------------+
 
-    Notes:
-    ------
-    - The output adapts to the current terminal width.
-    - All content is padded and aligned for readability.
-    - The function uses `shutil.get_terminal_size()` to determine centering.
     """
     # Extract header and subheader
     header = stats.get("header", "STATS").upper()
@@ -59,9 +56,6 @@ def print_stats_table(stats):
 
     # Remove header and subheader from stats
     stats = {k: v for k, v in stats.items() if k not in ["header", "subheader"]}
-
-    # Get terminal width
-    term_width = shutil.get_terminal_size().columns
 
     # Format header and subheader
     header_line = f"** {header} **"
@@ -75,20 +69,16 @@ def print_stats_table(stats):
     # Build border
     border = "+" + "-" * (box_width - 2) + "+"
 
-    # Center lines
-    def center(line): return line.center(box_width)
-
     # Assemble output
     output = [border]
-    output.append(center(header_line))
+    output.append(header_line)
     if subheader_line:
-        output.append(center(subheader_line))
-    output.append(center(f'{datetime.now()}'))
+        output.append(subheader_line)
+    output.append(f'{datetime.now()}')
     output.append(border)
     for line in stat_lines:
         output.append(f"|  {line.ljust(box_width - 4)}  |")
     output.append(border)
 
-    # Print centered in terminal
     for line in output:
-        print(line.center(term_width))
+        log.info(line)
