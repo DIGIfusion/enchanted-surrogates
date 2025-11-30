@@ -38,3 +38,5 @@ executor:
         - 'source /path/to/venv/bin/activate'
         - 'export PYTHONPATH=$PYTHONPATH:/path/to/enchanted-surrogates/src' 
         - 'cd /path/to/dir/ENCHSUR_RUN'
+
+log_level: "debug"
