@@ -14,10 +14,9 @@ def fake_sampler():
         sampler.get_next_samples.side_effect = sample_batches
 
         # Budget ends after all batches have been consumed
-        def has_budget():
-            return sampler.get_next_samples.call_count < len(sample_batches)
-
-        type(sampler).has_budget = property(lambda self: has_budget())
+        type(sampler).has_budget = property(
+            lambda self: self.get_next_samples.call_count < len(sample_batches)
+        )
 
         return sampler
 
