@@ -10,17 +10,22 @@ class RandomSampler(Sampler):
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
+        self.include_index = kwargs.get('include_index', False)
 
     def get_next_samples(self) -> list[dict]:
         # TODO not use uniform?
         # TODO batch samples
-        list_param_dicts = []
+        samples = []
         for _ in range(self.batch_size):
             params = [np.random.uniform(low, high) for low, high in self.bounds]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
-            list_param_dicts.append(param_dict)
-        self.submitted += len(list_param_dicts)
-        return list_param_dicts
+            samples.append(param_dict)
+        
+        if self.include_index:
+            samples = [{**samp, 'index': ind} for samp, ind in zip(samples, range(self.submitted,len(samples)))]
+        
+        self.submitted += len(samples)
+        return samples
 
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """
