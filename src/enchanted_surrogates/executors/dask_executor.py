@@ -84,7 +84,7 @@ class DaskExecutor(Executor):
         self.current_batch = 0
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
         self.submit_command = kwargs.get('submit_command', None)
-        
+        self.enchanted_dataset_headder = None
         self.psudo_runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
 
 
@@ -354,13 +354,19 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
 
                     # print('FUTURE RESULT',result, type(result))
                     success = result['success']
-                    result = {k:[v] for k,v in result.items()}
                     result['batch_num'] = self.current_batch
+                    result = {k:[v] for k,v in result.items()}
                     dfi = pd.DataFrame(result)
                     dfs.append(dfi)
-                    
-                    print('debug result success,', result['success'])
+                                                                        
                     if success:
+                        if not self.enchanted_dataset_headder:
+                            self.enchanted_dataset_headder = result.keys()
+                        extra_keys = [key for key in result.keys() if key not in self.enchanted_dataset_headder]
+                        if extra_keys:
+                            warnings.warn(f'A RESULT TO BE WRITTEN TO ENCHANTED DATASET HAS MORE HEADDER VALUES THAN IN THE FIRST SUCESSFUL RESULT. EXPECTED HEADDER: {self.enchanted_dataset_headder}. EXTRA HEADDER: {extra_keys}. FULL RESULT: {result}. THE extra_keys WILL BE REMOVED')
+                            dfi.drop(extra_keys, axis=1)
+                            
                         if os.path.exists(enchanted_dataset_batch_path_success):
                             dfi.to_csv(enchanted_dataset_batch_path_success, mode='a', header=False, index=False)
                         else:
