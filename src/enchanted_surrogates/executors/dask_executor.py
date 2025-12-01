@@ -381,10 +381,10 @@ class DaskExecutor(Executor):
 
         cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if cpu_ps.returncode == 0:
-            nanny_secs = int(cpu_ps.stdout.strip())
-            print(f"Total CPU time used by nanny: {nanny_secs/3600}")
+            headnode_secs = int(cpu_ps.stdout.strip())
+            print(f"Total CPU time used by head node: {headnode_secs/3600}")
         else:
-            print(f"Fetching nanny CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
+            print(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
 
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
