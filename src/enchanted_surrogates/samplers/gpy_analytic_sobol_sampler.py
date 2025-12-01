@@ -837,7 +837,6 @@ class GpyAnalyticSobolSampler(Sampler):
             print('debug shape variances self.gp_model.likelihood.variance.shape: in noise and var', self.gp_model.likelihood.variance.shape)
             # Y_metadata = {'output_index': np.arange(X_pool.shape[0]).reshape(-1,1)}
             mu, var_model = self.gp_model.predict_noiseless(X_pool)
-
             # _, var_model = self.gp_model.predict(X_pool)
             var_model = var_model.flatten()
 
