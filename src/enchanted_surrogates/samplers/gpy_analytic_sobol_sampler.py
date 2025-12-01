@@ -7,6 +7,7 @@ from scipy.special import erf
 from sklearn.model_selection import KFold
 import numpy as np
 import pandas as pd
+import traceback
 import GPy
 import time
 from enchanted_surrogates.samplers.base_sampler import Sampler
@@ -110,10 +111,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.initial_pool_size = kwargs.get('initial_pool_size', 5000)
         self.pool = None
         self._init_pool()
-
-        # training storage
-        self.train = {}  # map tuple(x) -> y
-
+        
         # GPy model (global) and cached hyperparams / solver
         self.gp_model = None
         self.kernel_variance = None
@@ -199,13 +197,14 @@ class GpyAnalyticSobolSampler(Sampler):
     def get_initial_samples(self, *args, **kwargs):
         # If a sub-sampler is configured, prefer it for initial samples
         if self.sub_sampler is not None:
-            samples = self.sub_sampler.get_next_samples() * self.num_repeats
+            samples = self.sub_sampler.get_next_samples()
             if samples:
                 self.batch_number += 1
                 self.submitted += len(samples)
                 self.custom_submitted += len(samples)
                 # remove samples from pool if present
                 self._remove_from_pool(samples)
+                samples = samples * self.num_repeats
                 if self.include_index:
                     samples = [
                         {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
@@ -222,14 +221,15 @@ class GpyAnalyticSobolSampler(Sampler):
             chosen = self.pool[idxs]
             real_chosen = self.from_unit(chosen)
             self.pool = np.delete(self.pool, idxs, axis=0)
-            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in real_chosen] * self.num_repeats
+            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in real_chosen]
         elif self.initial_pool_samples_strategy == 'first':
             n = min(self.initial_batch_size, len(self.pool))
             chosen = self.pool[:n]
             real_chosen = self.from_unit(chosen)
             self.pool = self.pool[n:]
-            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in real_chosen] * self.num_repeats
+            samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in real_chosen]
 
+        samples = samples * self.num_repeats
         if self.include_index:
             samples = [
                 {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
@@ -260,41 +260,154 @@ class GpyAnalyticSobolSampler(Sampler):
     # Main sampling loop
     # ---------------------------
     
-    def append_train_data(self, batch_dir):
-        new_data_df = pd.read_csv(os.path.join(batch_dir, 'enchanted_dataset.csv'))
-        output_col = [col for col in new_data_df.columns if 'output' in col]
+    def get_data(self):
+        data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        output_col = [col for col in data_df.columns if 'output' in col]
         if len(output_col) != 1:
             raise RuntimeError('Exactly one output column required.')
 
-        train_df = new_data_df[self.parameters + output_col]
-        new_train = {
-            tuple(row[col] for col in self.parameters): float(row[output_col[0]])
-            for _, row in train_df.iterrows()
-        }
-        self.train = {**self.train, **new_train}
+        X_real = data_df[self.parameters].to_numpy()
+        Y = data_df[output_col].to_numpy().reshape(-1,1)
+        return X_real, Y
 
     def _get_unitXY(self):
-        X_real = np.array([list(k) for k in self.train.keys()], dtype=float)
-        Y = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
+        X_real, Y = self.get_data()
         X_unit = self.to_unit(X_real)
         return X_unit, Y
+        
+    # def fit(self):
+    #     X, Y = self._get_unitXY()
+    #     # ---------------------------
+    #     # Global GP fit (optimize hyperparameters once)
+    #     # ---------------------------
+    #     input_dim = X.shape[1]
+    #     kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
+    #     self.gp_model = GPy.models.GPRegression(X, Y, kernel)
+    #     self.gp_model.Gaussian_noise.variance.constrain_positive()
+    #     if self.optimize_global:
+    #         try:
+    #             self.gp_model.optimize(messages=False)
+    #         except Exception as exc:
+    #             print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc} \n TRACEBACK:\n{traceback.format_exc()}')
     
+    def _get_unitXY_with_noise(self):
+        """
+        Returns:
+        X_unit     : scaled inputs (unique points)
+        Y_unique   : averaged outputs at each unique point
+        noise_vars : variance of repeats at each point (jitter if none)
+        se_vars    : standard error of variance at each point
+        mean_sems  : standard error of the mean at each point
+        counts     : number of repeats at each point
+        """
+        
+        X_real, Y = self.get_data()
+
+        # group by unique points
+        unique_points, inverse = np.unique(X_real, axis=0, return_inverse=True)
+        noise_vars = np.zeros(len(unique_points))
+        se_vars = np.zeros(len(unique_points))
+        Y_unique = np.zeros(len(unique_points))
+        mean_sems = np.zeros(len(unique_points))
+        counts = np.zeros(len(unique_points), dtype=int)
+
+        for i, up in enumerate(unique_points):
+            idxs = np.where(inverse == i)[0]
+            y_vals = Y[idxs].flatten()
+            counts[i] = len(y_vals)
+            Y_unique[i] = np.mean(y_vals)
+
+            if counts[i] > 1:
+                v = np.var(y_vals, ddof=1)
+                noise_vars[i] = v
+                # standard error of variance estimate
+                se_vars[i] = np.sqrt(2 * (v**2) / (counts[i] - 1))
+                # standard error of the mean
+                mean_sems[i] = np.std(y_vals, ddof=1) / np.sqrt(counts[i])
+            else:
+                noise_vars[i] = 1e-8  # jitter if no repeats
+                se_vars[i] = 1e-8     # jitter for SE as well
+                mean_sems[i] = 1e-8   # jitter for SEM
+
+        X_unit = self.to_unit(unique_points)
+        return X_unit, Y_unique.reshape(-1,1), noise_vars, se_vars, mean_sems, counts
+
+
     def fit(self):
-        X, Y = self._get_unitXY()
-        # ---------------------------
-        # Global GP fit (optimize hyperparameters once)
-        # ---------------------------
-        input_dim = X.shape[1]
-        kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
-        self.gp_model = GPy.models.GPRegression(X, Y, kernel)
-        self.gp_model.Gaussian_noise.variance.constrain_positive()
+        """
+        Fit the main GP surrogate using per-point noise via heteroscedastic regression.
+        If repeats exist, also fit the noise GP.
+        """
+        X, Y, noise_vars, se_vars, _, _ = self._get_unitXY_with_noise()
+        kernel = GPy.kern.RBF(input_dim=X.shape[1], ARD=True)
+
+        # Heteroscedastic model: allows per-point variances
+        self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y, kernel)
+
+        # Inject known per-point noise variances and fix them        
+        nv = noise_vars.reshape(-1, 1)
+        self.gp_model.likelihood.variance[:] = nv
+        self.gp_model.likelihood.variance.fix()
+
+        # Optimize kernel hyperparameters only
         if self.optimize_global:
             try:
                 self.gp_model.optimize(messages=False)
             except Exception as exc:
-                print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc} \n TRACEBACK:\n{traceback.format_exc()}')
+                print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc}')
+
+        # Fit noise GP if any repeats exist (non-jitter)
+        if self.num_repeats > 1:
+            self.fit_noise(X, noise_vars, se_vars)
+
+    def fit_noise(self, X, noise_vars, se_vars):
+        """
+        Fit a GP to model per-point noise (std), with heteroscedastic training noise
+        equal to the standard error of the variance estimate at each point.
+        """
+        # Train targets = std (sqrt of variance)
+        noise_targets = np.sqrt(np.maximum(noise_vars, 0.0)).reshape(-1, 1)
+        kernel = GPy.kern.RBF(input_dim=X.shape[1], ARD=True)
+
+        # Heteroscedastic model for noise GP
+        self.noise_gp = GPy.models.GPHeteroscedasticRegression(X, noise_targets, kernel)
+
+        # Per-point training noise = SE(var) (fixed)
+        se = se_vars.reshape(-1, 1)
+        self.noise_gp.likelihood.variance[:] = se**2
+        self.noise_gp.likelihood.variance.fix()
+
+        try:
+            self.noise_gp.optimize(messages=False)
+        except Exception as exc:
+            print(f'GLOBAL NOISE OPTIMIZE FAILED. ERROR: {exc}')
+
+    def predict_noise(self, X_test):
+        """
+        Predict per-point noise (std dev) using the fitted noise GP.
+        Returns:
+        - predicted std (mean of std process)
+        - predictive error on the std (posterior std of the noise GP)
+        """
+        if not hasattr(self, 'noise_gp') or self.noise_gp is None:
+            raise RuntimeError("Noise GP not fitted. Call fit() first with repeats.")
+
+        X_unit_test = self.to_unit(X_test)
+        pred_std_mean, pred_std_var = self.noise_gp.predict_noiseless(X_unit_test)
+
+        pred_std = pred_std_mean.flatten()
+        pred_std_err = np.sqrt(np.maximum(pred_std_var.flatten(), 0.0))
+        return pred_std, pred_std_err
     
-    
+    def predict_single_run_error(self, X_test):
+        """
+        Approximate the error of a single run at X_test:
+        single_run_error ≈ 2 * (predicted noise std + its predictive error)
+        This corresponds to ~97% Gaussian coverage (≈ 2σ) with a conservative bump.
+        """
+        pred_std, pred_err = self.predict_noise(X_test)
+        return 2.0 * (pred_std + pred_err)
+
     def get_next_samples(self, batch_dir=None, *args, **kwargs):
         if self.batch_number == 0:
             return self.get_initial_samples()
@@ -302,11 +415,8 @@ class GpyAnalyticSobolSampler(Sampler):
         if not self.base_run_dir:
             raise RuntimeError('base_run_dir must be set to retrieve training data.')
 
-        prev_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
-        self.append_train_data(prev_batch_dir)
-        
-        X, Y = self._get_unitXY()
         self.fit()
+        print('debug shape variances self.gp_model.likelihood.variance.shape:', self.gp_model.likelihood.variance.shape)
             
         # Extract and cache hyperparameters
         self.cache_hypers()
@@ -356,20 +466,21 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             print(f'SPLITTING DATA INTO FOLDS')
             # Use folds but reuse global hyperparams (no re-optimizing)
-            n_folds = min(self.n_ensembles,len(self.train)) #min(self.batch_size, max(1, len(self.train)))
+            X_all, Y_all, noise_vars_all, se_vars_all, _, _ = self._get_unitXY_with_noise()
+
+            n_folds = min(self.n_ensembles,len(Y_all))
             samples_per_fold = self.split_integer(self.batch_size, self.n_ensembles)
             kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
-            X_all, Y_all = self._get_unitXY()
-            # X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
-            # Y_all = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
-
+            
             chosen_indices = []
             for i, train_idx, _ in enumerate(kf.split(X_all)):
                 print(f'CALCULATING ACQUISITON FUNCTION FOR FOLD {i+1}')
                 X_fold = X_all[train_idx]
                 Y_fold = Y_all[train_idx]
                 # Build kernel with cached hyperparams and do NOT optimize
-                kernel_fold = GPy.kern.RBF(input_dim=input_dim, ARD=True)
+                kernel_fold = GPy.kern.RBF(input_dim=X_fold.shape[1], ARD=True)
+                
+                
                 # assign hyperparameters back to kernel object
                 try:
                     kernel_fold.variance = self.kernel_variance
@@ -383,20 +494,18 @@ class GpyAnalyticSobolSampler(Sampler):
                     except Exception:
                         pass
 
-                model_fold = GPy.models.GPRegression(X_fold, Y_fold, kernel_fold)
-                # set noise to global noise and fix
-                try:
-                    model_fold.likelihood.variance = self.noise_variance
-                    model_fold.Gaussian_noise.variance.fix(self.noise_variance)
-                except Exception:
-                    pass
+                model_fold = GPy.models.GPHeteroscedasticRegression(X_fold, Y_fold, kernel_fold)
+                nv = noise_vars_all[train_idx].reshape(-1, 1)
 
-                try:
-                    # Do not optimize kernel; only allow small local noise adjustment if desired
-                    model_fold.optimize_restarts(num_restarts=0, messages=False)
-                except Exception:
-                    # ignore fold optimization failures
-                    pass
+                model_fold.likelihood.variance[:] = nv
+                model_fold.likelihood.variance.fix()
+
+                # try:
+                #     # Do not optimize kernel; only allow small local noise adjustment if desired
+                #     model_fold.optimize_restarts(num_restarts=0, messages=False)
+                # except Exception:
+                #     # ignore fold optimization failures
+                #     pass
 
                 # _, var_f = model_fold.predict(self.pool)
                 # var_f = var_f.flatten()
@@ -440,14 +549,32 @@ class GpyAnalyticSobolSampler(Sampler):
             # remove chosen points from pool
             self.pool = np.delete(self.pool, chosen_indices_final, axis=0)
 
+        samples = samples * self.num_repeats
+        if self.include_index:
+            samples = [{**samp, 'index': ind} for samp, ind in zip(samples, range(self.custom_submitted,len(samples)))]
+        
         # increment counters and return
         self.batch_number += 1
         if self.custom_submitted >= self.budget:
+            print('DOING LIGHT POST PROCESSING FROM SAPLER')
+            self.post_process()
             return None
+
         if samples is not None:
             self.custom_submitted += len(samples)
+        
         return samples
 
+    def load_model(self, model_path=None, directory=None):
+        if model_path == None:
+            if os.path.exists(os.path.join(directory, 'gpy_model.csv')):
+                model_path = os.path.join(directory, 'gpy_model.csv')
+        
+        with open(model_path, 'rb') as file:
+            self.gp_model = pickle.load(file)
+            self.cache_hypers()
+            self.cache_K()
+    
     def cache_hypers(self):
         try:
             self.kernel_variance = float(self.gp_model.kern.variance.values[0])
@@ -458,15 +585,17 @@ class GpyAnalyticSobolSampler(Sampler):
         except Exception:
             ls = np.atleast_1d(self.gp_model.kern.lengthscale)
         self.lengthscales = np.array(ls, dtype=float).reshape(-1)
-        try:
-            self.noise_variance = float(self.gp_model.likelihood.variance.values[0])
-        except Exception:
-            self.noise_variance = float(self.gp_model.likelihood.variance)
+        self.noise_variances = self.gp_model.likelihood.variance[:]
+
+        # try:
+        #     self.noise_variance = float(self.gp_model.likelihood.variance.values[0])
+        # except Exception:
+        #     self.noise_variance = float(self.gp_model.likelihood.variance)
 
     def cache_K(self):
         X, Y = self._get_unitXY()
-        # X = np.array([list(k) for k in self.train.keys()], dtype=float)
-        K_full = self.gp_model.kern.K(X) + np.eye(X.shape[0]) * max(self.noise_variance, 1e-8)
+        diag_noise = np.diag(self.gp_model.likelihood.variance[:])
+        K_full = self.gp_model.kern.K(X) + diag_noise
         jitter = 1e-8
         K_full_j = K_full + np.eye(K_full.shape[0]) * jitter
         try:
@@ -486,22 +615,19 @@ class GpyAnalyticSobolSampler(Sampler):
     # ---------------------------
     # Predictor
     # ---------------------------
-
+    
     def surrogate_predict(self, samples):
-        """Accept samples in real bounds, scale to unit, predict with GP."""
+        """
+        Accept samples in real bounds, scale to unit, predict with GP.
+        Return mean and posterior std of the mean function.
+        """
         if self.gp_model is None:
-            if len(self.train) == 0:
-                raise RuntimeError('No training data to build surrogate.')
-            X_unit, Y = self._get_unitXY()
-            kernel = GPy.kern.RBF(input_dim=X_unit.shape[1], ARD=True)
-            self.gp_model = GPy.models.GPRegression(X_unit, Y, kernel)
-            try:
-                self.gp_model.optimize(messages=False)
-            except Exception:
-                pass
+            self.fit()
+
         samples_unit = self.to_unit(samples)
-        ypred, _ = self.gp_model.predict(samples_unit)
-        return ypred.flatten()
+        ypred, post_var = self.gp_model.predict_noiseless(samples_unit)
+        return ypred.flatten(), np.sqrt(np.maximum(post_var.flatten(), 0.0))
+
         
     # ---------------------------
     # Integrals and analytic UQ (predictor-only: Marrel et al.)
@@ -535,12 +661,7 @@ class GpyAnalyticSobolSampler(Sampler):
     def uq_analysis(self):
         print("\n\n\n ================================== \n\n\n")
 
-        if len(self.train) == 0:
-            raise RuntimeError('No training data available for UQ analysis.')
-
         X, y = self._get_unitXY()
-        # X = np.array([list(k) for k in self.train.keys()], dtype=float)
-        # y = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
         n, D = X.shape
         vol = 1 #np.prod([b[1] - b[0] for b in self.bounds])
         # real_vol = np.prod(self._range)   # real domain volume
@@ -549,7 +670,8 @@ class GpyAnalyticSobolSampler(Sampler):
         I = self._integral_k_over_domain(X)
 
         # Use cached solver to invert K without forming explicit inverse
-        K = self.gp_model.kern.K(X) + np.eye(n) * max(self.noise_variance, 1e-8)
+        # K = self.gp_model.kern.K(X) + np.eye(n) * max(self.noise_variance, 1e-8)
+        K = self.gp_model.kern.K(X) + np.diag(np.maximum(self.noise_variances, 1e-8))
         try:
             K_inv_y = self._solve_K(y)
         except Exception:
@@ -645,7 +767,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
             X_test = test_df[self.parameters].values
             y_test = test_df[out_col[0]].values
-            y_pred = self.surrogate_predict(X_test)
+            y_pred, _ = self.surrogate_predict(X_test)
             # print('debug, xtest', X_test)
             print('debug, ytest n nans', np.isnan(y_test).sum())
             print('debug, ypred n nans', np.isnan(y_pred).sum())
@@ -707,10 +829,30 @@ class GpyAnalyticSobolSampler(Sampler):
         if model is None:
             model = self.gp_model
         if mode == "var":
-            mu, var = model.predict(X_pool)
+            mu, var = model.predict_noiseless(X_pool)
             return var.flatten()
+        
+        if mode == "noise_and_var":
+            # GP posterior variance
+            print('debug shape variances self.gp_model.likelihood.variance.shape: in noise and var', self.gp_model.likelihood.variance.shape)
+            # Y_metadata = {'output_index': np.arange(X_pool.shape[0]).reshape(-1,1)}
+            mu, var_model = self.gp_model.predict_noiseless(X_pool)
 
-        elif mode == "gradVar":
+            # _, var_model = self.gp_model.predict(X_pool)
+            var_model = var_model.flatten()
+
+            # predicted noise std + error from noise_gp
+            noise_std, noise_err = self.predict_noise(self.from_unit(X_pool))
+            var_noise = (noise_std + noise_err)**2
+
+            return var_model + var_noise
+
+        if mode == "noise":
+            noise_std, noise_err = self.predict_noise(self.from_unit(X_pool))
+            var_noise = (noise_std + noise_err)**2
+            return var_noise
+
+        elif mode == "grad":
             # Ensure X_pool is 2D
             X_pool = np.atleast_2d(X_pool)
 
@@ -725,25 +867,6 @@ class GpyAnalyticSobolSampler(Sampler):
         elif mode == "intVar":
             return self.integral_variance_reduction(X_pool)
 
-        elif mode == "ensembleDisagreement":
-            # compute variance of predictions across folds
-            preds = []
-            n_folds = min(5, max(2, len(self.train)))
-            kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
-            X_all, Y_all = self._get_unitXY()
-            # X_all = np.array([list(k) for k in self.train.keys()], dtype=float)
-            # Y_all = np.array(list(self.train.values())).reshape(-1, 1)
-            for train_idx, _ in kf.split(X_all):
-                X_fold, Y_fold = X_all[train_idx], Y_all[train_idx]
-                kernel_fold = GPy.kern.RBF(input_dim=X_fold.shape[1], ARD=True)
-                kernel_fold.variance = self.kernel_variance
-                kernel_fold.lengthscale = self.lengthscales.copy()
-                model_fold = GPy.models.GPRegression(X_fold, Y_fold, kernel_fold)
-                model_fold.likelihood.variance = self.noise_variance
-                mu_f, _ = model_fold.predict(X_pool)
-                preds.append(mu_f.flatten())
-            preds = np.vstack(preds)
-            return preds.var(axis=0)
         else:
             raise ValueError(f"Unknown acquisition mode: {mode}")
 
@@ -769,11 +892,10 @@ class GpyAnalyticSobolSampler(Sampler):
 
     def integral_variance_reduction(self, X_pool):
         X_train, _ = self._get_unitXY()
-        # X_train = np.array([list(k) for k in self.train.keys()], dtype=float)
         n_train = X_train.shape[0]
 
         # Kernel matrix and inverse
-        K = self.gp_model.kern.K(X_train) + np.eye(n_train) * self.noise_variance
+        K = self.gp_model.kern.K(X_train) + np.diag(np.maximum(self.noise_variances, 1e-8))
         K_inv = np.linalg.pinv(K)
 
         # Kernel mean features for training points
@@ -796,6 +918,39 @@ class GpyAnalyticSobolSampler(Sampler):
         # Safe division
         results = np.where(denom > 1e-12, num / denom, 0.0)
         return results
+
+    def post_process(self):
+        """
+        Collapse repeated input points into unique entries and write
+        enchanted_dataset_collapsed.csv with mean, std, mean_error, std_error, and count.
+
+        Output file is written into self.base_run_dir (must be set).
+        """
+        if not self.base_run_dir:
+            raise RuntimeError("base_run_dir must be set to write collapsed dataset.")
+
+        # Get collapsed data
+        X_unit, Y_unique, noise_vars, se_vars, se_Y, counts = self._get_unitXY_with_noise()
+        X_real = self.from_unit(X_unit)
+
+        # Compute statistics
+        mean = Y_unique.flatten()
+        se_mean = se_Y
+        std = np.sqrt(np.maximum(noise_vars, 0.0))
+        se_std = se_vars
+
+        # Build dataframe
+        df = pd.DataFrame(X_real, columns=self.parameters)
+        df['count'] = counts
+        df['mean'] = mean
+        df['std'] = std
+        df['se_mean'] = se_mean
+        df['se_std'] = se_std
+
+        # Write CSV
+        out_path = os.path.join(self.base_run_dir, 'enchanted_dataset_collapsed.csv')
+        df.to_csv(out_path, index=False)
+        print(f"Collapsed dataset written to {out_path}")
 
 
     # ---------------------------
@@ -888,55 +1043,44 @@ if __name__ == '__main__':
     from enchanted_surrogates.utils.precise_imports import import_sampler
     _, base_run_dir = sys.argv
     
-    # batch_dirs = get_batch_dirs(base_run_dir)
+    batch_dirs = get_batch_dirs(base_run_dir)
     
-    # listdir = os.listdir(base_run_dir)
-    # config_file_name = [name for name in listdir if '.yaml' in name]
-    # if len(config_file_name) > 1:
-    #     raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
-    # config_file_name = config_file_name[0]
-    # print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
-    # config = load_configuration(os.path.join(base_run_dir, config_file_name))
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
     
-    # # bounds=np.array(config.executor.sampler_config['bounds'])
-    # # parameters = config.executor.sampler_config['parameters']
     
-    # # print('debug sampler config', config.executor['sampler_config'])
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
     
-    # sampler_config = config.executor['sampler_config']
-    # sampler_config['base_run_dir'] = base_run_dir
-    # # bounds = ['bounds']
-    # # config.executor['sampler_config'].pop('bounds')
-    # # parameters = config.executor['sampler_config']['parameters']
-    # # config.executor['sampler_config'].pop('parameters')
-    
-    # gpy = GpyAnalyticSobolSampler(**sampler_config)    
-    # for i, batch_dir in enumerate(batch_dirs):
-    #     gpy.append_train_data(batch_dir)
-    #     # # if len(gpy.train) <= 680:
-    #     #     continue
-    #     if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
-    #         if len(gpy.train) > 510:
-    #             print('WRITING BATCH INFO FOR:',batch_dir)
-    #             with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
-    #                 # gpy.gp_model = pickle.load(file)
-    #                 gpy.fit()
-    #                 gpy.cache_hypers()
-    #                 gpy.cache_K()
-    #             print("\n\n\n ================================== \n\n\n")
-    #             gpy._write_batch_info_inner(batch_dir, name='post2_')
+    gpy = GpyAnalyticSobolSampler(**sampler_config)    
+    for i, batch_dir in enumerate(batch_dirs):
+        gpy.append_train_data(batch_dir)
+        if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
+            print('WRITING BATCH INFO FOR:',batch_dir)
+            with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
+                gpy.gp_model = pickle.load(file)
+                # gpy.fit()
+                gpy.cache_hypers()
+                gpy.cache_K()
+            print("\n\n\n ================================== \n\n\n")
+            gpy._write_batch_info_inner(batch_dir, name='post2_')
             
-    #         # reg_results = gpy.regression_test()
-    #         # reg_results['num_samples'] = len(gpy.train)
-    #         # df = pd.DataFrame({k: v for k, v in reg_results.items()})
-    #         # reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
-    #         # if os.path.exists(reg_path):
-    #         #     df.to_csv(reg_path, mode='a', header=False, index=False)
-    #         # else:
-    #         #     df.to_csv(reg_path, mode='w', header=True, index=False)
+            # reg_results = gpy.regression_test()
+            # reg_results['num_samples'] = len(gpy.train)
+            # df = pd.DataFrame({k: v for k, v in reg_results.items()})
+            # reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
+            # if os.path.exists(reg_path):
+            #     df.to_csv(reg_path, mode='a', header=False, index=False)
+            # else:
+            #     df.to_csv(reg_path, mode='w', header=True, index=False)
          
-    #     # if i == 4:
-    #     #     break
+        # if i == 4:
+        #     break
    
  
     # merge_secondary_into_primary(
@@ -946,8 +1090,8 @@ if __name__ == '__main__':
     #     key='num_samples')
  
 
-    merge_secondary_into_primary(
-        primary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/batch_info.csv',
-        secondary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/post3batch_info.csv',
-        out_csv=os.path.join('/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/', 'merged_batch_info.csv'),
-        key='num_samples')
+    # merge_secondary_into_primary(
+    #     primary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/batch_info.csv',
+    #     secondary_csv='/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/post3batch_info.csv',
+    #     out_csv=os.path.join('/scratch/project_462000954/daniel/enchanted_test/AUG_33585_UQ_12D_anovaSpatDim32/', 'merged_batch_info.csv'),
+    #     key='num_samples')
