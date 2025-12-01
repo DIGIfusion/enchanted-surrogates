@@ -127,7 +127,7 @@ class DaskExecutor(Executor):
         try:
             jobs = []
             result = subprocess.run(['squeue', '--me'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "SURROGAT" not in line]
+            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "enc_dask_worker" not in line]
 
             if not dask_lines:
                 print("No Dask jobs found in queue.")
@@ -170,9 +170,9 @@ class DaskExecutor(Executor):
                 os.makedirs(slurm_out_dir)
             jed = self.SLURMcluster_config.get('job_extra_directives')
             if not jed:
-                self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+                self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             else:
-                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
+                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
             self.cluster = SLURMCluster(**self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
