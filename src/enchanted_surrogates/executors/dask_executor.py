@@ -127,7 +127,7 @@ class DaskExecutor(Executor):
         try:
             jobs = []
             result = subprocess.run(['squeue', '--me'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "enc_dask_worker" not in line]
+            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "enc_dask_worker" in line]
 
             if not dask_lines:
                 print("No Dask jobs found in queue.")
