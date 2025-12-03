@@ -50,6 +50,12 @@ pip install -e enchanted-surrogates/
 This will install the core package and its dependencies.
 In addition, you can install any plugins you want to use, by cloning their repositories and installing them with pip as well. See the [Plugins](./plugins/index.md) section for more details.
 
+Optional dependencies can be installed by listing them inside square brackets, comma-separated without spaces, e.g.:
+
+```bash
+pip install -e enchanted-surrogates[bo,GPy]
+```
+
 Note: in some environments, the command python may still point to system-wide Python (e.g. `/usr/bin/python` or `/Library/Frameworks/...`) rather than the virtual environment. You can check which python is active with: 
 
 ```bash
@@ -138,11 +144,16 @@ Although we will likely lint with `flake` so don't worry too much about it.
 #### Automated Testing at Pull Requests
 The `tests` folder contains unit tests. These can be run manually by using the command:
 
-    pytest tests/automated_tests_no_HPC -v -s
+    pytest tests -v -s
 
 and will also be automatically run by Github Actions at certain pushes and pull requests. It is recommended to locally run the tests before making a commit.
 
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests.
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests. 
+
+#### Workflow tests
+The `workflow_tests` folder contains larger workflow tests. These can be run manually by using the command:
+
+    pytest workflow_tests/automated_tests_no_HPC -v -s
 
 
 #### Linting Tests

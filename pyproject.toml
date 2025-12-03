@@ -20,6 +20,7 @@ dependencies = [
     "matplotlib",
     "plotly",
     "PyYAML",
+    "scipy",
 ]
 
 [tool.setuptools]
@@ -40,9 +41,7 @@ bo = [
 sdsg = [
   "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
 ]
-sobol_sequence = [
-    "scipy",
-]
+
 pysgpp = [
     "numpy<2.0",
     "pysgpp",
