@@ -146,6 +146,24 @@ class SlicesSampler2D(Sampler):
                 ax3d.set_xlabel(self.parameters[j])
                 ax3d.set_ylabel(self.parameters[i])
                 ax3d.set_zlabel(ycol)
+                
+                output_error_col = [c for c in df.columns if 'output_error' in c]
+                if output_error_col:
+                    errcol = output_error_col[0]
+                    Zerr = np.zeros_like(Z)
+                    for u in range(self.res):
+                        for v in range(self.res):
+                            mask = (
+                                (np.isclose(df[self.parameters[i]], Xi[u,v], atol=1e-6)) &
+                                (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
+                            )
+                            vals = df.loc[mask, errcol].values
+                            Zerr[u,v] = vals[0] if len(vals) else np.nan
+                    Z_upper = Z + Zerr
+                    Z_lower = Z - Zerr
+                    ax3d.plot_surface(Xi, Yi, Z_upper, cmap=cmap, alpha=0.2, vmin=ymin, vmax=ymax)
+                    ax3d.plot_surface(Xi, Yi, Z_lower, cmap=cmap, alpha=0.2, vmin=ymin, vmax=ymax)
+                
                 fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"                
 
                 cax = fig.add_subplot(gs[2])   # colorbar axis
@@ -224,6 +242,27 @@ class SlicesSampler2D(Sampler):
                     ax.set_xlabel(p)
                     ax.set_ylabel(ycol)
                     ax.grid(True, alpha=0.3)
+                    
+                    output_error_col = [c for c in df.columns if 'output_error' in c]
+                    if output_error_col:
+                        errcol = output_error_col[0]
+                        yerr = []
+                        for xv in xi_lin:
+                            vals_p = df[p].unique()
+                            if vals_p.size > 0:
+                                xv_closest = float(vals_p[np.argmin(np.abs(vals_p - xv))])
+                            else:
+                                xv_closest = xv
+                            diffs = np.abs(df[p] - xv_closest)
+                            for q, val in fixed_assignments.items():
+                                diffs += np.abs(df[q] - val)
+                            idx = np.argmin(diffs.values)
+                            yerr.append(float(df.iloc[idx][errcol]))
+                        yerr = np.array(yerr)
+                        y_upper = yvals + yerr
+                        y_lower = yvals - yerr
+                        ax.fill_between(xi_lin, y_lower, y_upper, color='tab:blue', alpha=0.3)
+
 
                 elif i < j:
                     # --- Upper triangle: 2D contour ---
@@ -267,6 +306,24 @@ class SlicesSampler2D(Sampler):
                     ax3d.set_xlabel(self.parameters[j])
                     ax3d.set_ylabel(self.parameters[i])
                     ax3d.set_zlabel(ycol)
+                    
+                    output_error_col = [c for c in df.columns if 'output_error' in c]
+                    if output_error_col:
+                        errcol = output_error_col[0]
+                        Zerr = np.zeros_like(Z)
+                        for u in range(self.res):
+                            for v in range(self.res):
+                                mask = (
+                                    (np.isclose(df[self.parameters[i]], Xi[u,v], atol=1e-6)) &
+                                    (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
+                                )
+                                vals = df.loc[mask, errcol].values
+                                Zerr[u,v] = vals[0] if len(vals) else np.nan
+                        Z_upper = Z + Zerr
+                        Z_lower = Z - Zerr
+                        ax3d.plot_surface(Xi, Yi, Z_upper, cmap=cmap, alpha=0.2, vmin=ymin, vmax=ymax)
+                        ax3d.plot_surface(Xi, Yi, Z_lower, cmap=cmap, alpha=0.2, vmin=ymin, vmax=ymax)
+
         
         # Add a new axes for the colorbar at custom coordinates
         cbar_ax = fig.add_axes([0.01, 0.02, 0.02, 0.7])  # [x, y, width, height]

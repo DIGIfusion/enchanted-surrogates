@@ -47,15 +47,14 @@ class GridSampler(Sampler):
         self.parameters = parameters
         self.bounds = bounds
         self.num_samples = num_samples
-        # check for stupidity
-        self.batch_size = kwargs.get("batch_size", self.budget)
-
+        
         self.num_repeats = kwargs.get('num_repeats', 1)
         self.budget = np.prod(np.array(num_samples))*self.num_repeats
-        
+        self.batch_size = kwargs.get("batch_size", self.budget)
+
         self.include_index = kwargs.get('include_index', False)
-        
-        if self.budget > 100000:
+        # check for stupidity        
+        if self.budget > 1000000:
             raise Exception(
                 (
                     "Can not do grid search on more than 10000 samples, ",

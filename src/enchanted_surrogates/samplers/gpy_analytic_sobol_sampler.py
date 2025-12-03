@@ -1028,23 +1028,21 @@ class GpyAnalyticSobolSampler(Sampler):
         samples = slice_samp.get_samples()
         df = pd.DataFrame(samples)
         X_slice = df[self.parameters].to_numpy()
-        Y_slice, _ = self.surrogate_predict(X_slice)
-        Y_slice_noise, _ = self.predict_noise(X_slice)
+        Y_slice, Y_error = self.surrogate_predict(X_slice)
+        Y_slice_noise, Y_slice_noise_error = self.predict_noise(X_slice)
         print('debug len y len df', len(Y_slice), len(df))
         df_plot = pd.DataFrame(samples)
-        if self.output_col:
-            df_plot[self.output_col+'_noise'] = Y_slice_noise
-        else:
+        if not self.output_col:
             self.set_output_col()
-            df_plot[self.output_col+'_noise'] = Y_slice_noise
+            
+        df_plot[self.output_col+'_noise_output'] = Y_slice_noise
+        df_plot[self.output_col+'_noise_output_error'] = Y_slice_noise_error
+
         slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_')
 
         df_plot = pd.DataFrame(samples)
-        if self.output_col:
-            df_plot[self.output_col] = Y_slice
-        else:
-            self.set_output_col()
-            df_plot[self.output_col] = Y_slice
+        df_plot[self.output_col] = Y_slice
+        df_plot[self.output_col+'_output_error'] = Y_error
         slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_')
 
     def plot_threshold_histograms_grid(self, threshold, res=20, bins=20):
