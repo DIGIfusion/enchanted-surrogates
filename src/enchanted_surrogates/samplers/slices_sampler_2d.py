@@ -160,7 +160,7 @@ class SlicesSampler2D(Sampler):
                 fig.savefig(os.path.join(self.base_run_dir, fname))
                 plt.close(fig)
 
-    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9, dataset_path=None, df=None, name=''):
+    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9, dataset_path=None, df=None, name='', dots_x=None):
                 
         if df is not None:
             pass

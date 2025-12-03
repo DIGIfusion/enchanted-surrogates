@@ -75,6 +75,7 @@ class IshigamiRunner(Runner):
         table = print_stats_table(stats)
         with open(os.path.join(base_run_dir, 'true_uq_stats.txt'),'w') as file:
             file.write(table)
+        self.plot_slices(base_run_dir)
             
     def plot_slices(self, base_run_dir, res=100):
         from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
@@ -83,26 +84,14 @@ class IshigamiRunner(Runner):
         dim = 3
         budget = (dim*(dim-1) / 2) * res**2
         # res = int(budget / (dim*(dim-1) / 2))
+        parameters=['x1','x2','x3']
         slice_samp = SlicesSampler2D(parameters=['x1','x2','x3'], bounds=[[-3.14,3.14],[-3.14,3.14],[-3.14,3.14]], base_run_dir=save_dir, res=res, budget=budget)
         samples = slice_samp.get_samples()
         df = pd.DataFrame(samples)
-        X_slice = df[self.parameters].to_numpy()
-        Y_slice, _ = self.surrogate_predict(X_slice)
-        Y_slice_noise, _ = self.predict_noise(X_slice)
+        X_slice = df[parameters].to_numpy()
+        Y_slice, _ = self.ishigami(X_slice)
         print('debug len y len df', len(Y_slice), len(df))
         df_plot = pd.DataFrame(samples)
-        if self.output_col:
-            df_plot[self.output_col+'_noise'] = Y_slice_noise
-        else:
-            self.set_output_col()
-            df_plot[self.output_col+'_noise'] = Y_slice_noise
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_')
-
-        df_plot = pd.DataFrame(samples)
-        if self.output_col:
-            df_plot[self.output_col] = Y_slice
-        else:
-            self.set_output_col()
-            df_plot[self.output_col] = Y_slice
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+        df_plot['Ishigami'] = Y_slice
+        slice_samp.plot_full_grid(df=df_plot, name=f'ishigami_')
 
