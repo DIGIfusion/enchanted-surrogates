@@ -283,7 +283,7 @@ class SobolGRunner(Runner):
         shutil.rmtree(run_dir)
 
     def plot_2D_and_3D_slices(self, res=120, fixed=None, vmin=None, vmax=None, cmap='viridis',
-                             save_dir=None, figsize_per_dim=2.5, triangle='upper', surface_alpha=1.0):
+                             save_dir=None, figsize_per_dim=2.5, triangle='upper', surface_alpha=1.0, data_csv=None):
         """
         Plot half-matrix heatmaps+contours for unique pairs and matching 3D surfaces.
 
@@ -382,7 +382,10 @@ class SobolGRunner(Runner):
 
         # --- Load optional dataset if save_dir provided (look for enchanted_dataset.csv in save_dir or its parent) ---
         dataset_df = None
-        if save_dir:
+        if data_csv:
+            import pandas as pd
+            dataset_df = pd.read_csv(data_csv)
+        elif save_dir:
             _candidate_paths = []
             _candidate_paths.append(_os.path.join(save_dir, "enchanted_dataset.csv"))
             _parent = _os.path.abspath(_os.path.join(save_dir, os.pardir))
@@ -444,8 +447,8 @@ class SobolGRunner(Runner):
                 ax0.clabel(cs, fmt='%.2f', fontsize=8)
             except Exception:
                 pass
-            ax0.set_xlabel(f"x{pair[1]+1}")
-            ax0.set_ylabel(f"x{pair[0]+1}")
+            ax0.set_xlabel(f"x{pair[0]+1}")
+            ax0.set_ylabel(f"x{pair[1]+1}")
 
             # Right: 3D surface with transparency
             ax1 = fig.add_subplot(1, 2, 2, projection='3d')
@@ -477,15 +480,15 @@ class SobolGRunner(Runner):
                     ax1.plot_wireframe(X, Y, Z, rcount=max(2, Z.shape[0]//plot_stride),
                                         ccount=max(2, Z.shape[1]//plot_stride), color='k')
 
-            ax1.set_xlabel(f"x{pair[1]+1}")
-            ax1.set_ylabel(f"x{pair[0]+1}")
+            ax1.set_xlabel(f"x{pair[0]+1}")
+            ax1.set_ylabel(f"x{pair[1]+1}")
             ax1.set_zlabel("g(x)")
 
             # Overlay dataset points if loaded (2D heatmap + project onto 3D floor)
             if dataset_df is not None:
                 # heatmap overlay on ax0: scatter x_j vs x_i
-                x_col = f"x{pair[1]+1}"
-                y_col = f"x{pair[0]+1}"
+                x_col = f"x{pair[0]+1}"
+                y_col = f"x{pair[1]+1}"
                 try:
                     _xs_plot = dataset_df[x_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[x_col])
                     _ys_plot = dataset_df[y_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[y_col])
@@ -568,8 +571,8 @@ class SobolGRunner(Runner):
 
                     # overlay dataset points on heatmap (if available)
                     if dataset_df is not None:
-                        x_col = f"x{pair[1]+1}"
-                        y_col = f"x{pair[0]+1}"
+                        x_col = f"x{pair[0]+1}"
+                        y_col = f"x{pair[1]+1}"
                         try:
                             _xs_plot = dataset_df[x_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[x_col])
                             _ys_plot = dataset_df[y_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[y_col])
@@ -649,8 +652,8 @@ class SobolGRunner(Runner):
 
                 # overlay dataset points projected to the floor of this 3D subplot
                 if dataset_df is not None:
-                    x_col = f"x{pair[1]+1}"
-                    y_col = f"x{pair[0]+1}"
+                    x_col = f"x{pair[0]+1}"
+                    y_col = f"x{pair[1]+1}"
                     try:
                         _xs_plot = dataset_df[x_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[x_col])
                         _ys_plot = dataset_df[y_col].values if hasattr(dataset_df, "values") else _np.asarray(dataset_df[y_col])
@@ -1011,7 +1014,11 @@ if __name__ == "__main__":
     # Requirements: matplotlib installed.
     import os
 
-    outdir = os.path.join('.', "sobol_plots_example")
+    data_csv = '/users/danieljordan/enchanted_plugins/uq_study_sobol-g_2D/data/sdsg/enchanted_dataset.csv' # None
+    outdir = '/users/danieljordan/enchanted_plugins/uq_study_sobol-g_2D/data/sdsg/post_plots'
+    # data_csv = None
+    # outdir = os.path.join('.', "sobol_plots_example")
+    
     os.makedirs(outdir, exist_ok=True)
 
     # Example 1: initialize from sensitivity parameters a
@@ -1020,12 +1027,11 @@ if __name__ == "__main__":
     # Example 2: initialize from first-order Sobol indices S (at least one > 0)
     a = [0.1, 1]          # first-order Sobol indices for 4 dims
     runner = SobolGRunner(a=a)
-    runner.print_stats()
-    
+    runner.print_stats()    
 
     # Plot lower-triangle (shows mirrored pairs) and save
     runner.plot_2D_and_3D_slices(res=100, fixed=None,
-                                save_dir=outdir, triangle='lower', cmap='plasma')
+                                save_dir=outdir, triangle='lower', cmap='plasma', data_csv=data_csv)
 
     print(f"Plots saved to {outdir}")
 

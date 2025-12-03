@@ -67,11 +67,11 @@ class SlicesSampler2D(Sampler):
             self.batch_number += 1
             return samples
 
-    def make_plots(self):
-        self.plot_slices_from_dataset()
-        self.plot_full_grid()
+    def make_plots(self, dots_x=None):
+        self.plot_slices_from_dataset(dots_x=dots_x)
+        self.plot_full_grid(dots_x=dots_x)
     
-    def plot_slices_from_dataset(self, cmap='viridis', surface_alpha=0.9):
+    def plot_slices_from_dataset(self, cmap='viridis', surface_alpha=0.9, dots_x=None):
         """
         Load enchanted_dataset.csv and plot 2D contours + 3D surfaces.
         """
@@ -124,24 +124,29 @@ class SlicesSampler2D(Sampler):
                 ax1.set_box_aspect(1)         # force the axes box to be square
 
                 # fig.colorbar(cs, ax=ax1)
-                ax1.set_xlabel(self.parameters[j])
-                ax1.set_ylabel(self.parameters[i])
+                ax1.set_xlabel(self.parameters[i])
+                ax1.set_ylabel(self.parameters[j])
 
                 ax3d = fig.add_subplot(gs[1], projection='3d')
                 ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha, vmin=ymin, vmax=ymax)
-                ax3d.set_xlabel(self.parameters[j])
-                ax3d.set_ylabel(self.parameters[i])
+                ax3d.set_xlabel(self.parameters[i])
+                ax3d.set_ylabel(self.parameters[j])
                 ax3d.set_zlabel(ycol)
+                z_floor = float(np.nanmin(Z)) if np.isfinite(np.nanmin(Z)) else 0
+                if dots_x:
+                    ax3d.scatter(dots_x.T[i], dots_x.T[j], zs=z_floor, zdir='z', s=15, c='k', alpha=0.6, depthshade=False)
                 fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"                
 
                 cax = fig.add_subplot(gs[2])   # colorbar axis
                 cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
+                if dots_x:
+                    ax1.scatter(dots_x.T[i], dots_x.T[j])
                 fig.colorbar(cs, cax=cax)
                 fig.tight_layout()
                 fig.savefig(os.path.join(self.base_run_dir, fname))
                 plt.close(fig)
 
-    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9):
+    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9, dots_x=None):
         if not self.base_run_dir:
             raise RuntimeError("base_run_dir must be set to load dataset.")
         dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
@@ -222,8 +227,11 @@ class SlicesSampler2D(Sampler):
                                 Z[u,v] = vals[0] if len(vals) else np.nan
                     cs = ax.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
                     ax.set_aspect('equal')
-                    ax.set_xlabel(self.parameters[j])
-                    ax.set_ylabel(self.parameters[i])
+                    ax.set_xlabel(self.parameters[i])
+                    ax.set_ylabel(self.parameters[j])
+                    if dots_x:
+                        ax.scatter(dots_x.T[i], dots_x.T[j])
+                
 
                 else:
                     # --- Lower triangle: 3D surface ---
@@ -243,8 +251,12 @@ class SlicesSampler2D(Sampler):
                             else:
                                 Z[u,v] = vals[0] if len(vals) else np.nan
                     ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha, vmin=ymin, vmax=ymax)
-                    ax3d.set_xlabel(self.parameters[j])
-                    ax3d.set_ylabel(self.parameters[i])
+                    z_floor = float(np.nanmin(Z)) if np.isfinite(np.nanmin(Z)) else 0
+                    if dots_x:
+                        ax3d.scatter(dots_x.T[i], dots_x.T[j], zs=z_floor, zdir='z', s=15, c='k', alpha=0.6, depthshade=False)
+
+                    ax3d.set_xlabel(self.parameters[i])
+                    ax3d.set_ylabel(self.parameters[j])
                     ax3d.set_zlabel(ycol)
         
         # Add a new axes for the colorbar at custom coordinates

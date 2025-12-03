@@ -2,7 +2,7 @@ import os
 from .base_runner import Runner
 import numpy as np
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
-
+import pandas as pd
 class IshigamiRunner(Runner):
     """
     IshigamiRunner: evaluates the Ishigami function for three input variables.
@@ -59,14 +59,13 @@ class IshigamiRunner(Runner):
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
             # Validate input domain
         assert 'x1' in params and 'x2' in params and 'x3' in params, "Parameters must include 'x1', 'x2', and 'x3'."
-        
-        x = [float(params[k]) for k in sorted(params.keys()) if k in ['x1', 'x2', 'x3']]
+        x=[params['x1'],params['x2'],params['x3']]
         for xi in x:
             if not (-np.pi <= xi <= np.pi):
                 raise ValueError(
                     f"Invalid input {xi}. Sobol IshigamiRunner expects all inputs inbetween -pi and pi. Where pi is approximately {np.pi}."
                 )
-        output = self.ishigami(*x)
+        output = self.ishigami(x1=params['x1'], x2=params['x2'], x3=params['x3'])
         return {"output": output, "success": True}
 
     def light_post_processing(self, base_run_dir):
@@ -76,3 +75,34 @@ class IshigamiRunner(Runner):
         table = print_stats_table(stats)
         with open(os.path.join(base_run_dir, 'true_uq_stats.txt'),'w') as file:
             file.write(table)
+            
+    def plot_slices(self, base_run_dir, res=100):
+        from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
+        save_dir = os.path.join(base_run_dir, 'ishigami_true_slice_plots')
+        os.makedirs(save_dir, exist_ok=True)
+        dim = 3
+        budget = (dim*(dim-1) / 2) * res**2
+        # res = int(budget / (dim*(dim-1) / 2))
+        slice_samp = SlicesSampler2D(parameters=['x1','x2','x3'], bounds=[[-3.14,3.14],[-3.14,3.14],[-3.14,3.14]], base_run_dir=save_dir, res=res, budget=budget)
+        samples = slice_samp.get_samples()
+        df = pd.DataFrame(samples)
+        X_slice = df[self.parameters].to_numpy()
+        Y_slice, _ = self.surrogate_predict(X_slice)
+        Y_slice_noise, _ = self.predict_noise(X_slice)
+        print('debug len y len df', len(Y_slice), len(df))
+        df_plot = pd.DataFrame(samples)
+        if self.output_col:
+            df_plot[self.output_col+'_noise'] = Y_slice_noise
+        else:
+            self.set_output_col()
+            df_plot[self.output_col+'_noise'] = Y_slice_noise
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+
+        df_plot = pd.DataFrame(samples)
+        if self.output_col:
+            df_plot[self.output_col] = Y_slice
+        else:
+            self.set_output_col()
+            df_plot[self.output_col] = Y_slice
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+
