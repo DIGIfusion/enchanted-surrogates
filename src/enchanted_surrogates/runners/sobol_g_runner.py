@@ -35,6 +35,8 @@ class SobolGRunner(Runner):
         # Accept either 'a' or 'S' (first-order Sobol indices)
         a_input = kwargs.get('a', None)
         S_input = kwargs.get('S', None)
+        
+        self.gauss_noise_std = kwargs.get('gauss_noise_std', 0.0)
 
         if (a_input is None) and (S_input is None):
             raise TypeError("Provide either 'a' (sensitivity params) or 'S' (first-order Sobol indices).")
@@ -162,7 +164,10 @@ class SobolGRunner(Runner):
             )
 
     def sobol_g(self, x):
-        return np.prod([(np.abs(4 * xi - 2) + ai) / (1 + ai) for xi, ai in zip(x, self.a)])
+        if self.gauss_noise_std > 0.0:
+            return np.prod([(np.abs(4 * xi - 2) + ai) / (1 + ai) for xi, ai in zip(x, self.a)]) + np.random.normal(0.0, self.gauss_noise_std)
+        else:
+            return np.prod([(np.abs(4 * xi - 2) + ai) / (1 + ai) for xi, ai in zip(x, self.a)])
 
     def analytical_stats(self):
         """

@@ -17,12 +17,16 @@ def run_simulation_task(
     Returns:
     Raises:
     """
+    runner_output = {**params}
+    runner_output['run_dir'] = run_dir
+
     os.makedirs(run_dir, exist_ok=True)
     runner_type = runner_config['type']
     runner = import_runner(type=runner_type, runner_config=runner_config)
     error_info = None
     try:
-        runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
+        runner_output_scr = runner.single_code_run(run_dir=run_dir, params=params)
+        runner_output = {**runner_output_scr, **runner_output}
         if 'success' not in runner_output or not isinstance(runner_output.get('success'), bool):
             raise KeyError(
                 "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
@@ -56,10 +60,7 @@ def run_simulation_task(
             with open(extra_errors_path, "w", encoding="utf-8") as f:
                 f.write(pformat(msg))
                 f.write(pformat(error_info))
-        
-    runner_output.update(params)
-    runner_output['run_dir'] = run_dir
-    
+            
     if os.path.exists(run_dir):
         df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
         df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
