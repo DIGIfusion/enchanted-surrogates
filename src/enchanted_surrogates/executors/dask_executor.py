@@ -64,6 +64,85 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
 
+    def find_line_in_seff_output(self, lines, entry):
+        """
+        Helper function to quickly find the required line in the seff output
+
+        Params:
+            lines (list): list of lines
+            entry (str): the entry that is being looked for
+        Returns:
+            str: time or percentage from the corresponding line, defaults to ""
+        """
+        return next((line.replace(entry,"").strip() for line in lines if line.startswith(entry)),"")
+
+
+    def get_slurm_usage_info(self, job_id=None):
+        """
+        Params:
+            job_id (list[int]): If you wish to only find the slurm usage info from one specific job pass this
+        Returns:
+            list: dictionary containing the output info from running seff
+        """
+        job_ids = job_id if job_id else self.get_all_dask_job_ids()
+        job_info = []
+
+        for job_id in job_ids:
+            try:
+                result = subprocess.run(['seff', job_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                output = result.stdout
+                seff_lines = output.splitlines()
+
+                if len(output.strip()) == 0:
+                    continue
+                
+                cpu_time = self.find_line_in_seff_output(seff_lines, "CPU Utilized:")
+                cpu_efficiency = self.find_line_in_seff_output(seff_lines, "CPU Efficiency:")
+                memory_used = self.find_line_in_seff_output(seff_lines, "Memory Utilized:")
+                memory_efficiency = self.find_line_in_seff_output(seff_lines, "Memory Efficiency:")
+
+                hours, minutes, seconds = map(int, cpu_time.split(":"))
+                cpu_secs = hours * 3600 + minutes * 60 + seconds
+                
+                job_info.append({
+                    'cpu_time': cpu_time,
+                    'cpu_time_seconds': cpu_secs,
+                    'cpu_efficiency': cpu_efficiency,
+                    'memory_efficiency': memory_efficiency,
+                    'memory_used': memory_used,
+                    'job_id': job_id
+                })
+            except Exception as e:
+                print(f"Error fetching SLURM resource usage for job {job_id}: {e}")
+
+
+        return job_info
+
+    def get_all_dask_job_ids(self):
+        """
+        Runs squeue to figure out all jobs from the cluster
+        Returns:
+            list: A list of Dask job IDs.
+        """
+        try:
+            jobs = []
+            result = subprocess.run(['squeue', '--me'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "enc_dask_worker" in line]
+
+            if not dask_lines:
+                print("No Dask jobs found in queue.")
+                return []
+
+            for line in dask_lines:
+                fields = line.split()
+                jobs.append(fields[0])
+
+            return jobs
+
+        except Exception as e:
+            print(f"Error while checking squeue: {e}")
+            return []
+
     def start_cluster(self, slurm_out_dir=None):
         """
         Starts a Dask cluster using either SLURMCluster or LocalCluster.
@@ -91,9 +170,9 @@ class DaskExecutor(Executor):
                 os.makedirs(slurm_out_dir)
             jed = self.SLURMcluster_config.get('job_extra_directives')
             if not jed:
-                self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']
+                self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             else:
-                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err']    
+                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             print('FOR WORKER SLURM OUT, SEE:',slurm_out_dir)
             self.cluster = SLURMCluster(**self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
@@ -254,6 +333,7 @@ class DaskExecutor(Executor):
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
+        all_job_ids = self.get_all_dask_job_ids()
         all_futures = []
 
         while self.sampler.has_budget:
@@ -299,6 +379,18 @@ class DaskExecutor(Executor):
         print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
+
+        job_info = self.get_slurm_usage_info(all_job_ids)
+        total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
+        print(f"Total CPU hours used: {total_cpu_time}")
+
+        cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if cpu_ps.returncode == 0:
+            headnode_secs = int(cpu_ps.stdout.strip())
+            print(f"Total CPU time used by head node: {headnode_secs/3600}")
+        else:
+            print(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
+
         print('CLUSTER SHUTDOWN')
         self.shutdown_cluster()
 

@@ -53,5 +53,7 @@ def test_dask_executor():
 
     assert os.path.exists(os.path.join(executor_config['base_run_dir'], 'ENCHANTED.FINISHED'))
 
+    assert executor.find_line_in_seff_output(["CPU Utilized: 01:01:01"], "CPU Utilized:") == "01:01:01"
+
     # TODO clean up test
     shutil.rmtree(executor_config['base_run_dir'])
