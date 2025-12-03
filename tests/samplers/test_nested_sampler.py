@@ -1,5 +1,3 @@
-# tests/test_nested_sampler.py
-
 import pytest
 import numpy as np
 from enchanted_surrogates.samplers.nested_sampler import NestedSampler

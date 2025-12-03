@@ -65,7 +65,9 @@ def test_start_cluster_uses_SLURMCluster(mock_SLURM, mock_Client, mock_import_sa
 @patch("enchanted_surrogates.executors.dask_executor.make_run_dir", return_value="/tmp/run_1")
 def test_submit_batch_submits_futures(mock_make_run_dir, mock_import_sampler, fake_sampler):
     # submit_batch creates futures for each sample given
-    samples = [{"a": 1}, {"b": 2}]
+    samples = [
+        {"a": 1}, {"b": 2}
+    ]
     sampler = fake_sampler(samples)
 
     mock_import_sampler.return_value = sampler
