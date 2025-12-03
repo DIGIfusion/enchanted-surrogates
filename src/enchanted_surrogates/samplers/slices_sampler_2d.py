@@ -32,57 +32,71 @@ class SlicesSampler2D(Sampler):
             self.make_plots()
             return None
         elif self.batch_number == 0:
-            d = len(self.parameters)
-            # number of unique parameter pairs
-            n_pairs = d * (d - 1) // 2
-            # samples per pair = res^2
-            total_samples = n_pairs * (self.res ** 2)
-            print(f'[SliceSampler] DIM {d}, RES {self.res}, N SAMPLES {total_samples}')
-            
-            if total_samples > self.budget:
-                raise RuntimeError(
-                    f"Requested {total_samples} samples exceeds budget={self.budget}. "
-                    f"Reduce resolution or number of parameters."
-                )
-            self.budget = total_samples
-            samples = []
-            # loop over all unique parameter pairs
-            
-            for i in range(d):
-                xi_lin = np.linspace(self.bounds[i][0], self.bounds[i][1], self.res)
-                for j in range(i+1, d):
-                    yi_lin = np.linspace(self.bounds[j][0], self.bounds[j][1], self.res)
-                    Xi, Yi = np.meshgrid(xi_lin, yi_lin)
-                    for u in range(self.res):
-                        for v in range(self.res):
-                            row = {}
-                            for k, (param, (a, b)) in enumerate(zip(self.parameters, self.bounds)):
-                                if k == i:
-                                    row[param] = Xi[u,v]
-                                elif k == j:
-                                    row[param] = Yi[u,v]
-                                else:
-                                    row[param] = self.fixed[param]
-                            samples.append(row)
-            self.batch_number += 1
-            return samples
+            return self.get_samples()
+        
+    def get_samples(self):
+        d = len(self.parameters)
+        # number of unique parameter pairs
+        n_pairs = d * (d - 1) // 2
+        # samples per pair = res^2
+        total_samples = n_pairs * (self.res ** 2)
+        print(f'[SliceSampler] DIM {d}, RES {self.res}, N SAMPLES {total_samples}')
+        
+        if total_samples > self.budget:
+            raise RuntimeError(
+                f"Requested {total_samples} samples exceeds budget={self.budget}. "
+                f"Reduce resolution or number of parameters."
+            )
+        self.budget = total_samples
+        samples = []
+        # loop over all unique parameter pairs
+        
+        for i in range(d):
+            xi_lin = np.linspace(self.bounds[i][0], self.bounds[i][1], self.res)
+            for j in range(i+1, d):
+                yi_lin = np.linspace(self.bounds[j][0], self.bounds[j][1], self.res)
+                Xi, Yi = np.meshgrid(xi_lin, yi_lin)
+                for u in range(self.res):
+                    for v in range(self.res):
+                        row = {}
+                        for k, (param, (a, b)) in enumerate(zip(self.parameters, self.bounds)):
+                            if k == i:
+                                row[param] = Xi[u,v]
+                            elif k == j:
+                                row[param] = Yi[u,v]
+                            else:
+                                row[param] = self.fixed[param]
+                        samples.append(row)
+        self.batch_number += 1
+        return samples
 
+    def get_samples_array(self):
+        samples = self.get_samples()
+        df = pd.DataFrame(samples)
+        return df[self.parameters].to_numpy()
+    
     def make_plots(self):
         self.plot_slices_from_dataset()
         self.plot_full_grid()
     
-    def plot_slices_from_dataset(self, cmap='viridis', surface_alpha=0.9):
+    def plot_slices_from_dataset(self, cmap='viridis', surface_alpha=0.9, dataset_path=None, df=None):
         """
         Load enchanted_dataset.csv and plot 2D contours + 3D surfaces.
         """
-        if not self.base_run_dir:
-            raise RuntimeError("base_run_dir must be set to load dataset.")
-        dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-        if not os.path.exists(dataset_path):
-            raise FileNotFoundError(f"{dataset_path} not found.")
+        if df is not None:
+            pass
+        elif dataset_path is not None:
+            dataset_path = dataset_path
+            df = pd.read_csv(dataset_path)
+        else:
+            if not self.base_run_dir:
+                raise RuntimeError("base_run_dir must be set to load dataset.")
+            if not os.path.exists(dataset_path):
+                raise FileNotFoundError(f"{dataset_path} not found.")
+            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+            df = pd.read_csv(dataset_path)
 
-        df = pd.read_csv(dataset_path)
-
+            
         output_col = [c for c in df.columns if 'output' in c]
         if len(output_col) != 1:
             raise RuntimeError("Dataset must contain exactly one output column.")
@@ -141,14 +155,20 @@ class SlicesSampler2D(Sampler):
                 fig.savefig(os.path.join(self.base_run_dir, fname))
                 plt.close(fig)
 
-    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9):
-        if not self.base_run_dir:
-            raise RuntimeError("base_run_dir must be set to load dataset.")
-        dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-        if not os.path.exists(dataset_path):
-            raise FileNotFoundError(f"{dataset_path} not found.")
-
-        df = pd.read_csv(dataset_path)
+    def plot_full_grid(self, cmap='viridis', surface_alpha=0.9, dataset_path=None, df=None, name=''):
+                
+        if df is not None:
+            pass
+        elif dataset_path is not None:
+            dataset_path = dataset_path
+            df = pd.read_csv(dataset_path)
+        else:
+            if not self.base_run_dir:
+                raise RuntimeError("base_run_dir must be set to load dataset.")
+            if not os.path.exists(dataset_path):
+                raise FileNotFoundError(f"{dataset_path} not found.")
+            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+            df = pd.read_csv(dataset_path)
 
         output_col = [c for c in df.columns if 'output' in c]
         if len(output_col) != 1:
@@ -221,7 +241,8 @@ class SlicesSampler2D(Sampler):
                             else:
                                 Z[u,v] = vals[0] if len(vals) else np.nan
                     cs = ax.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
-                    ax.set_aspect('equal')
+                    # ax.set_aspect('square')
+                    ax.set_box_aspect(1)   # matplotlib ≥ 3.3
                     ax.set_xlabel(self.parameters[j])
                     ax.set_ylabel(self.parameters[i])
 
@@ -249,12 +270,24 @@ class SlicesSampler2D(Sampler):
         
         # Add a new axes for the colorbar at custom coordinates
         cbar_ax = fig.add_axes([0.01, 0.02, 0.02, 0.7])  # [x, y, width, height]
-        cbar = fig.colorbar(cs, cax=cbar_ax)
+        import matplotlib.cm as cm
+        import matplotlib.colors as mcolors
+
+        # Define the global normalization you want
+        norm = mcolors.Normalize(vmin=ymin, vmax=ymax)
+
+        # Use the same colormap as your plots (pick one, or enforce consistency)
+        cmap = cs.cmap   # or explicitly: plt.get_cmap("viridis")
+
+        # Create a dummy ScalarMappable
+        sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])   # required placeholder
+        cbar = fig.colorbar(sm, cax=cbar_ax)
         cbar.set_label(ycol)
 
         # fig.tight_layout(pad=3.0)
         fig.subplots_adjust(wspace=0.4, hspace=0.2)
-        fig.savefig(os.path.join(self.base_run_dir, "slices_full_grid.png"), dpi=300)
+        fig.savefig(os.path.join(self.base_run_dir, name+"slices_full_grid.png"), dpi=300)
  
         plt.close(fig)
 

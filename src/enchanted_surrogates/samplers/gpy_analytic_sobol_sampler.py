@@ -5,6 +5,7 @@ import warnings
 import time
 from scipy.special import erf
 from sklearn.model_selection import KFold
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import traceback
@@ -14,6 +15,8 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler
 from enchanted_surrogates.utils.timeout import run_with_timeout, FunctionTimeoutError, FunctionExecutionError
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
+from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+
 
 # ---------------------------
 # Helper functions: RBF 1D integrals
@@ -84,7 +87,10 @@ class GpyAnalyticSobolSampler(Sampler):
         self.submitted = 0
         self.custom_submitted = 0
         self.budget = kwargs.get('budget', None) or self.batch_size
-
+        self.output_col = None
+        
+        self.max_y = kwargs.get('max_y',None) # above this value data will be ignored. Potentially because it blongs to a different class
+        
         # optional sub-sampler (for initial or alternative sampling)
         self.sub_sampler_config = kwargs.get('sub_sampler_config', None)
         if self.sub_sampler_config:
@@ -261,13 +267,32 @@ class GpyAnalyticSobolSampler(Sampler):
     # ---------------------------
     
     def get_data(self):
-        data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        print('debug get_data batch_numer:', self.batch_number)
+        if self.batch_number is not None:
+            _batch_dirs = get_batch_dirs(self.base_run_dir)
+            dfs = []
+            for _i in range(self.batch_number+1):
+                bd = _batch_dirs[_i]
+                # print('debug get_data bd', bd)
+                dd = os.path.join(bd, 'enchanted_dataset.csv')
+                dfi = pd.read_csv(dd, on_bad_lines='warn')
+                # print('debug get_data len(dfi)', len(dfi))
+                dfs.append(dfi)
+            data_df = pd.concat(dfs, axis=0)
+        else:
+            data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn')
         output_col = [col for col in data_df.columns if 'output' in col]
+        self.output_col = output_col[0]
         if len(output_col) != 1:
             raise RuntimeError('Exactly one output column required.')
 
         X_real = data_df[self.parameters].to_numpy()
         Y = data_df[output_col].to_numpy().reshape(-1,1)
+        if self.max_y:
+            mask = Y<=self.max_y
+            Y = Y[mask.ravel()]
+            mask = mask.reshape(-1,1)
+            X_real = X_real[mask.ravel()]
         return X_real, Y
 
     def _get_unitXY(self):
@@ -360,13 +385,19 @@ class GpyAnalyticSobolSampler(Sampler):
         if self.num_repeats > 1:
             self.fit_noise(X, noise_vars, se_vars)
 
-    def fit_noise(self, X, noise_vars, se_vars):
+    def fit_noise(self, X=None, noise_vars=None, se_vars=None):
         """
         Fit a GP to model per-point noise (std), with heteroscedastic training noise
         equal to the standard error of the variance estimate at each point.
         """
+        if X is None or noise_vars is None or se_vars is None:
+            X, Y, noise_vars, se_vars, _, _ = self._get_unitXY_with_noise()
+
+        # print('debug fit noise, noise_vars', noise_vars)
         # Train targets = std (sqrt of variance)
         noise_targets = np.sqrt(np.maximum(noise_vars, 0.0)).reshape(-1, 1)
+        # print('debug fit noise, noise_targets', noise_targets)
+        
         kernel = GPy.kern.RBF(input_dim=X.shape[1], ARD=True)
 
         # Heteroscedastic model for noise GP
@@ -390,6 +421,7 @@ class GpyAnalyticSobolSampler(Sampler):
         - predictive error on the std (posterior std of the noise GP)
         """
         if not hasattr(self, 'noise_gp') or self.noise_gp is None:
+            # self.fit_noise()
             raise RuntimeError("Noise GP not fitted. Call fit() first with repeats.")
 
         X_unit_test = self.to_unit(X_test)
@@ -768,15 +800,39 @@ class GpyAnalyticSobolSampler(Sampler):
             X_test = test_df[self.parameters].values
             y_test = test_df[out_col[0]].values
             y_pred, _ = self.surrogate_predict(X_test)
+            if self.max_y:
+                mask = y_pred <= self.max_y
+                X_test = X_test[mask]
+                y_test = y_test[mask]
+                y_pred = y_pred[mask]
             # print('debug, xtest', X_test)
             print('debug, ytest n nans', np.isnan(y_test).sum())
             print('debug, ypred n nans', np.isnan(y_pred).sum())
             residuals = y_test - y_pred
+            fig = plt.figure()
+            plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+            residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+            if not os.path.exists(residuals_save_dir):
+                os.mkdir(residuals_save_dir)
+            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+
+            fig = plt.figure()
+            plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+            residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+            if not os.path.exists(residuals_save_dir):
+                os.mkdir(residuals_save_dir)
+            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+
+
             print('debug n nans', np.isnan(residuals).sum())
-            rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
-            
-            print('debug rmse', rmse)
-            regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
+            if self.num_repeats > 1:
+                noise_pred, _ = self.predict_noise(X_test)
+                rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
+                msse = np.nanmean((residuals/noise_pred) ** 2)
+                nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
+                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
+            else:
+                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
             return regression_results
         
     def _write_batch_info_inner(self, batch_dir, name=''):
@@ -950,7 +1006,115 @@ class GpyAnalyticSobolSampler(Sampler):
         out_path = os.path.join(self.base_run_dir, 'enchanted_dataset_collapsed.csv')
         df.to_csv(out_path, index=False)
         print(f"Collapsed dataset written to {out_path}")
+        df_avg_noise = pd.DataFrame({'mean_noise': [np.mean(df['std'])]})
+        df_avg_noise.to_csv(os.path.join(self.base_run_dir, 'average_noise.csv'))
 
+    def set_output_col(self):
+        data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn', nrows=0)
+        output_col = [col for col in data_df.columns if 'output' in col]
+        if len(output_col)>1:
+            warnings.warn(f'WHEN SETTING OUTPUT COL THERE WERE MORE THAN ONE COLUMNS WITH output STRING: {output_col}, TAKING FIRST: {output_col[0]}')
+        self.output_col = output_col[0]
+        return self.output_col
+
+    def plot_slices(self, res=10):
+        from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
+        save_dir = os.path.join(self.base_run_dir, 'slice_plots')
+        os.makedirs(save_dir, exist_ok=True)
+        dim = len(self.parameters)
+        budget = (dim*(dim-1) / 2) * res**2
+        # res = int(budget / (dim*(dim-1) / 2))
+        slice_samp = SlicesSampler2D(parameters=self.parameters, bounds=self.bounds, base_run_dir=save_dir, res=res, budget=budget)
+        samples = slice_samp.get_samples()
+        df = pd.DataFrame(samples)
+        X_slice = df[self.parameters].to_numpy()
+        Y_slice, _ = self.surrogate_predict(X_slice)
+        Y_slice_noise, _ = self.predict_noise(X_slice)
+        print('debug len y len df', len(Y_slice), len(df))
+        df_plot = pd.DataFrame(samples)
+        if self.output_col:
+            df_plot[self.output_col+'_noise'] = Y_slice_noise
+        else:
+            self.set_output_col()
+            df_plot[self.output_col+'_noise'] = Y_slice_noise
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+
+        df_plot = pd.DataFrame(samples)
+        if self.output_col:
+            df_plot[self.output_col] = Y_slice
+        else:
+            self.set_output_col()
+            df_plot[self.output_col] = Y_slice
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+
+    def plot_threshold_histograms_grid(self, threshold, res=20, bins=20):
+        from enchanted_surrogates.samplers.grid_sampler import GridSampler
+        gs = GridSampler(parameters=self.parameters, bounds=self.bounds, num_samples=res)
+        samples = gs.get_next_samples()
+        df = pd.DataFrame(samples)
+        X = df[self.parameters].to_numpy()
+        print('debug len df len X', len(df), len(X))
+        Y, _ = self.surrogate_predict(X)
+        print('debug len df len Y', len(df), len(Y))
+        if self.output_col is None:
+            self.set_output_col()
+        print('debug len df len Y', len(df), len(Y))
+        df[self.output_col] = Y
+        self.plot_threshold_histograms(df, threshold, bins=bins)
+        
+    def plot_threshold_histograms(self, df, threshold, bins=20):
+        """
+        Plot mirrored histograms for each parameter:
+        - Above threshold: counts shown upwards
+        - Below threshold: counts shown inverted downwards
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame containing columns for self.parameters and self.output_col.
+        threshold : float
+            Threshold value for the output column.
+        bins : int
+            Number of bins for the histogram.
+        """
+        if self.output_col is None:
+            raise RuntimeError("Output column not set. Call get_data() first.")
+
+        if self.output_col is None:
+            self.set_output_col()
+
+        mask_above = df[self.output_col] > threshold
+        mask_below = ~mask_above
+
+        n_params = len(self.parameters)
+        fig, axes = plt.subplots(n_params, 1, figsize=(7, 3 * n_params), constrained_layout=True)
+
+        if n_params == 1:
+            axes = [axes]
+
+        for ax, param in zip(axes, self.parameters):
+            values_above = df.loc[mask_above, param]
+            values_below = df.loc[mask_below, param]
+
+            # Histogram for above threshold
+            ax.hist(values_above, bins=bins, color='steelblue', edgecolor='black', alpha=0.7, label=f'>{threshold}')
+
+            # Histogram for below threshold (inverted)
+            counts, bin_edges = np.histogram(values_below, bins=bins)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+            ax.bar(bin_centers, -counts, width=(bin_edges[1]-bin_edges[0]),
+                color='salmon', edgecolor='black', alpha=0.7, label=f'≤{threshold}')
+
+            ax.axhline(0, color='black', linewidth=1)
+            ax.set_title(f"Histogram of {param} relative to threshold {threshold}")
+            ax.set_xlabel(param)
+            ax.set_ylabel("Count (above vs. below)")
+            ax.legend()
+        num_train = self.gp_model.X.shape[0] * self.num_repeats
+        save_dir = os.path.join(self.base_run_dir, 'threshold_histograms')
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(os.path.join(save_dir, f'N{num_train}_thresh{threshold}_hist.png'))
+        plt.close(fig)
 
     # ---------------------------
     # Boilerplate
@@ -1043,7 +1207,9 @@ if __name__ == '__main__':
     _, base_run_dir = sys.argv
     
     batch_dirs = get_batch_dirs(base_run_dir)
-    
+    for i in range(len(batch_dirs)):
+        print('debug _batch dirs', batch_dirs[i])
+            
     listdir = os.listdir(base_run_dir)
     config_file_name = [name for name in listdir if '.yaml' in name]
     if len(config_file_name) > 1:
@@ -1056,31 +1222,50 @@ if __name__ == '__main__':
     sampler_config = config.executor['sampler_config']
     sampler_config['base_run_dir'] = base_run_dir
     
-    gpy = GpyAnalyticSobolSampler(**sampler_config)    
-    for i, batch_dir in enumerate(batch_dirs):
-        gpy.append_train_data(batch_dir)
-        if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
-            print('WRITING BATCH INFO FOR:',batch_dir)
-            with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
-                gpy.gp_model = pickle.load(file)
-                # gpy.fit()
-                gpy.cache_hypers()
-                gpy.cache_K()
-            print("\n\n\n ================================== \n\n\n")
-            gpy._write_batch_info_inner(batch_dir, name='post2_')
+    gpy = GpyAnalyticSobolSampler(**sampler_config)
+    last_write=0
+    write_every=500
+    # for i, batch_dir in enumerate(batch_dirs):
+    #     gpy.batch_number = i
+    #     # if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
+    #     print('WRITING BATCH INFO FOR:',batch_dir)
+    #     # with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
+    #         # gpy.gp_model = pickle.load(file)
+    #         # X, Y = gpy.get_data()
+    #         # if len(X)<=520:
+    #         #     continue
+    #     X, Y = gpy.get_data()
+    #     num_samples = len(X)
+    #     if num_samples - last_write <= write_every:
+    #         continue
+    #     else:
+    #         last_write = num_samples
+    #     gpy.fit()
+    #     gpy.cache_hypers()
+    #     gpy.cache_K()
+    #     gpy.plot_slices(res=30)
+    #     # gpy._write_batch_info_inner(batch_dir, name='post2_')
+        
+    #     # reg_results = gpy.regression_test()
+    #     # reg_results['num_samples'] = gpy.gp_model.X.shape[0]
+    #     # print('debug reg results', reg_results)
+    #     # df = pd.DataFrame({k: v for k, v in reg_results.items()})
+    #     # reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
+    #     # if os.path.exists(reg_path):
+    #     #     df.to_csv(reg_path, mode='a', header=False, index=False)
+    #     # else:
+    #     #     df.to_csv(reg_path, mode='w', header=True, index=False)
+    #     # print("\n\n\n ================================== \n\n\n")
             
-            # reg_results = gpy.regression_test()
-            # reg_results['num_samples'] = len(gpy.train)
-            # df = pd.DataFrame({k: v for k, v in reg_results.items()})
-            # reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
-            # if os.path.exists(reg_path):
-            #     df.to_csv(reg_path, mode='a', header=False, index=False)
-            # else:
-            #     df.to_csv(reg_path, mode='w', header=True, index=False)
          
-        # if i == 4:
-        #     break
-   
+    #     # if i == 2:
+    #     #     break
+
+    print('MAKING COLLAPSED DATASET')
+    gpy.batch_number = len(batch_dirs)-1
+    # gpy.plot_slices(res=30)
+    gpy.plot_threshold_histograms_grid(threshold=0.01, res=30, bins=100)
+    # gpy.post_process()
  
     # merge_secondary_into_primary(
     #     primary_csv=os.path.join(base_run_dir, 'batch_info.csv'),
