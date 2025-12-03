@@ -40,6 +40,7 @@ __pycache__/
 .vscode/
 data_store/*
 core
+*personal*
 *images*
 *out.txt
 *.png

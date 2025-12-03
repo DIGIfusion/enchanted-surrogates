@@ -266,15 +266,20 @@ class GpyAnalyticSobolSampler(Sampler):
     # Main sampling loop
     # ---------------------------
     
-    def get_data(self):
+    def get_data(self, timeout=60*5):
+        start = time.time()
         print('debug get_data batch_numer:', self.batch_number)
         if self.batch_number is not None:
             _batch_dirs = get_batch_dirs(self.base_run_dir)
             dfs = []
-            for _i in range(self.batch_number+1):
+            for _i in range(self.batch_number):
                 bd = _batch_dirs[_i]
                 # print('debug get_data bd', bd)
                 dd = os.path.join(bd, 'enchanted_dataset.csv')
+                while not os.path.exists(dd):
+                    time.sleep(0.1)
+                    if time.time() - start > timeout:
+                        raise TimeoutError(f'get data timeout, waiting for {dd} to exist')
                 dfi = pd.read_csv(dd, on_bad_lines='warn')
                 # print('debug get_data len(dfi)', len(dfi))
                 dfs.append(dfi)
@@ -884,6 +889,10 @@ class GpyAnalyticSobolSampler(Sampler):
     def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None):
         if model is None:
             model = self.gp_model
+        
+        if mode == "random":
+            return np.random.uniform(0,1,len(X_pool))
+        
         if mode == "var":
             mu, var = model.predict_noiseless(X_pool)
             return var.flatten()

@@ -55,6 +55,7 @@ class SgppSampler(Sampler):
         self.bounds = np.array(bounds)
         self.parameters = parameters
         self.num_samples_at_last_write = 0
+        self.main_diagonal_true_csv = kwargs.get('main_diagonal_true_csv',None)
         
         self.max_boundary_tree_points = kwargs.get('max_boundary_tree_points')
         self.boundary_threshold_quantile = kwargs.get('boundary_threshold_quantile')
@@ -463,7 +464,26 @@ class SgppSampler(Sampler):
         else:
             next_samples = self.get_adapted_samples()
         self.num_samples_by_batch.append(len(self.train)+self.guide_dataset_size)
+        if not self.has_budget:
+            self.light_post_processing()
+            return None
         return next_samples
+    
+    def light_post_processing(self):
+        self.plot_model_slices()
+        
+    def plot_model_slices(self):
+        from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
+        slices_dir = os.path.join(self.base_run_dir, 'slices')
+        os.makedirs(slices_dir)
+        slices_sampler = SlicesSampler2D(parameters=self.parameters, bounds=self.bounds, base_run_dir=slices_dir)
+        samples = slices_sampler.get_next_samples()
+        df_slices = pd.DataFrame(samples)
+        X = df_slices[self.parameters].to_numpy()
+        y = self.surrogate_predict(X)
+        df_slices['output'] = y
+        df_slices.to_csv(os.path.join(slices_dir,'enchanted_dataset.csv'))
+        slices_sampler.make_plots(dots_x=np.array(self.train.keys()))
     
     def update_mean_recent_surplus(self):
         if self.grid_increase != None:
@@ -1139,6 +1159,36 @@ class SgppSampler(Sampler):
         if save_grid:
             self.save_grid(batch_dir, name=name)
         return results
+    
+    def plot_main_diagonal(self, res=200):
+        import matplotlib.pyplot as plt
+        Y_main_diag_true = None
+        if self.main_diagonal_true_csv:
+            mdt_df = pd.read_csv(self.main_diagonal_true_csv)
+            X_main_diag = mdt_df[self.parameters].to_numpy()
+            X_main_diag = self.points_transform_box2unit(X_main_diag)
+            out_col = [col for col in mdt_df.columns() if 'output' in col]
+            if out_col > 1:
+                warnings.warn('MORE THAN ONE OUTPUT COLUMN, TAKING FIRST')
+            out_col = out_col[0]
+            Y_main_diag_true = mdt_df[out_col]
+        else:
+            co_ordinate = np.linspace(0,1,res)
+            X_main_diag = np.array([np.repeat(i, self.dim) for i in co_ordinate])
+        
+        Y_main_diag_pred = self.surrogate_predict(X_main_diag, space='unit_space')
+        x_main_diag = [X_main_diag_i[0] for X_main_diag_i in X_main_diag] 
+        fig = plt.figure()
+        plt.plot(x_main_diag, Y_main_diag_pred, label='prediction')
+        if Y_main_diag_true is not None:
+            plt.plot(x_main_diag, Y_main_diag_true, label='true')
+        num_samples = len(self.train)+self.guide_dataset_size
+        plt.title(f'Num Grid Points: {num_samples}')
+        plt.xlabel('main diagonal coordinate')
+        plt.ylabel(out_col)
+        save_path = os.path.join(self.base_run_dir, 'main_diagonals', f'N{num_samples}_main_diagonal.png')
+        os.makedirs(os.path.dirname(save_path))
+        fig.savefig(save_path)
         
     def merge_batch_info(self):
         assert self.base_run_dir
@@ -1732,12 +1782,19 @@ if __name__ == "__main__":
     _, base_run_dir = sys.argv
     
     batch_dirs = get_batch_dirs(base_run_dir)
-    for batch_dir in batch_dirs:
+    # for batch_dir in batch_dirs:
+    #     train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+    #     if os.path.exists(train_points_file):                
+    #         with open(train_points_file, 'rb') as file:
+    #             train = pickle.load(file)
+    #         print('len(train)', len(train)+32,'batch_dir', batch_dir)
+
+    for batch_dir in batch_dirs.reverse():
         train_points_file = os.path.join(batch_dir, 'train_points.pkl')
-        if os.path.exists(train_points_file):                
-            with open(train_points_file, 'rb') as file:
-                train = pickle.load(file)
-            print('len(train)', len(train)+32,'batch_dir', batch_dir)
+        if os.path.exists(train_points_file):
+            
+            break
+      
     
 
 # # import pysgpp library
