@@ -488,6 +488,25 @@ class BayesianOptimizationSampler(Sampler):
         try:
             dists = np.array(self.result_dictionary['distances'])
             ndistances = np.shape(dists)[1]
+            if ndistances > 1:
+                for i in range(ndistances):
+                    idx = np.where(dists[:,i] == 
+                                   np.min(dists[:,i]))
+                    idx = idx[0][0]
+                    run_dir = self.result_dictionary['run_dir'][idx]
+                    self.plot_forward(run_dir, str(i))
+                idx = np.where(np.sum(dists, axis=1) ==
+                               np.min(np.sum(dists, axis=1)))
+                idx = idx[0][0]
+                run_dir = self.result_dictionary['run_dir'][idx]
+                self.plot_forward(run_dir, 'sum')
+            else:
+                idx = np.where(dists == 
+                               np.min(dists))
+                idx = idx[0][0]
+                run_dir = self.result_dictionary['run_dir'][idx]
+                plt.figure(1)
+                self.plot_forward(run_dir, str(i))
             for i in range(ndistances):
                 if ndistances == 1:
                     idx = np.where(dists == 
@@ -497,18 +516,21 @@ class BayesianOptimizationSampler(Sampler):
                                    np.min(dists[:,i]))             
                 idx = idx[0][0]
                 run_dir = self.result_dictionary['run_dir'][idx]
-                plt.figure(1)
-                self.parser.collect_sample_information(
-                    run_dir,
-                    self.observations, plot_comparison=True)
-                plt.savefig(self.base_run_dir+'/Fig_result_'+str(i)+'.svg')
-                plt.close()
+                self.plot_forward(run_dir, str(i))
         except:
             plt.close()
             print('Result plotting did not work. Have you implemented',
                   ' plotting features in the parser?')
             
- 
+    def plot_forward(self, run_dir, label='_'):
+        plt.figure(1)
+        self.parser.collect_sample_information(
+            run_dir,
+            self.observations, 
+            plot_comparison=True)
+        plt.savefig(self.base_run_dir+'/Fig_result_'+label+'.svg')
+        plt.close()
+
     def plot_result_sequence(self):
         dists = np.array(self.result_dictionary['distances'])
         ndistances = np.shape(dists)[1]
