@@ -36,6 +36,9 @@ bo = [
     "botorch",
     "gpytorch",
     "torch",
+    "lampe",
+    "pyro-ppl",
+    "scipy",
 ]
 
 sdsg = [
