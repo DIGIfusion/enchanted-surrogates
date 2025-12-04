@@ -35,6 +35,9 @@ bo = [
     "botorch",
     "gpytorch",
     "torch",
+    "lampe",
+    "pickle",
+    "pyro"
 ]
 
 sdsg = [

@@ -9,19 +9,17 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
 import pickle as pkl
 import os
+import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import scienceplots
+import scipy.optimize as optimize
 
-try:
-    import botorch, gpytorch, torch
-    from botorch.optim import optimize_acqf
-    from botorch.utils.transforms import standardize, normalize, unnormalize
-except:
-    print(
-        "import botorch, gpytorch, torch failed.",
-        "Please make sure that you have torch, botorch,",
-        "and gpytorch installed",
-    )
+import botorch, gpytorch, torch, pyro, lampe
+import lampe.plots as plots
+from botorch.optim import optimize_acqf
+from botorch.utils.transforms import standardize, normalize, unnormalize
+
 
 
 class BayesianOptimizationSampler(Sampler):
@@ -60,6 +58,8 @@ class BayesianOptimizationSampler(Sampler):
         plot_file (bool):             True for plottining in file (vs. screen)
         plot_frequency (int):         Frequency of plotting (vs. # samples)
         plot_debug (bool):            True for debugging plotting
+        plot_labels ([str]):          Labels to be used in the plots
+        plot_progress (bool):         Whether to generate progress plots
 
     """
 
@@ -90,7 +90,7 @@ class BayesianOptimizationSampler(Sampler):
         self.random_fraction   = kwargs.get('random_fraction', 0.2)
         self.fail_p_filter     = kwargs.get('failure_prob_filter', False)
         self.ucb_beta          = kwargs.get('ucb_beta', 2.0)  
-        self.async_samp        = kwargs.get('async_samp', False)  
+        self.async_samp        = kwargs.get('async_samp', False)
 
         # GPR parameters
         self.fully_bayesian    = kwargs.get('fully_bayesian', False)
@@ -103,8 +103,8 @@ class BayesianOptimizationSampler(Sampler):
         self.plot_GPR_file     = kwargs.get('plot_file', False)
         self.plot_frequency    = kwargs.get('plot_frequency', 1)
         self.plot_debug        = kwargs.get('plot_debug', False)
-
-
+        self.plot_labels       = kwargs.get('plot_labels', None)
+        self.plot_progress     = kwargs.get('plot_progress', False)
 
         #if self.parser_config == None:
         if self.parser_type == None:
@@ -136,6 +136,7 @@ class BayesianOptimizationSampler(Sampler):
         # Assume random sampling if self.collected_samples is below 
         # the number of initial samples.
         batch_samples = []
+
         if self.collected_samples < self.initial_samples:
             print(str(100*self.collected_samples/self.initial_samples),
                   ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
@@ -253,7 +254,9 @@ class BayesianOptimizationSampler(Sampler):
             for index, _ in enumerate(range(candidates.size(dim=0))):
                 params_dict = dict(zip(self.parameters, 
                                        candidates[index,:].numpy()))
-                batch_samples.append(params_dict)  
+                batch_samples.append(params_dict)
+            if self.plot_progress:
+                self.progress_plots()  
 
         self.submitted += len(batch_samples)
         return batch_samples
@@ -318,7 +321,8 @@ class BayesianOptimizationSampler(Sampler):
                 model=gp)
             botorch.fit.fit_gpytorch_mll(mll)
         self.model = gp
-        self.best_f = torch.max(distances)
+        self.best_f, idx = torch.max(distances, 0)
+        self.best_f_loc = input_vector[idx,:]
         if self.result_dictionary_failed != [None]:
 
             inp = torch.tensor(self.result_dictionary['inputs'])
@@ -394,7 +398,7 @@ class BayesianOptimizationSampler(Sampler):
         # This list gives identifiers to recognize files & directories that
         # do not represent samples. 
         skiplist = ['yaml', 'worker_out', 'FINISHED', '.pkl', '.csv', '_RUN',
-                    'GPR']
+                    'GPR', 'Fig']
 
         for dirname in dirlist:
             # See if the dirname is on the skiplist
@@ -453,11 +457,67 @@ class BayesianOptimizationSampler(Sampler):
             pkl.dump(res_dump, resdict)
             resdict.close()
 
-    # Plotting functionalities
+    # Plotting ------------------------------------------------------
 
+    def progress_plots(self):
+        # Nice style for plotting
+        plt.style.use(['science','no-latex'])
+
+        # Plot the distances as a function of sample number
+        plt.figure(1)
+        self.plot_result_sequence()
+        plt.savefig(self.base_run_dir+'/Fig_distance_vs_sample.svg')
+        plt.close()
+
+        # Plot distances as a function of variable        
+        plt.figure(1)
+        self.plot_distances()
+        plt.savefig(self.base_run_dir+'/Fig_distances_vs_variable.svg')
+        plt.close()
+
+        # Sample the posterior
+        self.posterior_samples()
+        self.find_MAP()
+        # Corner plot
+        plt.figure(1)
+        self.corner_plot(point=np.array(self.MAP['x']))
+        plt.savefig(self.base_run_dir+'/Fig_corner_plot.svg')
+        plt.close()
+
+        # Plot the best case
+        try:
+            dists = np.array(self.result_dictionary['distances'])
+            ndistances = np.shape(dists)[1]
+            for i in range(ndistances):
+                if ndistances == 1:
+                    idx = np.where(dists == 
+                                   np.min(dists))
+                else:
+                    idx = np.where(dists[:,i] == 
+                                   np.min(dists[:,i]))             
+                idx = idx[0][0]
+                run_dir = self.result_dictionary['run_dir'][idx]
+                plt.figure(1)
+                self.parser.collect_sample_information(
+                    run_dir,
+                    self.observations, plot_comparison=True)
+                plt.savefig(self.base_run_dir+'/Fig_result_'+str(i)+'.svg')
+                plt.close()
+        except:
+            plt.close()
+            print('Result plotting did not work. Have you implemented',
+                  ' plotting features in the parser?')
+            
+ 
     def plot_result_sequence(self):
-        plt.plot(self.result_dictionary['distances'][:],'k.')
-        plt.show()
+        dists = np.array(self.result_dictionary['distances'])
+        ndistances = np.shape(dists)[1]
+        colorvec = ['k', 'r', 'b', 'm']
+        for i in range(ndistances):
+            plt.plot(dists[:,i],'.', color=colorvec[i])
+        plt.ylabel('Distance')
+        plt.xlabel('# sample')
+        #plt.show()
 
     def plot_distances(self):
         """
@@ -475,7 +535,7 @@ class BayesianOptimizationSampler(Sampler):
             if nrows == 1:
                 plt.plot(inputs[:], 
                          distances[:],'ko')
-                plt.xlabel(self.parameters[0])
+                plt.xlabel(self.plot_labels[0])
             else:
                 fig, axs = plt.subplots(nrows=nrows, 
                                         ncols=ncols, 
@@ -485,27 +545,34 @@ class BayesianOptimizationSampler(Sampler):
                         inputs[:], 
                         distances[:,i],'ko')
                     if i == numdist - 1:
-                        axs[int(i)].set_xlabel(self.parameters[0])
+                        axs[int(i)].set_xlabel(self.plot_labels[0])
         elif nrows == 1:
-            fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharey='row')
+            fig, axs = plt.subplots(nrows=nrows, 
+                                    ncols=ncols, 
+                                    sharey='row',
+                                    figsize=(3.0*ncols, 3.0)
+                                    )
             for j in range(numinp):
                 axs[int(j)].plot(inputs[:,j], 
                                  distances[:],'ko')
-                axs[int(j)].set_xlabel(self.parameters[j])
+                axs[int(j)].set_xlabel(self.plot_labels[j])
         else:
             fig, axs = plt.subplots(
                 nrows=nrows, 
                 ncols=ncols, 
                 sharex='col', 
-                sharey='row')
+                sharey='row',
+                figsize=(3.0*ncols, 3.0*nrows)
+                )
             for i in range(numdist):
                 for j in range(numinp):
                     axs[int(i), int(j)].plot(
                         inputs[:,j], 
                         distances[:,i], 'ko')
                     if i == numdist - 1:
-                        axs[int(i), int(j)].set_xlabel(self.parameters[j])
-        plt.show()
+                        axs[int(i), int(j)].set_xlabel(self.plot_labels[j])
+        plt.tight_layout()
+        #plt.show()
 
     def initialize_plot(self, plot_dims=[0, 1], base_point = 0):
         distances = torch.tensor(self.result_dictionary['distances'])
@@ -588,7 +655,7 @@ class BayesianOptimizationSampler(Sampler):
             else:
                 plt.show()
 
-    def plot_posterior(self, plot_dims=[0,1], base_point=0, threshold=0):
+    def plot_posterior(self, plot_dims=[0,1], base_point=0, threshold=-1):
         """
         This is a helper function for plotting the posterior.
         """
@@ -610,10 +677,127 @@ class BayesianOptimizationSampler(Sampler):
                 plt.xlabel(self.parameters[plot_dims[0]])
             plt.show()
     
-    def posterior(self, x, threshold=0):
+    def posterior(self, x, threshold=-1):
         modelpred = self.model(x)
         normal = torch.distributions.normal.Normal(0,1)
+        if threshold == -1:
+            threshold = self.best_f
         internal_value = (-threshold + modelpred.mean)/modelpred.stddev
         output_value = normal.cdf(internal_value)
         return output_value
+
+    def find_MAP(self, assume_near_the_bestf=True):
+        def fun(x):
+            x = torch.tensor(x).unsqueeze(0)
+            y = -float(self.posterior(x).detach())
+            return y
+        if assume_near_the_bestf:
+            h = optimize.minimize(fun, self.best_f_loc.squeeze())
+            minval = h.fun
+            xmin = unnormalize(torch.tensor(h.x), 
+                               torch.tensor(self.bounds).T)
+        else:
+            minval = 0
+            xmin = 0
+            for _ in range(niter):
+                h = optimize.minimize(fun, np.random.rand(len(self.parameters)))
+                if h.fun < minval:
+                    minval = h.fun
+                    xmin = unnormalize(torch.tensor(h.x), 
+                           torch.tensor(self.bounds).T)
+        maxval = -minval
+        MAP = {'x':xmin, 'val':maxval}
+        self.MAP = MAP
+
+    # Posterior sampling and plotting ---------------------------------
+
+    # This is the used default approach at the moment.
+    # This is a bit of a heuristic method combining random sampling 
+    # and using the collected result_dictionary. Intention is to be
+    # efficient.
+    def posterior_samples(self, add_rand=10000):
+        x_output = torch.tensor(self.result_dictionary['inputs'])
+        x_in = normalize(x_output, torch.tensor(self.bounds).T)
+        x_in = x_in + 1e-4*torch.randn(len(x_in[:,0]), len(self.parameters))
+        y_output = self.posterior(x_in)
+        rand_vector = [0.001, 0.01, 0.1, 0.5]
+        for i in rand_vector:
+            x_o = torch.tensor(self.result_dictionary['inputs'])
+            x_in = normalize(x_o, torch.tensor(self.bounds).T)
+            x_in = x_in + i*torch.randn(len(x_in[:,0]), len(self.parameters))
+            y_o = self.posterior(x_in)
+            x_o = unnormalize(x_in, torch.tensor(self.bounds).T)
+            x_output = torch.cat((x_output, x_o))
+            y_output = torch.cat((y_output, y_o))
+        x_output2 = torch.rand(add_rand, len(self.parameters))
+        y_output2 = self.posterior(x_output2)
+        y_output2 = y_output2        
+        x_output2 = unnormalize(x_output2, torch.tensor(self.bounds).T)
+        x_output = torch.cat((x_output, x_output2))
+        y_output = torch.cat((y_output, y_output2))
+        samples = {'x':x_output.detach().numpy(), 
+                   'y':y_output.detach().numpy()}
+        self.samples = samples
+
+    # Direct MC sampling of the posterior. This is the preferred option
+    # presently.
+    def posterior_MC(self, nsamples=100000):
+        x_output = torch.rand(nsamples, len(self.parameters))
+        y_output = self.posterior(x_output)
+        y_output = y_output.detach().numpy()         
+        x_output = unnormalize(x_output, torch.tensor(self.bounds).T)
+        samples = {'x':x_output, 'y':y_output}
+        self.samples = samples 
+
+    # An implemention of NUTS MCMC sampler using Pyro. This does not yet
+    # work very well/efficiently.
+    def posterior_MCMC(self, 
+                       num_samples=1000, 
+                       warmup_steps=300,
+                       num_chains=8,
+                       MC_start=True):
+        def model():
+            xprop = pyro.sample('x', 
+                                pyro.distributions.Uniform(
+                                    torch.zeros(len(self.parameters)),
+                                    torch.ones(len(self.parameters))))
+            y = self.posterior(xprop.unsqueeze(0))
+            return y
+        # Assume No-U-Turn kernel. More options can be added in future.
+        init_params = None
+        nuts_kernel = pyro.infer.mcmc.NUTS(model,
+                                           adapt_step_size=True,
+                                           target_accept_prob=0.95)
+        mcmc = pyro.infer.mcmc.MCMC(nuts_kernel, 
+                                    num_samples=num_samples, 
+                                    warmup_steps=warmup_steps,
+                                    num_chains=num_chains,
+                                    initial_params=init_params)
+        mcmc.run()
+        y = self.posterior(mcmc.get_samples()['x']) 
+        samples = unnormalize(mcmc.get_samples()['x'], 
+                                 torch.tensor(self.bounds).T)
+        outputdict = {'x':samples, 'y':y.detach().numpy()}
+        self.samples = outputdict
+
+    def corner_plot(self, smooth=1.5, point=[]):
+        plt.style.use(['science','no-latex'])
+        lower_array = []
+        upper_array = []
+        for i in range(len(self.parameters)):
+            lower_array.append(self.bounds[i][0])
+            upper_array.append(self.bounds[i][1])
+        domain = [lower_array, upper_array]
+        fig = plots.corner(self.samples['x'], 
+                           self.samples['y'],
+                           domain=domain, 
+                           smooth=smooth, 
+                           labels=self.plot_labels)
+        if len(point) > 0:
+            plots.mark_point(fig, point, color='black')
+        self.cp_figure = fig
+
+    
+        
+
 
