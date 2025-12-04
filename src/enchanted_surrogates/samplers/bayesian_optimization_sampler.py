@@ -686,7 +686,7 @@ class BayesianOptimizationSampler(Sampler):
         output_value = normal.cdf(internal_value)
         return output_value
 
-    def find_MAP(self, assume_near_the_bestf=True):
+    def find_MAP(self, assume_near_the_bestf=True, niter=100):
         def fun(x):
             x = torch.tensor(x).unsqueeze(0)
             y = -float(self.posterior(x).detach())
