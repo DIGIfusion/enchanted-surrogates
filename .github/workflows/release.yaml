@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+
+  lint:
+    uses: ./.github/workflows/pylint.yml
+  test:
+    uses: ./.github/workflows/pytest.yml
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v6
+          with:
+            fetch-depth: 0 # Fetch all history for tags
+        - name: Set up ${{ matrix.python-version }}
+          uses: actions/setup-python@v6
+          with:
+            python-version: ${{ matrix.python-version }}
+        - name: Install dependencies
+          run: |
+            python -m pip install --upgrade pip
+            python -m pip install build
+        - name: Build package
+          run: python -m build
+        - name: Upload artifacts
+          uses: actions/upload-artifact@v4
+          # Use dist folder created by build step
+          with:
+            name: dist
+            path: dist/*
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v6
+
+        - name: Download artifacts
+          uses: actions/download-artifact@v5
+          with:
+            name: dist
+            path: dist
+        
+        # For command line usage to do the release, following should be 
+        # fixed. 
+        #- name: Create GitHub Release
+        #  # GITHUB_TOKEN is automatically created by GitHub Actions
+        #  env:
+        #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        #  # github.ref_name contains the tag name that triggered the workflow
+        #  run: |
+        #    gh release create ${{ github.ref_name }} dist/* \
+        #    --title "${{ github.ref_name }}" \
+        #    --notes "Automated release of version ${{ github.ref_name }}."
+          
