@@ -787,16 +787,16 @@ class SgppSampler(Sampler):
             unit_point = ()
             for j in range(self.dim):
                 unit_point = unit_point + (gp.getStandardCoordinate(j),)
-                box_point = self.point_transform_unit2box(unit_point)
-                try:
-                    val = float(function(unit_point if acted_on == 'unit_point' else box_point))
-                    if not np.isfinite(val):
-                        warnings.warn(f'quadrature function integral got a non finite value from the function: {val}')
-                        val = 0.0
-                except Exception as e:
-                    warnings.warn(f'quadrature function integral got an error when evaluating function value from the function: {e}')
+            box_point = self.point_transform_unit2box(unit_point)
+            try:
+                val = float(function(unit_point if acted_on == 'unit_point' else box_point))
+                if not np.isfinite(val):
+                    warnings.warn(f'quadrature function integral got a non finite value from the function: {val}')
                     val = 0.0
-                alpha[i] = val
+            except Exception as e:
+                warnings.warn(f'quadrature function integral got an error when evaluating function value from the function: {e}')
+                val = 0.0
+            alpha[i] = val
         # compute surpluses
         # pysgpp.createOperationHierarchisation(self.grid).doHierarchisation(alpha)
         self.heirarchisation(self.grid, alpha)
@@ -883,6 +883,7 @@ class SgppSampler(Sampler):
         # VAR(f(x)) = EXP[({f(x)-EXP[f(x)]}**2]
         # if self.gaussian_input_uncertanties:
         #     fxsquared = lambda unit_point: self.unit_truncnorm_pdf(unit_point)*self.lookup_function(unit_point, unit_or_box='unit')**2
+        
         EXPfx = self.quadrature_expectation()
         fx_neg_mean_squared = lambda unit_point: (self.lookup_function(unit_point, unit_or_box='unit') - EXPfx)**2
         VARfx = self.quadrature_function_integral(fx_neg_mean_squared, acted_on='unit_point')
@@ -893,7 +894,7 @@ class SgppSampler(Sampler):
         # print('after exp fx sq')
         # EXPfx = self.quadrature_expectation()
         # print('after exp fx')
-        # VARfx = EXPfxsquared - EXPfx**2
+        # VARfx = EXPfxsquared - EXPfx**2 # subtracting two small numbers makes numerical instabilities
         return VARfx
     
     def quadrature_variance(self, *args, **kwargs):

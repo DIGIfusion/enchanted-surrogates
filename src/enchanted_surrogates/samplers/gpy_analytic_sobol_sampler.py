@@ -88,6 +88,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.custom_submitted = 0
         self.budget = kwargs.get('budget', None) or self.batch_size
         self.output_col = None
+        self.global_noise = kwargs.get('global_noise', 0)
         
         self.max_y = kwargs.get('max_y',None) # above this value data will be ignored. Potentially because it blongs to a different class
         
@@ -355,7 +356,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 # standard error of the mean
                 mean_sems[i] = np.std(y_vals, ddof=1) / np.sqrt(counts[i])
             else:
-                noise_vars[i] = 1e-8  # jitter if no repeats
+                noise_vars[i] = self.global_noise + 1e-8  # jitter if no repeats
                 se_vars[i] = 1e-8     # jitter for SE as well
                 mean_sems[i] = 1e-8   # jitter for SEM
 

@@ -35,9 +35,11 @@ class IshigamiRunner(Runner):
         """
         a, b = self.a, self.b
 
-        # Known analytical components
-        mean = 0.0
-        var = a**2 / 8 + b * np.pi**4 / 5 + b**2 * np.pi**8 / 18
+        # Analytical mean
+        mean = a / 2
+
+        # Analytical variance
+        var = 0.5 + (a**2 / 8) + (b * np.pi**4 / 5) + (b**2 * np.pi**8 / 18)
 
         # First-order indices
         S1 = (0.5 + b * np.pi**4 / 5) / var
@@ -51,6 +53,7 @@ class IshigamiRunner(Runner):
 
         return {
             "mean": mean,
+            "variance": var,
             "std": np.sqrt(var),
             "sobol_indices": [S1, S2, S3],
             "sobol_total_indices": [ST1, ST2, ST3]
@@ -71,13 +74,29 @@ class IshigamiRunner(Runner):
     def light_post_processing(self, base_run_dir):
         stats = self.analytical_stats()
         stats['header'] = 'ANALYTICAL UQ QUANTITIES'
-        stats['subheader'] = f'ISHIGAMI\n a:{self.a}'
+        stats['subheader'] = f'ISHIGAMI\n a:{self.a} b:{self.b}'
+        table = print_stats_table(stats)
+        dots_x = None
+        if os.path.exists(os.path.join(base_run_dir, 'enchanted_dataset.csv')):
+            df = pd.read_csv(os.path.join(base_run_dir, 'enchanted_dataset.csv'))
+            dots_x = df[['x1','x2','x3']].to_numpy()
+        self.plot_slices(base_run_dir, dots_x=dots_x)
+    
+    
+    def light_pre_processing(self, base_run_dir, *args, **kwargs):
+        stats = self.analytical_stats()
+        stats['header'] = 'ANALYTICAL UQ QUANTITIES'
+        stats['subheader'] = f'ISHIGAMI\n a:{self.a} b:{self.b}'
         table = print_stats_table(stats)
         with open(os.path.join(base_run_dir, 'true_uq_stats.txt'),'w') as file:
             file.write(table)
-        self.plot_slices(base_run_dir)
             
-    def plot_slices(self, base_run_dir, res=100):
+        outdir = os.path.join(base_run_dir, "true_function_plots")
+        os.makedirs(outdir, exist_ok=True)        
+        self.plot_slices(base_run_dir)
+
+    
+    def plot_slices(self, base_run_dir, res=100, dots_x=None):
         from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
         save_dir = os.path.join(base_run_dir, 'ishigami_true_slice_plots')
         os.makedirs(save_dir, exist_ok=True)
@@ -89,9 +108,10 @@ class IshigamiRunner(Runner):
         samples = slice_samp.get_samples()
         df = pd.DataFrame(samples)
         X_slice = df[parameters].to_numpy()
-        Y_slice, _ = self.ishigami(X_slice)
+        x1,x2,x3 = X_slice.T
+        Y_slice = self.ishigami(x1,x2,x3)
         print('debug len y len df', len(Y_slice), len(df))
         df_plot = pd.DataFrame(samples)
-        df_plot['Ishigami'] = Y_slice
-        slice_samp.plot_full_grid(df=df_plot, name=f'ishigami_')
+        df_plot['Ishigami_output'] = Y_slice
+        slice_samp.plot_full_grid(df=df_plot, name=f'ishigami_', dots_x=dots_x)
 
