@@ -390,6 +390,10 @@ class GpyAnalyticSobolSampler(Sampler):
         # Fit noise GP if any repeats exist (non-jitter)
         if self.num_repeats > 1:
             self.fit_noise(X, noise_vars, se_vars)
+        
+        self.cache_hypers()
+        self.cache_K()
+
 
     def fit_noise(self, X=None, noise_vars=None, se_vars=None):
         """
@@ -894,7 +898,7 @@ class GpyAnalyticSobolSampler(Sampler):
         if mode == "random":
             return np.random.uniform(0,1,len(X_pool))
         
-        if mode == "var":
+        if mode == "var" or "variance":
             mu, var = model.predict_noiseless(X_pool)
             return var.flatten()
         
@@ -1044,16 +1048,16 @@ class GpyAnalyticSobolSampler(Sampler):
         df_plot = pd.DataFrame(samples)
         if not self.output_col:
             self.set_output_col()
-            
+        
         df_plot[self.output_col+'_noise_output'] = Y_slice_noise
-        df_plot[self.output_col+'_noise_output_error'] = Y_slice_noise_error
+        df_plot[self.output_col.replace('output','')+'_noise_outerror'] = Y_slice_noise_error
 
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.noise_gp.X))
 
         df_plot = pd.DataFrame(samples)
         df_plot[self.output_col] = Y_slice
-        df_plot[self.output_col+'_output_error'] = Y_error
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_')
+        df_plot[self.output_col.replace('output', '')+'_outerror'] = Y_error
+        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.gp_model.X))
 
     def plot_threshold_histograms_grid(self, threshold, res=20, bins=20):
         from enchanted_surrogates.samplers.grid_sampler import GridSampler
@@ -1270,9 +1274,11 @@ if __name__ == '__main__':
     #     #     break
 
     print('MAKING COLLAPSED DATASET')
-    gpy.batch_number = len(batch_dirs)-1
-    # gpy.plot_slices(res=30)
-    gpy.plot_threshold_histograms_grid(threshold=0.01, res=30, bins=100)
+    for bn in np.linspace(1,207,10):
+        gpy.batch_number = int(bn)
+        gpy.fit()
+        gpy.plot_slices(res=30)
+    # gpy.plot_threshold_histograms_grid(threshold=0.01, res=30, bins=100)
     # gpy.post_process()
  
     # merge_secondary_into_primary(

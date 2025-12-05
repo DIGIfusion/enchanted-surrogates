@@ -147,7 +147,7 @@ class SlicesSampler2D(Sampler):
                 ax3d.set_ylabel(self.parameters[j])
                 ax3d.set_zlabel(ycol)
                 
-                output_error_col = [c for c in df.columns if 'output_error' in c]
+                output_error_col = [c for c in df.columns if 'outerror' in c]
                 if output_error_col:
                     errcol = output_error_col[0]
                     Zerr = np.zeros_like(Z)
@@ -165,13 +165,13 @@ class SlicesSampler2D(Sampler):
                     ax3d.plot_surface(Xi, Yi, Z_lower, cmap=cmap, alpha=0.2, vmin=ymin, vmax=ymax)
                 
                 z_floor = float(np.nanmin(Z)) if np.isfinite(np.nanmin(Z)) else 0
-                if dots_x:
+                if dots_x is not None:
                     ax3d.scatter(dots_x.T[i], dots_x.T[j], zs=z_floor, zdir='z', s=15, c='k', alpha=0.6, depthshade=False)
                 fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"                
 
                 cax = fig.add_subplot(gs[2])   # colorbar axis
                 cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
-                if dots_x:
+                if dots_x is not None:
                     ax1.scatter(dots_x.T[i], dots_x.T[j])
                 fig.colorbar(cs, cax=cax)
                 fig.tight_layout()
@@ -195,7 +195,7 @@ class SlicesSampler2D(Sampler):
 
         output_col = [c for c in df.columns if 'output' in c]
         if len(output_col) != 1:
-            raise RuntimeError("Dataset must contain exactly one output column.")
+            raise RuntimeError(f"Dataset must contain exactly one output column. found: {output_col}")
         ycol = output_col[0]
         ymin, ymax = df[ycol].min(), df[ycol].max()
 
@@ -238,7 +238,7 @@ class SlicesSampler2D(Sampler):
                         # now find the single closest row in the dataset across all parameters
                         diffs = np.abs(df[p] - xv_closest)
                         for q, val in fixed_assignments.items():
-                            diffs += np.abs(df[q] - val)
+                            diffs += np.abs(df[q] - val)    
                         idx = np.argmin(diffs.values)
                         yvals.append(float(df.iloc[idx][ycol]))
                     yvals = np.array(yvals)
@@ -248,7 +248,7 @@ class SlicesSampler2D(Sampler):
                     ax.set_ylabel(ycol)
                     ax.grid(True, alpha=0.3)
                     
-                    output_error_col = [c for c in df.columns if 'output_error' in c]
+                    output_error_col = [c for c in df.columns if 'outerror' in c]
                     if output_error_col:
                         errcol = output_error_col[0]
                         yerr = []
@@ -288,7 +288,7 @@ class SlicesSampler2D(Sampler):
                     ax.set_box_aspect(1)   # matplotlib ≥ 3.3
                     ax.set_xlabel(self.parameters[i])
                     ax.set_ylabel(self.parameters[j])
-                    if dots_x:
+                    if dots_x is not None:
                         ax.scatter(dots_x.T[i], dots_x.T[j])
                 else:
                     # --- Lower triangle: 3D surface ---
@@ -309,14 +309,14 @@ class SlicesSampler2D(Sampler):
                                 Z[u,v] = vals[0] if len(vals) else np.nan
                     ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha, vmin=ymin, vmax=ymax)
                     z_floor = float(np.nanmin(Z)) if np.isfinite(np.nanmin(Z)) else 0
-                    if dots_x:
+                    if dots_x is not None:
                         ax3d.scatter(dots_x.T[i], dots_x.T[j], zs=z_floor, zdir='z', s=15, c='k', alpha=0.6, depthshade=False)
 
                     ax3d.set_xlabel(self.parameters[i])
                     ax3d.set_ylabel(self.parameters[j])
                     ax3d.set_zlabel(ycol)
                     
-                    output_error_col = [c for c in df.columns if 'output_error' in c]
+                    output_error_col = [c for c in df.columns if 'outerror' in c]
                     if output_error_col:
                         errcol = output_error_col[0]
                         Zerr = np.zeros_like(Z)
