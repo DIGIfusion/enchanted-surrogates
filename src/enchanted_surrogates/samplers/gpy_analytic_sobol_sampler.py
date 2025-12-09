@@ -498,10 +498,11 @@ class GpyAnalyticSobolSampler(Sampler):
             # Predictive variance on pool using global model (not used for fold selection but useful fallback)
             score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string)
             score_pool_global = score_pool_global.flatten()
-
+            
             print(f'BATCH SIZE:{self.batch_size} USING GLOBAL SCORE.')
             idx = list(np.argsort(-score_pool_global)[:self.batch_size])
             chosen_points = self.pool[idx]
+
             real_chosen_points = self.from_unit(chosen_points)
             samples = [{key: float(v) for key, v in zip(self.parameters, row)} for row in real_chosen_points]
             self.pool = np.delete(self.pool, idx, axis=0)
@@ -576,7 +577,6 @@ class GpyAnalyticSobolSampler(Sampler):
                 # Predictive variance on pool using global model (not used for fold selection but useful fallback)
                 score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string)
                 score_pool_global = score_pool_global.flatten()
-
                 sorted_idx = list(np.argsort(-score_pool_global))
                 for idx in sorted_idx:
                     if idx not in seen:
@@ -593,7 +593,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
         samples = samples * self.num_repeats
         if self.include_index:
-            samples = [{**samp, 'index': ind} for samp, ind in zip(samples, range(self.custom_submitted,len(samples)))]
+            samples = [{**samp, 'index': ind} for samp, ind in zip(samples, range(self.custom_submitted,self.custom_submitted+len(samples)))]
         
         # increment counters and return
         self.batch_number += 1
@@ -604,7 +604,6 @@ class GpyAnalyticSobolSampler(Sampler):
 
         if samples is not None:
             self.custom_submitted += len(samples)
-        
         return samples
 
     def load_model(self, model_path=None, directory=None):
@@ -769,13 +768,11 @@ class GpyAnalyticSobolSampler(Sampler):
                 if K_inv is None:
                     K_inv = np.linalg.pinv(K)
                 num = float((y.T.dot(K_inv.dot(B).dot(K_inv)).dot(y)) / vol - mu ** 2)
-                # print('DEBUG num:',num)
             except Exception as exc:
                 print('EXCEPTION WHEN GETTING num:', exc)
                 print('TRACEBACK: \n', traceback.format_exc())
                 num = 0.0
             num = max(num, 0.0)
-            # print(f'debug var_pred: {var_pred} | num: {num}')
             sobol_first[self.parameters[j] + '_sobolF'] = float(num / var_pred) if var_pred > 0 else 0.0
 
         batch_info = {
@@ -815,7 +812,6 @@ class GpyAnalyticSobolSampler(Sampler):
                 X_test = X_test[mask]
                 y_test = y_test[mask]
                 y_pred = y_pred[mask]
-            # print('debug, xtest', X_test)
             print('debug, ytest n nans', np.isnan(y_test).sum())
             print('debug, ypred n nans', np.isnan(y_pred).sum())
             residuals = y_test - y_pred
@@ -904,7 +900,6 @@ class GpyAnalyticSobolSampler(Sampler):
         
         if mode == "noise_and_var":
             # GP posterior variance
-            print('debug shape variances self.gp_model.likelihood.variance.shape: in noise and var', self.gp_model.likelihood.variance.shape)
             # Y_metadata = {'output_index': np.arange(X_pool.shape[0]).reshape(-1,1)}
             mu, var_model = self.gp_model.predict_noiseless(X_pool)
             # _, var_model = self.gp_model.predict(X_pool)
