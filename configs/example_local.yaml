@@ -1,3 +1,4 @@
+logging: DEBUG
 executor:
   type: LocalExecutor
   base_run_dir: "data_dir/local"
@@ -9,4 +10,3 @@ sampler:
 runner:
   type: ExampleRunner
   other_params: {}
-log_level: "debug"

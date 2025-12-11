@@ -1,3 +1,4 @@
+logging: DEBUG
 executor:
   type: DaskExecutor
   base_run_dir: "data_dir/dask_local"
@@ -11,4 +12,3 @@ sampler:
 runner:
   type: ExampleRunner
   other_params: {}
-log_level: "debug"
