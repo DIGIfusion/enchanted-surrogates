@@ -56,7 +56,7 @@ def main(args: argparse.Namespace, config_path=None):
     if not os.path.exists(executor.base_run_dir):
         os.makedirs(executor.base_run_dir)
 
-    setup_logging(args.log_level, executor.base_run_dir)
+    setup_logging(args.logging, executor.base_run_dir)
     
     if config_path is not None:
         log.info(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
