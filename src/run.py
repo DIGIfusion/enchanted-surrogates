@@ -1,13 +1,12 @@
 # run.py
-import os
-import warnings
 import yaml
 import argparse
 from datetime import datetime
 from dask.distributed import print
-from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-import shutil
+from enchanted_surrogates.supervisor.supervisor import Supervisor
+
+
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
     Loads configuration from a YAML file.
@@ -48,26 +47,10 @@ def main(args: argparse.Namespace, config_path=None):
     """
 
     print(enchanted_wizard)
-
-    executor_type = args.executor.pop("type")
-    executor = import_executor(executor_type=executor_type, executor_config=args.executor)
-    if not os.path.exists(executor.base_run_dir):
-        os.makedirs(executor.base_run_dir)
-    
-    if config_path is not None:
-        print(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
-        try:
-            shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
-        except Exception as exe:
-            warnings.warn(f"Copying the config file to the base run dir failed.\n \
-                            Try using the full path to the config file.\n \
-                            Here is the exception raised:\n {exe}")
-    
-    print("Starting runs...")
-    executor.start_runs()
-    print("Shutting down scheduler and workers...")
-    executor.clean()
+    supervisor = Supervisor(args, config_path=config_path)
+    supervisor.start()
     return
+
 
 if __name__ == "__main__":
     print(f'{datetime.now()} - Starting Enchanted surrogates.')
