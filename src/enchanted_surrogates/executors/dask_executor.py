@@ -109,7 +109,7 @@ class DaskExecutor(Executor):
                     'job_id': job_id
                 })
             except Exception as e:
-                print(f"Error fetching SLURM resource usage for job {job_id}: {e}")
+                log.error(f"Error fetching SLURM resource usage for job {job_id}: {e}")
 
 
         return job_info
@@ -126,7 +126,7 @@ class DaskExecutor(Executor):
             dask_lines = [line for line in result.stdout.splitlines() if 'sys/dash' not in line and "enc_dask_worker" in line]
 
             if not dask_lines:
-                print("No Dask jobs found in queue.")
+                log.debug("No Dask jobs found in queue.")
                 return []
 
             for line in dask_lines:
@@ -136,7 +136,7 @@ class DaskExecutor(Executor):
             return jobs
 
         except Exception as e:
-            print(f"Error while checking squeue: {e}")
+            log.warning(f"Error while checking squeue: {e}")
             return []
 
     def start_cluster(self, slurm_out_dir=None):
@@ -328,12 +328,9 @@ class DaskExecutor(Executor):
 
         if not self.client:
             self.start_cluster()
-<<<<<<< HEAD
-        print('CLUSTER STARTED')
+
         all_job_ids = self.get_all_dask_job_ids()
-=======
         log.info('CLUSTER STARTED')
->>>>>>> 6e6f4d9 (feat: replace print statements with log calls)
         all_futures = []
 
         while self.sampler.has_budget:
@@ -379,23 +376,19 @@ class DaskExecutor(Executor):
         log.info('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
-<<<<<<< HEAD
 
         job_info = self.get_slurm_usage_info(all_job_ids)
         total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
-        print(f"Total CPU hours used: {total_cpu_time}")
+        log.info(f"Total CPU hours used: {total_cpu_time}")
 
         cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if cpu_ps.returncode == 0:
             headnode_secs = int(cpu_ps.stdout.strip())
-            print(f"Total CPU time used by head node: {headnode_secs/3600}")
+            log.info(f"Total CPU time used by head node: {headnode_secs/3600}")
         else:
-            print(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
+            log.info(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
 
-        print('CLUSTER SHUTDOWN')
-=======
         log.info('CLUSTER SHUTDOWN')
->>>>>>> 6e6f4d9 (feat: replace print statements with log calls)
         self.shutdown_cluster()
 
 
