@@ -23,7 +23,7 @@ class Executor(ABC):
         shutil.copyfile(config_filepath, os.path.join(base_run_dir, "CONFIG.yaml"))
 
     @abstractmethod
-    def start_runs(self):
+    def start_runs(self, samples):
         raise NotImplementedError("start_runs method not implemented.")
 
     @abstractmethod
