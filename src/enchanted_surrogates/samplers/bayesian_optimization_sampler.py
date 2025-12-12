@@ -520,9 +520,8 @@ class BayesianOptimizationSampler(Sampler):
                 self.plot_forward(run_dir, str(i))
         except:
             plt.close()
-            print('Result plotting did not work. Have you implemented',
-                  ' plotting features in the parser?')
-            
+            log.error('Result plotting did not work. Have you implemented plotting features in the parser?')
+
     def plot_forward(self, run_dir, label='_'):
         plt.figure(1)
         self.parser.collect_sample_information(
