@@ -30,7 +30,6 @@ class Supervisor():
 
 
     def start(self):
-        enchanted_dataset = pd.DataFrame()
         print("Starting runs...")
 
         batch_number = 0
@@ -54,12 +53,9 @@ class Supervisor():
 
         self.wait_all_processes()
 
+        enchanted_dataset = self.create_dataset()
 
-        # TODO Modify to work
-        enchanted_datapoint = pd.read_csv(filename)
-        enchanted_dataset.append(enchanted_datapoint)
-
-        # Create summary csv TODO or parquet file
+        # Create summary csv or parquet file
         if self.args.supervisor.summary_datatype == "parquet":
             enchanted_dataset.to_parquet(
                 os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
@@ -111,3 +107,14 @@ class Supervisor():
             if self.all_processes_done():
                 break
             sleep(1)
+
+    def create_dataset(self):
+
+        enchanted_dataset = pd.DataFrame()
+        for name in os.listdir(self.base_run_dir):
+            folder_path = os.path.join(self.base_run_dir, name)
+            if os.path.isdir(folder_path):
+                datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                if os.path.isfile(datapoint_file):
+                    enchanted_datapoint = pd.read_csv(datapoint_file)
+                    enchanted_dataset.append(enchanted_datapoint)
