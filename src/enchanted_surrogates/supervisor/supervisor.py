@@ -118,3 +118,4 @@ class Supervisor():
                 if os.path.isfile(datapoint_file):
                     enchanted_datapoint = pd.read_csv(datapoint_file)
                     enchanted_dataset.append(enchanted_datapoint)
+        return enchanted_dataset
