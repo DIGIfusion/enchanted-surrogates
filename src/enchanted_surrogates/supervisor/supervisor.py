@@ -1,18 +1,10 @@
 import os
+import sys
 import warnings
 import shutil
 from time import sleep
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
-
-# Tasks
-# 1. Execution of program is going through this module
-# 2. Supervisor creates samples with configured sampler
-# 3. Creates folders for runners
-# 4. Supervisor gives samples to executor
-# 5. Collects all the files created to folders
-# 6. Forms HDF5 dataset and enchanted_dataset.csv or parquet summary file to base_dir
-
 
 class Supervisor():
 
@@ -22,9 +14,10 @@ class Supervisor():
             type=args.executor.pop("type"),
             executor_config=args.executor)
         self.sampler = import_sampler(
-            type=args.sampler_config.pop("type"),
-            sampler_config=args.sampler_config)
-        self.base_run_dir = args.executor.base_run_dir  # TODO modify config parameter to be under supervisor
+            type=args.sampler.pop("type"),
+            sampler_config=args.sampler)
+        self.base_run_dir = args.supervisor.get("base_run_dir")
+
 
         self.create_base_run_dir(self.base_run_dir,config_path)
 
@@ -43,12 +36,7 @@ class Supervisor():
             ]
 
             # Call executor with folder path and samples
-            self.executor.start_runs(zip (run_dirs, samples))
-            # Collect files in folders
-
-
-            for run_dir in run_dirs:
-                filename = os.path.join(run_dir, "enchanted_datapoint.csv")
+            self.executor.execute(zip (run_dirs, samples), self.sampler)
 
 
         self.wait_all_processes()
@@ -56,7 +44,7 @@ class Supervisor():
         enchanted_dataset = self.create_dataset()
 
         # Create summary csv or parquet file
-        if self.args.supervisor.summary_datatype == "parquet":
+        if self.args.supervisor and self.args.supervisor.get('summary_datatype') == "parquet":
             enchanted_dataset.to_parquet(
                 os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
                 engine="pyarrow",
@@ -69,13 +57,28 @@ class Supervisor():
         print("Shutting down scheduler and workers...")
         self.executor.clean()
 
-        # TODO Create HDF5 file
+        # TODO: Create HDF5 file
 
 
     def create_base_run_dir(self, base_run_dir, config_path):
-        # Create base run dir if it does not exist
-        if not os.path.exists(base_run_dir):
-            os.makedirs(base_run_dir)
+        # Make sure that there is nothing in base_run_dir
+        if os.path.exists(base_run_dir):
+
+            if next(os.scandir(base_run_dir), None):
+                value = input(
+                    str(os.path.abspath(base_run_dir))
+                    + "\nFolders have content. Do you want to delete data in existing folders? (y/N) "
+                )
+
+                if value.lower() in ("y", "yes"):
+                    shutil.rmtree(base_run_dir)
+                    print("base_run_dir was deleted")
+                else:
+                    print("No content was deleted. Enchanted surrogates is exited.")
+                    sys.exit(1)
+
+        # Create base run dir
+        os.makedirs(base_run_dir, exist_ok=True)
 
         # Move config path to base_run_dir if config path is given
         if config_path is not None:
@@ -109,7 +112,6 @@ class Supervisor():
             sleep(1)
 
     def create_dataset(self):
-
         enchanted_dataset = pd.DataFrame()
         for name in os.listdir(self.base_run_dir):
             folder_path = os.path.join(self.base_run_dir, name)
@@ -117,5 +119,5 @@ class Supervisor():
                 datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
                 if os.path.isfile(datapoint_file):
                     enchanted_datapoint = pd.read_csv(datapoint_file)
-                    enchanted_dataset.append(enchanted_datapoint)
+                    enchanted_dataset = pd.concat([enchanted_dataset, enchanted_datapoint])
         return enchanted_dataset
