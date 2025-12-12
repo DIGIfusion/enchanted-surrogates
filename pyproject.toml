@@ -21,6 +21,7 @@ dependencies = [
     "plotly",
     "PyYAML",
     "scipy",
+    "pyarrow",
 ]
 
 [tool.setuptools]
