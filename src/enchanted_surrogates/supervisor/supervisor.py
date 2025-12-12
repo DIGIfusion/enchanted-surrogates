@@ -1,6 +1,7 @@
 import os
 import warnings
 import shutil
+from time import sleep
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
@@ -17,50 +18,46 @@ class Supervisor():
 
     def __init__(self, args, config_path=None):
         self.args = args
-        executor_type = args.executor.pop("type")
         self.executor = import_executor(
-            type=executor_type, 
+            type=args.executor.pop("type"),
             executor_config=args.executor)
         self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), 
-            sampler_config=self.sampler_config)        
-        self.base_run_dir = args.executor.base_run_dir
+            type=args.sampler_config.pop("type"),
+            sampler_config=args.sampler_config)
+        self.base_run_dir = args.executor.base_run_dir  # TODO modify config parameter to be under supervisor
 
-        # Create base run dir if it does not exist
-        if not os.path.exists(self.base_run_dir):
-            os.makedirs(self.base_run_dir)
+        self.create_base_run_dir(self.base_run_dir,config_path)
 
-        # Move config path to base_run_dir if config path is given
-        if config_path is not None:
-            new_config_path = os.path.join(self.base_run_dir, os.path.basename(config_path))
-            print(f"Moving config file... from {config_path} to {new_config_path}")
-            try:
-                shutil.copy(config_path, new_config_path)
-            except Exception as exe:
-                warnings.warn(
-                    f"Copying the config file to the base run dir failed.\n \
-                    Try using the full path to the config file.\n \
-                    Here is the exception raised:\n {exe}"
-                )
 
-        
     def start(self):
         enchanted_dataset = pd.DataFrame()
-        sampler = self.init_sampler()
         print("Starting runs...")
 
-        while sampler.has_budget:
+        batch_number = 0
+        while self.sampler.has_budget:
             # Get samples
-            samples: list[dict] = sampler.get_next_samples()
-            # Create folders with order number as name
-            folders = [os.path.join(self.base_run_dir, str(i)) for i in range(len(samples))]
+            samples: list[dict] = self.sampler.get_next_samples()
+            # Create run_dirs with order number as name
+            run_dirs = [
+                os.path.join(self.base_run_dir, f"{batch_number}_{i}")
+                for i in range(len(samples))
+            ]
+
             # Call executor with folder path and samples
-            self.executor.start_runs(zip (folders, samples))
+            self.executor.start_runs(zip (run_dirs, samples))
             # Collect files in folders
-            for folder in folders:
-                filename = os.path.join(folder, "enchanted_datapoint.csv")
-                enchanted_datapoint = pd.read_csv(filename)
-                enchanted_dataset.append(enchanted_datapoint)
+
+
+            for run_dir in run_dirs:
+                filename = os.path.join(run_dir, "enchanted_datapoint.csv")
+
+
+        self.wait_all_processes()
+
+
+        # TODO Modify to work
+        enchanted_datapoint = pd.read_csv(filename)
+        enchanted_dataset.append(enchanted_datapoint)
 
         # Create summary csv TODO or parquet file
         if self.args.supervisor.summary_datatype == "parquet":
@@ -71,23 +68,46 @@ class Supervisor():
             )
         else:
             enchanted_dataset.to_csv(os.path.join(self.base_run_dir, "enchanted_dataset.csv"))
-            
-        # Clean folders
+
+        # Clean run_dirs
         print("Shutting down scheduler and workers...")
         self.executor.clean()
 
         # TODO Create HDF5 file
 
 
+    def create_base_run_dir(self, base_run_dir, config_path):
+        # Create base run dir if it does not exist
+        if not os.path.exists(base_run_dir):
+            os.makedirs(base_run_dir)
 
-        
-    # Not sure if necessary to have??
-    def create_base_run_dir(self, base_run_dir, config_filepath):
-        print(
-            f"Making directory of simulations at: {base_run_dir}.",
-            "Copying {config_filepath} to CONFIG.yaml."
-        )
+        # Move config path to base_run_dir if config path is given
+        if config_path is not None:
+            new_config_path = os.path.join(base_run_dir, os.path.basename(config_path))
+            print(f"Moving config file... from {config_path} to {new_config_path}")
+            try:
+                shutil.copy(config_path, new_config_path)
+            except Exception as exe:
+                warnings.warn(
+                    f"Copying the config file to the base run dir failed.\n \
+                    Try using the full path to the config file.\n \
+                    Here is the exception raised:\n {exe}"
+                )
 
-        os.makedirs(base_run_dir, exist_ok=True)
-        shutil.copyfile(config_filepath, os.path.join(base_run_dir, "CONFIG.yaml"))
 
+    def all_processes_done(self):
+        # Check all the run_dirs that they have "enchanted_datapoint.csv"
+        for name in os.listdir(self.base_run_dir):
+            folder_path = os.path.join(self.base_run_dir,name)
+            if os.path.isdir(folder_path):
+                datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                if not os.path.isfile(datapoint_file):
+                    return False
+
+        return True
+
+    def wait_all_processes(self):
+        while True:
+            if self.all_processes_done():
+                break
+            sleep(1)
