@@ -1,4 +1,5 @@
 import os
+import warnings
 import shutil
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
@@ -14,7 +15,7 @@ from enchanted_surrogates.utils.precise_imports import import_sampler, import_ex
 
 class Supervisor():
 
-    def __init__(self, args):
+    def __init__(self, args, config_path=None):
         self.args = args
         executor_type = args.executor.pop("type")
         self.executor = import_executor(
@@ -22,11 +23,31 @@ class Supervisor():
             executor_config=args.executor)
         self.sampler = import_sampler(
             type=self.sampler_config.pop("type"), 
-            sampler_config=self.sampler_config)
+            sampler_config=self.sampler_config)        
+        self.base_run_dir = args.executor.base_run_dir
+
+        # Create base run dir if it does not exist
+        if not os.path.exists(self.base_run_dir):
+            os.makedirs(self.base_run_dir)
+
+        # Move config path to base_run_dir if config path is given
+        if config_path is not None:
+            new_config_path = os.path.join(self.base_run_dir, os.path.basename(config_path))
+            print(f"Moving config file... from {config_path} to {new_config_path}")
+            try:
+                shutil.copy(config_path, new_config_path)
+            except Exception as exe:
+                warnings.warn(
+                    f"Copying the config file to the base run dir failed.\n \
+                    Try using the full path to the config file.\n \
+                    Here is the exception raised:\n {exe}"
+                )
+
         
     def start(self):
         enchanted_dataset = pd.DataFrame()
         sampler = self.init_sampler()
+        print("Starting runs...")
 
         while sampler.has_budget:
             # Get samples
@@ -34,9 +55,7 @@ class Supervisor():
             # Create folders with order number as name
             folders = [os.path.join(self.base_run_dir, str(i)) for i in range(len(samples))]
             # Call executor with folder path and samples
-            print("Starting runs...")
             self.executor.start_runs(zip (folders, samples))
-
             # Collect files in folders
             for folder in folders:
                 filename = os.path.join(folder, "enchanted_datapoint.csv")
@@ -44,10 +63,20 @@ class Supervisor():
                 enchanted_dataset.append(enchanted_datapoint)
 
         # Create summary csv TODO or parquet file
-        enchanted_dataset.to_csv(os.path.join(self.base_run_dir), "enchanted_dataset.csv")
+        if self.args.supervisor.summary_datatype == "parquet":
+            enchanted_dataset.to_parquet(
+                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                engine="pyarrow",
+                index=True
+            )
+        else:
+            enchanted_dataset.to_csv(os.path.join(self.base_run_dir, "enchanted_dataset.csv"))
+            
         # Clean folders
         print("Shutting down scheduler and workers...")
         self.executor.clean()
+
+        # TODO Create HDF5 file
 
 
 
