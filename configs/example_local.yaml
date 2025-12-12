@@ -1,6 +1,5 @@
 executor:
   type: LocalExecutor
-  base_run_dir: "data_dir/local"
 sampler:
   type: RandomSampler
   bounds: [[0.0, 1.0], [0.0, 10.0]]
@@ -9,3 +8,5 @@ sampler:
 runner:
   type: ExampleRunner
   other_params: {}
+supervisor:
+  base_run_dir: "data_dir/local"
