@@ -57,6 +57,7 @@ def main(arguments: argparse.Namespace, config_path=None):
     supervisor = Supervisor(arguments, config_path=config_path)
     supervisor.start()
 
+
 if __name__ == "__main__":
     print(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
