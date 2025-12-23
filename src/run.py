@@ -6,13 +6,12 @@ execution namespace, and initializes the Supervisor responsible for
 managing sampling, execution, and result handling.
 """
 
-import yaml
 import argparse
 from datetime import datetime
-from dask.distributed import print
+import yaml
+from dask.distributed import print as dask_print
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.supervisor.supervisor import Supervisor
-
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -24,7 +23,7 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Namespace containing the configuration parameters.
     """
-    with open(config_path, "r") as file:
+    with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
     config.executor["config_filepath"] = config_path
@@ -41,11 +40,10 @@ def load_configuration(config_path: str) -> argparse.Namespace:
             config.executor['runner_config'] = config.runner
         elif 'runner' in config.executor:
             config.executor['runner_config'] = config.executor.pop('runner')
-    print(config)
+    dask_print(config)
     return config
 
-
-def main(args: argparse.Namespace, config_path=None):
+def main(arguments: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
 
@@ -56,10 +54,8 @@ def main(args: argparse.Namespace, config_path=None):
     """
 
     print(enchanted_wizard)
-    supervisor = Supervisor(args, config_path=config_path)
+    supervisor = Supervisor(arguments, config_path=config_path)
     supervisor.start()
-    return
-
 
 if __name__ == "__main__":
     print(f'{datetime.now()} - Starting Enchanted surrogates.')
