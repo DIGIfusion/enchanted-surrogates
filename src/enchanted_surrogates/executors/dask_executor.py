@@ -344,6 +344,9 @@ class DaskExecutor(Executor):
 
         # print(f"STARTING RUNS FOR RUNNER {self.runner_config['type']}, FROM WITHIN A {__class__}")
 
+        self.base_run_dir = os.path.dirname(list(input)[0][0])  # This might not work lol
+
+
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
