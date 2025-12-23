@@ -1,3 +1,10 @@
+"""
+Supervisor module.
+
+Provides the Supervisor class, which coordinates configuration,
+execution, sampling, and result aggregation for simulation runs.
+"""
+
 import os
 import sys
 import warnings
@@ -107,7 +114,7 @@ class Supervisor():
             if next(os.scandir(base_run_dir), None):
                 value = input(
                     str(os.path.abspath(base_run_dir))
-                    + "\nFolders have content. Do you want to delete data in existing folders? (y/N) "
+                    + "\nFolders have content. Do you want to delete data in existing folders? y/N "
                 )
 
                 if value.lower() in ("y", "yes"):
@@ -126,11 +133,14 @@ class Supervisor():
             print(f"Moving config file... from {config_path} to {new_config_path}")
             try:
                 shutil.copy(config_path, new_config_path)
-            except Exception as exe:
+            except OSError as exe:
                 warnings.warn(
-                    f"Copying the config file to the base run dir failed.\n \
-                    Try using the full path to the config file.\n \
-                    Here is the exception raised:\n {exe}"
+                    "Failed to copy configuration file to base run directory.\n"
+                    "Try using the full path to the config file. \n"
+                    f"Source: '{config_path}'\n"
+                    f"Target: '{new_config_path}'\n"
+                    f"Error type: {type(exe).__name__}\n"
+                    f"Error message: {exe}"
                 )
 
     def all_processes_done(self):
