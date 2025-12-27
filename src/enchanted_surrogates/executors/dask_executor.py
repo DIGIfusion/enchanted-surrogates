@@ -333,25 +333,18 @@ class DaskExecutor(Executor):
         Raises:
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
-        # assert self.base_run_dir
         assert sampler
 
-        # if self.sampler_type not in {'BayesianOptimizationSampler'}:
-        #     if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
-        #         raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
-        #                               This signifies that there is already data in this folder. 
-        #                               Aborting to avoid accidental data mixing.''' )
 
-        # print(f"STARTING RUNS FOR RUNNER {self.runner_config['type']}, FROM WITHIN A {__class__}")
-
-        self.base_run_dir = os.path.dirname(list(input)[0][0])  # This might not work lol
+        inputlist = list(input)
+        self.base_run_dir = os.path.dirname(inputlist[0][0])  # This might not work lol
 
 
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
 
-        futures, fut_to_rundir = self.submit_batch(input, include_fut_to_rundir=True)
+        futures, fut_to_rundir = self.submit_batch(inputlist, include_fut_to_rundir=True)
 
         for fut in futures:
             try:
@@ -359,18 +352,6 @@ class DaskExecutor(Executor):
             except Exception:
                 pass
 
-        # while self.sampler.has_budget:
-        #     samples = self.sampler.get_next_samples()
-        #     futures = self.submit_batch(samples)
-        #     if self.sampler_type in {'BayesianOptimizationSampler'}:
-        #         try: 
-        #             wait(futures, timeout=self.timeout)
-        #         except:
-        #             print("TIMEOUT OF SOME OF THE SAMPLES")
-        #     all_futures.extend(futures)
-        # print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
-        # dfs = []
-        # num_success = 0
         sampler_type = getattr(sampler, "type", None) or getattr(sampler, "__class__", None).__name__
 
         if sampler_type in {'BayesianOptimizationSampler'}:
@@ -379,7 +360,6 @@ class DaskExecutor(Executor):
             except Exception:
                 print("Timeout or error while waiting for BO batch; continuing.")
 
-            # Reuse the old behavior if sampler has these attributes/methods
             if getattr(sampler, "plot_GPR_flag", False):
                 try:
                     sampler.build_result_dictionary(self.base_run_dir)
@@ -387,39 +367,41 @@ class DaskExecutor(Executor):
                     sampler.train_surrogate()
                 except Exception as e:
                     print("Error during sampler postprocessing:", e)
+        else:
+            dfs = []
+            num_success = 0
+            total = len(futures)
 
+            print(f"Collecting results from {total} futures...")
 
-        # if sampler_type in {'BayesianOptimizationSampler'}:
-        #     try: 
-        #         wait(futures, timeout=self.timeout)
-        #         if self.sampler.plot_GPR_flag:
-        #             # Build the result dictionary and set plot frequency to 1 to 
-        #             # plot the GPR for the final state of the optimization.
-        #             # Plotting is presently implemented in the train_surrogate function.
-        #             self.sampler.build_result_dictionary(self.sampler.base_run_dir)
-        #             self.sampler.plot_frequency = 1
-        #             self.sampler.train_surrogate()
-        #     except:
-        #         print("Timeout of some of the samples")
-        # else:
-        #     for i, future in enumerate(as_completed(all_futures)):
-        #         result = future.result()
-        #         if result['success'] == True:
-        #             num_success += 1
-        #         # print('FUTURE RESULT',result, type(result))
-        #         result = {k:[v] for k,v in result.items()}
-        #         dfs.append(pd.DataFrame(result))
-        #         print(f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
-        #         print('_'*100)
-        #     df_dataset = pd.concat(dfs)
-        #     df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
+            for i, future in enumerate(as_completed(futures), start=1):
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"[{i}/{total}] Future failed with exception:", e)
+                    continue
 
-        # print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
-        # if self.sampler_type not in {'BayesianOptimizationSampler'}:
-        #     print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        # print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
-        # with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
-        #     file.write(f'ENCHANTED.FINISHED, {__class__}')
+                if isinstance(result, dict) and result.get("success") is True:
+                    num_success += 1
+
+                try:
+                    df = pd.DataFrame({k: [v] for k, v in result.items()})
+                    dfs.append(df)
+                except Exception as e:
+                    print("Failed to convert result to DataFrame:", e)
+                    continue
+
+                print(
+                    f"[{i}/{total}] Futures Completed ({(i/total)*100:.1f}%) | "
+                    f"[{num_success}/{i}] Futures Succeeded"
+                )
+                print("_" * 100)
+
+            if dfs:
+                df_dataset = pd.concat(dfs, ignore_index=True)
+                outpath = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                df_dataset.to_csv(outpath, index=False)
+                print("DATASET WRITTEN TO:", outpath)            
 
         # print('CLUSTER SHUTDOWN')
         # self.shutdown_cluster()
