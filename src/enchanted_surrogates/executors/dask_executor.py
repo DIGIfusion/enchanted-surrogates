@@ -379,7 +379,7 @@ class DaskExecutor(Executor):
 
         log.info(f'WALLTIME FOR ENCHANTED SURROGATES: {time.time()-start} sec')
         if self.sampler_type not in {'BayesianOptimizationSampler'}:
-            log.info(f'DATASET IS WRITTEN HERE: {os.path.join(self.base_run_dir, 'enchanted_dataset.csv')}')
+            log.info(f'DATASET IS WRITTEN HERE: {os.path.join(self.base_run_dir, "enchanted_dataset.csv")}')
         log.info(f'WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir: {self.base_run_dir}')
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
