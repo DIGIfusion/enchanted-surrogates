@@ -20,17 +20,21 @@ def setup_logging(log_level: str, log_dir: str):
     logger = logging.getLogger(LOGGER_NAME)
 
     time = datetime.datetime.now()
-
     file_name = time.strftime("%Y%m%d_%H%M%S_%f") # ISO 8601 with microseconds
     file_path = os.path.join(log_dir, f"{file_name}.log")
 
+    logger.setLevel(log_level)
+
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s] %(message)s")
+
     file_handler = logging.FileHandler(file_path)
-    file_handler.setLevel(log_level.upper())
+    file_handler.setFormatter(logFormatter)
+    logger.addHandler(file_handler)
 
     stdout_handler = logging.StreamHandler(stream=sys.stdout)
-
-    logger.addHandler(file_handler)
+    stdout_handler.setFormatter(logFormatter)
     logger.addHandler(stdout_handler)
+
 
 def get_logger(name: str) -> logging.Logger:
     """
