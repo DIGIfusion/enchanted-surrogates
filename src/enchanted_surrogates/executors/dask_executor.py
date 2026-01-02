@@ -10,6 +10,7 @@ from dask.distributed import Client, as_completed, wait, LocalCluster, get_worke
 
 from .base_executor import Executor
 from enchanted_surrogates.utils.logger import get_logger
+
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
 from enchanted_surrogates.utils.precise_imports import import_sampler
@@ -313,7 +314,6 @@ class DaskExecutor(Executor):
         start = time.time()
         assert self.base_run_dir
         assert self.sampler
-        log.info(f'BASE RUN DIR: {self.base_run_dir}')
         if not os.path.exists(self.base_run_dir):
             log.info(f'MAKING BASE RUN DIR: {self.base_run_dir}')
             os.makedirs(self.base_run_dir)
@@ -369,7 +369,6 @@ class DaskExecutor(Executor):
                     f"[{num_success}/{len(all_futures)}] Futures Succeeded ({(num_success/len(all_futures))*100:.1f}%)"
                 )
                 log.info(info_msg)
-                log.info('_'*100)
             df_dataset = pd.concat(dfs)
             df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
             log.info(f'DATASET IS WRITTEN HERE: {os.path.join(self.base_run_dir, "enchanted_dataset.csv")}')
@@ -388,11 +387,11 @@ class DaskExecutor(Executor):
             log.info(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
 
         log.info(
-            "\n===== RUNTIME SUMMARY =====\n"
+            "\n======== RUNTIME SUMMARY ========\n"
             f"Walltime (s):            {time.time()-start:.6f}\n"
             f"Total CPU hours used:    {total_cpu_time:.6f}\n"
             f"Head node CPU hours (h): {headnode_secs/3600:.6f}\n"
-            "=========================="
+            "================================="
         )
         log.info('Shutting down cluster.')
         self.shutdown_cluster()
@@ -431,7 +430,7 @@ class DaskExecutor(Executor):
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir
         p_info = [str(sample_params)+f' | {rd}' for sample_params,rd in zip(samples,run_dirs)]
-        log.info(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_config['type']} \n")
+        log.info(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_config['type']}")
         log.debug("Samples:\n" + "\n".join(p_info))
         
         if include_fut_to_rundir:

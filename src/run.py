@@ -54,8 +54,19 @@ def main(args: argparse.Namespace, config_path=None):
 
     # Setup a log file in the base run directory
     setup_logging(args.logging, args.executor["base_run_dir"])
-    log.info('Starting Enchanted surrogates.')
+    log.info('Enchanted surrogates is starting.')
+    log.info(f'Base run directory: {args.executor["base_run_dir"]}')
 
+    # Copying the config file to the base run directory
+    if config_path is not None:
+        log.debug(f"Copying config file from {config_path} to {os.path.join(args.executor['base_run_dir'], os.path.basename(config_path))}")
+        try:
+            shutil.copy(config_path, os.path.join(args.executor["base_run_dir"], os.path.basename(config_path)))
+        except Exception as exe:
+            log.error(f"Copying the config file to the base run dir failed.\n \
+                        Try using the full path to the config file.\n \
+                        Exception raised:\n {exe}")
+    
     print(enchanted_wizard)
 
     # Initialize executor
@@ -64,19 +75,10 @@ def main(args: argparse.Namespace, config_path=None):
     if not os.path.exists(executor.base_run_dir):
         os.makedirs(executor.base_run_dir)
 
-    if config_path is not None:
-        log.debug(f"Copying config file from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
-        try:
-            shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
-        except Exception as exe:
-            log.error(f"Copying the config file to the base run dir failed.\n \
-                        Try using the full path to the config file.\n \
-                        Exception raised:\n {exe}")
-    
     log.info("Starting runs...")
     executor.start_runs()
     executor.clean()
-    log.info('Enchanted surrogates finished.')
+    log.info('Enchanted surrogates has finished.')
     return
 
 if __name__ == "__main__":
