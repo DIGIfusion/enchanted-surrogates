@@ -46,8 +46,6 @@ class DaskExecutor(Executor):
         super().__init__(*args, **kwargs)
         log.info('INITIALISING DASK EXECUTOR')
 
-
-       
         self.type = kwargs.get('type')
         if self.sampler_config:
             self.sampler_type = self.sampler_config.pop("type")
@@ -155,7 +153,7 @@ class DaskExecutor(Executor):
             ValueError: If no workers are successfully started.
             Warning: If fewer workers than expected are started.
         """
-        log.info('MAKING CLUSTER')
+        log.info('Creating a cluster...')
         worker_logs_dir = None
 
         if self.SLURMcluster_config:
@@ -171,11 +169,10 @@ class DaskExecutor(Executor):
                 self.SLURMcluster_config['job_extra_directives']=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             else:
                 self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
-            log.info(f'FOR WORKER SLURM OUT, SEE: {slurm_out_dir}')
+            log.info(f'Output of SLURM workers saved in: {slurm_out_dir}')
             self.cluster = SLURMCluster(**self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
-            log.info('THE JOB SCRIPT FOR A WORKER IS:')
-            log.info(self.cluster.job_script())
+            log.debug(f'The job script for a worker is:\n{self.cluster.job_script()}')
             
             self.client = Client(self.cluster ,timeout=180)
             log.info(f'SCHEDULER ADDRESS: {self.cluster.scheduler_address}')
@@ -189,9 +186,6 @@ class DaskExecutor(Executor):
             self.expected_number_of_workers = self.LocalCluster_config['n_workers']
             self.cluster = LocalCluster(**self.LocalCluster_config)
             self.client = Client(self.cluster)
-
-        
-
             
         if self.block_until_cluster_started:
             log.info(f"Waiting for {self.expected_number_of_workers} workers to start...")
@@ -371,31 +365,37 @@ class DaskExecutor(Executor):
                 # print('FUTURE RESULT',result, type(result))
                 result = {k:[v] for k,v in result.items()}
                 dfs.append(pd.DataFrame(result))
-                info_msg = f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)"
+                info_msg = (
+                    f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%) | "
+                    f"[{num_success}/{len(all_futures)}] Futures Succeeded ({(num_success/len(all_futures))*100:.1f}%)"
+                )
                 log.info(info_msg)
                 log.info('_'*100)
             df_dataset = pd.concat(dfs)
             df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
-
-        log.info(f'WALLTIME FOR ENCHANTED SURROGATES: {time.time()-start} sec')
-        if self.sampler_type not in {'BayesianOptimizationSampler'}:
             log.info(f'DATASET IS WRITTEN HERE: {os.path.join(self.base_run_dir, "enchanted_dataset.csv")}')
-        log.info(f'WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir: {self.base_run_dir}')
+
+        log.debug(f'WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir: {self.base_run_dir}')
         with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
             file.write(f'ENCHANTED.FINISHED, {__class__}')
 
         job_info = self.get_slurm_usage_info(all_job_ids)
         total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
-        log.info(f"Total CPU hours used: {total_cpu_time}")
-
         cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if cpu_ps.returncode == 0:
             headnode_secs = int(cpu_ps.stdout.strip())
-            log.info(f"Total CPU time used by head node: {headnode_secs/3600}")
         else:
+            headnode_secs = None
             log.info(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
 
-        log.info('CLUSTER SHUTDOWN')
+        log.info(
+            "\n===== RUNTIME SUMMARY =====\n"
+            f"Walltime (s):            {time.time()-start:.6f}\n"
+            f"Total CPU hours used:    {total_cpu_time:.6f}\n"
+            f"Head node CPU hours (h): {headnode_secs/3600:.6f}\n"
+            "=========================="
+        )
+        log.info('Shutting down cluster.')
         self.shutdown_cluster()
 
 
@@ -431,9 +431,9 @@ class DaskExecutor(Executor):
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = sample_run_dir
-        p_info = [str(sample_params)+f'| {rd}' for sample_params,rd in zip(samples,run_dirs)]
+        p_info = [str(sample_params)+f' | {rd}' for sample_params,rd in zip(samples,run_dirs)]
         log.info(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_config['type']} \n")
-        log.info('\n'.join(p_info))
+        log.debug("Samples:\n" + "\n".join(p_info))
         
         if include_fut_to_rundir:
             return futures, fut_to_rundir

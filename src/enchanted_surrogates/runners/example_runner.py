@@ -13,7 +13,6 @@ from enchanted_surrogates.utils.is_package_available import is_package_available
 
 log = get_logger(__name__)
 
-
 def is_number(x):
     return isinstance(x, numbers.Number)
 
@@ -216,7 +215,7 @@ class ExampleRunner(Runner):
 
         # Sleep for configured duration
         sleep_sec = self.get_sleep_sec()
-        log.info(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+        log.info(f'IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
         sleep(sleep_sec)
 
         result = {"output": output, "success": True}
