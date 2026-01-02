@@ -48,16 +48,20 @@ def main(args: argparse.Namespace, config_path=None):
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
+    # Create the base run directory
+    if not os.path.exists(args.executor["base_run_dir"]):
+        os.makedirs(args.executor["base_run_dir"])
+
+    # Setup a log file in the base run directory
+    setup_logging(args.logging, args.executor["base_run_dir"])
+    log.info(f'{datetime.now()} - Starting Enchanted surrogates.')
 
     print(enchanted_wizard)
 
+    # Initialize executor
     executor_type = args.executor.pop("type")
     executor = import_executor(type=executor_type, executor_config=args.executor)
-    if not os.path.exists(executor.base_run_dir):
-        os.makedirs(executor.base_run_dir)
 
-    setup_logging(args.logging, executor.base_run_dir)
-    
     if config_path is not None:
         log.info(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
         try:
@@ -71,10 +75,10 @@ def main(args: argparse.Namespace, config_path=None):
     executor.start_runs()
     log.info("Shutting down scheduler and workers...")
     executor.clean()
+    log.info(f'{datetime.now()} - Enchanted surrogates finished.')
     return
 
 if __name__ == "__main__":
-    log.info(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
         "-cf",
@@ -86,4 +90,3 @@ if __name__ == "__main__":
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
     main(args, config_path=config_args.config_file)
-    log.info(f'{datetime.now()} - Enchanted surrogates finished.')
