@@ -54,7 +54,7 @@ def main(args: argparse.Namespace, config_path=None):
 
     # Setup a log file in the base run directory
     setup_logging(args.logging, args.executor["base_run_dir"])
-    log.info(f'{datetime.now()} - Starting Enchanted surrogates.')
+    log.info('Starting Enchanted surrogates.')
 
     print(enchanted_wizard)
 
@@ -65,19 +65,18 @@ def main(args: argparse.Namespace, config_path=None):
         os.makedirs(executor.base_run_dir)
 
     if config_path is not None:
-        log.info(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
+        log.debug(f"Copying config file from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
         try:
             shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
         except Exception as exe:
             log.error(f"Copying the config file to the base run dir failed.\n \
                         Try using the full path to the config file.\n \
-                        Here is the exception raised:\n {exe}")
+                        Exception raised:\n {exe}")
     
     log.info("Starting runs...")
     executor.start_runs()
-    log.info("Shutting down scheduler and workers...")
     executor.clean()
-    log.info(f'{datetime.now()} - Enchanted surrogates finished.')
+    log.info('Enchanted surrogates finished.')
     return
 
 if __name__ == "__main__":
