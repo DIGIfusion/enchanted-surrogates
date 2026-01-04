@@ -7,15 +7,16 @@ has_children: true
 
 # Enchanted surrogates
 
+<span class="hero-subtitle">
 A framework for creating databases for surrogate models of complex physics codes.
-{: .fs-6 .fw-300 }
-
-[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 }
+</span>
+    
+[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){ .md-button .md-button--primary }
 
 ---
 
-{: .warning }
-This documentation is under development.
+!!! warning
+    This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data, which is often generated using complex and computationally expensive simulation codes. The `enchanted-surrogates` package provides a flexible framework for creating databases for surrogate models of such complex physics codes.
 Database generation for a simulation consists of: 

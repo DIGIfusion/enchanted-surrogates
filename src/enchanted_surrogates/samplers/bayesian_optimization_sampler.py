@@ -18,7 +18,8 @@ from botorch.utils.transforms import standardize, normalize, unnormalize
 class BayesianOptimizationSampler(Sampler):
     """
     ---
-    ## Overview 
+
+    ## Overview
 
     This sampler Class uses Bayesian Optimization techniques to data efficiently
     sample through the search space to yield optimial information gain as 
@@ -26,6 +27,7 @@ class BayesianOptimizationSampler(Sampler):
     Bayesian Optimization sampler using the BoTorch library.
 
     ---
+
     ## Configuration
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
@@ -50,7 +52,7 @@ class BayesianOptimizationSampler(Sampler):
         key: value
     ```
 
-   ---
+    ---
 
     Attributes:
         base_run_dir (str):           Base run directory
@@ -88,8 +90,11 @@ class BayesianOptimizationSampler(Sampler):
         plot_progress (bool):         Whether to generate progress plots
     
     ## Assumptions and notes
+
      - The sampler assumes continuous numeric parameters and bounded search spaces.
+
      - Bayesian optimization relies on existing evaluation results stored in base_run_dir.
+
      - Sampling proceeds in two phases:
           Random sampling until initial_samples are collected.
           Model-based sampling using a Gaussian Process surrogate.
