@@ -8,21 +8,17 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
 class JoblibExecutor(Executor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
+    """
+    Docstring for JoblibExecutor TODO
+    """
 
-    def start_runs(self):
-        while self.sampler.has_budget:
-            samples: list[dict] = self.sampler.get_next_samples()
-            sample_run_dirs = [os.path.join(self.base_run_dir, str(uuid.uuid4())) for _ in samples]
-            new_futures = joblib.Parallel(n_jobs=-1, verbose=10)(
-                joblib.delayed(run_simulation_task)(
-                    self.runner_config, sample_run_dir, params=sample)
-                for sample, sample_run_dir in zip(samples, sample_run_dirs)
-            )
-            self.sampler.register_futures(new_futures)
+    def execute(self, input: list[(str, dict)], sampler):
+        new_futures = joblib.Parallel(n_jobs=-1, verbose=10)(
+            joblib.delayed(run_simulation_task)(
+                self.runner_config, sample_run_dir, params=sample)
+            for sample_run_dir, sample in input
+        )
+        sampler.register_futures(new_futures)
 
     def clean(self):
         print('Joblib runner doesn\'t clean up any resources')
