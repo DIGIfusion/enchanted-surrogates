@@ -1,0 +1,36 @@
+site_name: Enchanted Surrogates Documentation
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            separate_signature: true
+            merge_init_into_class: true
+            allow_inspection: false
+          paths:
+            - src
+
+nav:
+  - Start: index.md
+  - Samplers:
+      - Array sampler: samplers/array_sampler.md
+      - Bayesian optimization sampler: samplers/bayesian_optimization_sampler.md
+      - Grid sampler: samplers/grid_sampler.md
+      - Nested sampler: samplers/nested_sampler.md
+      - Random sampler: samplers/random_sampler.md
+  - Executors:
+      - Dask executor: api/executors.md
+  - Plugins:
+      - Overview: plugins/index.md
+      - Helena plugin: plugins/helena_plugin.md
+      - Mishka plugin: plugins/mishka_plugin.md
+      - Dream plugin: plugins/dream_plugin.md
+      - Castor plugin: plugins/castor_plugin.md
+      - Gene plugin: plugins/gene_plugin.md
