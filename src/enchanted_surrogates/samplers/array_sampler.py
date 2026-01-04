@@ -7,11 +7,35 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class ArraySampler(Sampler):
     """
-    Creates combinations of the given samples.
+    ---
 
+    ## Overview
+
+    The array sampler will generate samples by taking the Cartesian product of the provided discrete values for each parameter.
     The samples are directly specified in 'bounds' in the config file.
 
-    Attributes:
+    ---
+
+    ## Configuration
+
+    To use the `ArraySampler`, specify it in the configuration file as in following example:
+
+    ```yaml
+    sampler:
+      type: Array
+      bounds: [[5, 7, 77, 199], [0.02, 0.2]]
+      num_samples: [4, 2]
+      parameters: ['a', 'b']
+    ```
+
+    This configuration would create the following sample space:
+
+        [[5, 0.02], [5, 0.2], [7, 0.02], [7, 0.2], [77, 0.02],
+        [77, 0.2], [199, 0.02], [199, 0.2]].
+    
+    ---
+
+    Args:
         bounds (list of list of float or int): The bounds of each parameter.
         num_samples (list of int): The number of samples for each parameter.
         parameters (list of str): The names of the parameters.
@@ -20,30 +44,27 @@ class ArraySampler(Sampler):
         samples (list of list of float or int): The generated parameter combinations.
         current_index (int): The index of the current parameter combination.
 
-    For example:
-        sampler:
-          type: Array
-          bounds: [[5, 7, 77, 199], [0.02, 0.2]]
-          num_samples: [4, 2]
-          parameters: ['a', 'b']
+    ---
 
-    would create the following sample space:
-        [[5, 0.02], [5, 0.2], [7, 0.02], [7, 0.2], [77, 0.02],
-        [77, 0.2], [199, 0.02], [199, 0.2]]
+    ## Assumption and notes
 
-    This throws errors if you are asking for something insane,
-        e.g., 10 parameters  for 10 samples each -> 10 billion
-        so hard limit at 100.000
+    - This throws errors if you are asking for something insane, e.g., 10 parameters  for 10 samples each -> 10 billion so hard limit at 100.000
 
-    Methods:
-        generate_parameters: Generates the parameter combinations.
-        get_next_parameter: Gets the next parameter combination.
+    ---
+
+    ## Methods
+
+      **`generate_parameters:`** Generates the parameter combinations.
+
+      **`get_next_parameter:`** Gets the next parameter combination.
+    
+    ---
 
     """
 
     def __init__(self, bounds, parameters, **kwargs):
         """
-        Initializes the ArraySampler.
+        **`__init__:`** Initializes the ArraySampler.
 
         Args:
             bounds (list of list of float or int): The bounds of each parameter.

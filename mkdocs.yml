@@ -26,7 +26,7 @@ nav:
       - Nested sampler: samplers/nested_sampler.md
       - Random sampler: samplers/random_sampler.md
   - Executors:
-      - Dask executor: api/executors.md
+      - Dask executor: executors/executors.md
   - Plugins:
       - Overview: plugins/index.md
       - Helena plugin: plugins/helena_plugin.md
