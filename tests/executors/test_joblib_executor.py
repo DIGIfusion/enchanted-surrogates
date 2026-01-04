@@ -4,7 +4,7 @@ from enchanted_surrogates.executors.joblib_executor import JoblibExecutor
 @patch("enchanted_surrogates.executors.joblib_executor.joblib.delayed")
 @patch("enchanted_surrogates.executors.joblib_executor.joblib.Parallel")
 @patch("enchanted_surrogates.executors.joblib_executor.run_simulation_task")
-def test_start_runs_registers_futures(mock_run_simulation_task, mock_parallel, mock_delayed):
+def test_execute_registers_futures(mock_run_simulation_task, mock_parallel, mock_delayed):
     executor_input = [
         ("test_run_dir_0", {"a": 1, "b": 2}),
         ("test_run_dir_1", {"c": 2})

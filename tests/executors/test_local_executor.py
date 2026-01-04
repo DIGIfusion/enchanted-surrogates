@@ -2,7 +2,7 @@ from unittest.mock import patch, MagicMock
 from enchanted_surrogates.executors.local_executor import LocalExecutor
 
 @patch("enchanted_surrogates.executors.local_executor.run_simulation_task")
-def test_start_runs_registers_futures(mock_run_simulation_task):
+def test_execute_registers_futures(mock_run_simulation_task):
     executor_input = [
         ("test_run_dir_0", {"a": 1, "b": 2}),
         ("test_run_dir_1", {"c": 2})
