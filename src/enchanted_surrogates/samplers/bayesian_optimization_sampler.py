@@ -1,10 +1,3 @@
-"""
-samplers/bayesian_optimization_sampler.py
-
-This sampler Class uses Bayesian Optimization techniques to data efficiently
-sample through the search space to yield optimial information gain as 
-specified by the acquisition strategy.
-"""
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
 import pickle as pkl
@@ -24,7 +17,40 @@ from botorch.utils.transforms import standardize, normalize, unnormalize
 
 class BayesianOptimizationSampler(Sampler):
     """
+    ---
+    ## Overview 
+
+    This sampler Class uses Bayesian Optimization techniques to data efficiently
+    sample through the search space to yield optimial information gain as 
+    specified by the acquisition strategy.
     Bayesian Optimization sampler using the BoTorch library.
+
+    ---
+    ## Configuration
+
+    To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
+    ```yaml
+    sampler:
+      type: BayesianOptimizationSampler
+      budget: 50
+      initial_samples: 20
+      acquisition_batch_size: 10
+      acquisition_function: qEI
+      random_fraction: 0.2
+      bounds: [[0.0, 1.0], [1.0, 5.0]]
+      parameters: ['x', 'y']
+      observations: ['distance']
+      base_run_dir: ./runs
+      fully_bayesian: false
+      async_samp: false
+      failure_prob_filter: false
+      ucb_beta: 2.0
+      parser: Parser
+      parser_config:
+        key: value
+    ```
+
+   ---
 
     Attributes:
         base_run_dir (str):           Base run directory
@@ -60,6 +86,32 @@ class BayesianOptimizationSampler(Sampler):
         plot_debug (bool):            True for debugging plotting
         plot_labels ([str]):          Labels to be used in the plots
         plot_progress (bool):         Whether to generate progress plots
+    
+    ## Assumptions and notes
+     - The sampler assumes continuous numeric parameters and bounded search spaces.
+     - Bayesian optimization relies on existing evaluation results stored in base_run_dir.
+     - Sampling proceeds in two phases:
+          Random sampling until initial_samples are collected.
+          Model-based sampling using a Gaussian Process surrogate.
+    
+    ---
+
+    ## Methods
+
+      **`__init__:`** Initializes the sampler with the given parameters.
+
+      **`get_next_samples:`** Gets the next sampled parameter configurations.
+
+      **`build_result_dictionary:`** Build the result_dictionary based on the
+        existing runs.
+
+      **`plot_distances:`** Plot the sample distributions.
+
+      **`plot_GPR:`** Plot the GPR (gaussian process regression).
+
+      **`plot_posterior:`** Plot the posterior.
+
+    ---
 
     """
 
