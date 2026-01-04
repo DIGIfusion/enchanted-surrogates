@@ -5,11 +5,6 @@ on:
     branches:
       - main
       - 'feature/**'
-      - 'bug/**'
-      - 'dev**'
-
-  pull_request:
-    types: [opened, reopened]
 
 permissions:
   contents: read
@@ -17,8 +12,9 @@ permissions:
   id-token: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,14 +22,27 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: |
+      - name: Install dependencies
+        run: |
           pip install mkdocs mkdocstrings[python] mkdocs-material
 
-      - run: mkdocs build
+      - name: Build MkDocs site
+        run: mkdocs build
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
-      - uses: actions/deploy-pages@v4
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
 
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
