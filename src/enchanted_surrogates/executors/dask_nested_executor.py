@@ -1,5 +1,35 @@
 """
-TODO: Add module docstring
+---
+
+## Overview
+
+A nested executor that orchestrates multiple executors using Dask for parallel execution.
+This class handles sequential and nested execution of tasks across multiple
+sub-executors, manages futures, dynamically handles clusters, and coordinates
+sampling for parameter exploration.
+
+![nested](/img/nested.png)
+
+---
+
+## Features
+- Supports multiple executors in a nested pipeline.
+- Integrates with any sampler implementing the Enchanted Surrogates interface.
+- Optionally reuses executors and their Dask clients.
+- Tracks completion statistics for each executor and the overall pipeline.
+- Writes intermediate and final datasets to CSV.
+- Handles cluster startup and optional dynamic scale-down (experimental).
+
+---
+
+!!! notes
+    - Dynamic scale-down is currently not implemented.
+    - Each executor must implement `start_cluster`, `submit_batch`, `clean`, and related methods.
+    - This class assumes that each executor has an independent sampling budget and may produce results asynchronously.
+
+---
+
+
 """
 import os
 import time
@@ -19,13 +49,23 @@ from enchanted_surrogates.utils.print_stats_table import print_stats_table
 # to be sure it is not holding back the dynamic scaling
 
 class DaskNestedExecutor(Executor):
-    """
-    TODO: add docstring
-    """
+
 
     def __init__(self, base_run_dir, executors:dict, sampler_config:dict, *args, **kwargs):
         """
-        TODO: add docstring
+        Initialize the DaskNestedExecutor.
+        
+        Args:
+            - base_run_dir (str): Path to the base directory where all runs will be stored.
+            - executors (dict): Dictionary mapping executor names to their configuration dictionaries.
+            - sampler_config (dict): Configuration dictionary for the sampler. Must include a "type" key.
+            - *args: Additional positional arguments.
+            - **kwargs: Additional keyword arguments:
+               - type (str): Optional executor type identifier.
+               - block_until_cluster_started (bool): If True, blocks until Dask clusters are ready.
+               - start_cluster_when_needed (bool): If True, starts clusters lazily when required.
+               - shutdown_finished_clusters (bool): If True, shuts down clusters when finished.
+               - do_dynamic_scale_down (bool): If True, enables dynamic scale-down (not yet implemented).
         """
         print('INITIALISING NESTED EXECUTOR')
         self.type = kwargs.get('type')
@@ -98,7 +138,25 @@ class DaskNestedExecutor(Executor):
 
     def start_runs(self):
         """
-        TDO: add docstring
+        Start the nested execution runs.
+
+        ## Workflow
+
+        1. Creates the base run directory if it does not exist.
+        2. Checks for the presence of `ENCHANTED.FINISHED` to avoid overwriting existing runs.
+        3. Iterates over all sub-executors:
+            - Starts cluster or reuses existing cluster.
+            - Submits initial batch of samples from the sampler.
+            - Waits for dependent futures to complete before launching the next executor in the pipeline.
+        4. Writes intermediate datasets for each executor to CSV files.
+        5. Writes the final dataset to `enchanted_dataset.csv`.
+        6. Shuts down clusters if `shutdown_finished_clusters` is True.
+
+        !!! notes
+            - Each executor runs its own set of futures, tracked in `self.all_futures`.
+            - Results are retrieved asynchronously using `get_result`.
+            - Completion statistics are updated and printed using `print_stats_table`.
+            - Currently, dynamic scale-down is not implemented but hooks exist for future use.
         """
         
         start = time.time()
