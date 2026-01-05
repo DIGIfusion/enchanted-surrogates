@@ -10,3 +10,6 @@ runner:
   other_params: {}
 supervisor:
   base_run_dir: "data_dir/local"
+storage:
+  type: hdf5
+  path: "{base_run_dir}/runs.h5"
