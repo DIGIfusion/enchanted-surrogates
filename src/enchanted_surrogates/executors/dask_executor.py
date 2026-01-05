@@ -50,11 +50,11 @@ class DaskExecutor(Executor):
         """
         super().__init__(*args, **kwargs)
         print('INITIALISING DASK EXECUTOR')
-        self.type = kwargs.get('type')
-        if self.sampler_config:
-            self.sampler_type = self.sampler_config.pop("type")
-            self.sampler = import_sampler(
-                type=self.sampler_type, sampler_config=self.sampler_config)
+        # self.type = kwargs.get('type')
+        # if self.sampler_config:
+        #     self.sampler_type = self.sampler_config.pop("type")
+        #     self.sampler = import_sampler(
+        #         type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
         self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
@@ -63,6 +63,7 @@ class DaskExecutor(Executor):
         self.cluster = None
         self.client = None
         self.expected_number_of_workers = None
+        self.slurm_job_ids = set()
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -214,6 +215,12 @@ class DaskExecutor(Executor):
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
 
+        if isinstance(self.cluster, SLURMCluster):
+            try:
+                self.slurm_job_ids.update(self.cluster.workers.keys())
+            except Exception:
+                pass
+
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
         Waits for all Dask jobs submitted to SLURM to reach the RUNNING state.
@@ -274,6 +281,18 @@ class DaskExecutor(Executor):
 
         This method is intended to be called when the executor is no longer needed.
         """
+
+        job_info = self.get_slurm_usage_info(self.slurm_job_ids)
+        total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
+        print(f"Total CPU hours used: {total_cpu_time}")
+
+        cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if cpu_ps.returncode == 0:
+            headnode_secs = int(cpu_ps.stdout.strip())
+            print(f"Total CPU time used by head node: {headnode_secs/3600}")
+        else:
+            print(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")        
+
         self.shutdown_cluster()
 
     def shutdown_cluster(self):
@@ -303,7 +322,7 @@ class DaskExecutor(Executor):
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
-    def start_runs(self):
+    def execute(self, input: list[(str, dict)], sampler):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
 
@@ -314,88 +333,81 @@ class DaskExecutor(Executor):
         Raises:
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
-        start = time.time()
-        assert self.base_run_dir
-        assert self.sampler
-        print('BASE RUN DIR:', self.base_run_dir)
-        if not os.path.exists(self.base_run_dir):
-            print('MAKING BASE RUN DIR:',self.base_run_dir)
-            os.makedirs(self.base_run_dir)
+        assert sampler
 
-        if self.sampler_type not in {'BayesianOptimizationSampler'}:
-            if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
-                raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
-                                      This signifies that there is already data in this folder. 
-                                      Aborting to avoid accidental data mixing.''' )
 
-        print(f"STARTING RUNS FOR RUNNER {self.runner_config['type']}, FROM WITHIN A {__class__}")
+        inputlist = list(input)
+        self.base_run_dir = os.path.dirname(inputlist[0][0])  # This might not work lol
+
 
         if not self.client:
             self.start_cluster()
         print('CLUSTER STARTED')
-        all_job_ids = self.get_all_dask_job_ids()
-        all_futures = []
 
-        while self.sampler.has_budget:
-            samples = self.sampler.get_next_samples()
-            futures = self.submit_batch(samples)
-            if self.sampler_type in {'BayesianOptimizationSampler'}:
-                try: 
-                    wait(futures, timeout=self.timeout)
-                except:
-                    print("TIMEOUT OF SOME OF THE SAMPLES")
-            all_futures.extend(futures)
-        print(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
-        dfs = []
-        num_success = 0
-        if self.sampler_type in {'BayesianOptimizationSampler'}:
-            try: 
+        futures, fut_to_rundir = self.submit_batch(inputlist, include_fut_to_rundir=True)
+
+        for fut in futures:
+            try:
+                sampler.register_future(fut)
+            except Exception:
+                pass
+
+        sampler_type = getattr(sampler, "type", None) or getattr(sampler, "__class__", None).__name__
+
+        if sampler_type in {'BayesianOptimizationSampler'}:
+            try:
                 wait(futures, timeout=self.timeout)
-                if self.sampler.plot_GPR_flag:
-                    # Build the result dictionary and set plot frequency to 1 to 
-                    # plot the GPR for the final state of the optimization.
-                    # Plotting is presently implemented in the train_surrogate function.
-                    self.sampler.build_result_dictionary(self.sampler.base_run_dir)
-                    self.sampler.plot_frequency = 1
-                    self.sampler.train_surrogate()
-            except:
-                print("Timeout of some of the samples")
+            except Exception:
+                print("Timeout or error while waiting for BO batch; continuing.")
+
+            if getattr(sampler, "plot_GPR_flag", False):
+                try:
+                    sampler.build_result_dictionary(self.base_run_dir)
+                    sampler.plot_frequency = 1
+                    sampler.train_surrogate()
+                except Exception as e:
+                    print("Error during sampler postprocessing:", e)
         else:
-            for i, future in enumerate(as_completed(all_futures)):
-                result = future.result()
-                if result['success'] == True:
+            dfs = []
+            num_success = 0
+            total = len(futures)
+
+            print(f"Collecting results from {total} futures...")
+
+            for i, future in enumerate(as_completed(futures), start=1):
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"[{i}/{total}] Future failed with exception:", e)
+                    continue
+
+                if isinstance(result, dict) and result.get("success") is True:
                     num_success += 1
-                # print('FUTURE RESULT',result, type(result))
-                result = {k:[v] for k,v in result.items()}
-                dfs.append(pd.DataFrame(result))
-                print(f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
-                print('_'*100)
-            df_dataset = pd.concat(dfs)
-            df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
 
-        print('WALLTIME FOR ENCHANTED SURROGATES:', time.time()-start,'sec')
-        if self.sampler_type not in {'BayesianOptimizationSampler'}:
-            print('DATASET IS WRITTEN HERE:',os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
-        print('WRITTING ENCHANTED.FINISHED FILE, SEE base_run_dir:',self.base_run_dir)
-        with open(os.path.join(self.base_run_dir,'ENCHANTED.FINISHED'), 'w') as file:
-            file.write(f'ENCHANTED.FINISHED, {__class__}')
+                try:
+                    df = pd.DataFrame({k: [v] for k, v in result.items()})
+                    dfs.append(df)
+                except Exception as e:
+                    print("Failed to convert result to DataFrame:", e)
+                    continue
 
-        job_info = self.get_slurm_usage_info(all_job_ids)
-        total_cpu_time = sum(job['cpu_time_seconds'] for job in job_info)/3600
-        print(f"Total CPU hours used: {total_cpu_time}")
+                print(
+                    f"[{i}/{total}] Futures Completed ({(i/total)*100:.1f}%) | "
+                    f"[{num_success}/{i}] Futures Succeeded"
+                )
+                print("_" * 100)
 
-        cpu_ps = subprocess.run(["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if cpu_ps.returncode == 0:
-            headnode_secs = int(cpu_ps.stdout.strip())
-            print(f"Total CPU time used by head node: {headnode_secs/3600}")
-        else:
-            print(f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}")
+            if dfs:
+                df_dataset = pd.concat(dfs, ignore_index=True)
+                outpath = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                df_dataset.to_csv(outpath, index=False)
+                print("DATASET WRITTEN TO:", outpath)            
 
-        print('CLUSTER SHUTDOWN')
-        self.shutdown_cluster()
+        # print('CLUSTER SHUTDOWN')
+        # self.shutdown_cluster()
 
 
-    def submit_batch(self, samples, base_run_dir=None, client=None, include_fut_to_rundir=False):
+    def submit_batch(self, run_dir_sample_pairs, base_run_dir=None, client=None, include_fut_to_rundir=False):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
@@ -403,34 +415,23 @@ class DaskExecutor(Executor):
         asynchronously, and their futures are returned for tracking.
 
         Args:
-            samples (list): List of sample parameters for the simulation tasks.
+            run_dir_sample_pairs (list): List of rundir, sample parameters for the simulation tasks.
 
         Returns:
             list: List of futures representing the submitted tasks.
         """
-        
         if not client:
             client = self.client
-        
-        if not base_run_dir:
-            base_run_dir = self.base_run_dir
-        assert base_run_dir
-        
+        assert client is not None
+
         futures = []
-        run_dirs = []
         fut_to_rundir = {}
-        for sample_params in samples:
-            sample_run_dir = make_run_dir(base_run_dir=base_run_dir, prepend=self.runner_config['type']) 
-            run_dirs.append(sample_run_dir)
-            new_future = client.submit(
-                run_simulation_task, self.runner_config, sample_run_dir, sample_params
-            )
+        for run_dir, sample_params in run_dir_sample_pairs:
+            new_future = client.submit(run_simulation_task, self.runner_config, run_dir, sample_params)
             futures.append(new_future)
-            fut_to_rundir[new_future.key] = sample_run_dir
-        p_info = [str(sample_params)+f'| {rd}' for sample_params,rd in zip(samples,run_dirs)]
-        print(f"{len(futures)} DASK FUTURES HAVE BEEN SUBMITTED FOR RUNNER: {self.runner_config['type']} \n",'\n'.join(p_info))
-        
+            fut_to_rundir[new_future.key] = run_dir
+
+        print(f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}")
         if include_fut_to_rundir:
             return futures, fut_to_rundir
-        else:
-            return futures
+        return futures
