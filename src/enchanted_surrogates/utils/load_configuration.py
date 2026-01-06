@@ -31,7 +31,7 @@ def load_configuration(config_path: str) -> argparse.Namespace:
             config.executor['runner_config'] = config.runner
         elif 'runner' in config.executor:
             config.executor['runner_config'] = config.executor.pop('runner')
-    print(config)
+    print('CONFIG:\n',config)
     return config
 
 
@@ -61,5 +61,6 @@ def load_from_dir(dir_path: str) -> Optional[argparse.Namespace]:
 
     # Exactly one YAML file found
     config_path = os.path.join(dir_path, yaml_files[0])
+    print(f'LOADING CONFIG {config_path}')
     return load_configuration(config_path)
     

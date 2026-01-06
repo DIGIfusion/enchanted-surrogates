@@ -89,6 +89,9 @@ class GpyAnalyticSobolSampler(Sampler):
         self.budget = kwargs.get('budget', None) or self.batch_size
         self.output_col = None
         self.global_noise = kwargs.get('global_noise', 0)
+        self.optimise_global_noise_if_no_repeats = kwargs.get('optimise_global_noise_if_no_repeats', True)
+        
+        self.rand1 = True
         
         self.max_y = kwargs.get('max_y',None) # above this value data will be ignored. Potentially because it blongs to a different class
         
@@ -363,37 +366,71 @@ class GpyAnalyticSobolSampler(Sampler):
         X_unit = self.to_unit(unique_points)
         return X_unit, Y_unique.reshape(-1,1), noise_vars, se_vars, mean_sems, counts
 
+    def var_to_std(self, var, var_err):
+        """
+        Convert variance ± error into std ± error using first‑order error propagation.
+
+        Parameters
+        ----------
+        var : float or array
+            Estimated variance.
+        var_err : float or array
+            Standard error (or std) of the variance estimate.
+
+        Returns
+        -------
+        std : float or array
+            Standard deviation = sqrt(var)
+        std_err : float or array
+            Error on the standard deviation
+        """
+        var = np.asarray(var)
+        var_err = np.asarray(var_err)
+
+        std = np.sqrt(var)
+        std_err = var_err / (2 * std)
+
+        return std, std_err
 
     def fit(self):
         """
-        Fit the main GP surrogate using per-point noise via heteroscedastic regression.
-        If repeats exist, also fit the noise GP.
+        Fit the main GP surrogate.
+        If repeats exist, use heteroscedastic regression with per-point noise.
+        If no repeats and use_global_noise_if_no_repeats=True, fit a global GPRegression with kernel noise.
         """
-        X, Y, noise_vars, se_vars, _, _ = self._get_unitXY_with_noise()
-        kernel = GPy.kern.RBF(input_dim=X.shape[1], ARD=True)
+        X, Y, noise_vars, se_vars, _, counts = self._get_unitXY_with_noise()
+        input_dim = X.shape[1]
+        kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
 
-        # Heteroscedastic model: allows per-point variances
-        self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y, kernel)
+        if np.any(counts > 1):
+            # Heteroscedastic model: per-point variances
+            self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y, kernel)
+            nv = noise_vars.reshape(-1, 1)
+            self.gp_model.likelihood.variance[:] = nv
+            self.gp_model.likelihood.variance.fix()
+        else:
+            if self.optimise_global_noise_if_no_repeats:
+                # Fit global GP with free noise variance
+                self.gp_model = GPy.models.GPRegression(X, Y, kernel)
+                self.gp_model.Gaussian_noise.variance.constrain_positive()
+            else:
+                # Default: heteroscedastic with jitter
+                self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y, kernel)
+                nv = noise_vars.reshape(-1, 1)
+                self.gp_model.likelihood.variance[:] = nv
+                self.gp_model.likelihood.variance.fix()
 
-        # Inject known per-point noise variances and fix them        
-        nv = noise_vars.reshape(-1, 1)
-        self.gp_model.likelihood.variance[:] = nv
-        self.gp_model.likelihood.variance.fix()
+        try:
+            self.gp_model.optimize(messages=False)
+        except Exception as exc:
+            print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc}')
 
-        # Optimize kernel hyperparameters only
-        if self.optimize_global:
-            try:
-                self.gp_model.optimize(messages=False)
-            except Exception as exc:
-                print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc}')
-
-        # Fit noise GP if any repeats exist (non-jitter)
-        if self.num_repeats > 1:
+        # Fit noise GP if repeats exist
+        if np.any(counts > 1) and self.num_repeats > 1:
             self.fit_noise(X, noise_vars, se_vars)
-        
+
         self.cache_hypers()
         self.cache_K()
-
 
     def fit_noise(self, X=None, noise_vars=None, se_vars=None):
         """
@@ -405,13 +442,13 @@ class GpyAnalyticSobolSampler(Sampler):
 
         # print('debug fit noise, noise_vars', noise_vars)
         # Train targets = std (sqrt of variance)
-        noise_targets = np.sqrt(np.maximum(noise_vars, 0.0)).reshape(-1, 1)
+        # noise_targets = np.sqrt(np.maximum(noise_vars, 0.0)).reshape(-1, 1)
         # print('debug fit noise, noise_targets', noise_targets)
         
         kernel = GPy.kern.RBF(input_dim=X.shape[1], ARD=True)
 
         # Heteroscedastic model for noise GP
-        self.noise_gp = GPy.models.GPHeteroscedasticRegression(X, noise_targets, kernel)
+        self.noise_gp = GPy.models.GPHeteroscedasticRegression(X, noise_vars.reshape(-1,1), kernel)
 
         # Per-point training noise = SE(var) (fixed)
         se = se_vars.reshape(-1, 1)
@@ -435,10 +472,9 @@ class GpyAnalyticSobolSampler(Sampler):
             raise RuntimeError("Noise GP not fitted. Call fit() first with repeats.")
 
         X_unit_test = self.to_unit(X_test)
-        pred_std_mean, pred_std_var = self.noise_gp.predict_noiseless(X_unit_test)
-
-        pred_std = pred_std_mean.flatten()
-        pred_std_err = np.sqrt(np.maximum(pred_std_var.flatten(), 0.0))
+        pred_var_mean, pred_var_var = self.noise_gp.predict_noiseless(X_unit_test)
+        pred_var_std = np.sqrt(pred_var_var)
+        pred_std, pred_std_err = self.var_to_std(pred_var_mean.flatten(), pred_var_std.flatten())
         return pred_std, pred_std_err
     
     def predict_single_run_error(self, X_test):
@@ -860,20 +896,24 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             df.to_csv(all_batch_info_path, mode='w', header=True, index=False)
 
-    def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None):
+    def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None, X_train=None):
+        print('debug compute acquisition')
         start = time.time()        
         if mode == "blend":
+            print('debug mode blend')
             if blend_string is None:
                 raise ValueError("blend_string must be provided for blend mode")
+            
             blend = self._parse_blend_string(blend_string)
-
+            print('debug blend, coeff, mode:', blend)
+            
             total = np.zeros(len(X_pool))
             for coeff, m in blend:
                 if len(X_pool) > self.chunk_size:
-                    scores = self._compute_acquisition_chunked(X_pool, mode=m, chunk_size=self.chunk_size, model=model)
+                    scores = self._compute_acquisition_chunked(X_pool, mode=m, chunk_size=self.chunk_size, model=model, X_train=X_train)
                     
                 else:
-                    scores = self._compute_acquisition_unchunked(X_pool, mode=m, model=model)
+                    scores = self._compute_acquisition_unchunked(X_pool, mode=m, model=model, X_train=X_train)
                 scores = (scores - scores.mean()) / (scores.std() + 1e-12)
                 total += coeff * scores
 
@@ -882,29 +922,38 @@ class GpyAnalyticSobolSampler(Sampler):
             return total
 
         else:
+            print('debug mode:', mode)
             if len(X_pool) > self.chunk_size:
-                scores = self._compute_acquisition_chunked(X_pool, mode=mode, chunk_size=self.chunk_size)
+                scores = self._compute_acquisition_chunked(X_pool, mode=mode, chunk_size=self.chunk_size, model=model, X_train=X_train)
                 
             else:
-                scores = self._compute_acquisition_unchunked(X_pool, mode=mode)
+                print('debug, computing acquisition unchunked, mode', mode)
+                scores = self._compute_acquisition_unchunked(X_pool, mode=mode, model=model, X_train=X_train)
             end = time.time()
             print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
             return scores
 
-    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None):
+    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None):
         if model is None:
             model = self.gp_model
         
         if mode == "random":
             return np.random.uniform(0,1,len(X_pool))
         
-        if mode == "var" or "variance":
+        elif mode == "var" or mode == "variance":
             mu, var = model.predict_noiseless(X_pool)
             return var.flatten()
         
-        if mode == "noise_and_var":
+        elif mode == "rand1var1":
+            self.rand1 = not self.rand1
+            if self.rand1:
+                return np.random.uniform(0,1,len(X_pool))
+            else:
+                mu, var = model.predict_noiseless(X_pool)
+                return var.flatten()
+        
+        elif mode == "noise_and_var":
             # GP posterior variance
-            print('debug shape variances self.gp_model.likelihood.variance.shape: in noise and var', self.gp_model.likelihood.variance.shape)
             # Y_metadata = {'output_index': np.arange(X_pool.shape[0]).reshape(-1,1)}
             mu, var_model = self.gp_model.predict_noiseless(X_pool)
             # _, var_model = self.gp_model.predict(X_pool)
@@ -915,8 +964,35 @@ class GpyAnalyticSobolSampler(Sampler):
             var_noise = (noise_std + noise_err)**2
 
             return var_model + var_noise
+        
+        elif mode == "var_distpen":
+            # GP posterior variance
+            mu, var = model.predict_noiseless(X_pool)
+            var = var.flatten()
 
-        if mode == "noise":
+            # Compute kernel similarity between pool points and training points
+            # K_xt_x = k(X_pool, X_train)
+            K_xt_x = model.kern.K(X_pool, X_train)  # shape (N_pool, N_train)
+
+            # For each pool point, take the maximum similarity to any training point
+            max_sim = np.max(K_xt_x, axis=1)  # shape (N_pool,)
+
+            # Optionally normalize by kernel variance if needed
+            # For many kernels, kern.variance is the output scale
+            if hasattr(model.kern, "variance"):
+                variance_scale = model.kern.variance[0] if np.ndim(model.kern.variance) > 0 else model.kern.variance
+                # Avoid divide-by-zero
+                if variance_scale > 0:
+                    max_sim = max_sim / variance_scale
+
+            # Distance penalty: low when similar to existing points, high when far
+            # You can tune alpha; alpha=1 is a good default
+            alpha = 1.0
+            penalty = 1.0 - np.clip(max_sim, 0.0, 1.0) ** alpha
+
+            return var * penalty
+
+        elif mode == "noise":
             noise_std, noise_err = self.predict_noise(self.from_unit(X_pool))
             var_noise = (noise_std + noise_err)**2
             return var_noise
@@ -934,16 +1010,16 @@ class GpyAnalyticSobolSampler(Sampler):
             return grads
 
         elif mode == "intVar":
-            return self.integral_variance_reduction(X_pool)
+            return self.integral_variance_reduction(X_pool, model=model, X_train=X_train)
 
         else:
             raise ValueError(f"Unknown acquisition mode: {mode}")
 
-    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None):
+    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None):
         results = []
         for i in range(0, len(X_pool), chunk_size):
             block = X_pool[i:i+chunk_size]
-            results.append(self._compute_acquisition_unchunked(block, mode=mode, model=model))
+            results.append(self._compute_acquisition_unchunked(block, mode=mode, model=model, X_train=X_train))
         return np.concatenate(results)
 
     def _parse_blend_string(self, blend_string):
@@ -959,12 +1035,19 @@ class GpyAnalyticSobolSampler(Sampler):
         return blend
 
 
-    def integral_variance_reduction(self, X_pool):
-        X_train, _ = self._get_unitXY()
+    def integral_variance_reduction(self, X_pool, model=None, X_train=None):
+        if X_train is None:
+            X_train, _ = self._get_unitXY()
+        
+        if model is None:
+            model = self.gp_model
+        
+        noise_variances = model.likelihood.variance[:]
+    
         n_train = X_train.shape[0]
 
         # Kernel matrix and inverse
-        K = self.gp_model.kern.K(X_train) + np.diag(np.maximum(self.noise_variances, 1e-8))
+        K = model.kern.K(X_train) + np.diag(np.maximum(noise_variances, 1e-8))
         K_inv = np.linalg.pinv(K)
 
         # Kernel mean features for training points
@@ -974,10 +1057,10 @@ class GpyAnalyticSobolSampler(Sampler):
         phi_pool = self._integral_k_over_domain(X_pool)    # shape (n_pool,)
 
         # Cross‑covariance between train and pool
-        K_cross = self.gp_model.kern.K(X_train, X_pool)    # shape (n_train, n_pool)
+        K_cross = model.kern.K(X_train, X_pool)    # shape (n_train, n_pool)
 
         # Self‑covariance for pool points
-        K_self = np.diag(self.gp_model.kern.K(X_pool))     # shape (n_pool,)
+        K_self = np.diag(model.kern.K(X_pool))     # shape (n_pool,)
 
         # Compute numerator and denominator vectorized
         diff = phi_pool - K_cross.T.dot(K_inv).dot(phi_train)   # shape (n_pool,)
@@ -1127,6 +1210,257 @@ class GpyAnalyticSobolSampler(Sampler):
         os.makedirs(save_dir, exist_ok=True)
         fig.savefig(os.path.join(save_dir, f'N{num_train}_thresh{threshold}_hist.png'))
         plt.close(fig)
+
+    def oracle_test(self, train_df=None, train_csv=None,
+                    test_df=None, test_csv=None,
+                    max_steps=None, random_seed=0):
+        """
+        Oracle vs Random active learning test on a fully labeled dataset.
+        Hyperparameters are optimized ONCE on the full training set, then frozen.
+
+        Parameters
+        ----------
+        train_df, test_df : pandas DataFrame
+        train_csv, test_csv : str
+            If only one dataset is provided, it is split 50/50.
+        max_steps : int
+            Number of acquisition steps to simulate.
+        random_seed : int
+            Seed for random baseline.
+
+        Returns
+        -------
+        oracle_rmse : list
+        random_rmse : list
+        fig : matplotlib Figure
+        """
+
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import mean_squared_error
+        import numpy as np
+        import pandas as pd
+        import GPy
+        
+        print('performing oracle test')
+        
+        # ----------------------------
+        # Load data
+        # ----------------------------
+        
+        print('loading data')
+        if train_df is None and train_csv is not None:
+            train_df = pd.read_csv(train_csv)
+        if test_df is None and test_csv is not None:
+            test_df = pd.read_csv(test_csv)
+
+        if train_df is None and test_df is None:
+            raise ValueError("Provide either train_df/test_df or train_csv/test_csv")
+
+        print('debug test_df is None', test_df is None)
+        # If only one dataset provided → split 50/50
+        if test_df is None:
+            df = train_df.copy()
+            df = df.sample(frac=1.0, random_state=random_seed)
+            mid = len(df) // 2
+            train_df = df.iloc[:mid].reset_index(drop=True)
+            test_df = df.iloc[mid:].reset_index(drop=True)
+
+        # ----------------------------
+        # Identify input/output columns
+        # ----------------------------
+        out_cols = [c for c in train_df.columns if "output" in c.lower()]
+        if len(out_cols) != 1:
+            raise ValueError("Exactly one output column required containing 'output'")
+        ycol = out_cols[0]
+
+        X_train_full = train_df[self.parameters].to_numpy()
+        y_train_full = train_df[ycol].to_numpy().reshape(-1, 1)
+
+        X_test = test_df[self.parameters].to_numpy()
+        y_test = test_df[ycol].to_numpy().reshape(-1, 1)
+
+        if max_steps is None:
+            max_steps = len(X_train_full) - 1
+            
+        print('max steps:', max_steps)
+        # ----------------------------
+        # Step 1: Optimize hyperparameters ONCE on full training set
+        # ----------------------------
+        print('optimizing hypers')
+        X_unit_full = self.to_unit(X_train_full)
+        kernel = GPy.kern.RBF(input_dim=X_unit_full.shape[1], ARD=True)
+        model_full = GPy.models.GPRegression(X_unit_full, y_train_full, kernel)
+
+        try:
+            model_full.optimize(messages=False)
+        except Exception:
+            pass
+
+        # Freeze optimized hyperparameters
+        kernel_fixed = GPy.kern.RBF(input_dim=X_unit_full.shape[1], ARD=True)
+        kernel_fixed.variance = float(model_full.kern.variance.values[0])
+        kernel_fixed.lengthscale = model_full.kern.lengthscale.values.copy()
+        self.lengthscales = kernel_fixed.lengthscale
+        self.kernel_variance = kernel_fixed.variance
+
+        # ----------------------------
+        # Helper: fit GP with fixed hypers and compute RMSE
+        # ----------------------------
+        def fit_and_rmse(Xtr, Ytr, do_optimize=False):
+            # Scale training data
+            X_unit = self.to_unit(Xtr)
+
+            # Build model with fixed kernel copy
+            model = GPy.models.GPRegression(X_unit, Ytr, kernel_fixed.copy())
+
+            # Optional optimization
+            if do_optimize:
+                try:
+                    model.optimize(messages=False)
+                except Exception as e:
+                    print("Warning: GP optimization failed:", e)
+
+            # Predict on test set
+            X_test_unit = self.to_unit(X_test)
+            mu, _ = model.predict(X_test_unit)
+            
+            print('debug len(X_test)', len(X_test))
+
+            # Compute RMSE
+            rmse = np.sqrt(mean_squared_error(y_test, mu))
+            return rmse, model
+
+        # ----------------------------
+        # Initial seed: 1 random point
+        # ----------------------------
+        rng = np.random.RandomState(random_seed)
+        idx0 = rng.choice(len(X_train_full), size=1, replace=False)
+
+        X_oracle = X_train_full[idx0].copy()
+        y_oracle = y_train_full[idx0].copy()
+
+        X_random = X_train_full[idx0].copy()
+        y_random = y_train_full[idx0].copy()
+
+        active = ['blend', 'grad', 'var', 'intVar', 'rand1var1', 'var_distpen'] #, 'intVar', 'blend']
+        blend_string = [
+            None if i != 'blend' else '0.33-var_0.33-grad_0.34-intVar'
+            for i in active
+        ]
+
+        X_active = [X_train_full[idx0].copy() for i in active]
+        y_active = [y_train_full[idx0].copy() for i in active]
+        Xpool_active = [X_train_full.copy() for i in active]
+        ypool_active = [y_train_full.copy() for i in active]
+        
+        pool_idx_oracle = np.setdiff1d(np.arange(len(X_train_full)), idx0)
+        pool_idx_random = np.setdiff1d(np.arange(len(X_train_full)), idx0)
+        oracle_rmse = []
+        random_rmse = []
+        active_rmse = [[] for i in active]
+
+        # ----------------------------
+        # Main oracle loop
+        # ----------------------------
+        print('running main loop')
+        for step in range(max_steps):
+            start_time = time.time()
+            print(f'Running step: {step}/{max_steps}')
+            # ----------------------------
+            # ORACLE SELECTION
+            # ----------------------------
+
+            from joblib import Parallel, delayed
+            def evaluate_index(i, X_oracle, y_oracle, X_train_full, y_train_full):
+                X_try = np.vstack([X_oracle, X_train_full[i:i+1]])
+                y_try = np.vstack([y_oracle, y_train_full[i:i+1]])
+                rmse_i, model = fit_and_rmse(X_try, y_try, do_optimize=True)
+                return rmse_i, i
+
+            # Run in parallel
+            results = Parallel(n_jobs=-1)(
+                delayed(evaluate_index)(i, X_oracle, y_oracle, X_train_full, y_train_full)
+                for i in pool_idx_oracle
+            )
+            
+            # Find best
+            best_rmse, best_idx = min(results, key=lambda x: x[0])
+
+            # Update oracle set
+            X_oracle = np.vstack([X_oracle, X_train_full[best_idx:best_idx+1]])
+            y_oracle = np.vstack([y_oracle, y_train_full[best_idx:best_idx+1]])
+
+            pool_idx_oracle = pool_idx_oracle[pool_idx_oracle != best_idx]
+
+            rmse_oracle, model = fit_and_rmse(X_oracle, y_oracle, do_optimize=True)
+            oracle_rmse.append(rmse_oracle)
+
+            # ----------------------------
+            # RANDOM SELECTION
+            # ----------------------------
+            if len(pool_idx_random) == 0:
+                break
+
+            ridx = rng.choice(pool_idx_random, size=1)[0]
+            X_random = np.vstack([X_random, X_train_full[ridx:ridx+1]])
+            y_random = np.vstack([y_random, y_train_full[ridx:ridx+1]])
+
+            pool_idx_random = pool_idx_random[pool_idx_random != ridx]
+
+            rmse_random, model = fit_and_rmse(X_random, y_random, do_optimize=True)
+            random_rmse.append(rmse_random)
+
+            # ----------------------------
+            # ACTIVE ACQUISTIONS
+            # ----------------------------
+            for i, act in enumerate(active):
+                if step == 0:
+                    rmse, model = fit_and_rmse(X_random, y_random, do_optimize=True)
+                else:
+                    rmse, model = fit_and_rmse(X_active[i], y_active[i], do_optimize=True)
+                # print('debug model', model)
+                scores = self._compute_acquisition(Xpool_active[i], mode=act, blend_string=blend_string[i], model=model, X_train=X_active[i])
+                print('debug, mode, scores 10', act, scores[:10])
+                best_idx = np.argmax(scores)
+                print('debug, mode, best idx', best_idx)
+                
+                # Update active set
+                X_active[i] = np.vstack([X_active[i], Xpool_active[i][best_idx:best_idx+1]])
+                y_active[i] = np.vstack([y_active[i], ypool_active[i][best_idx:best_idx+1]])
+    
+                # Option 1: using np.delete with axis=0
+                Xpool_active[i] = np.delete(Xpool_active[i], best_idx, axis=0)
+                ypool_active[i] = np.delete(ypool_active[i], best_idx, axis=0)
+
+                rmse, model = fit_and_rmse(X_active[i], y_active[i], do_optimize=True) 
+                active_rmse[i].append(rmse)
+
+            # ----------------------------
+            # Plot
+            # ----------------------------
+            print('plotting')
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.plot(range(1, len(oracle_rmse)+1), oracle_rmse, label="Oracle", lw=2)
+            ax.plot(range(1, len(random_rmse)+1), random_rmse, label="Random", lw=2)
+            for i, act in enumerate(active):
+                if act == 'blend':
+                    ax.plot(range(1, len(active_rmse[i])+1), active_rmse[i], label=act, lw=2)
+                else:
+                    ax.plot(range(1, len(active_rmse[i])+1), active_rmse[i], label=act, lw=2, linestyle='--')
+            ax.set_xlabel("Number of samples")
+            ax.set_ylabel("Test RMSE")
+            ax.set_title("Oracle vs Random Active Learning")
+            ax.legend()
+            ax.grid(True)
+            fig.savefig(os.path.join(self.base_run_dir, 'oracle_vs_random.png'))
+            plt.close(fig)
+            print(f'Step {step} completed in {(time.time() - start_time)/60:.2f} min | Oracle RMSE: {rmse_oracle:.4f} | Random RMSE: {rmse_random:.4f}')
+            print(f'estimated time left: {((time.time() - start_time)/60)*(max_steps - step):.2f} min')
+
+        print('FINNISHED ORACLE TEST')
+        
+        return oracle_rmse, random_rmse, fig
+
 
     # ---------------------------
     # Boilerplate

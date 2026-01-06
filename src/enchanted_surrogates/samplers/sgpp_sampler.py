@@ -1582,25 +1582,65 @@ class SgppSampler(Sampler):
     def do_quadrature(self, *args, **kwargs):
         return self.safe_run(self._do_quadrature, *args, **kwargs)
     def get_test_set(self, test_file, test_dir=None):
-        if test_file:
-            df_test = pd.read_csv(test_file)
-        else:
-            print('RETRIVING TEST SET FROM', test_dir)        
-            if os.path.exists(os.path.join(test_dir,'merged_runner_return.csv')):        
-                df_test = pd.read_csv(os.path.join(test_dir,'merged_runner_return.csv'))
-                print('got runner_return.csv')
-            elif os.path.exists(os.path.join(test_dir, 'merged_runner_return.txt')):
-                df_test = pd.read_csv(os.path.join(test_dir, 'merged_runner_return.txt'))
-                print('got runner_return.txt')
-            # elif os.path.exists(os.path.join(test_dir, 'runner_return.txt')):
-            #     df_test = pd.read_csv(os.path.join(test_dir, 'runner_return.txt'))
-            #     print('got runner_return.txt')    
-                
-        test_x = np.array(df_test.iloc[:,0:-1].astype('float'))
-        # print('debug l tx', len(test_x))
-        test_y = np.array(df_test.iloc[:,-1].astype('float'))
-        return test_x, test_y
+        test_df = pd.read_csv(self.test_data_csv)
+        out_col = [col for col in test_df.columns if 'output' in col]
+        if len(out_col) > 2:
+            raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
+        X_test = test_df[self.parameters].values
+        y_test = test_df[out_col[0]].values
+        return np.array(X_test), np.array(y_test)
     
+    def add_rmse_column_to_batch_info(self):
+        # usefull if you forget to put the test set in before running, add it to the yaml file in the base_run_dir and run this function
+        from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+        batch_dirs = get_batch_dirs(base_run_dir)
+        
+        for i, batch_dir in enumerate(batch_dirs):
+            print('CONSIDERING BATCH DIR:', batch_dir)
+            # if i == 0 or i == 1 or i % write_every == 0:
+            if os.path.exists(os.path.join(batch_dir, 'train_points.pkl')):
+                if 'batch_00' in batch_dir:
+                    continue
+                print('OPERATING ON BATCH DIR:',batch_dir)
+                assert sampler_config['type'] in ('sgpp_sampler', 'SgppSampler')
+                print('debug gds:',self.guide_dataset_size)
+                grid_file_path = os.path.join(batch_dir, 'pysgpp_grid.txt')
+                surpluses_file_path = os.path.join(batch_dir, 'surpluses.mat')
+                train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+                
+                with open(train_points_file, 'rb') as file:
+                    self.train = pickle.load(file)
+                print('len(train)', len(self.train),'batch_dir', batch_dir)
+                
+                virtual_boundary_points_file = os.path.join(batch_dir, 'virtual_boundary_points.pkl')
+                anchor_boundary_points_file = os.path.join(batch_dir, 'anchor_boundary_points.pkl')
+
+                try:
+                    with open(grid_file_path, 'r') as file:
+                        serialized_grid = file.read()
+                        self.grid = pysgpp.Grid.unserialize(serialized_grid)
+                        self.gridStorage = sgpp.grid.getStorage()
+                        self.gridGen = sgpp.grid.getGenerator()
+                        surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
+                        self.alpha = surpluses
+                except FileNotFoundError:
+                    continue
+
+                with open(train_points_file, 'rb') as file:
+                    self.train = pickle.load(file)
+                print('debug wbi')
+                results = self.write_batch_info(batch_dir, name='rmse_', test_data_csv=self.test_data_csv, only_test=True, save_grid=False)
+        
+        batch_info_csv = os.path.join(self.base_run_dir, 'batch_info.csv')
+        shutil.copy2(batch_info_csv, os.path.join(self.base_run_dir, 'batch_info_orig.csv'))
+        merge_secondary_into_primary(
+            primary_csv=batch_info_csv,
+            secondary_csv=os.path.join(self.base_run_dir, 'rmse_batch_info.csv'),
+            out_csv=batch_info_csv,
+            key='num_samples'
+        )
+
+
         
     def register_future(self, future):
         """ Doesn't matter for random sampler TODO: Probably? """
@@ -1609,16 +1649,103 @@ class SgppSampler(Sampler):
     def register_futures(self, futures):
         return None
 
-# if __name__ == "__main__":
-#     import sys
-#     import os
-#     import yaml
-#     import pickle
-#     import argparse
-#     import pysgpp
-#     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-#     from enchanted_surrogates.utils.load_configuration import load_configuration
-#     # from enchanted_surrogates.utils.precise_imports import import_sampler
+def merge_secondary_into_primary(primary_csv: str,
+                                 secondary_csv: str,
+                                 out_csv: str = None,
+                                 key: str = "num_samples",
+                                 how: str = "left",
+                                 require_exact_match: bool = True) -> pd.DataFrame:
+    """
+    Load two CSV files into pandas DataFrames, add columns from the secondary
+    DataFrame to the primary DataFrame for rows with the same `key` values,
+    but only add columns that do not already exist in the primary.
+
+    Args:
+        primary_csv: path to primary CSV (kept as the main table / order preserved).
+        secondary_csv: path to secondary CSV (source of extra columns).
+        out_csv: optional path to write the resulting DataFrame to CSV.
+        key: column name present in both CSVs used to align rows (default "num_samples").
+        how: merge strategy relative to primary. Default "left" keeps all primary rows.
+        require_exact_match: if True, assert that the set of key values in the
+            secondary is a superset of those in primary (or exactly matching if how="inner"),
+            otherwise raises ValueError. If False, missing keys in secondary will remain NaN.
+
+    Returns:
+        result_df: pandas DataFrame (primary with added columns from secondary).
+    """
+    # Load
+    df_p = pd.read_csv(primary_csv)
+    df_s = pd.read_csv(secondary_csv)
+
+    # Basic sanity
+    if key not in df_p.columns:
+        raise KeyError(f"Primary CSV does not contain key column '{key}'")
+    if key not in df_s.columns:
+        raise KeyError(f"Secondary CSV does not contain key column '{key}'")
+
+    # Ensure key uniqueness in secondary if we intend to merge 1:1
+    if df_s[key].duplicated().any():
+        # If duplicates are expected, user should aggregate beforehand.
+        raise ValueError(f"Secondary CSV contains duplicate '{key}' values; please aggregate or deduplicate.")
+
+    # Check matching keys if required
+    prim_keys = set(df_p[key].unique())
+    sec_keys  = set(df_s[key].unique())
+
+    if require_exact_match:
+        missing_in_secondary = prim_keys - sec_keys
+        if missing_in_secondary:
+            raise ValueError(f"The following {key} values are in primary but missing in secondary: "
+                             f"{sorted(list(missing_in_secondary))[:10]}{'...' if len(missing_in_secondary)>10 else ''}")
+
+    # Select only columns from secondary that don't already exist in primary (except the key)
+    new_cols = [c for c in df_s.columns if c != key and c not in df_p.columns]
+    if not new_cols:
+        # Nothing to add — return primary as-is (optionally write out)
+        if out_csv:
+            df_p.to_csv(out_csv, index=False)
+        return df_p
+
+    # Prepare reduced secondary df with key + new columns
+    df_s_reduced = df_s[[key] + new_cols].copy()
+
+    # Merge: keep primary order; by default left join retains primary rows
+    result = pd.merge(df_p, df_s_reduced, on=key, how=how, validate="one_to_one")
+
+    # Optionally write to CSV
+    if out_csv:
+        result.to_csv(out_csv, index=False)
+
+    return result        
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    import yaml
+    import pickle
+    import argparse
+    import pysgpp
+    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+    from enchanted_surrogates.utils.load_configuration import load_configuration
+    
+    _, base_run_dir = sys.argv
+    
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:', os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
+
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
+    sgpp = SgppSampler(**sampler_config)
+    sgpp.add_rmse_column_to_batch_info()
+    
+    
+    # from enchanted_surrogates.utils.precise_imports import import_sampler
 
 #     # ---------------------------
 #     # Argument parsing
@@ -1776,25 +1903,25 @@ class SgppSampler(Sampler):
 #         fig.savefig(save_path)
 #         plt.close(fig)
 
-if __name__ == "__main__":
-    import sys, os
-    from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+# if __name__ == "__main__":
+#     import sys, os
+#     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
 
-    _, base_run_dir = sys.argv
+#     _, base_run_dir = sys.argv
     
-    batch_dirs = get_batch_dirs(base_run_dir)
-    # for batch_dir in batch_dirs:
-    #     train_points_file = os.path.join(batch_dir, 'train_points.pkl')
-    #     if os.path.exists(train_points_file):                
-    #         with open(train_points_file, 'rb') as file:
-    #             train = pickle.load(file)
-    #         print('len(train)', len(train)+32,'batch_dir', batch_dir)
+#     batch_dirs = get_batch_dirs(base_run_dir)
+#     # for batch_dir in batch_dirs:
+#     #     train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+#     #     if os.path.exists(train_points_file):                
+#     #         with open(train_points_file, 'rb') as file:
+#     #             train = pickle.load(file)
+#     #         print('len(train)', len(train)+32,'batch_dir', batch_dir)
 
-    for batch_dir in batch_dirs.reverse():
-        train_points_file = os.path.join(batch_dir, 'train_points.pkl')
-        if os.path.exists(train_points_file):
+#     for batch_dir in batch_dirs.reverse():
+#         train_points_file = os.path.join(batch_dir, 'train_points.pkl')
+#         if os.path.exists(train_points_file):
             
-            break
+#             break
       
     
 
