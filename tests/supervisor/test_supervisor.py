@@ -52,11 +52,11 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
         assert "columns" in group
 
         # Check aggregation dimensions and values
-        agg_values = file["data/aggregated/values"][:].flatten()
+        agg_values = file["data/aggregated/values"][:]
         agg_columns = file["data/aggregated/columns"][:]
 
         assert agg_values.shape == (3,1)
-        assert sorted(agg_values.tolist() == [0,1,2])
+        assert sorted(agg_values.flatten().tolist() == [0,1,2])
         assert agg_columns.tolist() == [b"x"]
 
         # Check run dimensions and values
