@@ -10,6 +10,7 @@ import sys
 import warnings
 import shutil
 from time import sleep
+import h5py
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
@@ -198,28 +199,28 @@ class Supervisor():
                     enchanted_datapoint = pd.read_csv(datapoint_file)
                     enchanted_dataset = pd.concat([enchanted_dataset, enchanted_datapoint])
         return enchanted_dataset
-    
-    def create_hdf5(self, enchanted_dataset: pd.DataFrame):
 
-        # Check if necessary package is installed
-        try:
-            import h5py
-        except ImportError as e:
-            raise RuntimeError(
-                "HDF5 support requires optional dependency:\n"
-                "h5py"
-            ) from e
+    def create_hdf5(self, enchanted_dataset: pd.DataFrame):
+        """
+        Creates hdf5 and saves storage file in base_run_dir with name runs.h5
+        Includes aggregated data from enchanted_dataset and run specific data 
+        in structured format. Dataset has only numeric values, column headers
+        are saved separately in in same location. Metadata includes types for
+        sampler, executor and runner.
         
+        Attributes: 
+            - enchanted_dataset (pd.DataFrame): Dataframe containing all run results
+            
+        """
         h5_path = os.path.join(self.base_run_dir, "runs.h5")
 
         with h5py.File(h5_path, "w") as f:
             # Aggregated dataset
             agg_group = f.create_group("data/aggregated")
 
-            values = enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
             agg_group.create_dataset(
                 "values",
-                data=values
+                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
             )
 
             agg_group.create_dataset(
@@ -243,9 +244,9 @@ class Supervisor():
                 df = pd.read_csv(csv_path)
                 run_group = runs_group.create_group(name)
 
-                # Select only numeric values (also boolean)
+                # Select only numeric values
                 numeric_df = df.select_dtypes(include=[np.number])
-                
+
                 run_group.create_dataset(
                     "values",
                     data=numeric_df.to_numpy()
@@ -258,7 +259,7 @@ class Supervisor():
                         dtype=h5py.string_dtype("utf-8")
                     )
                 )
-            
+
             # Metadata
             meta_group = f.create_group("metadata")
             meta_group.attrs["executor"] = str(self.args.executor.get('type'))
