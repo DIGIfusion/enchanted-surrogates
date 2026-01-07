@@ -61,7 +61,7 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
 
         # Check run dimensions and values
         run_values = file["data/runs/2_0/values"][:]
-        run_columns = file["data/runs/2_0/values"][:]
+        run_columns = file["data/runs/2_0/columns"][:]
 
         assert run_values.shape == (1,1)
         assert run_values[0,0] == 2
