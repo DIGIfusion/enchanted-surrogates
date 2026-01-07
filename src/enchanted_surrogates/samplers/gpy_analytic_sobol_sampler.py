@@ -89,7 +89,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.submitted = 0
         self.custom_submitted = 0
         self.budget = kwargs.get('budget', None) or self.batch_size * self.num_repeats
-        self.output_col = None
+        self.output_col = kwargs.get('output_col', None)
         self.global_noise = kwargs.get('global_noise', 0)
         self.optimise_global_noise_if_no_repeats = kwargs.get('optimise_global_noise_if_no_repeats', True)
         
@@ -305,13 +305,15 @@ class GpyAnalyticSobolSampler(Sampler):
             data_df = pd.concat(dfs, axis=0)
         else:
             data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn')
-        output_col = [col for col in data_df.columns if 'output' in col]
-        self.output_col = output_col[0]
-        if len(output_col) != 1:
-            raise RuntimeError('Exactly one output column required.')
+        if self.output_col is None:
+            output_col = [col for col in data_df.columns if 'output' in col]
+            self.output_col = output_col[0]
+
+            if len(output_col) != 1:
+                raise RuntimeError('Exactly one output column required.')
 
         X_real = data_df[self.parameters].to_numpy()
-        Y = data_df[output_col].to_numpy().reshape(-1,1)
+        Y = data_df[self.output_col].to_numpy().reshape(-1,1)
         if self.max_y:
             mask = Y<=self.max_y
             Y = Y[mask.ravel()]
@@ -1194,19 +1196,20 @@ class GpyAnalyticSobolSampler(Sampler):
         df['se_std'] = se_std
 
         # Write CSV
-        out_path = os.path.join(self.base_run_dir, 'enchanted_dataset_collapsed.csv')
+        out_path = os.path.join(self.base_run_dir, self.output_col+'_enchanted_dataset_collapsed.csv')
         df.to_csv(out_path, index=False)
         print(f"Collapsed dataset written to {out_path}")
         df_avg_noise = pd.DataFrame({'mean_noise': [np.mean(df['std'])]})
-        df_avg_noise.to_csv(os.path.join(self.base_run_dir, 'average_noise.csv'))
+        df_avg_noise.to_csv(os.path.join(self.base_run_dir, self.output_col+'_average_noise.csv'))
 
 
     def set_output_col(self):
-        data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn', nrows=0)
-        output_col = [col for col in data_df.columns if 'output' in col]
-        if len(output_col)>1:
-            warnings.warn(f'WHEN SETTING OUTPUT COL THERE WERE MORE THAN ONE COLUMNS WITH output STRING: {output_col}, TAKING FIRST: {output_col[0]}')
-        self.output_col = output_col[0]
+        if self.output_col is None:
+            data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn', nrows=0)
+            output_col = [col for col in data_df.columns if 'output' in col]
+            if len(output_col)>1:
+                warnings.warn(f'WHEN SETTING OUTPUT COL THERE WERE MORE THAN ONE COLUMNS WITH output STRING: {output_col}, TAKING FIRST: {output_col[0]}')
+            self.output_col = output_col[0]
         return self.output_col
 
     def plot_slices(self):
@@ -1225,18 +1228,21 @@ class GpyAnalyticSobolSampler(Sampler):
         Y_slice_noise, Y_slice_noise_error = self.predict_noise(X_slice)
         print('debug len y len df', len(Y_slice), len(df))
         df_plot = pd.DataFrame(samples)
-        if not self.output_col:
+        if self.output_col is None:
             self.set_output_col()
         
         df_plot[self.output_col+'_noise_output'] = Y_slice_noise
         df_plot[self.output_col.replace('output','')+'_noise_outerror'] = Y_slice_noise_error
-
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.noise_gp.X))
+        slice_samp.plot_full_grid(df=df_plot, name=f'{self.output_col}_gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.noise_gp.X))
 
         df_plot = pd.DataFrame(samples)
-        df_plot[self.output_col] = Y_slice
-        df_plot[self.output_col.replace('output', '')+'_outerror'] = Y_error
-        slice_samp.plot_full_grid(df=df_plot, name=f'gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.gp_model.X))
+        if not 'output' in self.output_col:
+            out_label = self.output_col+'_output'
+        else:
+            out_label = self.output_col
+        df_plot[out_label] = Y_slice
+        df_plot[out_label.replace('output', '')+'_outerror'] = Y_error
+        slice_samp.plot_full_grid(df=df_plot, name=f'{self.output_col}_gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.gp_model.X))
 
     def plot_threshold_histograms_grid(self, threshold, res=20, bins=20):
         from enchanted_surrogates.samplers.grid_sampler import GridSampler
@@ -1268,8 +1274,8 @@ class GpyAnalyticSobolSampler(Sampler):
         bins : int
             Number of bins for the histogram.
         """
-        if self.output_col is None:
-            raise RuntimeError("Output column not set. Call get_data() first.")
+        # if self.output_col is None:
+        #     raise RuntimeError("Output column not set. Call get_data() first.")
 
         if self.output_col is None:
             self.set_output_col()
@@ -1665,11 +1671,14 @@ if __name__ == '__main__':
     sampler_config['base_run_dir'] = base_run_dir
     
     gpy = GpyAnalyticSobolSampler(**sampler_config)
-    gpy.batch_number=6
-    gpy.fit()
-    gpy.fit_noise()
-    gpy.plot_slices()
-    gpy.post_process()
+    gpy.batch_number=4
+    outputs = ['ascot_runtime_min','lost_power_W_output','number_particles','current_drive_A','power_deposited_to_ions_W','power_deposited_to_electrons_W']
+    for out in outputs:
+        gpy.output_col = out
+        gpy.fit()
+        gpy.fit_noise()
+        gpy.plot_slices()
+        gpy.post_process()
     # last_write=0
     # write_every=500
     # for i, batch_dir in enumerate(batch_dirs):

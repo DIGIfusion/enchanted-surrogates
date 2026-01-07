@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
-plt.rcParams.update({'font.size': 10})
+plt.rcParams.update({'font.size': 15})
 
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
@@ -200,7 +200,7 @@ class SlicesSampler2D(Sampler):
         ymin, ymax = df[ycol].min(), df[ycol].max()
 
         d = len(self.parameters)
-        base_size = 6
+        base_size = 4
         fig, axes = plt.subplots(d, d, figsize=(base_size*d, base_size*d),
                                 subplot_kw={'projection': None})
 
@@ -245,7 +245,8 @@ class SlicesSampler2D(Sampler):
                     yvals[yvals==0.0] = np.nan
                     ax.plot(xi_lin, yvals, '-', color='tab:blue', linewidth=1.5)
                     ax.set_xlabel(p)
-                    ax.set_ylabel(ycol)
+                    if i == 0:
+                        ax.set_ylabel(ycol)
                     ax.grid(True, alpha=0.3)
                     
                     output_error_col = [c for c in df.columns if 'outerror' in c]
@@ -314,7 +315,7 @@ class SlicesSampler2D(Sampler):
 
                     ax3d.set_xlabel(self.parameters[i])
                     ax3d.set_ylabel(self.parameters[j])
-                    ax3d.set_zlabel(ycol)
+                    # ax3d.set_zlabel(ycol)
                     
                     output_error_col = [c for c in df.columns if 'outerror' in c]
                     if output_error_col:
@@ -352,7 +353,7 @@ class SlicesSampler2D(Sampler):
         cbar.set_label(ycol)
 
         # fig.tight_layout(pad=3.0)
-        fig.subplots_adjust(wspace=0.4, hspace=0.2)
+        fig.subplots_adjust(wspace=0.7, hspace=0.7)
         fig.savefig(os.path.join(self.base_run_dir, name+"slices_full_grid.png"), dpi=300)
  
         plt.close(fig)
