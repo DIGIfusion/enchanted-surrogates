@@ -1,4 +1,5 @@
 import pandas as pd
+import h5py
 from enchanted_surrogates.supervisor.supervisor import Supervisor
 from types import SimpleNamespace
 
@@ -17,14 +18,59 @@ def test_create_dataset_combines_csv_files(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    for i in range(3):
-        d = tmp_path / f"{i}_0"
-        d.mkdir()
-        pd.DataFrame([{"x": i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
+    create_run_folders(tmp_path, 3)
 
     df = supervisor.create_dataset()
     assert len(df) == 3
     assert set(df["x"]) == {0, 1, 2}
+
+def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    create_run_folders(tmp_path, 3)
+
+    df = supervisor.create_dataset()
+    supervisor.create_hdf5(df)
+
+    # Check if hdf5 exists
+    output_file = tmp_path / "runs.h5"
+    assert output_file.exists()
+    assert output_file.is_file()
+
+    with h5py.File(output_file, "r") as file:
+
+        
+        # Then, check structure
+        assert "data" in file
+        assert "data/aggregated" in file
+        assert "data/runs" in file
+        assert "metadata" in file
+
+        # Check groups
+        group = file["data/aggregated"]
+        assert "values" in group
+        assert "columns" in group
+
+        # Check aggregation dimensions and values
+        agg_values = file["data/aggregated/values"][:]
+        agg_columns = file["data/aggregated/columns"][:]
+
+        assert agg_values.shape == (3,1)
+        assert agg_values.tolist() == [0,1,2]
+        assert agg_columns.tolist() == [b"x"]
+
+        # Check run dimensions and values
+        run_values = file["data/runs/2_0/values"][:]
+        run_columns = file["data/runs/2_0/values"][:]
+
+        assert run_values.shape == (1,1)
+        assert run_values[0,0] == 2
+        assert run_columns.tolist() == [b"x"]
+
+        # Check that metadata exists
+        meta = file["metadata"].attrs
+        for key in ["executor", "sampler", "runner"]:
+            assert key in meta
 
 def test_start_calls_execute_for_each_sample(tmp_path, patch_supervisor_imports):
     sampler, executor = patch_supervisor_imports([
@@ -49,4 +95,14 @@ def make_args(tmp_path, summary="csv"):
             "base_run_dir": str(tmp_path),
             "summary_datatype": summary,
         },
+        runner={"type": "mock"},
     )
+
+def create_run_folders(tmp_path, amount):
+    """
+    Helper function to create run folders
+    """
+    for i in range(amount):
+        d = tmp_path / f"{i}_0"
+        d.mkdir()
+        pd.DataFrame([{"x":i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
