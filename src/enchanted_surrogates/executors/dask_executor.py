@@ -215,7 +215,8 @@ class DaskExecutor(Executor):
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
 
-        if isinstance(self.cluster, SLURMCluster):
+        # Only for SLURM cluster
+        if hasattr(self.cluster, "workers"):
             try:
                 self.slurm_job_ids.update(self.cluster.workers.keys())
             except Exception:
