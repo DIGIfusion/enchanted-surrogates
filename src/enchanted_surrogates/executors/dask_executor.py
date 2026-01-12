@@ -215,7 +215,8 @@ class DaskExecutor(Executor):
                 print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 print(f"  Resources: {info.get('resources', {})}\n")
 
-        if isinstance(self.cluster, SLURMCluster):
+        # Only for SLURM cluster
+        if hasattr(self.cluster, "workers"):
             try:
                 self.slurm_job_ids.update(self.cluster.workers.keys())
             except Exception:
@@ -395,13 +396,7 @@ class DaskExecutor(Executor):
                     f"[{i}/{total}] Futures Completed ({(i/total)*100:.1f}%) | "
                     f"[{num_success}/{i}] Futures Succeeded"
                 )
-                print("_" * 100)
-
-            if dfs:
-                df_dataset = pd.concat(dfs, ignore_index=True)
-                outpath = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                df_dataset.to_csv(outpath, index=False)
-                print("DATASET WRITTEN TO:", outpath)            
+                print("_" * 100)          
 
         # print('CLUSTER SHUTDOWN')
         # self.shutdown_cluster()
