@@ -50,9 +50,9 @@ class NestedSampler(Sampler):
     ```
     In this example:
 
-      - `sampler_a` generates 12 samplers for `(y, z)`
+      - `sampler_a` generates 12 samples for `(x)`
 
-      - `sampler_b` generates 2 samples for `(x)`
+      - `sampler_b` generates 2 samples for `(y, z)`
 
       - The nested sampler produces `12 × 2 = 24` combined configurations.
 
