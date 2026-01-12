@@ -1,3 +1,5 @@
+# pylint: disable=E1101
+
 import pandas as pd
 import h5py
 from enchanted_surrogates.supervisor.supervisor import Supervisor
@@ -52,7 +54,7 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
         assert "columns" in group
 
         # Check aggregation dimensions and values
-        agg_values = file["data/aggregated/values"][:]
+        agg_values = file["data/aggregated/values"][:] 
         agg_columns = file["data/aggregated/columns"][:]
 
         assert agg_values.shape == (3,1)
