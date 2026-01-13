@@ -13,6 +13,7 @@ from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
+from enchanted_surrogates.supervisor.run_group import RunGroup
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
 
@@ -49,12 +50,19 @@ class Supervisor:
         """
 
         self.args = args
-        self.executor = import_executor(
-            args.executor.pop("type"), executor_config=args.executor
-        )
-        self.sampler = import_sampler(
-            args.sampler.pop("type"), sampler_config=args.sampler
-        )
+        self.executors = self.import_executors(args)
+        self.samplers = self.import_samplers(args)
+        groups = self.import_run_groups(args)
+
+        self.groups = []
+        for group in groups:
+            run_group = RunGroup(
+                self.executors[group["executor"]],
+                self.samplers[group["sampler"]],
+                args.runners[group["runner"]]
+            )
+            self.groups.append(run_group)
+
         self.base_run_dir = args.supervisor.get("base_run_dir")
 
         if self.base_run_dir is None:
