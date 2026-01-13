@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 class Executor(ABC):
     def __init__(
-        self, sampler_config, runner_config, output_dir=None, *args, **kwargs
+        self, output_dir=None, *args, **kwargs
     ):
-        self.sampler_config = sampler_config
-        self.runner_config = runner_config
+        #self.sampler_config = sampler_config
+        #self.runner_config = runner_config
         self.output_dir = output_dir  # TODO rename
 
     @abstractmethod
