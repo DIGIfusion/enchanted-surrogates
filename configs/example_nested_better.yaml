@@ -13,7 +13,7 @@ samplers:
     type: RandomSampler
     bounds: [[0.0, 1.0], [0.0, 10.0]]
     budget: 4
-    parameters: ['c1', 'c2']
+    parameters: ['c3', 'c4']
 runners:
   runner1:
     type: ExampleRunner
