@@ -16,3 +16,6 @@ class Executor(ABC):
     @abstractmethod
     def clean(self):
         raise NotImplementedError("clean method not implemented.")
+
+    def set_runner_config(self, config):
+        self.runner_config = config
