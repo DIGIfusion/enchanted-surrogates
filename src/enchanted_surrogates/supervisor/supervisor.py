@@ -14,6 +14,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.supervisor.run_group import RunGroup
+from enchanted_surrogates.samplers.nested_sampler import NestedSampler
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
 
@@ -54,13 +55,14 @@ class Supervisor:
         self.samplers = self.import_samplers(args)
         groups = self.import_run_groups(args)
 
-        self.groups = []
+        self.groups: list[RunGroup] = []
         for group in groups:
             run_group = RunGroup(
                 self.executors[group["executor"]],
                 self.samplers[group["sampler"]],
                 args.runners[group["runner"]]
             )
+            run_group.executor.set_runner_config(run_group.runner)
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
@@ -80,17 +82,19 @@ class Supervisor:
 
         print("Starting runs...")
 
+        sampler = NestedSampler(list(self.samplers.values())) if (len(self.groups) > 1)  else self.groups[0].sampler
+
         batch_number = 0
-        while self.sampler.has_budget:
+        while sampler.has_budget:
             # Get samples
-            samples: list[dict] = self.sampler.get_next_samples()
+            samples: list[dict] = sampler.get_next_samples()
             # Create run_dirs with order number as name
             run_dirs = [
                 os.path.join(self.base_run_dir, f"{batch_number}_{i}")
                 for i in range(len(samples))
             ]
             # Call executor with folder path and samples in tuple
-            self.executor.execute(zip(run_dirs, samples), self.sampler)
+            self.groups[0].executor.execute(zip(run_dirs, samples), sampler)
 
         self.wait_all_processes()
         enchanted_dataset = self.create_dataset()
@@ -116,7 +120,7 @@ class Supervisor:
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
-        self.executor.clean()
+        self.groups[0].executor.clean()
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
