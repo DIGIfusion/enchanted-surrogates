@@ -9,7 +9,7 @@ from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 
 from .base_executor import Executor
-from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.utils.logger import get_logger, log_queue, setup_subprocess_logging
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
@@ -209,6 +209,9 @@ class DaskExecutor(Executor):
                 log.info(f"  CPUs: {info['nthreads']}")
                 log.info(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 log.info(f"  Resources: {info.get('resources', {})}\n")
+
+        # Setup logging for the workers
+        self.client.run(setup_subprocess_logging, log_queue())
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
