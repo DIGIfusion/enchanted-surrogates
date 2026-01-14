@@ -1,11 +1,12 @@
 # run.py
 import os
+import threading
 import yaml
 import argparse
 from datetime import datetime
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-from enchanted_surrogates.utils.logger import get_logger, setup_logging
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, log_queue, logger_thread, shutdown_logging
 import shutil
 
 log = get_logger(__name__)
@@ -41,6 +42,8 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     return config
 
 
+
+
 def main(args: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
@@ -56,6 +59,11 @@ def main(args: argparse.Namespace, config_path=None):
     setup_logging(args.logging, args.executor["base_run_dir"])
     log.info('Enchanted surrogates is starting.')
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
+
+
+    # Start the logging listener
+    # log_thread = threading.Thread(target=logger_thread, args=(log_queue(),))
+    # log_thread.start()
 
     # Copying the config file to the base run directory
     if config_path is not None:
@@ -79,6 +87,9 @@ def main(args: argparse.Namespace, config_path=None):
     executor.start_runs()
     executor.clean()
     log.info('Enchanted surrogates has finished.')
+
+    # Terminate logger thread
+    shutdown_logging()
     return
 
 if __name__ == "__main__":
