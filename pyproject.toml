@@ -22,6 +22,7 @@ dependencies = [
     "PyYAML",
     "scipy",
     "pyarrow",
+    "h5py",
 ]
 
 [tool.setuptools]

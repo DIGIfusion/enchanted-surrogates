@@ -10,6 +10,8 @@ import sys
 import warnings
 import shutil
 from time import sleep
+import h5py
+import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
@@ -94,11 +96,13 @@ class Supervisor:
                 os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             )
 
+        # Create HDF5 file if configured
+        if self.args.storage and self.args.storage.get('type') != "None":
+            self.create_hdf5(enchanted_dataset)
+
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
         self.executor.clean()
-
-        # TODO: Create HDF5 file
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
@@ -209,3 +213,69 @@ class Supervisor:
                         [enchanted_dataset, enchanted_datapoint]
                     )
         return enchanted_dataset
+
+    def create_hdf5(self, enchanted_dataset: pd.DataFrame):
+        """
+        Creates hdf5 and saves storage file in base_run_dir with name runs.h5
+        Includes aggregated data from enchanted_dataset and run specific data 
+        in structured format. Dataset has only numeric values, column headers
+        are saved separately in in same location. Metadata includes types for
+        sampler, executor and runner.
+        
+        Attributes: 
+            - enchanted_dataset (pd.DataFrame): Dataframe containing all run results
+            
+        """
+        h5_path = os.path.join(self.base_run_dir, "runs.h5")
+
+        with h5py.File(h5_path, "w") as f:
+            # Aggregated dataset
+            agg_group = f.create_group("data/aggregated")
+
+            agg_group.create_dataset(
+                "values",
+                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
+            )
+
+            agg_group.create_dataset(
+                "columns",
+                data=np.array(
+                    enchanted_dataset.select_dtypes(include=[np.number]).columns,
+                    dtype=h5py.string_dtype(encoding="utf-8")
+                )
+            )
+
+            # Run directory datasets
+            runs_group = f.create_group("data/runs")
+
+            for name in os.listdir(self.base_run_dir):
+                folder_path = os.path.join(self.base_run_dir, name)
+                csv_path = os.path.join(folder_path, "enchanted_datapoint.csv")
+
+                if not os.path.isfile(csv_path):
+                    continue
+
+                df = pd.read_csv(csv_path)
+                run_group = runs_group.create_group(name)
+
+                # Select only numeric values
+                numeric_df = df.select_dtypes(include=[np.number])
+
+                run_group.create_dataset(
+                    "values",
+                    data=numeric_df.to_numpy()
+                )
+
+                run_group.create_dataset(
+                    "columns",
+                    data=np.array(
+                        numeric_df.columns,
+                        dtype=h5py.string_dtype("utf-8")
+                    )
+                )
+
+            # Metadata
+            meta_group = f.create_group("metadata")
+            meta_group.attrs["executor"] = str(self.args.executor.get('type'))
+            meta_group.attrs["sampler"] = str(self.args.sampler.get('type'))
+            meta_group.attrs["runner"] = str(self.args.runner.get('type'))
