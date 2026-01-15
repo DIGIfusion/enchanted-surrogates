@@ -1,6 +1,5 @@
 executor:
   type: DaskExecutor
-  base_run_dir: "data_dir/dask_local"
   LocalCluster_config:
     n_workers: 1
 sampler:
@@ -11,3 +10,8 @@ sampler:
 runner:
   type: ExampleRunner
   other_params: {}
+supervisor:
+  base_run_dir: "data_dir/dask_local"
+storage:
+  type: hdf5
+
