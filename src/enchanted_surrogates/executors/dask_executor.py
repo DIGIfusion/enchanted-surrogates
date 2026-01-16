@@ -368,7 +368,7 @@ class DaskExecutor(Executor):
                 # print('FUTURE RESULT',result, type(result))
                 result = {k:[v] for k,v in result.items()}
                 dfs.append(pd.DataFrame(result))
-                print(f"[{i}/{len(all_futures)}] Futures Completed ({(i/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
+                print(f"[{i+1}/{len(all_futures)}] Futures Completed ({(i+1/len(all_futures))*100:.1f}%)","|",f"[{num_success}/{len(all_futures)}] Futures Succeded ({(num_success/len(all_futures))*100:.1f}%)")
                 print('_'*100)
             df_dataset = pd.concat(dfs)
             df_dataset.to_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), index=False)
