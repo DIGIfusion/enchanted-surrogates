@@ -16,7 +16,7 @@ def run_simulation_task(
     """
     os.makedirs(run_dir, exist_ok=True)
     runner_type = runner_config['type']
-    runner = import_runner(type=runner_type, runner_config=runner_config)
+    runner = import_runner(runner_type=runner_type, runner_config=runner_config)
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 
