@@ -50,7 +50,7 @@ def main(args: argparse.Namespace, config_path=None):
     print(enchanted_wizard)
 
     executor_type = args.executor.pop("type")
-    executor = import_executor(type=executor_type, executor_config=args.executor)
+    executor = import_executor(executor_type=executor_type, executor_config=args.executor)
     if not os.path.exists(executor.base_run_dir):
         os.makedirs(executor.base_run_dir)
     
