@@ -54,7 +54,7 @@ class DaskExecutor(Executor):
         if self.sampler_config:
             self.sampler_type = self.sampler_config.pop("type")
             self.sampler = import_sampler(
-                type=self.sampler_type, sampler_config=self.sampler_config)
+                sampler_type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
         self.timeout = kwargs.get('timeout', 1e10)
         self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
