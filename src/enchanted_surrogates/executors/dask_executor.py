@@ -3,17 +3,26 @@ import subprocess
 import time
 import pandas as pd
 
-
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 
 from .base_executor import Executor
-from enchanted_surrogates.utils.logger import get_logger, log_queue, setup_subprocess_logging
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, get_log_dir
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
 from enchanted_surrogates.utils.precise_imports import import_sampler
+
+from dask.distributed import WorkerPlugin
+
+# This setups logging for every worker
+class LogPlugin(WorkerPlugin):
+    def __init__(self, log_dir):
+        self.log_dir = log_dir
+
+    def setup(self, worker):
+        setup_logging("DEBUG", self.log_dir, f"{worker.id}.log")
 
 
 log = get_logger(__name__)
@@ -60,6 +69,8 @@ class DaskExecutor(Executor):
         self.cluster = None
         self.client = None
         self.expected_number_of_workers = None
+
+        
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -171,7 +182,7 @@ class DaskExecutor(Executor):
             else:
                 self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
             log.info(f'Output of SLURM workers saved in: {slurm_out_dir}')
-            self.cluster = SLURMCluster(**self.SLURMcluster_config)
+            self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
             log.debug(f'The job script for a worker is:\n{self.cluster.job_script()}')
             
@@ -185,9 +196,13 @@ class DaskExecutor(Executor):
                                 
         elif self.LocalCluster_config:
             self.expected_number_of_workers = self.LocalCluster_config['n_workers']
-            self.cluster = LocalCluster(**self.LocalCluster_config)
+            self.cluster = LocalCluster(silence_logs=False, **self.LocalCluster_config)
             self.client = Client(self.cluster)
-            
+
+        # Register the log plugin
+        plugin = LogPlugin(get_log_dir())
+        self.client.register_plugin(plugin)
+
         if self.block_until_cluster_started:
             log.info(f"Waiting for {self.expected_number_of_workers} workers to start...")
             for i in range(1,self.expected_number_of_workers+2):
@@ -210,8 +225,6 @@ class DaskExecutor(Executor):
                 log.info(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 log.info(f"  Resources: {info.get('resources', {})}\n")
 
-        # Setup logging for the workers
-        self.client.run(setup_subprocess_logging, log_queue())
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
