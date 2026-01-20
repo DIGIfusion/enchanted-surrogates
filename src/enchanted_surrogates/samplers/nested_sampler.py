@@ -21,7 +21,7 @@ class NestedSampler(Sampler):
         samplers_types = [samplers[k]['type'] for k in samplers_keys()]
         samplers_config = [samplers[k] for k in samplers_keys()]
         self.all_samplers = [import_sampler(sampler_type, sampler_config) for sampler_type, sampler_config in zip(samplers_types, samplers_config)]
-        self.budget = kwargs.get('budget', 1)
+        self.budget = kwargs.get('budget')
         self.batch_size = kwargs.get('batch_size', self.budget)
         self.submitted = 0
         self.all_parameters = [param for sampler in self.all_samplers for param in sampler.parameters]
