@@ -80,22 +80,95 @@ class Supervisor:
 
         print("Starting runs...")
 
-        sampler = NestedSampler(list(self.samplers.values())) if (len(self.groups) > 1)  else self.groups[0].sampler
+        #sampler = NestedSampler(list(self.samplers.values())) if (len(self.groups) > 1)  else self.groups[0].sampler
 
-        batch_number = 0
-        while sampler.has_budget:
-            # Get samples
-            samples: list[dict] = sampler.get_next_samples()
-            # Create run_dirs with order number as name
-            run_dirs = [
-                os.path.join(self.base_run_dir, f"{batch_number}_{i}")
-                for i in range(len(samples))
-            ]
-            # Call executor with folder path and samples in tuple
-            self.groups[0].executor.execute(zip(run_dirs, samples), sampler)
+        #batch_number = 0
+        #while sampler.has_budget:
+        #    # Get samples
+        #    samples: list[dict] = sampler.get_next_samples()
+        #    # Create run_dirs with order number as name
+        #    run_dirs = [
+        #        os.path.join(self.base_run_dir, f"{batch_number}_{i}")
+        #        for i in range(len(samples))
+        #    ]
+        #    # Call executor with folder path and samples in tuple
+        #    self.groups[0].executor.execute(zip(run_dirs, samples), sampler)
 
-        self.wait_all_processes()
-        enchanted_dataset = self.create_dataset()
+        #self.wait_all_processes()
+        #enchanted_dataset = self.create_dataset()
+
+        # depth = len(self.groups)
+
+        # root_samples = sampler.get_next_samples()
+
+        # # Track rows as they move through pipeline
+        # current_rows = root_samples
+
+        # for d in range(depth):
+        #     print(f"Submitting depth {d} jobs...")
+
+        #     run_dirs = [
+        #         os.path.join(self.base_run_dir, f"{d}_{i}")
+        #         for i in range(len(current_rows))
+        #     ]
+
+        #     self.groups[d].executor.execute(zip(run_dirs, current_rows), self.groups[d].sampler)
+
+        #     # wait until this depth finishes
+        #     self.wait_all_processes(d)
+
+        #     if d < depth - 1:
+        #         next_rows = []
+        #         for rd in run_dirs:
+        #             datapoint_file = os.path.join(rd, "enchanted_datapoint.csv")
+        #             if not os.path.isfile(datapoint_file):
+        #                 continue
+
+        #             df = pd.read_csv(datapoint_file)
+        #             next_rows.extend(df.to_dict(orient="records"))
+
+        #         current_rows = next_rows
+
+        # enchanted_dataset = self.create_dataset()
+
+        rows = [{}]   # root
+
+        for depth, group in enumerate(self.groups):
+            next_rows = []
+            batch_number = 0
+
+            while group.sampler.has_budget:
+                samples = group.sampler.get_next_samples()
+
+                expanded = []
+                for parent in rows:
+                    for sample in samples:
+                        merged = {**parent, **sample}
+                        expanded.append(merged)
+
+                run_dirs = [
+                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_{i}")
+                    for i in range(len(expanded))
+                ]
+
+                group.executor.execute(zip(run_dirs, expanded), group.sampler)
+
+                self.wait_all_processes(f"d{depth}")
+
+                for run_dir, row in zip(run_dirs, expanded):
+                    datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
+                    if os.path.isfile(datapoint_file):
+                        result = pd.read_csv(datapoint_file).iloc[0].to_dict()
+                        combined = {**row, **result}
+                        next_rows.append(combined)
+
+                batch_number += 1
+
+            rows = next_rows
+
+        enchanted_dataset = pd.DataFrame(rows)
+
+        ################## OLD CODE #####################
 
         # Create summary csv or parquet file
         if (
@@ -118,7 +191,8 @@ class Supervisor:
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
-        self.groups[0].executor.clean()
+        for group in self.groups:
+            group.executor.clean()
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
@@ -175,7 +249,7 @@ class Supervisor:
                     f"Error message: {exe}"
                 )
 
-    def all_processes_done(self):
+    def all_processes_done(self, filter):
         """
         Monitors simulation processes and returns boolean describing state.
         Helper function for wait_all_processes.
@@ -188,15 +262,16 @@ class Supervisor:
         """
 
         for name in os.listdir(self.base_run_dir):
-            folder_path = os.path.join(self.base_run_dir, name)
-            if os.path.isdir(folder_path):
-                datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
-                if not os.path.isfile(datapoint_file):
-                    return False
+            if str(filter) in str(name):
+                folder_path = os.path.join(self.base_run_dir, name)
+                if os.path.isdir(folder_path):
+                    datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                    if not os.path.isfile(datapoint_file):
+                        return False
 
         return True
 
-    def wait_all_processes(self):
+    def wait_all_processes(self, filter):
         """
         Waits in while loop until all simulations are done. Loop is broken
         when all_processes_done returns true. Checks condition once in
@@ -204,7 +279,7 @@ class Supervisor:
         """
 
         while True:
-            if self.all_processes_done():
+            if self.all_processes_done(filter):
                 break
             sleep(1)
 
