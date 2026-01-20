@@ -59,7 +59,7 @@ class Supervisor:
                 samplers[group["sampler"]],
                 args.runners[group["runner"]]
             )
-            run_group.executor.set_runner_config(run_group.runner)
+            run_group.executor.runner_config = run_group.runner
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
