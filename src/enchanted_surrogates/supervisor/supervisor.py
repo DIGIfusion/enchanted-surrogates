@@ -195,7 +195,7 @@ class Supervisor:
                     f"Error message: {exe}"
                 )
 
-    def all_processes_done(self, filter):
+    def all_processes_done(self, filter=None):
         """
         Monitors simulation processes and returns boolean describing state.
         Helper function for wait_all_processes.
@@ -208,7 +208,7 @@ class Supervisor:
         """
 
         for name in os.listdir(self.base_run_dir):
-            if str(filter) in str(name):
+            if not filter or str(filter) in str(name):
                 folder_path = os.path.join(self.base_run_dir, name)
                 if os.path.isdir(folder_path):
                     datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
@@ -217,7 +217,7 @@ class Supervisor:
 
         return True
 
-    def wait_all_processes(self, filter):
+    def wait_all_processes(self, filter=None):
         """
         Waits in while loop until all simulations are done. Loop is broken
         when all_processes_done returns true. Checks condition once in
