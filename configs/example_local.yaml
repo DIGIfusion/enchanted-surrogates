@@ -10,5 +10,6 @@ runner:
   other_params: {}
 supervisor:
   base_run_dir: "data_dir/local"
+  run_mode: "fresh" # "resume" / "extend"
 storage:
   type: hdf5

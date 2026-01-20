@@ -10,6 +10,7 @@ import sys
 import warnings
 import shutil
 from time import sleep
+import yaml
 import h5py
 import numpy as np
 import pandas as pd
@@ -54,6 +55,23 @@ class Supervisor:
             type=args.sampler.pop("type"), sampler_config=args.sampler
         )
         self.base_run_dir = args.supervisor.get("base_run_dir")
+        self.run_mode = args.supervisor.get("run_mode", "fresh")
+
+        if self.run_mode in ("resume", "extend"):
+            previous_run_batches = os.path.join(self.base_run_dir, "enchanted_run.yaml")
+            if os.path.isfile(previous_run_batches):
+                with open(previous_run_batches,"r", encoding="ascii") as f:
+                    previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
+                self.sampler.skip(
+                    previous_run_data["batch_number"] +1
+                )
+                self.batch_number = previous_run_data["batch_number"]
+            else:
+                raise RuntimeError(
+                    "Tried to continue from previous sampling but no "
+                    " enchanted_run.yaml was found"
+                )
+
         self.create_base_run_dir(self.base_run_dir, config_path)
 
     def start(self):
@@ -66,7 +84,24 @@ class Supervisor:
 
         print("Starting runs...")
 
+        enchanted_dataset = pd.DataFrame()
         batch_number = 0
+
+        if hasattr(self, "batch_number"):
+            batch_number = self.batch_number +1
+            if (
+                self.args.supervisor
+                and self.args.supervisor.get("summary_datatype") == "parquet"
+            ):
+                enchanted_dataset = pd.read_parquet(
+                    os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                    engine="pyarrow"
+                    )
+            else:
+                enchanted_dataset = pd.read_csv(
+                    os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                )
+
         while self.sampler.has_budget:
             # Get samples
             samples: list[dict] = self.sampler.get_next_samples()
@@ -78,25 +113,39 @@ class Supervisor:
             # Call executor with folder path and samples in tuple
             self.executor.execute(zip(run_dirs, samples), self.sampler)
 
-        self.wait_all_processes()
-        enchanted_dataset = self.create_dataset()
+            # Wait that there are files that match run_dirs
+            self.wait_batch_dirs(run_dirs)
 
-        # Create summary csv or parquet file
-        if (
-            self.args.supervisor
-            and self.args.supervisor.get("summary_datatype") == "parquet"
-        ):
-            enchanted_dataset.to_parquet(
-                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                engine="pyarrow",
-                index=True,
-            )
-        else:
-            enchanted_dataset.to_csv(
-                os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-            )
+            # Then files in this batch should be saved into summary files
+            df_batch = self.load_batch_to_df(run_dirs)
+            enchanted_dataset = pd.concat(enchanted_dataset, df_batch)
 
-        # Create HDF5 file if configured
+            # Update status yaml
+            data = {
+                "batch_number": batch_number
+            }
+            path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
+            with open(path,"w", encoding="ascii") as f:
+                yaml.safe_dump(data, f)
+
+            # Create summary csv or parquet file
+            if (
+                self.args.supervisor
+                and self.args.supervisor.get("summary_datatype") == "parquet"
+            ):
+                enchanted_dataset.to_parquet(
+                    os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                    engine="pyarrow",
+                    index=True,
+                )
+            else:
+                enchanted_dataset.to_csv(
+                    os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                )
+
+            batch_number += 1
+
+        # After main loop, create HDF5 file if configured
         if self.args.storage and self.args.storage.get('type') != "None":
             self.create_hdf5(enchanted_dataset)
 
@@ -124,7 +173,7 @@ class Supervisor:
                 if sys.stdout.isatty():
                     value = input(
                         str(os.path.abspath(base_run_dir))
-                        + "\nFolders have content. Do you want to delete data in existing folders? y/N "
+                        + "\nFolders have content. Delete data in existing folders? y/N "
                     )
                 else:
                     print(
@@ -213,6 +262,52 @@ class Supervisor:
                         [enchanted_dataset, enchanted_datapoint]
                     )
         return enchanted_dataset
+
+    def batch_dirs_done(self, run_dirs: list[str]) -> bool:
+        """
+        Checks if enchanted_datapoint.csv files exist in the directories list given
+
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+        
+        Return:
+            False if any of the datapoint files in the run_dirs is missing
+            True if all datapoint files are found
+        """
+        for d in run_dirs:
+            path = os.path.join(self.base_run_dir, d)
+            if not os.path.isfile(
+                os.path.join(path, "enchanted_datapoint.csv")
+            ):
+                return False
+        return True
+
+    def wait_batch_dirs(self, run_dirs: list[str]):
+        """
+        Waits for batch_dirs_done function to return True
+        
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+        """
+        while not self.batch_dirs_done(run_dirs):
+            sleep(1)
+
+    def load_batch_to_df(self, run_dirs: list[str]):
+        """
+        Creates pd.DataFrame combining enchanted_datapoint.csv files in given path list folders
+
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+
+        Returns:
+            pd.DataFrame containing batch datapoints combined
+        """
+        dfs = []
+        for d in run_dirs:
+            path = os.path.join(self.base_run_dir, d)
+            file = os.path.join(path, "enchanted_datapoint.csv")
+            dfs.append(pd.read_csv(file))
+        return pd.concat(dfs)
 
     def create_hdf5(self, enchanted_dataset: pd.DataFrame):
         """
