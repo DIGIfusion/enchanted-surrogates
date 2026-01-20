@@ -17,11 +17,10 @@ class NestedSampler(Sampler):
         """
         Args:
         """
-        #samplers_keys = samplers.keys
-        #samplers_types = [samplers[k]['type'] for k in samplers_keys()]
-        #samplers_config = [samplers[k] for k in samplers_keys()]
-        #self.all_samplers = [import_sampler(sampler_type, sampler_config) for sampler_type, sampler_config in zip(samplers_types, samplers_config)]
-        self.all_samplers = samplers
+        samplers_keys = samplers.keys
+        samplers_types = [samplers[k]['type'] for k in samplers_keys()]
+        samplers_config = [samplers[k] for k in samplers_keys()]
+        self.all_samplers = [import_sampler(sampler_type, sampler_config) for sampler_type, sampler_config in zip(samplers_types, samplers_config)]
         self.budget = kwargs.get('budget', 1)
         self.batch_size = kwargs.get('batch_size', self.budget)
         self.submitted = 0
