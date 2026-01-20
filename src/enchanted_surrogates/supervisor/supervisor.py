@@ -13,9 +13,7 @@ from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
-from enchanted_surrogates.supervisor.run_group import RunGroup
-from enchanted_surrogates.samplers.nested_sampler import NestedSampler
-from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
+from enchanted_surrogates.supervisor.nested_imports import RunGroup, import_executors, import_samplers, import_run_groups
 
 
 class Supervisor:
@@ -49,17 +47,16 @@ class Supervisor:
             config_path (str or None): Optional path for configuration file where
                 configuration is fetched from.
         """
-
         self.args = args
-        self.executors = self.import_executors(args)
-        self.samplers = self.import_samplers(args)
-        groups = self.import_run_groups(args)
+        executors = import_executors(args)
+        samplers = import_samplers(args)
+        group_configs = import_run_groups(args)
 
         self.groups: list[RunGroup] = []
-        for group in groups:
+        for group in group_configs:
             run_group = RunGroup(
-                self.executors[group["executor"]],
-                self.samplers[group["sampler"]],
+                executors[group["executor"]],
+                samplers[group["sampler"]],
                 args.runners[group["runner"]]
             )
             run_group.executor.set_runner_config(run_group.runner)
