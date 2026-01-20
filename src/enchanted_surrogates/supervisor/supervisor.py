@@ -118,7 +118,7 @@ class Supervisor:
 
             # Then files in this batch should be saved into summary files
             df_batch = self.load_batch_to_df(run_dirs)
-            enchanted_dataset = pd.concat(enchanted_dataset, df_batch)
+            enchanted_dataset = pd.concat([enchanted_dataset, df_batch])
 
             # Update status yaml
             data = {
@@ -275,9 +275,8 @@ class Supervisor:
             True if all datapoint files are found
         """
         for d in run_dirs:
-            path = os.path.join(self.base_run_dir, d)
             if not os.path.isfile(
-                os.path.join(path, "enchanted_datapoint.csv")
+                os.path.join(d, "enchanted_datapoint.csv")
             ):
                 return False
         return True
@@ -304,8 +303,7 @@ class Supervisor:
         """
         dfs = []
         for d in run_dirs:
-            path = os.path.join(self.base_run_dir, d)
-            file = os.path.join(path, "enchanted_datapoint.csv")
+            file = os.path.join(d, "enchanted_datapoint.csv")
             dfs.append(pd.read_csv(file))
         return pd.concat(dfs)
 
