@@ -82,59 +82,7 @@ class Supervisor:
 
         print("Starting runs...")
 
-        #sampler = NestedSampler(list(self.samplers.values())) if (len(self.groups) > 1)  else self.groups[0].sampler
-
-        #batch_number = 0
-        #while sampler.has_budget:
-        #    # Get samples
-        #    samples: list[dict] = sampler.get_next_samples()
-        #    # Create run_dirs with order number as name
-        #    run_dirs = [
-        #        os.path.join(self.base_run_dir, f"{batch_number}_{i}")
-        #        for i in range(len(samples))
-        #    ]
-        #    # Call executor with folder path and samples in tuple
-        #    self.groups[0].executor.execute(zip(run_dirs, samples), sampler)
-
-        #self.wait_all_processes()
-        #enchanted_dataset = self.create_dataset()
-
-        # depth = len(self.groups)
-
-        # root_samples = sampler.get_next_samples()
-
-        # # Track rows as they move through pipeline
-        # current_rows = root_samples
-
-        # for d in range(depth):
-        #     print(f"Submitting depth {d} jobs...")
-
-        #     run_dirs = [
-        #         os.path.join(self.base_run_dir, f"{d}_{i}")
-        #         for i in range(len(current_rows))
-        #     ]
-
-        #     self.groups[d].executor.execute(zip(run_dirs, current_rows), self.groups[d].sampler)
-
-        #     # wait until this depth finishes
-        #     self.wait_all_processes(d)
-
-        #     if d < depth - 1:
-        #         next_rows = []
-        #         for rd in run_dirs:
-        #             datapoint_file = os.path.join(rd, "enchanted_datapoint.csv")
-        #             if not os.path.isfile(datapoint_file):
-        #                 continue
-
-        #             df = pd.read_csv(datapoint_file)
-        #             next_rows.extend(df.to_dict(orient="records"))
-
-        #         current_rows = next_rows
-
-        # enchanted_dataset = self.create_dataset()
-
-        rows = [{}]   # root
-
+        rows = [{}]
         for depth, group in enumerate(self.groups):
             next_rows = []
             batch_number = 0
@@ -149,7 +97,7 @@ class Supervisor:
                         expanded.append(merged)
 
                 run_dirs = [
-                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_{i}")
+                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
                 ]
 
@@ -169,8 +117,6 @@ class Supervisor:
             rows = next_rows
 
         enchanted_dataset = pd.DataFrame(rows)
-
-        ################## OLD CODE #####################
 
         # Create summary csv or parquet file
         if (
