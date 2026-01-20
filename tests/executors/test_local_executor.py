@@ -13,7 +13,6 @@ def test_execute_registers_futures(mock_run_simulation_task):
     mock_run_simulation_task.return_value = "FUTURE"
 
     executor = LocalExecutor(
-        sampler_config={"type": "mock"},
         runner_config={"type": "mock"}
     )
 

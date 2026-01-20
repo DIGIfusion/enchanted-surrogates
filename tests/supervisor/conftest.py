@@ -43,11 +43,11 @@ def patch_supervisor_imports(monkeypatch, fake_sampler, fake_executor):
         executor = fake_executor()
 
         monkeypatch.setattr(
-            "enchanted_surrogates.supervisor.supervisor.import_sampler",
+            "enchanted_surrogates.supervisor.nested_imports.import_sampler",
             lambda *args, **kwargs: sampler,
         )
         monkeypatch.setattr(
-            "enchanted_surrogates.supervisor.supervisor.import_executor",
+            "enchanted_surrogates.supervisor.nested_imports.import_executor",
             lambda *args, **kwargs: executor,
         )
 

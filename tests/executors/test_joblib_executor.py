@@ -20,7 +20,6 @@ def test_execute_registers_futures(mock_run_simulation_task, mock_parallel, mock
     mock_delayed.side_effect = lambda fn: lambda *args, **kwargs: fn(*args, **kwargs)
 
     executor = JoblibExecutor(
-        sampler_config={"type": "mock"},
         runner_config={"type": "mock_runner"}
     )
 
