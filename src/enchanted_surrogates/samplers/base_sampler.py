@@ -21,6 +21,14 @@ class Sampler(ABC):
         Should register a future from a submitted sample.
         """
         raise NotImplementedError("register_future method not implemented.")
+    
+    @abstractmethod
+    def jump_to(self, index: int):
+        """
+        Allows setting sampler state as if 'get_next_samples' was called 'index' number of times.
+        Used to allow program restarts.
+        """
+        raise NotImplementedError("jump_to method not implemented.")
 
     @property
     def has_budget(self) -> bool:

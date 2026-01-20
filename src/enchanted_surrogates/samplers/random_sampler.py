@@ -26,5 +26,11 @@ class RandomSampler(Sampler):
         """ Doesn't matter for random sampler TODO: Probably? """
         return None
 
+    def jump_to(self, index):
+        # This just runs the sampler 'index' times
+        for _ in range(index):
+            if self.has_budget:
+                self.get_next_samples()
+
     def register_futures(self, futures):
         return None

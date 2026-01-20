@@ -27,7 +27,6 @@ def test_get_next_samples_returns_dicts_within_bounds():
     # Counter increments
     assert sampler.submitted == 1
 
-
 def test_batch_sample_size(monkeypatch):
     bounds = [(0, 1), (10, 20)]
     params = ["x", "y"]
@@ -48,7 +47,7 @@ def test_randomness_with_fixed_seed():
     params = ["a"]
     sampler = RandomSampler(bounds=bounds, budget=5, parameters=params)
     sampler.submitted = 0
-
+    
     np.random.seed(42)
     samples1 = sampler.get_next_samples()
 
@@ -57,3 +56,20 @@ def test_randomness_with_fixed_seed():
 
     # With the same seed, results should be reproducible
     assert samples1 == samples2
+
+def test_jump_to():
+    bounds = [(0, 1)]
+    params = ["a"]
+    budget = 100
+    batch_size = 2
+    sampler = RandomSampler(bounds=bounds, budget=budget, parameters=params, batch_size=batch_size)
+
+    jump = 25
+    sampler.jump_to(jump)
+
+    batches = []
+    while sampler.has_budget:
+        batches.append(sampler.get_next_samples())
+    
+    assert len(batches) == (budget / batch_size) - jump
+
