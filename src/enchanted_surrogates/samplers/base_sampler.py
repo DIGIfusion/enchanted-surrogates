@@ -21,8 +21,8 @@ class Sampler(ABC):
         Should register a future from a submitted sample.
         """
         raise NotImplementedError("register_future method not implemented.")
-    
-    def jump_to(self, index: int):
+
+    def skip(self, index: int):
         """
         Allows setting sampler state.
         Used to allow program restarts.

@@ -62,5 +62,5 @@ class SobolSequence(Sampler):
     def register_futures(self, futures):
         return None
 
-    def jump_to(self, index):
-        raise NotImplementedError("jump_to not implemented for SobolSequence.")
+    def skip(self, index):
+        raise NotImplementedError("skip not implemented for SobolSequence.")
