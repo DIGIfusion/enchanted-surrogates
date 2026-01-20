@@ -9,7 +9,7 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    one_run_dir = tmp_path / "0_0"
+    one_run_dir = tmp_path / "d0_b0_r0"
     one_run_dir.mkdir()
     assert supervisor.all_processes_done() is False
 
@@ -91,11 +91,17 @@ def make_args(tmp_path, summary="csv"):
     Helper function to create constructor arguments
     """
     return SimpleNamespace(
-        executor={"type": "mock"},
-        sampler={"type": "mock"},
+        executors={"testexecutor": {"type": "mock"}},
+        samplers={"testsampler": {"type": "mock"}},
+        runners={"testrunner": {"type": "mock"}},
         supervisor={
             "base_run_dir": str(tmp_path),
             "summary_datatype": summary,
+            "run_order": [{
+                "executor": "testexecutor",
+                "sampler": "testsampler",
+                "runner": "testrunner",
+            }]
         },
         runner={"type": "mock"},
         storage={"type": "mock"},
