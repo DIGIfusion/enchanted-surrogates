@@ -820,6 +820,7 @@ class BayesianOptimizationSampler(Sampler):
         self.cp_figure = fig
 
     
-        
+    def jump_to(self, index):
+        raise NotImplementedError("jump_to not implemented for BayesianOptimizationSampler.")
 
 
