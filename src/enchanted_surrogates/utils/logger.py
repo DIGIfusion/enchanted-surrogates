@@ -1,39 +1,15 @@
-import multiprocessing
 import os
 import sys
 import logging
-import logging.handlers
 
-import datetime
-import threading
+_log_dir=None
 
-# Multiprocessing queue for QueueHandler, initialized in setup_logging()
-_log_queue = None
+# TODO: Better solution for getting the log dir, give executors the log dir when supervisor is ready?
+def get_log_dir():
+    global _log_dir
+    return _log_dir
 
-# Listener thread for log events, initialized in setup_logging()
-_logger_thread = None
-
-def logger_thread(queue):
-    """
-    Listens for log events from multiple processes.
-
-    Note:
-        Should be spawned and terminated in run.py.
-    """
-    while True:
-        record = queue.get()
-        if not record:
-            break
-
-        logger = logging.getLogger(record.name)
-        logger.handle(record)
-
-
-def log_queue():
-    global _log_queue
-    return _log_queue
-
-def setup_logging(log_level: str, log_dir: str):
+def setup_logging(log_level: str, log_dir: str, log_file: str):
     """
     Configures a project-level logger that writes to stdout and to a file.
 
@@ -41,27 +17,29 @@ def setup_logging(log_level: str, log_dir: str):
         log_level (str): The logging level of the log file.
 
         log_dir (str): Path to the directory where the log file will be created.
+
+        log_file_name (str): Name of the log file.
     
     Note:
-        Only run this function once.
+        Only run this function once (except dask workers run this also).
     """
 
+    # Store the log dir
+    global _log_dir
+    if not _log_dir:
+        _log_dir = log_dir
     
     logger = logging.getLogger()
 
-    time = datetime.datetime.now()
-    file_name = time.strftime("%Y%m%d_%H%M%S_%f") # ISO 8601 with microseconds
-    file_path = os.path.join(log_dir, f"{file_name}.log")
+    # time = datetime.datetime.now()
+    # file_name = time.strftime("%Y%m%d_%H%M%S_%f") # ISO 8601 with microseconds
+    file_path = os.path.join(log_dir, f"{log_file}")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
     logger.setLevel(log_level)
 
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s] %(message)s")
-
-
-    # Initialize log queue
-    mgr = multiprocessing.Manager()
-    global _log_queue
-    _log_queue = mgr.Queue()
 
     file_handler = logging.FileHandler(file_path)
     file_handler.setFormatter(logFormatter)
@@ -70,33 +48,6 @@ def setup_logging(log_level: str, log_dir: str):
     stdout_handler = logging.StreamHandler(stream=sys.stdout)
     stdout_handler.setFormatter(logFormatter)
     logger.addHandler(stdout_handler)
-
-    global _logger_thread
-    _logger_thread = threading.Thread(target=logger_thread, args=(log_queue(),))
-    _logger_thread.start()
-
-def shutdown_logging():
-    """
-    Terminates the logging listener thread.
-    """
-    log_queue().put(None)
-    global _logger_thread
-    _logger_thread.join()
-
-def setup_subprocess_logging(queue):
-    """
-    Adds a queue handler for the logger. Dask client should run this to make logging work.
-    
-    :param queue: The shared log queue
-    """
-    logger = logging.getLogger()
-
-    handler = logging.handlers.QueueHandler(queue)
-    logger.addHandler(handler)
-
-    logger.setLevel(logging.DEBUG)
-
-
 
 def get_logger(name: str) -> logging.Logger:
     """

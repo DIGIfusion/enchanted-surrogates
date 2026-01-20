@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-from enchanted_surrogates.utils.logger import get_logger, setup_logging, log_queue, logger_thread, shutdown_logging
+from enchanted_surrogates.utils.logger import get_logger, setup_logging
 import shutil
 
 log = get_logger(__name__)
@@ -55,15 +55,11 @@ def main(args: argparse.Namespace, config_path=None):
     if not os.path.exists(args.executor["base_run_dir"]):
         os.makedirs(args.executor["base_run_dir"])
 
-    # Setup a log file in the base run directory
-    setup_logging(args.logging, args.executor["base_run_dir"])
+    # Setup logging
+    log_dir = os.path.join(args.executor['base_run_dir'], "logs")
+    setup_logging(args.logging, log_dir, "main.log")
     log.info('Enchanted surrogates is starting.')
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
-
-
-    # Start the logging listener
-    # log_thread = threading.Thread(target=logger_thread, args=(log_queue(),))
-    # log_thread.start()
 
     # Copying the config file to the base run directory
     if config_path is not None:
@@ -86,8 +82,6 @@ def main(args: argparse.Namespace, config_path=None):
     executor.clean()
     log.info('Enchanted surrogates has finished.')
 
-    # Terminate logger thread
-    shutdown_logging()
     return
 
 if __name__ == "__main__":
