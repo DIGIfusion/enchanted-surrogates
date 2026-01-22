@@ -87,12 +87,14 @@ class Supervisor:
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
 
+                # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = []
                 for parent in rows:
                     for sample in samples:
                         merged = {**parent, **sample}
                         expanded.append(merged)
 
+                # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
                     os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
@@ -100,8 +102,10 @@ class Supervisor:
 
                 group.executor.execute(zip(run_dirs, expanded), group.sampler)
 
-                self.wait_all_processes(f"d{depth}")
+                # Wait processes of current batch to complete
+                self.wait_all_processes(f"d{depth}_b{batch_number}")
 
+                # For nesting, get the results of this batch and merge with previous batches of this nesting level
                 for run_dir, row in zip(run_dirs, expanded):
                     datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
                     if os.path.isfile(datapoint_file):
@@ -111,6 +115,7 @@ class Supervisor:
 
                 batch_number += 1
 
+            # Update data rows for next nesting level
             rows = next_rows
 
         enchanted_dataset = pd.DataFrame(rows)
