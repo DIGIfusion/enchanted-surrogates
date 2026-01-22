@@ -273,15 +273,15 @@ class Supervisor:
 
             agg_group.create_dataset(
                 "values",
-                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
+                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy(),
             )
 
             agg_group.create_dataset(
                 "columns",
                 data=np.array(
                     enchanted_dataset.select_dtypes(include=[np.number]).columns,
-                    dtype=h5py.string_dtype(encoding="utf-8")
-                )
+                    dtype=h5py.string_dtype(encoding="utf-8"),
+                ),
             )
 
             # Run directory datasets
@@ -300,17 +300,11 @@ class Supervisor:
                 # Select only numeric values
                 numeric_df = df.select_dtypes(include=[np.number])
 
-                run_group.create_dataset(
-                    "values",
-                    data=numeric_df.to_numpy()
-                )
+                run_group.create_dataset("values", data=numeric_df.to_numpy())
 
                 run_group.create_dataset(
                     "columns",
-                    data=np.array(
-                        numeric_df.columns,
-                        dtype=h5py.string_dtype("utf-8")
-                    )
+                    data=np.array(numeric_df.columns, dtype=h5py.string_dtype("utf-8")),
                 )
 
             # Metadata
