@@ -256,14 +256,14 @@ class Supervisor:
     def create_hdf5(self, enchanted_dataset: pd.DataFrame):
         """
         Creates hdf5 and saves storage file in base_run_dir with name runs.h5
-        Includes aggregated data from enchanted_dataset and run specific data 
+        Includes aggregated data from enchanted_dataset and run specific data
         in structured format. Dataset has only numeric values, column headers
         are saved separately in in same location. Metadata includes types for
         sampler, executor and runner.
-        
-        Attributes: 
+
+        Attributes:
             - enchanted_dataset (pd.DataFrame): Dataframe containing all run results
-            
+
         """
         h5_path = os.path.join(self.base_run_dir, "runs.h5")
 
@@ -273,15 +273,15 @@ class Supervisor:
 
             agg_group.create_dataset(
                 "values",
-                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
+                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy(),
             )
 
             agg_group.create_dataset(
                 "columns",
                 data=np.array(
                     enchanted_dataset.select_dtypes(include=[np.number]).columns,
-                    dtype=h5py.string_dtype(encoding="utf-8")
-                )
+                    dtype=h5py.string_dtype(encoding="utf-8"),
+                ),
             )
 
             # Run directory datasets
@@ -300,17 +300,11 @@ class Supervisor:
                 # Select only numeric values
                 numeric_df = df.select_dtypes(include=[np.number])
 
-                run_group.create_dataset(
-                    "values",
-                    data=numeric_df.to_numpy()
-                )
+                run_group.create_dataset("values", data=numeric_df.to_numpy())
 
                 run_group.create_dataset(
                     "columns",
-                    data=np.array(
-                        numeric_df.columns,
-                        dtype=h5py.string_dtype("utf-8")
-                    )
+                    data=np.array(numeric_df.columns, dtype=h5py.string_dtype("utf-8")),
                 )
 
             # Metadata
