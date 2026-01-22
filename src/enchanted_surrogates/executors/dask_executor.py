@@ -8,7 +8,7 @@ from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
 
 from .base_executor import Executor
-from enchanted_surrogates.utils.logger import get_logger, setup_logging, get_log_dir
+from enchanted_surrogates.utils.logger import get_logger, setup_logging
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
@@ -18,11 +18,12 @@ from dask.distributed import WorkerPlugin
 
 # This setups logging for every worker
 class LogPlugin(WorkerPlugin):
-    def __init__(self, log_dir):
+    def __init__(self, log_level, log_dir):
+        self.log_level = log_level
         self.log_dir = log_dir
 
     def setup(self, worker):
-        setup_logging("DEBUG", self.log_dir, f"{worker.id}.log")
+        setup_logging(self.log_level, self.log_dir, f"{worker.id}.log")
 
 
 log = get_logger(__name__)
@@ -70,7 +71,9 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
 
-        
+        # Store log level and log dir
+        self.log_level = kwargs.get('log_level')        
+        self.log_dir = kwargs.get('log_dir')        
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -200,7 +203,7 @@ class DaskExecutor(Executor):
             self.client = Client(self.cluster)
 
         # Register the log plugin
-        plugin = LogPlugin(get_log_dir())
+        plugin = LogPlugin(self.log_level, self.log_dir)
         self.client.register_plugin(plugin)
 
         if self.block_until_cluster_started:

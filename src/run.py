@@ -56,7 +56,7 @@ def main(args: argparse.Namespace, config_path=None):
         os.makedirs(args.executor["base_run_dir"])
 
     # Setup logging
-    log_dir = os.path.join(args.executor['base_run_dir'], "logs")
+    log_dir = os.path.join(args.executor['base_run_dir'], 'logs')
     setup_logging(args.logging, log_dir, "main.log")
     log.info('Enchanted surrogates is starting.')
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
@@ -75,7 +75,13 @@ def main(args: argparse.Namespace, config_path=None):
 
     # Initialize executor
     executor_type = args.executor.pop("type")
-    executor = import_executor(executor_type=executor_type, executor_config=args.executor)
+
+    # Add log level and log dir to executor config
+    args.executor['log_level'] = args.logging
+    args.executor['log_dir'] = log_dir
+
+    executor = import_executor(type=executor_type, executor_config=args.executor)
+
     if not os.path.exists(executor.base_run_dir):
         os.makedirs(executor.base_run_dir)
 
