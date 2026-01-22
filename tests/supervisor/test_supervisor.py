@@ -62,15 +62,15 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
         assert agg_columns.tolist() == [b"x"]
 
         # Check run dimensions and values
-        run_values = file["data/runs/2_0/values"][:]
-        run_columns = file["data/runs/2_0/columns"][:]
+        run_values = file["data/runs/d0_b2_r0/values"][:]
+        run_columns = file["data/runs/d0_b2_r0/columns"][:]
 
         assert run_values.shape == (1,1)
         assert run_values[0,0] == 2
         assert run_columns.tolist() == [b"x"]
 
         # Check that metadata exists
-        meta = file["metadata"].attrs
+        meta = file["metadata/run_groups/0"].attrs
         for key in ["executor", "sampler", "runner"]:
             assert key in meta
 
