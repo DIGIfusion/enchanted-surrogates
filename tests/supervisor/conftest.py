@@ -9,6 +9,7 @@ def fake_sampler():
     """
     def _factory(sample_batches: list[list[dict]]):
         sampler = MagicMock()
+        sampler.__name__ = "MockSampler"
 
         # On every function call, next list of dicts from sample_batches is returned
         sampler.get_next_samples.side_effect = sample_batches
@@ -29,6 +30,7 @@ def fake_executor():
     """
     def _factory():
         executor = MagicMock()
+        executor.__name__ = "MockExecutor"
         return executor
 
     return _factory

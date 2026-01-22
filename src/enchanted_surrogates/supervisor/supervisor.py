@@ -309,6 +309,9 @@ class Supervisor:
 
             # Metadata
             meta_group = f.create_group("metadata")
-            meta_group.attrs["executor"] = str(self.args.executor.get("type"))
-            meta_group.attrs["sampler"] = str(self.args.sampler.get("type"))
-            meta_group.attrs["runner"] = str(self.args.runner.get("type"))
+            run_groups = meta_group.create_group("run_groups")
+            for i, run_group in enumerate(self.groups):
+                meta_run_group = run_groups.create_group(str(i))
+                meta_run_group.attrs["executor"] = str(run_group.executor.__name__)
+                meta_run_group.attrs["sampler"] = str(run_group.sampler.__name__)
+                meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
