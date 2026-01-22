@@ -51,7 +51,7 @@ class SgppSampler(Sampler):
         self.do_quad_sobol = kwargs.get('do_quad_sobol', False)
         self.gaussian_input_uncertanties = kwargs.get('gaussian_input_uncertanties', False)
         self.test_data_csv = test_data_csv
-        self.test_data_name = kwargs.get('test_data_name', 'sobolseq')
+        self.test_data_name = kwargs.get('test_data_name', 'testData')
         self.bounds = np.array(bounds)
         self.parameters = parameters
         self.num_samples_at_last_write = 0
