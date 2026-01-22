@@ -11,7 +11,7 @@ class JoblibExecutor(Executor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
+            sampler_type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
 
     def start_runs(self):
         while self.sampler.has_budget:
