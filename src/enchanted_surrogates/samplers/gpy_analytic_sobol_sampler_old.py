@@ -810,43 +810,43 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     # ---- misc -----------------------------------------------------------------
 
-    def add_rmse_column_to_batch_info(self):
-        from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-        from enchanted_surrogates.utils.merge_secondary_into_primary import (
-            merge_secondary_into_primary
-        )
+    # def add_rmse_column_to_batch_info(self):
+    #     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+    #     from enchanted_surrogates.utils.merge_secondary_into_primary import (
+    #         merge_secondary_into_primary
+    #     )
 
-        batch_dirs = get_batch_dirs(self.base_run_dir)
-        for i, batch_dir in enumerate(batch_dirs):
-            if not os.path.exists(os.path.join(batch_dir, 'enchanted_dataset.csv')):
-                continue
-            self.append_train_data(batch_dir)
-            if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
-                print('WRITING BATCH INFO FOR:', batch_dir)
-                with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
-                    self.gp_model = pickle.load(file)
-                self.cache_hypers()
-                self.cache_K()
-                print("\n\n ================================== \n")
-                reg_results = self.regression_test()
-                if reg_results is None:
-                    continue
-                reg_results['num_samples'] = [len(self.train)]
-                df = pd.DataFrame(reg_results)
-                reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
-                if os.path.exists(reg_path):
-                    df.to_csv(reg_path, mode='a', header=False, index=False)
-                else:
-                    df.to_csv(reg_path, mode='w', header=True, index=False)
+    #     batch_dirs = get_batch_dirs(self.base_run_dir)
+    #     for i, batch_dir in enumerate(batch_dirs):
+    #         if not os.path.exists(os.path.join(batch_dir, 'enchanted_dataset.csv')):
+    #             continue
+    #         self.append_train_data(batch_dir)
+    #         if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
+    #             print('WRITING BATCH INFO FOR:', batch_dir)
+    #             with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
+    #                 self.gp_model = pickle.load(file)
+    #             self.cache_hypers()
+    #             self.cache_K()
+    #             print("\n\n ================================== \n")
+    #             reg_results = self.regression_test()
+    #             if reg_results is None:
+    #                 continue
+    #             reg_results['num_samples'] = [len(self.train)]
+    #             df = pd.DataFrame(reg_results)
+    #             reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
+    #             if os.path.exists(reg_path):
+    #                 df.to_csv(reg_path, mode='a', header=False, index=False)
+    #             else:
+    #                 df.to_csv(reg_path, mode='w', header=True, index=False)
 
-        batch_info_csv = os.path.join(self.base_run_dir, 'batch_info.csv')
-        shutil.copy2(batch_info_csv, os.path.join(self.base_run_dir, 'batch_info_orig.csv'))
-        merge_secondary_into_primary(
-            primary_csv=batch_info_csv,
-            secondary_csv=os.path.join(self.base_run_dir, 'regression_info.csv'),
-            out_csv=batch_info_csv,
-            key='num_samples'
-        )
+    #     batch_info_csv = os.path.join(self.base_run_dir, 'batch_info.csv')
+    #     shutil.copy2(batch_info_csv, os.path.join(self.base_run_dir, 'batch_info_orig.csv'))
+    #     merge_secondary_into_primary(
+    #         primary_csv=batch_info_csv,
+    #         secondary_csv=os.path.join(self.base_run_dir, 'regression_info.csv'),
+    #         out_csv=batch_info_csv,
+    #         key='num_samples'
+    #     )
 
     def brute_force_uq_analysis(self):
         raise NotImplementedError('Brute force UQ analysis not implemented in this sampler.')
