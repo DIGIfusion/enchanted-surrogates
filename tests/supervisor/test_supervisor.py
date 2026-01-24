@@ -112,6 +112,6 @@ def create_run_folders(tmp_path, amount):
     Helper function to create run folders
     """
     for i in range(amount):
-        d = tmp_path / f"{i}_0"
+        d = tmp_path / f"d0_b{i}_r0"
         d.mkdir()
         pd.DataFrame([{"x":i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
