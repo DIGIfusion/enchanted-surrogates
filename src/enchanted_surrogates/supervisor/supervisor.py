@@ -9,6 +9,7 @@ import os
 import sys
 import warnings
 import shutil
+import glob
 from time import sleep
 import yaml
 import h5py
@@ -60,11 +61,9 @@ class Supervisor:
         if self.run_mode in ("resume", "extend"):
             previous_run_batches = os.path.join(self.base_run_dir, "enchanted_run.yaml")
             if os.path.isfile(previous_run_batches):
-                with open(previous_run_batches,"r", encoding="ascii") as f:
+                with open(previous_run_batches, "r", encoding="ascii") as f:
                     previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
-                self.sampler.skip(
-                    previous_run_data["batch_number"] +1
-                )
+                self.sampler.skip(previous_run_data["batch_number"] + 1)
                 self.batch_number = previous_run_data["batch_number"]
             else:
                 raise RuntimeError(
@@ -72,7 +71,9 @@ class Supervisor:
                     " enchanted_run.yaml was found"
                 )
 
-        self.create_base_run_dir(self.base_run_dir, config_path)
+            self.continue_with_base_run_dir(self.base_run_dir, config_path)
+        else:
+            self.create_base_run_dir(self.base_run_dir, config_path)
 
     def start(self):
         """
@@ -88,15 +89,15 @@ class Supervisor:
         batch_number = 0
 
         if hasattr(self, "batch_number"):
-            batch_number = self.batch_number +1
+            batch_number = self.batch_number + 1
             if (
                 self.args.supervisor
                 and self.args.supervisor.get("summary_datatype") == "parquet"
             ):
                 enchanted_dataset = pd.read_parquet(
                     os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                    engine="pyarrow"
-                    )
+                    engine="pyarrow",
+                )
             else:
                 enchanted_dataset = pd.read_csv(
                     os.path.join(self.base_run_dir, "enchanted_dataset.csv")
@@ -121,11 +122,9 @@ class Supervisor:
             enchanted_dataset = pd.concat([enchanted_dataset, df_batch])
 
             # Update status yaml
-            data = {
-                "batch_number": batch_number
-            }
+            data = {"batch_number": batch_number}
             path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
-            with open(path,"w", encoding="ascii") as f:
+            with open(path, "w", encoding="ascii") as f:
                 yaml.safe_dump(data, f)
 
             # Create summary csv or parquet file
@@ -146,12 +145,42 @@ class Supervisor:
             batch_number += 1
 
         # After main loop, create HDF5 file if configured
-        if self.args.storage and self.args.storage.get('type') != "None":
+        if self.args.storage and self.args.storage.get("type") != "None":
             self.create_hdf5(enchanted_dataset)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
         self.executor.clean()
+
+    def continue_with_base_run_dir(self, base_run_dir, config_path):
+        """
+        Deletes old unfinished bathes prompting the user if they want to keep them
+        Creates a base_run_dir if one does not exist
+
+        Attributes:
+            base_run_dir (str): Path where runner saves result files
+            config_path (str or None): Optional path for configuration file where
+                configuration is fetched from
+        """
+
+        if not os.path.exists(base_run_dir):
+            return self.create_base_run_dir(base_run_dir, config_path)
+
+        dirs = glob.glob(f"{base_run_dir}/{self.batch_number + 1}*")
+
+        if not dirs:
+            return
+
+        if (
+            input(
+                f"An unfinished batch was found in {base_run_dir}\n Do you want to delete it? Y/n"
+            ).lower()
+            == "n"
+        ):
+            return
+
+        for path in dirs:
+            shutil.rmtree(path)
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
@@ -269,22 +298,20 @@ class Supervisor:
 
         Attributes:
             run_dirs (list[str]): List of running directories within the batch
-        
+
         Return:
             False if any of the datapoint files in the run_dirs is missing
             True if all datapoint files are found
         """
         for d in run_dirs:
-            if not os.path.isfile(
-                os.path.join(d, "enchanted_datapoint.csv")
-            ):
+            if not os.path.isfile(os.path.join(d, "enchanted_datapoint.csv")):
                 return False
         return True
 
     def wait_batch_dirs(self, run_dirs: list[str]):
         """
         Waits for batch_dirs_done function to return True
-        
+
         Attributes:
             run_dirs (list[str]): List of running directories within the batch
         """
@@ -310,14 +337,14 @@ class Supervisor:
     def create_hdf5(self, enchanted_dataset: pd.DataFrame):
         """
         Creates hdf5 and saves storage file in base_run_dir with name runs.h5
-        Includes aggregated data from enchanted_dataset and run specific data 
+        Includes aggregated data from enchanted_dataset and run specific data
         in structured format. Dataset has only numeric values, column headers
         are saved separately in in same location. Metadata includes types for
         sampler, executor and runner.
-        
-        Attributes: 
+
+        Attributes:
             - enchanted_dataset (pd.DataFrame): Dataframe containing all run results
-            
+
         """
         h5_path = os.path.join(self.base_run_dir, "runs.h5")
 
@@ -327,15 +354,15 @@ class Supervisor:
 
             agg_group.create_dataset(
                 "values",
-                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy()
+                data=enchanted_dataset.select_dtypes(include=[np.number]).to_numpy(),
             )
 
             agg_group.create_dataset(
                 "columns",
                 data=np.array(
                     enchanted_dataset.select_dtypes(include=[np.number]).columns,
-                    dtype=h5py.string_dtype(encoding="utf-8")
-                )
+                    dtype=h5py.string_dtype(encoding="utf-8"),
+                ),
             )
 
             # Run directory datasets
@@ -354,21 +381,15 @@ class Supervisor:
                 # Select only numeric values
                 numeric_df = df.select_dtypes(include=[np.number])
 
-                run_group.create_dataset(
-                    "values",
-                    data=numeric_df.to_numpy()
-                )
+                run_group.create_dataset("values", data=numeric_df.to_numpy())
 
                 run_group.create_dataset(
                     "columns",
-                    data=np.array(
-                        numeric_df.columns,
-                        dtype=h5py.string_dtype("utf-8")
-                    )
+                    data=np.array(numeric_df.columns, dtype=h5py.string_dtype("utf-8")),
                 )
 
             # Metadata
             meta_group = f.create_group("metadata")
-            meta_group.attrs["executor"] = str(self.args.executor.get('type'))
-            meta_group.attrs["sampler"] = str(self.args.sampler.get('type'))
-            meta_group.attrs["runner"] = str(self.args.runner.get('type'))
+            meta_group.attrs["executor"] = str(self.args.executor.get("type"))
+            meta_group.attrs["sampler"] = str(self.args.sampler.get("type"))
+            meta_group.attrs["runner"] = str(self.args.runner.get("type"))
