@@ -41,9 +41,6 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     log.debug(config)
     return config
 
-
-
-
 def main(args: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
