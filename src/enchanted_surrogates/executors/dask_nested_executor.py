@@ -65,7 +65,7 @@ class DaskNestedExecutor(Executor):
         
         self.sampler_config = sampler_config#kwargs.get('sampler_config')
         sampler_type = self.sampler_config.pop("type")
-        self.sampler = import_sampler(type=sampler_type, sampler_config=self.sampler_config) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_config)
+        self.sampler = import_sampler(sampler_type=sampler_type, sampler_config=self.sampler_config) #getattr(importlib.import_module(f'enchanted_surrogates.samplers'),sampler_type)(**sampler_config)
 
         self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)
         for executor in self.executors:

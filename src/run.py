@@ -62,6 +62,11 @@ def main(args: argparse.Namespace, config_path=None):
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
 
     # Copying the config file to the base run directory
+    executor_type = args.executor.pop("type")
+    executor = import_executor(executor_type=executor_type, executor_config=args.executor)
+    if not os.path.exists(executor.base_run_dir):
+        os.makedirs(executor.base_run_dir)
+    
     if config_path is not None:
         log.debug(f"Copying config file from {config_path} to {os.path.join(args.executor['base_run_dir'], os.path.basename(config_path))}")
         try:

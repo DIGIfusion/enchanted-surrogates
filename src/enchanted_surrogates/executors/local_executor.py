@@ -11,7 +11,7 @@ class LocalExecutor(Executor):
 
     def start_runs(self):
         self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
+            sampler_type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
         while self.sampler.has_budget:
             samples: list[dict] = self.sampler.get_next_samples()
 
