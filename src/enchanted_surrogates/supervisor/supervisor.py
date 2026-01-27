@@ -48,10 +48,10 @@ class Supervisor:
 
         self.args = args
         self.executor = import_executor(
-            type=args.executor.pop("type"), executor_config=args.executor
+            args.executor.pop("type"), executor_config=args.executor
         )
         self.sampler = import_sampler(
-            type=args.sampler.pop("type"), sampler_config=args.sampler
+            args.sampler.pop("type"), sampler_config=args.sampler
         )
         self.base_run_dir = args.supervisor.get("base_run_dir")
 
@@ -100,8 +100,8 @@ class Supervisor:
                 os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             )
 
-        # Create HDF5 file if configured
-        if self.args.storage and self.args.storage.get("type") != "None":
+        # Create HDF5 file by default
+        if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(enchanted_dataset)
 
         # Clean run_dirs
