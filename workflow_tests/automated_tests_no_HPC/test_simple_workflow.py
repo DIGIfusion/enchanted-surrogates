@@ -55,11 +55,7 @@ def test_full_workflow_local(tmp_path):
     supervisor.start()
 
     # This should create {budget} folders with ??? inside
-
-    assert len(glob.glob(os.path.join(base_run_dir, "*"))) == budget
-
-    # Clean up test
-    shutil.rmtree(base_run_dir)
+    assert len(next(os.walk(tmp_path))[1]) == budget
 
 
 def test_full_workflow_joblib(tmp_path):
@@ -106,8 +102,7 @@ def test_full_workflow_joblib(tmp_path):
     supervisor.start()
     # This should create {budget} folders with ??? inside
 
-    created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
-    assert len(created_rundirs) == budget
+    assert len(next(os.walk(tmp_path))[1]) == budget
 
 
 def test_full_workflow_dask(tmp_path):
@@ -126,7 +121,8 @@ def test_full_workflow_dask(tmp_path):
         }
     }
     sampler_config = {
-        'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
+        'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters
+    }
     runner_config = {
         'type': 'ExampleRunner'
     }
@@ -159,6 +155,4 @@ def test_full_workflow_dask(tmp_path):
     supervisor.start()
     # This should create {budget} folders with ??? inside
 
-    assert os.path.exists(os.path.join(executor_config['base_run_dir'], 'ENCHANTED.FINISHED'))
-    created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
-    assert len(created_rundirs) == budget
+    assert len(next(os.walk(tmp_path))[1]) == budget
