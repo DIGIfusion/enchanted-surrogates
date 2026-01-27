@@ -3,38 +3,36 @@ import sys
 import logging
 
 
-def setup_logging(log_level: str, log_dir: str, log_file: str):
-    """
-    Configures a project-level logger that writes to stdout and to a file.
+class Singleton(type):
+    _instance = None
+    def __call__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instance
 
-    Args:
-        log_level (str): The logging level of the log file.
+class LoggerConfig(metaclass=Singleton):
+    def __init__(self, log_level, log_dir, format):
+        self.log_level = log_level
+        self.log_dir = log_dir
+        self.format = format
 
-        log_dir (str): Path to the directory where the log file(s) will be created.
-
-        log_file_name (str): Name of the log file.
-    
-    Note:
-        Only run this function once (except dask workers run this also).
-    """
-
+def setup_logging(config: LoggerConfig, console_handler: logging.Handler, file_handler: logging.Handler):
     logger = logging.getLogger()
+    logger.propagate = False
 
-    file_path = os.path.join(log_dir, f"{log_file}")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
+    log_level = config.log_level
     logger.setLevel(log_level)
 
-    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s] %(message)s")
+    logFormatter = logging.Formatter(config.format)
 
-    file_handler = logging.FileHandler(file_path)
+    logger.handlers.clear()
+
+    console_handler.setFormatter(logFormatter)
     file_handler.setFormatter(logFormatter)
+
+    logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
-    stdout_handler = logging.StreamHandler(stream=sys.stdout)
-    stdout_handler.setFormatter(logFormatter)
-    logger.addHandler(stdout_handler)
 
 def get_logger(name: str) -> logging.Logger:
     """
@@ -46,6 +44,7 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         logging.Logger: A configured logger.
     """
+    # return logging.getLogger()
     return logging.getLogger().getChild(name)
     
 

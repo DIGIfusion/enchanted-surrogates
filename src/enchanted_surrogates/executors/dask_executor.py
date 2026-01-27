@@ -1,14 +1,18 @@
 import os
 import subprocess
+import sys
 import time
 import pandas as pd
+import logging
+
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
 from dask.distributed import Client, as_completed, wait, LocalCluster, get_worker, get_client
+from dask.distributed import print as dask_print
 
 from .base_executor import Executor
-from enchanted_surrogates.utils.logger import get_logger, setup_logging
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
 
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
@@ -16,14 +20,30 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 from dask.distributed import WorkerPlugin
 
-# This setups logging for every worker
-class LogPlugin(WorkerPlugin):
-    def __init__(self, log_level, log_dir):
-        self.log_level = log_level
-        self.log_dir = log_dir
+class SLURMStreamHandler(logging.Handler):
+    def __init__(self)-> None:
+        logging.Handler.__init__(self)
+
+    def emit(self, record) -> None:
+        dask_print(self.formatter.format(record))
+
+class SLURMLogPlugin(WorkerPlugin):
+    def __init__(self, config: LoggerConfig):
+        self.config = config
 
     def setup(self, worker):
-        setup_logging(self.log_level, self.log_dir, f"{worker.id}.log")
+        log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
+        dask_handler = SLURMStreamHandler()
+        setup_logging(self.config, dask_handler, logging.FileHandler(filename=log_file))
+
+
+class DaskLocalLogPlugin(WorkerPlugin):
+    def __init__(self, config: LoggerConfig):
+        self.config = config
+
+    def setup(self, worker):
+        log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
+        setup_logging(self.config, logging.StreamHandler(stream=sys.stdout), logging.FileHandler(filename=log_file))
 
 
 log = get_logger(__name__)
@@ -69,11 +89,7 @@ class DaskExecutor(Executor):
         self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)  # for debugging purposes only
         self.cluster = None
         self.client = None
-        self.expected_number_of_workers = None
-
-        # Store log level and log dir
-        self.log_level = kwargs.get('log_level')        
-        self.log_dir = kwargs.get('log_dir')        
+        self.expected_number_of_workers = None     
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -190,6 +206,11 @@ class DaskExecutor(Executor):
             log.debug(f'The job script for a worker is:\n{self.cluster.job_script()}')
             
             self.client = Client(self.cluster ,timeout=180)
+
+            # Register the log plugin
+            plugin = SLURMLogPlugin(LoggerConfig())
+            self.client.register_plugin(plugin, name='LogPlugin')
+
             log.info(f'SCHEDULER ADDRESS: {self.cluster.scheduler_address}')
             log.info(f'DASHBOARD LINK: {self.client.dashboard_link}')        
             
@@ -202,9 +223,9 @@ class DaskExecutor(Executor):
             self.cluster = LocalCluster(silence_logs=False, **self.LocalCluster_config)
             self.client = Client(self.cluster)
 
-        # Register the log plugin
-        plugin = LogPlugin(self.log_level, self.log_dir)
-        self.client.register_plugin(plugin)
+            # Register the log plugin
+            plugin = DaskLocalLogPlugin(LoggerConfig())
+            self.client.register_plugin(plugin, name='LogPlugin')
 
         if self.block_until_cluster_started:
             log.info(f"Waiting for {self.expected_number_of_workers} workers to start...")

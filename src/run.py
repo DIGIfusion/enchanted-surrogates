@@ -1,12 +1,14 @@
 # run.py
 import os
+import sys
 import threading
 import yaml
 import argparse
 from datetime import datetime
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-from enchanted_surrogates.utils.logger import get_logger, setup_logging
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+import logging
 import shutil
 
 log = get_logger(__name__)
@@ -54,7 +56,19 @@ def main(args: argparse.Namespace, config_path=None):
 
     # Setup logging
     log_dir = os.path.join(args.executor['base_run_dir'], 'logs')
-    setup_logging(args.logging, log_dir, "main.log")
+    log_file = os.path.join(log_dir, "main.log")
+    log_level = args.logging
+    log_format = "%(asctime)s [%(levelname)-5.5s] %(message)s"
+
+    # Store to logger config
+    config = LoggerConfig(log_level, log_dir, log_format)
+
+    if not os.path.exists(config.log_dir):
+        os.makedirs(config.log_dir)
+
+    setup_logging(config, logging.StreamHandler(stream=sys.stdout), logging.FileHandler(filename=log_file))
+
+    # setup_logging(args.logging, log_dir, "main.log")
     log.info('Enchanted surrogates is starting.')
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
 
@@ -72,11 +86,6 @@ def main(args: argparse.Namespace, config_path=None):
 
     # Initialize executor
     executor_type = args.executor.pop("type")
-
-    # Add log level and log dir to executor config
-    args.executor['log_level'] = args.logging
-    args.executor['log_dir'] = log_dir
-
     executor = import_executor(executor_type=executor_type, executor_config=args.executor)
 
     if not os.path.exists(executor.base_run_dir):
