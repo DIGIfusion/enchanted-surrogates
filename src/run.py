@@ -58,17 +58,16 @@ def main(args: argparse.Namespace, config_path=None):
     log_dir = os.path.join(args.executor['base_run_dir'], 'logs')
     log_file = os.path.join(log_dir, "main.log")
     log_level = args.logging
-    log_format = "%(asctime)s [%(levelname)-5.5s] %(message)s"
 
     # Store to logger config
-    config = LoggerConfig(log_level, log_dir, log_format)
+    config = LoggerConfig(log_level=log_level, log_dir=log_dir)
 
+    # Create log dir
     if not os.path.exists(config.log_dir):
         os.makedirs(config.log_dir)
 
     setup_logging(config, logging.StreamHandler(stream=sys.stdout), logging.FileHandler(filename=log_file))
 
-    # setup_logging(args.logging, log_dir, "main.log")
     log.info('Enchanted surrogates is starting.')
     log.info(f'Base run directory: {args.executor["base_run_dir"]}')
 

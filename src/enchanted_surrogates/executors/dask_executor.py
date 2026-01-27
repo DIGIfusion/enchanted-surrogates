@@ -20,6 +20,7 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 from dask.distributed import WorkerPlugin
 
+# Console log handler for SLURM, uses dask.distributed.print
 class SLURMStreamHandler(logging.Handler):
     def __init__(self)-> None:
         logging.Handler.__init__(self)
