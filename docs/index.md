@@ -78,14 +78,21 @@ Make sure to replace `path/to/config/file` with the actual path to your configur
 The configuration file should be in YAML format and specify the runner, sampler, executor, supervisor and other parameters needed for the simulation. 
   
 ```yaml
-executor:
-    type: ...
-sampler: 
-    type: ...
-runner:
-    type: ...
+executors:
+    e1:
+        type: ...
+samplers:
+    s1:
+        type: ...
+runners:
+    r1:
+        type: ...
 supervisor:
     base_run_dir: ...
+    run_order:
+    -   executor: e1
+        sampler: s1
+        runner: r1
 ```
 
 ### Quick start example
@@ -121,8 +128,8 @@ Code-specific modules for reading and writing files produced by the code.
 The supervisor is the entry point. The supervisor reads parameters and has Sampler, Executor and Runner. 
 Supervisor initializes Sampler and fetches samples from it. 
 Supervisor gives samples to executor. Executor initializes some cluster or job queue or similar. 
-A sample is sent to Runner. Runner or Parser tied to it creates files. Supervisor creates data structures 
-from the files created to specified running directory.
+Executor calls `simulation_task.py` which initializes Runner and creates files. Supervisor creates 
+data structures from the files created to specified running directory.
 
 See documentation for [Supervisor](supervisor.md) for a graph about module structure.
 

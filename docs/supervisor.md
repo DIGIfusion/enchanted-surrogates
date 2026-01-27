@@ -22,6 +22,10 @@ Example as follows:
 ```yaml
 supervisor:
     base_run_dir: "path/to/folder"
+    run_order:
+    -   executor: ...
+        sampler: ...
+        runner: ...
 ```
 
 ### Optional attributes
