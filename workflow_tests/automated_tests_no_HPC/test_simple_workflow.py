@@ -5,9 +5,9 @@ import os
 import glob
 import shutil
 
-from ..utils.append_es_to_path import append_es_to_path
-append_es_to_path()
+from types import SimpleNamespace
 from enchanted_surrogates.executors import LocalExecutor, JoblibExecutor, DaskExecutor
+from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 
 # https://docs.pytest.org/en/stable/how-to/tmp_path.html
@@ -18,25 +18,45 @@ def test_full_workflow_local(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 10
+    executor_config = {
+        'type': 'LocalExecutor'
+    }
     sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
     runner_config = {
         'type': 'ExampleRunner'
     }
 
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
+    base_run_dir = tmp_path
 
-    executor = LocalExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    executor.start_runs()
+    args = SimpleNamespace(
+        executors = {
+            'e1': executor_config
+        },
+        samplers = {
+            's1': sampler_config
+        },
+        runners = {
+            'r1': runner_config
+        },
+        supervisor = {
+            'base_run_dir': base_run_dir,
+            'run_order': [
+                {
+                    'executor': 'e1',
+                    'sampler': 's1',
+                    'runner' : 'r1'
+                }
+            ]
+        }
+    )
+
+    supervisor = Supervisor(args)
+    supervisor.start()
+
     # This should create {budget} folders with ??? inside
 
     assert len(glob.glob(os.path.join(base_run_dir, "*"))) == budget
-    executor.clean()
 
     # Clean up test
     shutil.rmtree(base_run_dir)
@@ -49,27 +69,45 @@ def test_full_workflow_joblib(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 50
+    executor_config = {
+        'type': 'JoblibExecutor'
+    }
     sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-
-    # -- runner args
     runner_config = {
         'type': 'ExampleRunner'
     }
 
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
-    executor = JoblibExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    executor.start_runs()
+    base_run_dir = tmp_path
+
+    args = SimpleNamespace(
+        executors = {
+            'e1': executor_config
+        },
+        samplers = {
+            's1': sampler_config
+        },
+        runners = {
+            'r1': runner_config
+        },
+        supervisor = {
+            'base_run_dir': base_run_dir,
+            'run_order': [
+                {
+                    'executor': 'e1',
+                    'sampler': 's1',
+                    'runner' : 'r1'
+                }
+            ]
+        }
+    )
+
+    supervisor = Supervisor(args)
+    supervisor.start()
     # This should create {budget} folders with ??? inside
 
     created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
     assert len(created_rundirs) == budget
-    executor.clean()
 
 
 def test_full_workflow_dask(tmp_path):
@@ -79,24 +117,48 @@ def test_full_workflow_dask(tmp_path):
     bounds = [[-5, 5], [0, 1]]
     parameters = ['c1', 'c2']
     budget = 50
+    executor_config = {
+        'type': 'DaskExecutor',
+        'LocalCluster_config': {
+            'name': 'es-dask_cluster',
+            'n_workers': 2,
+            'threads_per_worker': 1
+        }
+    }
     sampler_config = {
         'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-
-    # -- runner args
     runner_config = {
         'type': 'ExampleRunner'
     }
 
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
-    executor = DaskExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    # executor.start_runs()   # Dask executor missing local cluster option
+    base_run_dir = tmp_path
+
+    args = SimpleNamespace(
+        executors = {
+            'e1': executor_config
+        },
+        samplers = {
+            's1': sampler_config
+        },
+        runners = {
+            'r1': runner_config
+        },
+        supervisor = {
+            'base_run_dir': base_run_dir,
+            'run_order': [
+                {
+                    'executor': 'e1',
+                    'sampler': 's1',
+                    'runner' : 'r1'
+                }
+            ]
+        }
+    )
+
+    supervisor = Supervisor(args)
+    supervisor.start()
     # This should create {budget} folders with ??? inside
 
-    # created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
-    # assert len(created_rundirs) == budget
-    # executor.clean()
+    assert os.path.exists(os.path.join(executor_config['base_run_dir'], 'ENCHANTED.FINISHED'))
+    created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
+    assert len(created_rundirs) == budget
