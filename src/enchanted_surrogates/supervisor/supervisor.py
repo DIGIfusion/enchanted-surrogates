@@ -77,7 +77,7 @@ class Supervisor:
 
         print("Starting runs...")
 
-        rows = [{}]
+        rows = [{}] # Holds results for run of previous depth. Summary file is created from this.
         for depth, group in enumerate(self.groups):
             next_rows = []
             batch_number = 0
