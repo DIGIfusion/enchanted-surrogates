@@ -48,7 +48,7 @@ runners:
     sleep_sec: 0.1
 
 supervisor:
-  base_run_dir: "data_dir/local"
+  base_run_dir: "data_dir/nested_local"
   run_order:
   - executor: code1_executor
     sampler: code1_sampler
