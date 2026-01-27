@@ -470,7 +470,24 @@ class SgppSampler(Sampler):
         return next_samples
     
     def light_post_processing(self):
-        self.plot_model_slices()
+        if self.dim > 1:
+            self.plot_model_slices()
+        elif self.dim == 1:
+            self.plot_model_1D()
+    
+    def plot_model_1D(self, res=200):
+        from matplotlib import pyplot as plt
+        x = np.linspace(self.bounds[0][0],self.bounds[0][1],res)
+        y = self.surrogate_predict(x.reshape(-1,1))
+        plt.plot(x,y, label = 'Prediction')
+        
+        x_grid = np.array(self.train.keys()).flatten()
+        y_grid = np.array(self.train.values()).flatten()
+        
+        plt.plot(x_grid, y_grid, label='Sparse Grid')
+        plt.legend()
+        plt.savefig(os.path.join(self.base_run_dir, f'model_1D_{len(self.train)}.png'))
+        plt.close()
         
     def plot_model_slices(self):
         from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
