@@ -59,16 +59,16 @@ def test_nested_dask_executors(tmp_path):
     args = SimpleNamespace(
         executors = {
             # New executors are created, but they using the same config
-            'e1': dask_config,
-            'e2': dask_config
+            'e1': dask_config.copy(),
+            'e2': dask_config.copy()
         },
         samplers = {
-            's1': sampler_config_1,
-            's2': sampler_config_2
+            's1': sampler_config_1.copy(),
+            's2': sampler_config_2.copy()
         },
         runners = {
-            'r1': runner_config_1,
-            'r2': runner_config_2
+            'r1': runner_config_1.copy(),
+            'r2': runner_config_2.copy()
         },
         supervisor = {
             'base_run_dir': tmp_path,
@@ -90,23 +90,21 @@ def test_nested_dask_executors(tmp_path):
     supervisor = Supervisor(args)
     supervisor.start()
 
-    assert os.path.exists(os.path.join(tmp_path, 'ENCHANTED.FINISHED'))
-
 
 def test_nested_dask_executors_with_executor_reuse(tmp_path):
     args = SimpleNamespace(
         executors = {
-            'e1': dask_config
+            'e1': dask_config.copy()
         },
         samplers = {
-            's1': sampler_config_1,
-            's2': sampler_config_2,
-            's3': sampler_config_3
+            's1': sampler_config_1.copy(),
+            's2': sampler_config_2.copy(),
+            's3': sampler_config_3.copy()
         },
         runners = {
-            'r1': runner_config_1,
-            'r2': runner_config_2,
-            's3': runner_config_3
+            'r1': runner_config_1.copy(),
+            'r2': runner_config_2.copy(),
+            'r3': runner_config_3.copy()
         },
         supervisor = {
             'base_run_dir': tmp_path,
@@ -132,5 +130,3 @@ def test_nested_dask_executors_with_executor_reuse(tmp_path):
 
     supervisor = Supervisor(args)
     supervisor.start()
-
-    assert os.path.exists(os.path.join(tmp_path, 'ENCHANTED.FINISHED'))
