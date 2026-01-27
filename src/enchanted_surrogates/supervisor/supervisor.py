@@ -202,7 +202,10 @@ class Supervisor:
         Monitors simulation processes and returns boolean describing state.
         Helper function for wait_all_processes.
 
-        Return:
+        Args:
+            filter (str or None): Optional filter used to limit checking to run directories
+                containing this text. If None (default), all run directories are checked.
+        Returns:
             True when all simulations are done. Helper function for
                 wait_all_processes. Checks inside base_run_dir if folders inside it
                 contain "enchanted_datapoint.csv" files.
@@ -224,6 +227,10 @@ class Supervisor:
         Waits in while loop until all simulations are done. Loop is broken
         when all_processes_done returns true. Checks condition once in
         second.
+
+        Args:
+            filter (str or None): Optional filter used to limit waiting to run directories
+                containing this text. If None (default), all run directories are waited.
         """
 
         while True:
