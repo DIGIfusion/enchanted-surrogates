@@ -34,6 +34,8 @@ class Supervisor:
         wait_all_processes: Waits in while loop until all simulations are done.
         create_dataset: Creates pandas DataFrame that includes all the
             "enchanted_datapoints.csv" files of running directories.
+        create_hdf5: Creates hdf5 structured file that includes numeric data of
+            enchanted_dataset and metadata
     """
 
     def __init__(self, args, config_path=None):
