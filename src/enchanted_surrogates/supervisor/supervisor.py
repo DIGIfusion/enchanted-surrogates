@@ -13,7 +13,9 @@ from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
-from enchanted_surrogates.supervisor.nested_imports import RunGroup, import_executors, import_samplers, import_run_groups
+from enchanted_surrogates.supervisor.nested_imports import (
+    RunGroup, import_executors, import_samplers, import_run_groups
+)
 
 
 class Supervisor:
@@ -105,7 +107,7 @@ class Supervisor:
                 # Wait processes of current batch to complete
                 self.wait_all_processes(f"d{depth}_b{batch_number}")
 
-                # For nesting, get the results of this batch and merge with previous batches of this nesting level
+                # Merge batch results with results of previous batches on current nesting level
                 for run_dir, row in zip(run_dirs, expanded):
                     datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
                     if os.path.isfile(datapoint_file):
@@ -164,7 +166,8 @@ class Supervisor:
                 if sys.stdout.isatty():
                     value = input(
                         str(os.path.abspath(base_run_dir))
-                        + "\nFolders have content. Do you want to delete data in existing folders? y/N "
+                        + "\nFolders have content. "
+                        + "Do you want to delete data in existing folders? y/N "
                     )
                 else:
                     print(
@@ -199,7 +202,7 @@ class Supervisor:
                     f"Error message: {exe}"
                 )
 
-    def all_processes_done(self, filter=None):
+    def all_processes_done(self, name_filter=None):
         """
         Monitors simulation processes and returns boolean describing state.
         Helper function for wait_all_processes.
@@ -215,7 +218,7 @@ class Supervisor:
         """
 
         for name in os.listdir(self.base_run_dir):
-            if not filter or str(filter) in str(name):
+            if not name_filter or str(name_filter) in str(name):
                 folder_path = os.path.join(self.base_run_dir, name)
                 if os.path.isdir(folder_path):
                     datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
@@ -224,7 +227,7 @@ class Supervisor:
 
         return True
 
-    def wait_all_processes(self, filter=None):
+    def wait_all_processes(self, name_filter=None):
         """
         Waits in while loop until all simulations are done. Loop is broken
         when all_processes_done returns true. Checks condition once in
@@ -236,7 +239,7 @@ class Supervisor:
         """
 
         while True:
-            if self.all_processes_done(filter):
+            if self.all_processes_done(name_filter):
                 break
             sleep(1)
 
