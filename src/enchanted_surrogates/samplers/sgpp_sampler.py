@@ -1038,6 +1038,8 @@ class SgppSampler(Sampler):
         return self.write_batch_info(*args, **kwargs)       
     
     def write_batch_info(self, batch_dir, name='', save_grid=True, test_data_csv=None, only_test=False): #Necessary
+        if self.dim == 1:
+            self.plot_model_1D()
         df = pd.DataFrame()
         fname = name+'batch_info.csv'
         print('debug guide dataset size:', self.guide_dataset_size)

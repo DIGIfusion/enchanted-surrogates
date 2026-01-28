@@ -91,9 +91,9 @@ class SlicesSampler2D(Sampler):
         else:
             if not self.base_run_dir:
                 raise RuntimeError("base_run_dir must be set to load dataset.")
+            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             if not os.path.exists(dataset_path):
                 raise FileNotFoundError(f"{dataset_path} not found.")
-            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             df = pd.read_csv(dataset_path)
 
             
@@ -167,7 +167,7 @@ class SlicesSampler2D(Sampler):
                 z_floor = float(np.nanmin(Z)) if np.isfinite(np.nanmin(Z)) else 0
                 if dots_x is not None:
                     ax3d.scatter(dots_x.T[i], dots_x.T[j], zs=z_floor, zdir='z', s=15, c='k', alpha=0.6, depthshade=False)
-                fname = f"slices_{self.parameters[i]}_{self.parameters[j]}.png"                
+                fname = f"slices_{self.parameters[i]}_{self.parameters[j]}_{ycol}.png"                
 
                 cax = fig.add_subplot(gs[2])   # colorbar axis
                 cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
@@ -183,14 +183,13 @@ class SlicesSampler2D(Sampler):
         if df is not None:
             pass
         elif dataset_path is not None:
-            dataset_path = dataset_path
             df = pd.read_csv(dataset_path)
         else:
             if not self.base_run_dir:
                 raise RuntimeError("base_run_dir must be set to load dataset.")
+            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             if not os.path.exists(dataset_path):
                 raise FileNotFoundError(f"{dataset_path} not found.")
-            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             df = pd.read_csv(dataset_path)
 
         output_col = [c for c in df.columns if 'output' in c]
@@ -354,7 +353,7 @@ class SlicesSampler2D(Sampler):
 
         # fig.tight_layout(pad=3.0)
         fig.subplots_adjust(wspace=0.7, hspace=0.7)
-        fig.savefig(os.path.join(self.base_run_dir, name+"slices_full_grid.png"), dpi=300)
+        fig.savefig(os.path.join(self.base_run_dir, name+f"slices_full_grid_{ycol}.png"), dpi=300)
  
         plt.close(fig)
 
