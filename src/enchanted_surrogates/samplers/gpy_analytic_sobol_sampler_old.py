@@ -1005,43 +1005,41 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     # ---- misc -----------------------------------------------------------------
 
-    # def add_rmse_column_to_batch_info(self):
-    #     from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
-    #     from enchanted_surrogates.utils.merge_secondary_into_primary import (
-    #         merge_secondary_into_primary
-    #     )
+    def add_rmse_column_to_batch_info(self):
+        from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
+        
+        batch_dirs = get_batch_dirs(self.base_run_dir)
+        for i, batch_dir in enumerate(batch_dirs):
+            if not os.path.exists(os.path.join(batch_dir, 'enchanted_dataset.csv')):
+                continue
+            self.append_train_data(batch_dir)
+            if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
+                print('WRITING BATCH INFO FOR:', batch_dir)
+                with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
+                    self.gp_model = pickle.load(file)
+                self.cache_hypers()
+                self.cache_K()
+                print("\n\n ================================== \n")
+                reg_results = self.regression_test()
+                if reg_results is None:
+                    continue
+                reg_results['num_samples'] = [len(self.train)]
+                df = pd.DataFrame(reg_results)
+                reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
+                print('debug, reg_path', reg_path)
+                if os.path.exists(reg_path):
+                    df.to_csv(reg_path, mode='a', header=False, index=False)
+                else:
+                    df.to_csv(reg_path, mode='w', header=True, index=False)
 
-    #     batch_dirs = get_batch_dirs(self.base_run_dir)
-    #     for i, batch_dir in enumerate(batch_dirs):
-    #         if not os.path.exists(os.path.join(batch_dir, 'enchanted_dataset.csv')):
-    #             continue
-    #         self.append_train_data(batch_dir)
-    #         if os.path.exists(os.path.join(batch_dir, 'gpy_model.pkl')):
-    #             print('WRITING BATCH INFO FOR:', batch_dir)
-    #             with open(os.path.join(batch_dir, 'gpy_model.pkl'), 'rb') as file:
-    #                 self.gp_model = pickle.load(file)
-    #             self.cache_hypers()
-    #             self.cache_K()
-    #             print("\n\n ================================== \n")
-    #             reg_results = self.regression_test()
-    #             if reg_results is None:
-    #                 continue
-    #             reg_results['num_samples'] = [len(self.train)]
-    #             df = pd.DataFrame(reg_results)
-    #             reg_path = os.path.join(os.path.dirname(batch_dir), 'regression_info.csv')
-    #             if os.path.exists(reg_path):
-    #                 df.to_csv(reg_path, mode='a', header=False, index=False)
-    #             else:
-    #                 df.to_csv(reg_path, mode='w', header=True, index=False)
-
-    #     batch_info_csv = os.path.join(self.base_run_dir, 'batch_info.csv')
-    #     shutil.copy2(batch_info_csv, os.path.join(self.base_run_dir, 'batch_info_orig.csv'))
-    #     merge_secondary_into_primary(
-    #         primary_csv=batch_info_csv,
-    #         secondary_csv=os.path.join(self.base_run_dir, 'regression_info.csv'),
-    #         out_csv=batch_info_csv,
-    #         key='num_samples'
-    #     )
+        batch_info_csv = os.path.join(self.base_run_dir, 'batch_info.csv')
+        shutil.copy2(batch_info_csv, os.path.join(self.base_run_dir, 'batch_info_orig.csv'))
+        merge_secondary_into_primary(
+            primary_csv=batch_info_csv,
+            secondary_csv=os.path.join(self.base_run_dir, 'regression_info.csv'),
+            out_csv=batch_info_csv,
+            key='num_samples'
+        )
 
     def brute_force_uq_analysis(self):
         raise NotImplementedError('Brute force UQ analysis not implemented in this sampler.')
@@ -1051,3 +1049,97 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     def register_futures(self, futures):
         return None
+    
+    
+def merge_secondary_into_primary(primary_csv: str,
+                                 secondary_csv: str,
+                                 out_csv: str = None,
+                                 key: str = "num_samples",
+                                 how: str = "left",
+                                 require_exact_match: bool = True) -> pd.DataFrame:
+    """
+    Load two CSV files into pandas DataFrames, add columns from the secondary
+    DataFrame to the primary DataFrame for rows with the same `key` values,
+    but only add columns that do not already exist in the primary.
+
+    Args:
+        primary_csv: path to primary CSV (kept as the main table / order preserved).
+        secondary_csv: path to secondary CSV (source of extra columns).
+        out_csv: optional path to write the resulting DataFrame to CSV.
+        key: column name present in both CSVs used to align rows (default "num_samples").
+        how: merge strategy relative to primary. Default "left" keeps all primary rows.
+        require_exact_match: if True, assert that the set of key values in the
+            secondary is a superset of those in primary (or exactly matching if how="inner"),
+            otherwise raises ValueError. If False, missing keys in secondary will remain NaN.
+
+    Returns:
+        result_df: pandas DataFrame (primary with added columns from secondary).
+    """
+    # Load
+    df_p = pd.read_csv(primary_csv)
+    df_s = pd.read_csv(secondary_csv)
+
+    # Basic sanity
+    if key not in df_p.columns:
+        raise KeyError(f"Primary CSV does not contain key column '{key}'")
+    if key not in df_s.columns:
+        raise KeyError(f"Secondary CSV does not contain key column '{key}'")
+
+    # Ensure key uniqueness in secondary if we intend to merge 1:1
+    if df_s[key].duplicated().any():
+        # If duplicates are expected, user should aggregate beforehand.
+        raise ValueError(f"Secondary CSV contains duplicate '{key}' values; please aggregate or deduplicate.")
+
+    # Check matching keys if required
+    prim_keys = set(df_p[key].unique())
+    sec_keys  = set(df_s[key].unique())
+
+    if require_exact_match:
+        missing_in_secondary = prim_keys - sec_keys
+        if missing_in_secondary:
+            raise ValueError(f"The following {key} values are in primary but missing in secondary: "
+                             f"{sorted(list(missing_in_secondary))[:10]}{'...' if len(missing_in_secondary)>10 else ''}")
+
+    # Select only columns from secondary that don't already exist in primary (except the key)
+    new_cols = [c for c in df_s.columns if c != key and c not in df_p.columns]
+    if not new_cols:
+        # Nothing to add — return primary as-is (optionally write out)
+        if out_csv:
+            df_p.to_csv(out_csv, index=False)
+        return df_p
+
+    # Prepare reduced secondary df with key + new columns
+    df_s_reduced = df_s[[key] + new_cols].copy()
+
+    # Merge: keep primary order; by default left join retains primary rows
+    result = pd.merge(df_p, df_s_reduced, on=key, how=how, validate="one_to_one")
+
+    # Optionally write to CSV
+    if out_csv:
+        result.to_csv(out_csv, index=False)
+
+    return result
+
+if __name__ == '__main__':
+    import sys
+    import yaml
+    from enchanted_surrogates.utils.load_configuration import load_configuration
+    from enchanted_surrogates.utils.precise_imports import import_sampler
+    _, base_run_dir = sys.argv
+            
+    listdir = os.listdir(base_run_dir)
+    config_file_name = [name for name in listdir if '.yaml' in name]
+    if len(config_file_name) > 1:
+        raise FileNotFoundError('More than one .yaml file in base_run_dir, not sure which to use as config file')
+    config_file_name = config_file_name[0]
+    print('CONFIG FOUND:',os.path.join(base_run_dir, config_file_name))
+    config = load_configuration(os.path.join(base_run_dir, config_file_name))
+    
+    
+    sampler_config = config.executor['sampler_config']
+    sampler_config['base_run_dir'] = base_run_dir
+    
+    gpy = GpyAnalyticSobolSamplerOld(**sampler_config)
+    
+    gpy.add_rmse_column_to_batch_info()
+    
