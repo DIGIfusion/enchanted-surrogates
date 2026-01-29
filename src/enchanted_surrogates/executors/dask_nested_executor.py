@@ -1,36 +1,3 @@
-"""
----
-
-## Overview
-
-A nested executor that orchestrates multiple executors using Dask for parallel execution.
-This class handles sequential and nested execution of tasks across multiple
-sub-executors, manages futures, dynamically handles clusters, and coordinates
-sampling for parameter exploration.
-
-![nested](/img/nested.png)
-
----
-
-## Features
-- Supports multiple executors in a nested pipeline.
-- Integrates with any sampler implementing the Enchanted Surrogates interface.
-- Optionally reuses executors and their Dask clients.
-- Tracks completion statistics for each executor and the overall pipeline.
-- Writes intermediate and final datasets to CSV.
-- Handles cluster startup and optional dynamic scale-down (experimental).
-
----
-
-!!! notes
-    - Dynamic scale-down is currently not implemented.
-    - Each executor must implement `start_cluster`, `submit_batch`, `clean`, and related methods.
-    - This class assumes that each executor has an independent sampling budget and may produce results asynchronously.
-
----
-
-
-"""
 import os
 import time
 import warnings
@@ -49,7 +16,37 @@ from enchanted_surrogates.utils.print_stats_table import print_stats_table
 # to be sure it is not holding back the dynamic scaling
 
 class DaskNestedExecutor(Executor):
+    """
+    ---
 
+    ## Overview
+
+    A nested executor that orchestrates multiple executors using Dask for parallel execution.
+    This class handles sequential and nested execution of tasks across multiple
+    sub-executors, manages futures, dynamically handles clusters, and coordinates
+    sampling for parameter exploration.
+
+    ![nested](/img/nested.png)
+
+    ---
+
+    ## Features
+    - Supports multiple executors in a nested pipeline.
+    - Integrates with any sampler implementing the Enchanted Surrogates interface.
+    - Optionally reuses executors and their Dask clients.
+    - Tracks completion statistics for each executor and the overall pipeline.
+    - Writes intermediate and final datasets to CSV.
+    - Handles cluster startup and optional dynamic scale-down (experimental).
+
+    ---
+
+    !!! notes
+        - Dynamic scale-down is currently not implemented.
+        - Each executor must implement `start_cluster`, `submit_batch`, `clean`, and related methods.
+        - This class assumes that each executor has an independent sampling budget and may produce results asynchronously.
+
+    ---
+    """
 
     def __init__(self, base_run_dir, executors:dict, sampler_config:dict, *args, **kwargs):
         """

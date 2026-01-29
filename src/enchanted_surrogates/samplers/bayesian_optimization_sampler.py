@@ -51,43 +51,24 @@ class BayesianOptimizationSampler(Sampler):
       parser_config:
         key: value
     ```
+    
+    Attributes:
+        initial_samples (int): Number of initial samples required.
+        verbose (bool): Whether to print verbose output.
+        fully_bayesian (bool): Whether to use fully Bayesian models.
+        acquisition_batch_size (int): Number of samples in each acquisition batch.
+        observations (list): List of observations.
+        bounds (list): Bounds for the search space.
+        acquisition_function (str): Acquisition function to use.
+        random_fraction (float): Fraction of random samples.
+        failure_prob_filter (bool): Whether to filter based on failure probability.
+        ucb_beta (float): Beta parameter for UCB acquisition function.
+        async_samp (bool): Whether to use asynchronous sampling.
+        parameters (list): List of parameter names.
+        parser (type): Parser type for collecting sample information.
+        parser_config: Parser kwargs
 
     ---
-
-    Attributes:
-        base_run_dir (str):           Base run directory
-        budget (int):                 Sampling budget
-        bounds (list):                List of search bounds     
-        parameters (list):            List of parameter names
-
-        observations (dict):          Dictionary of observations
-                                      for distance calculation
-        parser (type):                Parser type for collecting 
-                                      sample information
-        parser_config:                Parser kwargs
-
-        initial_samples (int):        Number of initial samples
-        acquisition_batch_size (int): Number of samples in each 
-                                      acquisition batch
-        acquisition_function (str):   Acquisition function to use
-        random_fraction (float):      Fraction of random samples
-        failure_prob_filter (bool):   True for using failure information
-                                      to filter samples
-        ucb_beta (float):             Beta parameter for the UCB 
-                                      acquisition function
-        async_samp (bool):            True for asynchronous sampling
-
-        fully_bayesian (bool):        True for fully Bayesian models
-        covar_kernel (str):           Covariance kernel to be used
-
-        verbose (bool):               True for detailed output
-        plot_GPR (bool):              True for plotting GPR
-        GPR_plot_dim (list):          List of dimensions to plot for GPR
-        plot_file (bool):             True for plottining in file (vs. screen)
-        plot_frequency (int):         Frequency of plotting (vs. # samples)
-        plot_debug (bool):            True for debugging plotting
-        plot_labels ([str]):          Labels to be used in the plots
-        plot_progress (bool):         Whether to generate progress plots
     
     ## Assumptions and notes
 
@@ -98,26 +79,8 @@ class BayesianOptimizationSampler(Sampler):
      - Sampling proceeds in two phases:
           Random sampling until initial_samples are collected.
           Model-based sampling using a Gaussian Process surrogate.
-    
-    ---
-
-    ## Methods
-
-      **`__init__:`** Initializes the sampler with the given parameters.
-
-      **`get_next_samples:`** Gets the next sampled parameter configurations.
-
-      **`build_result_dictionary:`** Build the result_dictionary based on the
-        existing runs.
-
-      **`plot_distances:`** Plot the sample distributions.
-
-      **`plot_GPR:`** Plot the GPR (gaussian process regression).
-
-      **`plot_posterior:`** Plot the posterior.
 
     ---
-
     """
 
     def __init__(
@@ -128,6 +91,16 @@ class BayesianOptimizationSampler(Sampler):
         """
         Initializes the BayesianOptimization sampler 
         with the given parameters.
+
+        Args:
+            bounds (list[tuple[float, float]]): Search space bounds.
+            parameters (list[str]): Parameter names.
+            initial_samples (int, optional): Number of initial random samples.
+            acquisition_function (str, optional): Acquisition strategy.
+            acquisition_batch_size (int, optional): Number of samples per batch.
+            random_fraction (float, optional): Fraction of random exploration.
+            async_samp (bool, optional): Enable asynchronous sampling.
+        
         """
         print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
         self.base_run_dir      = kwargs.get('base_run_dir', '')

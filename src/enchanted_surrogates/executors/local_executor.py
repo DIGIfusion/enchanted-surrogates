@@ -1,29 +1,3 @@
-"""
----
-
-## Overview
-
-An executor that runs simulation tasks sequentially on the local machine.
-This executor is intended for simple workflows, debugging, and environments
-where parallel or distributed execution is not required.
-Example configuration: /configs/example_local.yaml
-
----
-
-## Features
-
-- Executes simulation tasks sequentially in the local Python process.
-- Integrates with an Enchanted Surrogates sampler for parameter exploration.
-- Generates a unique run directory for each sample.
-- Registers completed runs directly with the sampler.
-
----
-
-!!! notes
-    - No parallelism or distributed execution is used.
-    - This executor is best suited for small workloads or debugging.
-    - Cleanup is minimal since no external resources are allocated.
-"""
 import os
 import uuid
 from enchanted_surrogates.executors.base_executor import Executor
@@ -32,6 +6,32 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
 class LocalExecutor(Executor):
+    """
+    ---
+
+    ## Overview
+
+    An executor that runs simulation tasks sequentially on the local machine.
+    This executor is intended for simple workflows, debugging, and environments
+    where parallel or distributed execution is not required.
+    Example configuration: /configs/example_local.yaml
+
+    ---
+
+    ## Features
+
+    - Executes simulation tasks sequentially in the local Python process.
+    - Integrates with an Enchanted Surrogates sampler for parameter exploration.
+    - Generates a unique run directory for each sample.
+    - Registers completed runs directly with the sampler.
+
+    ---
+
+    !!! notes
+        - No parallelism or distributed execution is used.
+        - This executor is best suited for small workloads or debugging.
+        - Cleanup is minimal since no external resources are allocated.
+    """
 
     def start_runs(self):
         """

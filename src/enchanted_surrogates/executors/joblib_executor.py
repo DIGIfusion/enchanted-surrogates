@@ -1,31 +1,3 @@
-"""
----
-
-## Overview
-
-An executor that runs simulations in parallel using `joblib.Parallel`. 
-This executor integrates with an Enchanted Surrogates sampler to generate 
-parameter configurations and execute tasks concurrently on the local machine.
-
----
-
-## Features
-
-- Uses `joblib` to parallelize simulation tasks across available CPU cores.
-- Integrates with Enchanted Surrogates sampler for parameter exploration.
-- Generates a unique run directory for each sample.
-- Automatically registers completed futures with the sampler.
-
----
-
-!!! notes
-    - This executor does not manage clusters; it runs everything locally.
-    - No dynamic scaling or distributed execution is supported.
-    - Cleanup is minimal since `joblib` runs in-process and does not leave persistent resources.
-
----
-
-"""
 import os
 import uuid
 import joblib
@@ -35,6 +7,34 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 
 class JoblibExecutor(Executor):
+    """
+    ---
+
+    ## Overview
+
+    An executor that runs simulations in parallel using `joblib.Parallel`. 
+    This executor integrates with an Enchanted Surrogates sampler to generate 
+    parameter configurations and execute tasks concurrently on the local machine.
+
+    ---
+
+    ## Features
+
+    - Uses `joblib` to parallelize simulation tasks across available CPU cores.
+    - Integrates with Enchanted Surrogates sampler for parameter exploration.
+    - Generates a unique run directory for each sample.
+    - Automatically registers completed futures with the sampler.
+
+    ---
+
+    !!! notes
+        - This executor does not manage clusters; it runs everything locally.
+        - No dynamic scaling or distributed execution is supported.
+        - Cleanup is minimal since `joblib` runs in-process and does not leave persistent resources.
+
+    ---
+
+    """
     def __init__(self, *args, **kwargs):
         """
         Initialize the JoblibExecutor.

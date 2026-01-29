@@ -55,16 +55,19 @@ class NestedSampler(Sampler):
       - `sampler_b` generates 2 samples for `(y, z)`
 
       - The nested sampler produces `12 × 2 = 24` combined configurations.
-
-
-    ---
     
-    Args:
-        samplers(dict): Dictionary defining the nested samplers.
-        type(S): Sampler class name, sampler-specific configuration parameters
-        budget (int): Maximum number of combined samples. Currently used for bookkeeping only.
-        batch_size (int): Number of samples returned in a single batch. Defaults to `budget`.
-    
+
+    Attribute:
+        all_samplers (list[Sampler]): List of instantiated nested samplers.
+        budget (int): Total number of samples allowed across the nested sampling process.
+        batch_size (int): Number of samples returned per call to `get_next_samples`.
+        submitted (int): Counter tracking the number of generated combined samples.
+        all_parameters (list[str]): Flattened list of parameter names from all nested samplers.
+        initial_parameters (list[list[dict]]): Initial samples collected from each nested sampler.
+        total_num_runs (list[int]): Total number of combined parameter configurations.
+        depth_num_runs (list[int]): Cumulative product of the number of initial samples per nested sampler.
+        current_batch (int): Tracks whether the first (and only) batch has been returned.
+
     ---
 
     ## Assumptions and notes
@@ -75,24 +78,25 @@ class NestedSampler(Sampler):
 
     ---
 
-    ## Methods
-
-      **`__init__:`** Initializes all nested samplers and generates initial samples.
-
-      **`get_next_samples:`** Returns the Cartesian product of nested samples.
-    
-    ---
-
     """
 
     def __init__(self, samplers, *args, **kwargs):
 
         """
-        **`__init__:`** Initializes the NestedSampler and all nested samplers.
+        Initializes the NestedSampler and all nested samplers.
 
         Each nested sampler is instantiated using its provided configuration,
         and its initial samples are collected immediately. The full Cartesian
         product of these samples defines the nested search space.
+
+        Args:
+            samplers (dict): Mapping of sampler names to sampler configurations.
+                Each configuration must specify the sampler type and its
+                corresponding parameters.
+            budget (int, optional): Total number of samples allowed across the
+                nested sampling process.
+            batch_size (int, optional): Number of samples returned per batch.
+                Defaults to the total budget.
 
         """
         samplers_keys = samplers.keys

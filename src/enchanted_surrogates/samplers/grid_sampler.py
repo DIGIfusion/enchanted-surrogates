@@ -32,9 +32,8 @@ class GridSampler(Sampler):
     - parameter y is sampled at 3 evenly spaced points between 0 and 1
     - resulting in a total of 4 × 3 = 12 samples.
 
-    ---
-    
-    Args:
+
+    Attributes:
         bounds (list of tuple of float): The bounds of each parameter.
         num_samples (list of int): The number of samples for each parameter.
         parameters (list of str): The names of the parameters.
@@ -54,20 +53,11 @@ class GridSampler(Sampler):
 
     ---
 
-    ## Methods
-
-      **`get_initial_parameters:`** Gets the initial parameters.
-
-      **`generate_parameters:`** Generates the parameter combinations.
-
-      **`get_next_parameter:`** Gets the next parameter combination.
-    
-    ---
     """
 
     def __init__(self, bounds, num_samples, parameters, *args, **kwargs):
         """
-        **`__init__:`** Initializes the Grid sampler.
+        Initializes the Grid sampler.
 
         Args:
             bounds (list of tuple of float): The bounds of each parameter.

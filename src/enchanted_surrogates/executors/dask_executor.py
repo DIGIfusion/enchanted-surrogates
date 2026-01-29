@@ -1,13 +1,3 @@
-"""
----
-## Overview
-
-Handles execution of surrogate workflow on Dask.
-Supports both SLURMCluster and LocalCluster for distributed task execution.
-SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
-
----
-"""
 import os
 import subprocess
 import time
@@ -36,7 +26,16 @@ run_simulation_task = simulation_task.run_simulation_task
 
 
 class DaskExecutor(Executor):
+    """
+    ---
+    ## Overview
 
+    Handles execution of surrogate workflow on Dask.
+    Supports both SLURMCluster and LocalCluster for distributed task execution.
+    SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+
+    ---
+    """
     def __init__(self, *args, **kwargs):
         """
         Initializes the DaskExecutor.

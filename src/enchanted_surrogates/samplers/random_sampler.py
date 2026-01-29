@@ -26,13 +26,13 @@ class RandomSampler(Sampler):
         num_samples: 100
     ```
 
-    ---
-    
-    Args:
-        type (str): Sampler identifier. Must be set to `RandomSampler`.
-        parameters (list[str]): Names of the parameters to be sampled. The order of parameters must correspond to the order of bounds.
-        bounds (list[list[float]]): Lower and upper bounds for each parameter. Each element must be a list or tuple of two floats: `[min, max]`.
-        num_samples (int): Total number of samples to generate. 
+    Attributes:
+        self.budget (int): Total number of samples that can be generated.
+        self.bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
+        self.parameters (list[str]): Names of the parameters to be sampled.
+        self.batch_size (int): Number of samples returned per batch (defaults to full budget).
+        self.submitted (int): Counter tracking how many samples have been generated so far.
+        BATCH_SAMPLE_SIZE (int): Class-level default batch size (currently 1).
 
     ---
 
@@ -54,20 +54,12 @@ class RandomSampler(Sampler):
     
     ---
 
-    ## Methods
-
-      **`get_initial_parameters:`** Gets the initial parameters.
-
-      **`get_next_samples:`** Gets the next sampled parameter configurations.
-
-    ---
-
     """
     BATCH_SAMPLE_SIZE = 1
 
     def __init__(self, bounds, budget, parameters, **kwargs):
         """
-        **`__init__:`** Initializes the RandomSampler.
+        Initializes the RandomSampler.
 
         Args:
           bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
