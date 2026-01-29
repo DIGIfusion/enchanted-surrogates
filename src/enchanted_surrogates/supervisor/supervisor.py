@@ -171,14 +171,6 @@ class Supervisor:
         if not dirs:
             return
 
-        if (
-            input(
-                f"An unfinished batch was found in {base_run_dir}\n Do you want to delete it? Y/n"
-            ).lower()
-            == "n"
-        ):
-            return
-
         for path in dirs:
             shutil.rmtree(path)
 
