@@ -16,7 +16,10 @@ import h5py
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.supervisor.nested_imports import (
-    RunGroup, import_executors, import_samplers, import_run_groups
+    RunGroup,
+    import_executors,
+    import_samplers,
+    import_run_groups,
 )
 
 
@@ -61,14 +64,14 @@ class Supervisor:
             run_group = RunGroup(
                 executors[group["executor"]],
                 samplers[group["sampler"]],
-                args.runners[group["runner"]]
+                args.runners[group["runner"]],
             )
             run_group.executor.runner_config = run_group.runner
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
-        
+
         if self.base_run_dir is None:
             raise ValueError("base_run_dir is not set in the provided configuration")
 
@@ -79,6 +82,7 @@ class Supervisor:
                     previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
                 self.sampler.skip(previous_run_data["batch_number"] + 1)
                 self.batch_number = previous_run_data["batch_number"]
+                self.depth = previous_run_data["depth"]
             else:
                 raise RuntimeError(
                     "Tried to continue from previous sampling but no "
@@ -88,8 +92,6 @@ class Supervisor:
             self.continue_with_base_run_dir(self.base_run_dir, config_path)
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
-
-        
 
     def start(self):
         """
@@ -101,20 +103,43 @@ class Supervisor:
 
         print("Starting runs...")
 
-        rows = [{}] # Holds results for run of previous depth. Summary file is created from this.
+        enchanted_dataset = pd.DataFrame()
+
         for depth, group in enumerate(self.groups):
-            next_rows = []
             batch_number = 0
+            batch_dataset = pd.DataFrame()
+
+            if hasattr(self, "depth"):
+                if depth < self.depth:
+                    continue
+
+                if depth == self.depth and hasattr(self, "batch_number"):
+                    batch_number = self.batch_number + 1
+                    if (
+                        self.args.supervisor
+                        and self.args.supervisor.get("summary_datatype") == "parquet"
+                    ):
+                        enchanted_dataset = pd.read_parquet(
+                            os.path.join(
+                                self.base_run_dir, "enchanted_dataset.parquet"
+                            ),
+                            engine="pyarrow",
+                        )
+                    else:
+                        enchanted_dataset = pd.read_csv(
+                            os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                        )
 
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
-                expanded = []
-                for parent in rows:
-                    for sample in samples:
-                        merged = {**parent, **sample}
-                        expanded.append(merged)
+                expanded = samples
+                # TODO: Fix for seamless sampling
+                # for parent in rows:
+                #    for sample in samples:
+                #        merged = {**parent, **sample}
+                #        expanded.append(merged)
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
@@ -125,37 +150,46 @@ class Supervisor:
                 group.executor.execute(zip(run_dirs, expanded), group.sampler)
 
                 # Wait processes of current batch to complete
-                self.wait_all_processes(f"d{depth}_b{batch_number}")
+                # self.wait_all_processes(f"d{depth}_b{batch_number}")
+                self.wait_batch_dirs(run_dirs)
+
+                # Then the files in this batch should be saved into summary files
+                df_batch = self.load_batch_to_df(run_dirs)
+                batch_dataset = pd.concat([batch_dataset, df_batch])
+                # enchanted_dataset = pd.concat([enchanted_dataset, batch_dataset])
+
+                data = {"batch_number": batch_number, "depth": depth}
+                path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
+                with open(path, "w", encoding="ascii") as f:
+                    yaml.safe_dump(data, f)
+
+                # Create summary csv or parquet file
+                if (
+                    self.args.supervisor
+                    and self.args.supervisor.get("summary_datatype") == "parquet"
+                ):
+                    enchanted_dataset.to_parquet(
+                        os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                        engine="pyarrow",
+                        index=True,
+                    )
+                else:
+                    enchanted_dataset.to_csv(
+                        os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                    )
 
                 # Merge batch results with results of previous batches on current nesting level
-                for run_dir, row in zip(run_dirs, expanded):
-                    datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
-                    if os.path.isfile(datapoint_file):
-                        result = pd.read_csv(datapoint_file).iloc[0].to_dict()
-                        combined = {**row, **result}
-                        next_rows.append(combined)
+                # for run_dir, row in zip(run_dirs, expanded):
+                # datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
+                # if os.path.isfile(datapoint_file):
+                # result = pd.read_csv(datapoint_file).iloc[0].to_dict()
+                # combined = {**row, **result}
+                #   next_rows.append(combined)
 
                 batch_number += 1
 
             # Update data rows for next nesting level
-            rows = next_rows
-
-        enchanted_dataset = pd.DataFrame(rows)
-
-        # Create summary csv or parquet file
-        if (
-            self.args.supervisor
-            and self.args.supervisor.get("summary_datatype") == "parquet"
-        ):
-            enchanted_dataset.to_parquet(
-                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                engine="pyarrow",
-                index=True,
-            )
-        else:
-            enchanted_dataset.to_csv(
-                os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-            )
+            enchanted_dataset = pd.concat([enchanted_dataset, batch_dataset])
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
@@ -164,7 +198,7 @@ class Supervisor:
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
         for group in self.groups:
-          group.executor.clean()
+            group.executor.clean()
 
     def continue_with_base_run_dir(self, base_run_dir, config_path):
         """
@@ -263,7 +297,9 @@ class Supervisor:
             if not name_filter or str(name_filter) in str(name):
                 folder_path = os.path.join(self.base_run_dir, name)
                 if os.path.isdir(folder_path):
-                    datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                    datapoint_file = os.path.join(
+                        folder_path, "enchanted_datapoint.csv"
+                    )
                     if not os.path.isfile(datapoint_file):
                         return False
 
@@ -408,6 +444,10 @@ class Supervisor:
             run_groups = meta_group.create_group("run_groups")
             for i, run_group in enumerate(self.groups):
                 meta_run_group = run_groups.create_group(str(i))
-                meta_run_group.attrs["executor"] = str(run_group.executor.__class__.__name__)
-                meta_run_group.attrs["sampler"] = str(run_group.sampler.__class__.__name__)
+                meta_run_group.attrs["executor"] = str(
+                    run_group.executor.__class__.__name__
+                )
+                meta_run_group.attrs["sampler"] = str(
+                    run_group.sampler.__class__.__name__
+                )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
