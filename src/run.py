@@ -47,7 +47,9 @@ def main(args: argparse.Namespace, config_path=None):
         args (argparse.Namespace): Namespace containing the configuration parameters.
     """
 
-    print(enchanted_wizard)
+    show_ascii_art = getattr(args, "show_ascii_art", True)
+    if show_ascii_art:
+        print(enchanted_wizard)
 
     executor_type = args.executor.pop("type")
     executor = import_executor(type=executor_type, executor_config=args.executor)
