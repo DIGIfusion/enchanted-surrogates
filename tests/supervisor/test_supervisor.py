@@ -9,7 +9,7 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    one_run_dir = tmp_path / "0_0"
+    one_run_dir = tmp_path / "d0_b0_r0"
     one_run_dir.mkdir()
     assert supervisor.all_processes_done() is False
 
@@ -62,15 +62,15 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
         assert agg_columns.tolist() == [b"x"]
 
         # Check run dimensions and values
-        run_values = file["data/runs/2_0/values"][:]
-        run_columns = file["data/runs/2_0/columns"][:]
+        run_values = file["data/runs/d0_b2_r0/values"][:]
+        run_columns = file["data/runs/d0_b2_r0/columns"][:]
 
         assert run_values.shape == (1,1)
         assert run_values[0,0] == 2
         assert run_columns.tolist() == [b"x"]
 
         # Check that metadata exists
-        meta = file["metadata"].attrs
+        meta = file["metadata/run_groups/0"].attrs
         for key in ["executor", "sampler", "runner"]:
             assert key in meta
 
@@ -91,11 +91,17 @@ def make_args(tmp_path, summary="csv"):
     Helper function to create constructor arguments
     """
     return SimpleNamespace(
-        executor={"type": "mock"},
-        sampler={"type": "mock"},
+        executors={"testexecutor": {"type": "mock"}},
+        samplers={"testsampler": {"type": "mock"}},
+        runners={"testrunner": {"type": "mock"}},
         supervisor={
             "base_run_dir": str(tmp_path),
             "summary_datatype": summary,
+            "run_order": [{
+                "executor": "testexecutor",
+                "sampler": "testsampler",
+                "runner": "testrunner",
+            }]
         },
         runner={"type": "mock"},
         storage={"type": "mock"},
@@ -106,6 +112,6 @@ def create_run_folders(tmp_path, amount):
     Helper function to create run folders
     """
     for i in range(amount):
-        d = tmp_path / f"{i}_0"
+        d = tmp_path / f"d0_b{i}_r0"
         d.mkdir()
         pd.DataFrame([{"x":i}]).to_csv(d / "enchanted_datapoint.csv", index=False)

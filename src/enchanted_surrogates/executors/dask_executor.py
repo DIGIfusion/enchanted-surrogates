@@ -56,11 +56,6 @@ class DaskExecutor(Executor):
         """
         super().__init__(*args, **kwargs)
         print("INITIALISING DASK EXECUTOR")
-        # self.type = kwargs.get('type')
-        # if self.sampler_config:
-        #     self.sampler_type = self.sampler_config.pop("type")
-        #     self.sampler = import_sampler(
-        #         type=self.sampler_type, sampler_config=self.sampler_config)
         self.scale_n_jobs = kwargs.get("scale_n_jobs", 1)
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
@@ -382,18 +377,23 @@ class DaskExecutor(Executor):
         total_cpu_time = sum(job["cpu_time_seconds"] for job in job_info) / 3600
         print(f"Total CPU hours used: {total_cpu_time}")
 
-        cpu_ps = subprocess.run(
-            ["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        if cpu_ps.returncode == 0:
-            headnode_secs = int(cpu_ps.stdout.strip())
-            print(f"Total CPU time used by head node: {headnode_secs / 3600}")
-        else:
+        try:
+            cpu_ps = subprocess.run(
+                ["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if cpu_ps.returncode == 0:
+                headnode_secs = int(cpu_ps.stdout.strip())
+                print(f"Total CPU time used by head node: {headnode_secs / 3600}")
+            else:
+                print(
+                    f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}"
+                )
+        except Exception:
             print(
-                f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}"
+                "Fetching head node CPU time failed. Most likely due to running on Windows"
             )
 
         self.shutdown_cluster()

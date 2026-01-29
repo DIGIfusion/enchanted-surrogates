@@ -103,13 +103,13 @@ def get_snake_and_pascal(string):
     return string_snake, string_pascal
 
 
-def import_sampler(type, sampler_config):
+def import_sampler(sampler_type, sampler_config):
     """
     Dynamically imports and instantiates a sampler class based on naming convention.
 
     Parameters
     ----------
-    type : str
+    sampler_type : str
         The name of the sampler (in snake_case or PascalCase).
     sampler_config : dict
         Keyword arguments to pass to the sampler constructor.
@@ -124,7 +124,7 @@ def import_sampler(type, sampler_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(type)
+    type_snake, type_pascal = get_snake_and_pascal(sampler_type)
     eps = load_plugins()
     if 'type' in sampler_config:
         sampler_config.pop('type')
@@ -137,13 +137,13 @@ def import_sampler(type, sampler_config):
     return sampler
 
 
-def import_runner(type, runner_config):
+def import_runner(runner_type, runner_config):
     """
     Dynamically imports and instantiates a runner class based on naming convention.
 
     Parameters
     ----------
-    type : str
+    runner_type : str
         The name of the sampler (in snake_case or PascalCase).
     sampler_config : dict
         Keyword arguments to pass to the sampler constructor.
@@ -158,7 +158,7 @@ def import_runner(type, runner_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(type)
+    type_snake, type_pascal = get_snake_and_pascal(runner_type)
     eps = load_plugins()
 
     if type_snake in eps:
@@ -170,13 +170,13 @@ def import_runner(type, runner_config):
     return runner
 
 
-def import_executor(type, executor_config):
+def import_executor(executor_type, executor_config):
     """
     Dynamically imports and instantiates a executor class based on naming convention.
 
     Parameters
     ----------
-    type : str
+    executor_type : str
         The name of the executor (in snake_case or PascalCase).
     executor_config : dict
         Keyword arguments to pass to the executor constructor.
@@ -191,7 +191,7 @@ def import_executor(type, executor_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(type)
+    type_snake, type_pascal = get_snake_and_pascal(executor_type)
     eps = load_plugins()
 
     if type_snake in eps:
@@ -202,13 +202,13 @@ def import_executor(type, executor_config):
                 f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_config)
     return cls
 
-def import_parser(type, parser_config):
+def import_parser(parser_type, parser_config):
     """
     Dynamically imports and instantiates a parser class based on naming convention.
 
     Parameters
     ----------
-    type : str
+    parser_type : str
         The name of the parser (in snake_case or PascalCase).
     parser_config : dict
         Keyword arguments to pass to the sampler constructor.
@@ -223,7 +223,7 @@ def import_parser(type, parser_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(type)
+    type_snake, type_pascal = get_snake_and_pascal(parser_type)
     eps = load_plugins()
 
     if type_snake in eps:

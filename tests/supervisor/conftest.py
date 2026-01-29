@@ -9,6 +9,7 @@ def fake_sampler():
     """
     def _factory(sample_batches: list[list[dict]]):
         sampler = MagicMock()
+        sampler.__name__ = "MockSampler"
 
         # On every function call, next list of dicts from sample_batches is returned
         sampler.get_next_samples.side_effect = sample_batches
@@ -29,6 +30,7 @@ def fake_executor():
     """
     def _factory():
         executor = MagicMock()
+        executor.__name__ = "MockExecutor"
         return executor
 
     return _factory
@@ -43,11 +45,11 @@ def patch_supervisor_imports(monkeypatch, fake_sampler, fake_executor):
         executor = fake_executor()
 
         monkeypatch.setattr(
-            "enchanted_surrogates.supervisor.supervisor.import_sampler",
+            "enchanted_surrogates.supervisor.nested_imports.import_sampler",
             lambda *args, **kwargs: sampler,
         )
         monkeypatch.setattr(
-            "enchanted_surrogates.supervisor.supervisor.import_executor",
+            "enchanted_surrogates.supervisor.nested_imports.import_executor",
             lambda *args, **kwargs: executor,
         )
 

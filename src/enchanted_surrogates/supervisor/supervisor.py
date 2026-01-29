@@ -15,7 +15,9 @@ import yaml
 import h5py
 import numpy as np
 import pandas as pd
-from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
+from enchanted_surrogates.supervisor.nested_imports import (
+    RunGroup, import_executors, import_samplers, import_run_groups
+)
 
 
 class Supervisor:
@@ -36,6 +38,8 @@ class Supervisor:
         wait_all_processes: Waits in while loop until all simulations are done.
         create_dataset: Creates pandas DataFrame that includes all the
             "enchanted_datapoints.csv" files of running directories.
+        create_hdf5: Creates hdf5 structured file that includes numeric data of
+            enchanted_dataset and metadata
     """
 
     def __init__(self, args, config_path=None):
@@ -47,16 +51,26 @@ class Supervisor:
             config_path (str or None): Optional path for configuration file where
                 configuration is fetched from.
         """
-
         self.args = args
-        self.executor = import_executor(
-            type=args.executor.pop("type"), executor_config=args.executor
-        )
-        self.sampler = import_sampler(
-            type=args.sampler.pop("type"), sampler_config=args.sampler
-        )
+        executors = import_executors(args)
+        samplers = import_samplers(args)
+        group_configs = import_run_groups(args)
+
+        self.groups: list[RunGroup] = []
+        for group in group_configs:
+            run_group = RunGroup(
+                executors[group["executor"]],
+                samplers[group["sampler"]],
+                args.runners[group["runner"]]
+            )
+            run_group.executor.runner_config = run_group.runner
+            self.groups.append(run_group)
+
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
+        
+        if self.base_run_dir is None:
+            raise ValueError("base_run_dir is not set in the provided configuration")
 
         if self.run_mode in ("resume", "extend"):
             previous_run_batches = os.path.join(self.base_run_dir, "enchanted_run.yaml")
@@ -75,6 +89,8 @@ class Supervisor:
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
+        
+
     def start(self):
         """
         Main function of the supervisor. Starts the simulation process. Currently
@@ -85,72 +101,70 @@ class Supervisor:
 
         print("Starting runs...")
 
-        enchanted_dataset = pd.DataFrame()
-        batch_number = 0
+        rows = [{}] # Holds results for run of previous depth. Summary file is created from this.
+        for depth, group in enumerate(self.groups):
+            next_rows = []
+            batch_number = 0
 
-        if hasattr(self, "batch_number"):
-            batch_number = self.batch_number + 1
-            if (
-                self.args.supervisor
-                and self.args.supervisor.get("summary_datatype") == "parquet"
-            ):
-                enchanted_dataset = pd.read_parquet(
-                    os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                    engine="pyarrow",
-                )
-            else:
-                enchanted_dataset = pd.read_csv(
-                    os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                )
+            while group.sampler.has_budget:
+                samples = group.sampler.get_next_samples()
 
-        while self.sampler.has_budget:
-            # Get samples
-            samples: list[dict] = self.sampler.get_next_samples()
-            # Create run_dirs with order number as name
-            run_dirs = [
-                os.path.join(self.base_run_dir, f"{batch_number}_{i}")
-                for i in range(len(samples))
-            ]
-            # Call executor with folder path and samples in tuple
-            self.executor.execute(zip(run_dirs, samples), self.sampler)
+                # Merge parameter names for nesting. On first depth run, expanded=samples
+                expanded = []
+                for parent in rows:
+                    for sample in samples:
+                        merged = {**parent, **sample}
+                        expanded.append(merged)
 
-            # Wait that there are files that match run_dirs
-            self.wait_batch_dirs(run_dirs)
+                # Create run directories named by depth, batch and sample numbers
+                run_dirs = [
+                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_r{i}")
+                    for i in range(len(expanded))
+                ]
 
-            # Then files in this batch should be saved into summary files
-            df_batch = self.load_batch_to_df(run_dirs)
-            enchanted_dataset = pd.concat([enchanted_dataset, df_batch])
+                group.executor.execute(zip(run_dirs, expanded), group.sampler)
 
-            # Update status yaml
-            data = {"batch_number": batch_number}
-            path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
-            with open(path, "w", encoding="ascii") as f:
-                yaml.safe_dump(data, f)
+                # Wait processes of current batch to complete
+                self.wait_all_processes(f"d{depth}_b{batch_number}")
 
-            # Create summary csv or parquet file
-            if (
-                self.args.supervisor
-                and self.args.supervisor.get("summary_datatype") == "parquet"
-            ):
-                enchanted_dataset.to_parquet(
-                    os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                    engine="pyarrow",
-                    index=True,
-                )
-            else:
-                enchanted_dataset.to_csv(
-                    os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                )
+                # Merge batch results with results of previous batches on current nesting level
+                for run_dir, row in zip(run_dirs, expanded):
+                    datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
+                    if os.path.isfile(datapoint_file):
+                        result = pd.read_csv(datapoint_file).iloc[0].to_dict()
+                        combined = {**row, **result}
+                        next_rows.append(combined)
 
-            batch_number += 1
+                batch_number += 1
 
-        # After main loop, create HDF5 file if configured
-        if self.args.storage and self.args.storage.get("type") != "None":
+            # Update data rows for next nesting level
+            rows = next_rows
+
+        enchanted_dataset = pd.DataFrame(rows)
+
+        # Create summary csv or parquet file
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            enchanted_dataset.to_parquet(
+                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                engine="pyarrow",
+                index=True,
+            )
+        else:
+            enchanted_dataset.to_csv(
+                os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+            )
+
+        # Create HDF5 file by default
+        if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(enchanted_dataset)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
-        self.executor.clean()
+        for group in self.groups:
+          group.executor.clean()
 
     def continue_with_base_run_dir(self, base_run_dir, config_path):
         """
@@ -194,7 +208,8 @@ class Supervisor:
                 if sys.stdout.isatty():
                     value = input(
                         str(os.path.abspath(base_run_dir))
-                        + "\nFolders have content. Delete data in existing folders? y/N "
+                        + "\nFolders have content. "
+                        + "Do you want to delete data in existing folders? y/N "
                     )
                 else:
                     print(
@@ -229,12 +244,15 @@ class Supervisor:
                     f"Error message: {exe}"
                 )
 
-    def all_processes_done(self):
+    def all_processes_done(self, name_filter=None):
         """
         Monitors simulation processes and returns boolean describing state.
         Helper function for wait_all_processes.
 
-        Return:
+        Args:
+            filter (str or None): Optional filter used to limit checking to run directories
+                containing this text. If None (default), all run directories are checked.
+        Returns:
             True when all simulations are done. Helper function for
                 wait_all_processes. Checks inside base_run_dir if folders inside it
                 contain "enchanted_datapoint.csv" files.
@@ -242,23 +260,28 @@ class Supervisor:
         """
 
         for name in os.listdir(self.base_run_dir):
-            folder_path = os.path.join(self.base_run_dir, name)
-            if os.path.isdir(folder_path):
-                datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
-                if not os.path.isfile(datapoint_file):
-                    return False
+            if not name_filter or str(name_filter) in str(name):
+                folder_path = os.path.join(self.base_run_dir, name)
+                if os.path.isdir(folder_path):
+                    datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                    if not os.path.isfile(datapoint_file):
+                        return False
 
         return True
 
-    def wait_all_processes(self):
+    def wait_all_processes(self, name_filter=None):
         """
         Waits in while loop until all simulations are done. Loop is broken
         when all_processes_done returns true. Checks condition once in
         second.
+
+        Args:
+            filter (str or None): Optional filter used to limit waiting to run directories
+                containing this text. If None (default), all run directories are waited.
         """
 
         while True:
-            if self.all_processes_done():
+            if self.all_processes_done(name_filter):
                 break
             sleep(1)
 
@@ -382,6 +405,9 @@ class Supervisor:
 
             # Metadata
             meta_group = f.create_group("metadata")
-            meta_group.attrs["executor"] = str(self.args.executor.get("type"))
-            meta_group.attrs["sampler"] = str(self.args.sampler.get("type"))
-            meta_group.attrs["runner"] = str(self.args.runner.get("type"))
+            run_groups = meta_group.create_group("run_groups")
+            for i, run_group in enumerate(self.groups):
+                meta_run_group = run_groups.create_group(str(i))
+                meta_run_group.attrs["executor"] = str(run_group.executor.__class__.__name__)
+                meta_run_group.attrs["sampler"] = str(run_group.sampler.__class__.__name__)
+                meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
