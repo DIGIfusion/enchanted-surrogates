@@ -1256,6 +1256,7 @@ class GpyAnalyticSobolSampler(Sampler):
             score = self.integral_variance_reduction(X_pool, model=model, X_train=X_train)
 
         elif mode == "oracle":
+            # TODO should use test set to get rmse if available
             print('ACQUISITION MODE: oracle')
             if X_train is None and Y_train is None:
                 X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)

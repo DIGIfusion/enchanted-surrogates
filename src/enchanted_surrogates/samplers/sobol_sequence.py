@@ -23,6 +23,8 @@ class SobolSequence(Sampler):
         self.batch_number = 0
         self.include_index = kwargs.get('include_index', False)
         self.seed = kwargs.get("seed", 42)
+        self.fast_forward = kwargs.get('fast_forward', 0)
+        
         # must be last
         self.samples = self.generate_samples()
         
@@ -42,7 +44,7 @@ class SobolSequence(Sampler):
         return samples
         
     def generate_samples(self):
-                
+        print('GENERATING SOBOL SEQUENCE SAMPLES')                
         # Define the dimensionality
 
         # Define the bounds for each dimension
@@ -54,7 +56,10 @@ class SobolSequence(Sampler):
             sobol = Sobol(d=self.dim, scramble=self.scramble, rng=self.seed)
         except:
             sobol = Sobol(d=self.dim, scramble=self.scramble, seed=self.seed)
-                                    
+
+        if self.fast_forward > 0:
+            sobol.fast_forward(self.fast_forward)
+
         # Generate points in the unit hypercube [0, 1]^d
         points = sobol.random_base2(m=self.power)  # Generates 2^power points
 

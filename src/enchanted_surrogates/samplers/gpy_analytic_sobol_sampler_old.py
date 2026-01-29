@@ -100,6 +100,9 @@ class GpyAnalyticSobolSamplerOld(Sampler):
         self.custom_submitted = 0
         self.budget = kwargs.get('budget', self.batch_size)
 
+        self.pool_csv_path = kwargs.get('pool_csv_path', None)
+
+
         # sub-sampler
         self.sub_sampler_config = kwargs.get('sub_sampler_config', None)
         if self.sub_sampler_config:
@@ -184,6 +187,16 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 raise ValueError('The pool sampler did not return any samples.')
 
             self.pool = np.array(collected, dtype=float)
+        
+        if self.pool_csv_path is not None:
+            df = pd.read_csv(self.pool_csv_path)
+            self.pool = self.to_unit(df[self.parameters].to_numpy())
+            output_col = [col for col in df.columns if 'output' in col]
+            if len(output_col)>1:
+                warnings.warn(f'MORE THAN ONE OUTPUT WAS FOUND IN THE POOL CSV: {output_col}. THE FIRST WILL BE TAKEN AS THE OUTPUT OF INTEREST. {output_col[0]}')
+            output_col = output_col[0]
+            self.pool_y = df[output_col].to_numpy() # unormalised
+
         else:
             self.pool = rng.uniform(
                 low=0.0,
@@ -235,6 +248,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 idxs = rng.choice(len(self.pool), size=n, replace=False)
                 chosen = self.pool[idxs]
                 self.pool = np.delete(self.pool, idxs, axis=0)
+                if self.pool_y is not None:
+                    self.pool_y = np.delete(self.pool_y, idxs, axis=0)
             elif self.initial_pool_samples_strategy == 'first':
                 n = min(self.initial_batch_size, len(self.pool))
                 chosen = self.pool[:n]
@@ -275,6 +290,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 to_delete.append(idxs[0])
         if to_delete:
             self.pool = np.delete(self.pool, to_delete, axis=0)
+            if self.pool_y is not None:
+                self.pool_y = np.delete(self.pool_y, to_delete, axis=0)
 
     # ---- training data / GP ---------------------------------------------------
 
@@ -344,7 +361,7 @@ class GpyAnalyticSobolSamplerOld(Sampler):
             if (
                 self.custom_submitted - self.num_samples_at_last_write
                 >= self.write_batch_info_every_x_samples
-                or self.batch_number in (0, 1, 2, 3)
+                #or self.batch_number in (0, 1, 2, 3)
             ):
                 self.write_batch_info(previous_batch_dir)
                 self.num_samples_at_last_write = self.custom_submitted
@@ -366,7 +383,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
             score_pool_global = self._compute_acquisition(
                 self.pool,
                 mode=self.acquisition_mode,
-                blend_string=self.blend_string
+                blend_string=self.blend_string,
+                pool_y = self.pool_y
             ).flatten()
             print(f"BATCH SIZE: {self.batch_size} USING GLOBAL SCORE.")
             idx = list(np.argsort(-score_pool_global)[:self.batch_size])
@@ -377,6 +395,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 for row in real_chosen_points
             ]
             self.pool = np.delete(self.pool, idx, axis=0)
+            if self.pool_y is not None:
+                self.pool_y = np.delete(self.pool_y, idx, axis=0)
         else:
             # ensemble logic kept close to decompiled version, but cleaned
             print('SPLITTING DATA INTO FOLDS')
@@ -422,7 +442,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                     self.pool,
                     mode=self.acquisition_mode,
                     blend_string=self.blend_string,
-                    model=model_fold
+                    model=model_fold,
+                    pool_y = self.pool_y
                 )
                 idx_f = list(np.argsort(-scores)[:samples_per_fold[i]])
                 chosen_indices.extend(idx_f)
@@ -443,7 +464,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 score_pool_global = self._compute_acquisition(
                     self.pool,
                     mode=self.acquisition_mode,
-                    blend_string=self.blend_string
+                    blend_string=self.blend_string,
+                    pool_y = self.pool_y
                 ).flatten()
                 sorted_idx = list(np.argsort(-score_pool_global))
                 for idx in sorted_idx:
@@ -460,6 +482,8 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 for row in real_chosen_points
             ]
             self.pool = np.delete(self.pool, chosen_indices_final, axis=0)
+            if self.pool_y is not None:
+                self.pool_y = np.delete(self.pool_y, chosen_indices_final, axis=0)
 
         self.batch_number += 1
         if self.custom_submitted >= self.budget:
@@ -686,7 +710,7 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     # ---- acquisition ----------------------------------------------------------
 
-    def _compute_acquisition(self, X_pool, mode='var', blend_string=None, model=None):
+    def _compute_acquisition(self, X_pool, mode='var', blend_string=None, model=None, pool_y=None):
         start = time.time()
         if model is None:
             model = self.gp_model
@@ -699,11 +723,11 @@ class GpyAnalyticSobolSamplerOld(Sampler):
             for coeff, m in blend:
                 if len(X_pool) > self.chunk_size:
                     scores = self._compute_acquisition_chunked(
-                        X_pool, mode=m, chunk_size=self.chunk_size, model=model
+                        X_pool, mode=m, chunk_size=self.chunk_size, model=model, pool_y=pool_y
                     )
                 else:
                     scores = self._compute_acquisition_unchunked(
-                        X_pool, mode=m, model=model
+                        X_pool, mode=m, model=model, pool_y = pool_y
                     )
                 scores = (scores - scores.mean()) / (scores.std() + 1e-12)
                 total += coeff * scores
@@ -718,11 +742,11 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
         if len(X_pool) > self.chunk_size:
             scores = self._compute_acquisition_chunked(
-                X_pool, mode=mode, chunk_size=self.chunk_size, model=model
+                X_pool, mode=mode, chunk_size=self.chunk_size, model=model, pool_y = pool_y
             )
         else:
             scores = self._compute_acquisition_unchunked(
-                X_pool, mode=mode, model=model
+                X_pool, mode=mode, model=model, pool_y = pool_y
             )
         end = time.time()
         print(
@@ -733,23 +757,23 @@ class GpyAnalyticSobolSamplerOld(Sampler):
         )
         return scores
 
-    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None):
+    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None, pool_y = None):
         if model is None:
             model = self.gp_model
 
         if mode == 'random':
             return np.random.uniform(0, 1, len(X_pool))
-        if mode == 'var':
+        elif mode == 'var':
             mu, var = model.predict(X_pool)
             return var.flatten()
-        if mode in ('gradVar', 'grad'):
+        elif mode in ('gradVar', 'grad'):
             X_pool = np.atleast_2d(X_pool)
             dmu, _ = model.predictive_gradients(X_pool)
             grads = np.linalg.norm(dmu, axis=1).squeeze()
             return grads
-        if mode == 'intVar':
+        elif mode == 'intVar':
             return self.integral_variance_reduction(X_pool)
-        if mode == 'ensembleDisagreement':
+        elif mode == 'ensembleDisagreement':
             preds = []
             n_folds = min(5, max(2, len(self.train)))
             kf = KFold(
@@ -770,7 +794,178 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 preds.append(mu_f.flatten())
             preds = np.vstack(preds)
             return preds.var(axis=0)
-        raise ValueError(f"Unknown acquisition mode: {mode}")
+        
+        elif mode == "var_distpen":
+            print('ACQUISITION MODE: var_distpen') 
+            X_train, Y_train = self._get_unitXY()
+
+            # GP posterior variance
+            mu, var = model.predict_noiseless(X_pool)
+            var = var.flatten()
+
+            # Compute kernel similarity between pool points and training points
+            # K_xt_x = k(X_pool, X_train)
+            K_xt_x = model.kern.K(X_pool, X_train)  # shape (N_pool, N_train)
+
+            # For each pool point, take the maximum similarity to any training point
+            max_sim = np.max(K_xt_x, axis=1)  # shape (N_pool,)
+
+            # Optionally normalize by kernel variance if needed
+            # For many kernels, kern.variance is the output scale
+            if hasattr(model.kern, "variance"):
+                variance_scale = model.kern.variance[0] if np.ndim(model.kern.variance) > 0 else model.kern.variance
+                # Avoid divide-by-zero
+                if variance_scale > 0:
+                    max_sim = max_sim / variance_scale
+
+            # Distance penalty: low when similar to existing points, high when far
+            # You can tune alpha; alpha=1 is a good default
+            alpha = 1.0
+            penalty = 1.0 - np.clip(max_sim, 0.0, 1.0) ** alpha
+
+            score = var * penalty
+            return score
+        
+        elif mode == "eigf": # doi: 10.1016/j.ress.2024.109945
+            print('ACQUISITION MODE: eigf')
+            X_train, Y_train = self._get_unitXY()
+            
+            from sklearn.neighbors import KDTree
+            tree = KDTree(X_train)  # X_train: (n_samples, d)
+            dist, idx = tree.query(X_pool, k=1)
+            y_nearest = Y_train[idx[:, 0]]
+            
+            mu, var = model.predict_noiseless(X_pool)
+            
+            score = (mu - y_nearest)**2 + var
+            return score
+
+        elif mode == "vigf": # doi:10.1016/j.ress.2024.109945
+            print('ACQUISITION MODE: vigf')
+            X_train, Y_train = self._get_unitXY()
+            
+            from sklearn.neighbors import KDTree
+            tree = KDTree(X_train)  # X_train: (n_samples, d)
+            dist, idx = tree.query(X_pool, k=1)
+            y_nearest = Y_train[idx[:, 0]]
+
+            mu, var = model.predict_noiseless(X_pool)
+
+            score = 4*var * ((mu-y_nearest)**2 + 2*var)
+            return score
+        
+        elif mode in ("oracle_rmse", 'oracle_ipv', 'oracle'):
+            print('ACQUISITION MODE: oracle')
+            X_train, Y_train = self._get_unitXY()
+            assert pool_y is not None
+            if len(X_pool) > os.cpu_count()*100:
+                warnings.warn(f'ORACLE ACQUISITION IS HEAVY AND REQUIRES MANY CORES. THE POOL IS MUCH LARGER THEN THE NUMBER OF CORES, POOL {len(X_pool)}, CORES {os.cpu_count}. PLEASE CONSIDER A SMALLER POOL.')
+            # y_model, _ = self.gp_model.predict_noiseless(X_pool)
+ 
+            # orig_rmse = np.sqrt(np.mean((y_model.flatten() - pool_y.flatten())**2)) 
+
+            test_df = pd.read_csv(self.test_data_csv)
+            out_col = [col for col in test_df.columns if 'output' in col]
+            if len(out_col) != 1:
+                raise ValueError(
+                    f"More than one output col detected when doing regression test. "
+                    f"Check {self.test_data_csv} and ensure only one column has 'output' in the name."
+                )
+            X_test_unit = self.to_unit(test_df[self.parameters].values)
+            y_test = test_df[out_col[0]].values
+            y_pred, var_orig = self.gp_model.predict_noiseless(X_test_unit)
+            residuals = y_test - y_pred
+            orig_rmse = np.sqrt(np.nanmean(residuals ** 2))
+
+            def new_point_rmse_decrease(x_new, y_new):
+                # Ensure shapes
+                x_new = np.asarray(x_new).reshape(1, -1)
+                y_new = np.asarray(y_new).reshape(1, 1)
+
+                # Append new point
+                X = np.vstack([X_train, x_new])
+                y = np.vstack([Y_train, y_new])
+
+                # Build model with fixed hyperparameters
+                new_model = self.make_fixed_hyperparam_copy(X, y)
+                #new_model.optimize_restarts(num_restarts=1, verbose=False)
+
+                # Predict on pool
+                y_model, _ = new_model.predict_noiseless(X_test_unit)
+
+                # Compute RMSE
+                rmse = np.sqrt(np.mean((y_model.flatten() - y_test.flatten())**2)) 
+
+                decrease = orig_rmse - rmse
+                return decrease
+            
+            ipv_orig = np.nanmean(var_orig)        
+            def oracle_ipv_reduction(x_new, y_new):
+                # Ensure shapes
+                x_new = np.asarray(x_new).reshape(1, -1)
+                y_new = np.asarray(y_new).reshape(1, 1)
+
+                # Augment training data
+                X_aug = np.vstack([X_train, x_new])
+                Y_aug = np.vstack([Y_train, y_new])
+
+                # Build model with fixed hyperparameters
+                model_aug = self.make_fixed_hyperparam_copy(X_aug, Y_aug)
+
+                # Predict variance on test set
+                _, var_aug = model_aug.predict_noiseless(X_test_unit)
+
+                ipv_aug = np.nanmean(var_aug)
+
+                # Score = reduction in integrated posterior variance
+                return ipv_orig - ipv_aug
+
+
+            from joblib import Parallel, delayed
+
+            if mode in ('oracle_rmse', 'oracle'):
+                score = np.array(Parallel(n_jobs=-1, prefer="threads")(
+                    delayed(new_point_rmse_decrease)(xi, yi)
+                    for xi, yi in zip(X_pool, pool_y)
+                ))
+
+            if mode == 'oracle_ipv':
+                score = np.array(Parallel(n_jobs=-1, prefer="threads")(
+                    delayed(oracle_ipv_reduction)(xi, yi)
+                    for xi, yi in zip(X_pool, pool_y)
+                ))
+
+            return score
+
+        else:
+            raise ValueError(f"Unknown acquisition mode: {mode}")
+
+    def make_fixed_hyperparam_copy(self, X_new, Y_new):
+        # 1. Extract kernel hyperparameters from the trained model
+        kern = self.gp_model.kern
+        variance = float(kern.variance.values)
+        lengthscales = kern.lengthscale.values.copy()
+
+        # 2. Build a new kernel with the same structure
+        new_kern = GPy.kern.RBF(input_dim=X_new.shape[1], ARD=True)
+        jitter = 1e-8
+        new_kern.variance = variance + jitter 
+        new_kern.lengthscale = lengthscales
+
+        # 3. Fix hyperparameters so they cannot be optimized
+        new_kern.variance.fix()
+        new_kern.lengthscale.fix()
+
+        # 4. Build a new GP model using the fixed kernel
+        new_model = GPy.models.GPRegression(X_new, Y_new, new_kern)
+
+        # 5. Fix noise variance as well
+        noise = float(self.gp_model.Gaussian_noise.variance.values)
+        new_model.Gaussian_noise.variance = noise
+        new_model.Gaussian_noise.variance.fix()
+
+        return new_model
+
 
     def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None):
         results = []
