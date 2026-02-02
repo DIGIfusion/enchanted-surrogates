@@ -31,6 +31,8 @@ theme:
     - content.code.copy        # Copy button for code blocks
     - content.tabs.link        # Sync tabs across pages
 
+  enable_mathjax: true
+
 plugins:
   # Full-text search
   - search
@@ -68,6 +70,10 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.highlight
   - pymdownx.snippets
+
+  # Math extension
+  - pymdownx.arithmatex:
+      generic: true
 
 nav:
   # Main landing page

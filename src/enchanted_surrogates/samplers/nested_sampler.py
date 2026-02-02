@@ -57,7 +57,7 @@ class NestedSampler(Sampler):
       - The nested sampler produces `12 × 2 = 24` combined configurations.
     
 
-    Attribute:
+    Attributes:
         all_samplers (list[Sampler]): List of instantiated nested samplers.
         budget (int): Total number of samples allowed across the nested sampling process.
         batch_size (int): Number of samples returned per call to `get_next_samples`.

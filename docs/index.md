@@ -1,10 +1,3 @@
----
-layout: default
-title: Start
-nav_order: 1
-has_children: true
----
-
 # Enchanted surrogates
 
 <span class="hero-subtitle">
