@@ -105,7 +105,7 @@ class Supervisor:
 
         print("Starting runs...")
 
-        enchanted_dataset = pd.DataFrame()
+        last_complete_dataset = pd.DataFrame()
 
         for depth, group in enumerate(self.groups):
             batch_number = 0
@@ -121,14 +121,15 @@ class Supervisor:
                         self.args.supervisor
                         and self.args.supervisor.get("summary_datatype") == "parquet"
                     ):
-                        enchanted_dataset = pd.read_parquet(
+                        batch_dataset = pd.read_parquet(
                             os.path.join(
                                 self.base_run_dir, "enchanted_dataset.parquet"
                             ),
                             engine="pyarrow",
                         )
                     else:
-                        enchanted_dataset = pd.read_csv(
+                        # TODO: In nested runs, the previous complete dataset should also be stored and read into last_complete_dataset
+                        batch_dataset = pd.read_csv(
                             os.path.join(self.base_run_dir, "enchanted_dataset.csv")
                         )
 
@@ -137,8 +138,8 @@ class Supervisor:
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = []
-                if not enchanted_dataset.empty:
-                    for parent in enchanted_dataset.to_dict(orient='records'):
+                if not last_complete_dataset.empty:
+                    for parent in last_complete_dataset.to_dict(orient='records'):
                         for sample in samples:
                             expanded.append({**parent, **sample})
                 else:
@@ -182,11 +183,11 @@ class Supervisor:
                 batch_number += 1
 
             # Update data rows for next nesting level
-            enchanted_dataset = batch_dataset.copy()
+            last_complete_dataset = batch_dataset.copy()
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
-            self.create_hdf5(enchanted_dataset)
+            self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
         self.save_files(self.save_files_arg)
