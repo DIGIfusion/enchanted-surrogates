@@ -90,7 +90,7 @@ class Supervisor:
                     " enchanted_run.yaml was found"
                 )
 
-            self.continue_with_base_run_dir(self.base_run_dir, config_path)
+            self.continue_with_base_run_dir(config_path)
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
@@ -213,28 +213,34 @@ class Supervisor:
             self.args.supervisor
             and self.args.supervisor.get("summary_datatype") == "parquet"
         ):
-            return pd.read_parquet(
-                os.path.join(self.base_run_dir, f"{filename}.parquet"),
-                engine="pyarrow",
-            )
+            file = os.path.join(self.base_run_dir, f"{filename}.parquet")
+            if os.path.exists(file):
+                return pd.read_parquet(
+                    file,
+                    engine="pyarrow",
+                )
+            return pd.DataFrame()
 
-        return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+        file = os.path.join(self.base_run_dir, f"{filename}.csv")
+        if os.path.exists(file):
+            return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
 
-    def continue_with_base_run_dir(self, base_run_dir, config_path):
+        return pd.DataFrame()
+
+    def continue_with_base_run_dir(self, config_path):
         """
         Deletes old unfinished bathes prompting the user if they want to keep them
         Creates a base_run_dir if one does not exist
 
         Attributes:
-            base_run_dir (str): Path where runner saves result files
             config_path (str or None): Optional path for configuration file where
                 configuration is fetched from
         """
 
-        if not os.path.exists(base_run_dir):
-            return self.create_base_run_dir(base_run_dir, config_path)
+        if not os.path.exists(self.base_run_dir):
+            return self.create_base_run_dir(self.base_run_dir, config_path)
 
-        dirs = glob.glob(f"{base_run_dir}/{self.batch_number + 1}*")
+        dirs = glob.glob(f"{self.base_run_dir}/d{self.depth}_b{self.batch_number + 1}*")
 
         if not dirs:
             return
