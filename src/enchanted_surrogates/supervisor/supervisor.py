@@ -175,15 +175,7 @@ class Supervisor:
             self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
-<<<<<<< HEAD
-<<<<<<< HEAD
         self.save_files(self.save_files_arg)
-=======
-        self.save_files(self.save_files)
->>>>>>> 4f7d2c9 (feat: some linting issues fixed)
-=======
-        self.save_files(self.save_files_arg)
->>>>>>> c0dc2a5 (feat: linter fixing)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -491,46 +483,18 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     def save_files(self, argument: str):
         """
         Deletes files according to command given.
         """
         default_list = ["enchanted_dataset.csv", "runs.h5"]
-=======
-    def save_files(
-        self,
-        argument: str,
-        default_list: list = ["enchanted_dataset.csv", "runs.h5"]
-        ):
-        """
-        Deletes files according to command given.
-        """
->>>>>>> 4f7d2c9 (feat: some linting issues fixed)
-=======
-    def save_files(self, argument: str):
-        """
-        Deletes files according to command given.
-        """
-        default_list = ["enchanted_dataset.csv", "runs.h5"]
->>>>>>> c0dc2a5 (feat: linter fixing)
         if argument == "all":
             return
 
         if argument == "custom":
             saved_list = import_saved_files_list(self.args)
             allowed_files = set(default_list) | set(saved_list)
-<<<<<<< HEAD
-<<<<<<< HEAD
         elif argument == "none":
-=======
-
-        if argument == "none":
->>>>>>> 4f7d2c9 (feat: some linting issues fixed)
-=======
-        elif argument == "none":
->>>>>>> c0dc2a5 (feat: linter fixing)
             allowed_files = set(default_list)
         else:
             return
