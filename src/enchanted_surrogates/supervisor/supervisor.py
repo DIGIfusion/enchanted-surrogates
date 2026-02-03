@@ -115,21 +115,11 @@ class Supervisor:
 
                 if depth == self.depth and hasattr(self, "batch_number"):
                     batch_number = self.batch_number + 1
-                    if (
-                        self.args.supervisor
-                        and self.args.supervisor.get("summary_datatype") == "parquet"
-                    ):
-                        batch_dataset = pd.read_parquet(
-                            os.path.join(
-                                self.base_run_dir, "enchanted_dataset.parquet"
-                            ),
-                            engine="pyarrow",
-                        )
-                    else:
-                        # TODO: In nested runs, the previous complete dataset should also be stored and read into last_complete_dataset
-                        batch_dataset = pd.read_csv(
-                            os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                        )
+
+                    batch_dataset = self.read_summary()
+                    last_complete_dataset = self.read_summary(
+                        "last_complete_enchanted_dataset"
+                    )
 
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
@@ -137,7 +127,7 @@ class Supervisor:
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = []
                 if not last_complete_dataset.empty:
-                    for parent in last_complete_dataset.to_dict(orient='records'):
+                    for parent in last_complete_dataset.to_dict(orient="records"):
                         for sample in samples:
                             expanded.append({**parent, **sample})
                 else:
@@ -164,24 +154,18 @@ class Supervisor:
                     yaml.safe_dump(data, f)
 
                 # Create summary csv or parquet file
-                if (
-                    self.args.supervisor
-                    and self.args.supervisor.get("summary_datatype") == "parquet"
-                ):
-                    batch_dataset.to_parquet(
-                        os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                        engine="pyarrow",
-                        index=True,
-                    )
-                else:
-                    batch_dataset.to_csv(
-                        os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                    )
+                self.write_summary(batch_dataset)
 
                 batch_number += 1
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
+
+            if depth == len(self.groups):
+                continue
+
+            # Create a summary file with last_complete_dataset
+            self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
@@ -191,6 +175,49 @@ class Supervisor:
         print("Shutting down scheduler and workers...")
         for group in self.groups:
             group.executor.clean()
+
+    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset"):
+        """
+        Writes a summary of dataset to base_run_dir/filename
+        This functionality is used within the start function to
+        enable seamless sampling.
+
+        Attributes:
+            dataset (pd.DataFrame): dataset to be written
+            filename (str): filename for the written file
+        """
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            dataset.to_parquet(
+                os.path.join(self.base_run_dir, f"{filename}.parquet"),
+                engine="pyarrow",
+                index=True,
+            )
+        else:
+            dataset.to_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+
+    def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
+        """
+        Reads the summary written by write_summary.
+
+        Attributes:
+            filename (str): file to be read
+
+        Returns:
+            pd.Dataframe: read dataset
+        """
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            return pd.read_parquet(
+                os.path.join(self.base_run_dir, f"{filename}.parquet"),
+                engine="pyarrow",
+            )
+
+        return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
 
     def continue_with_base_run_dir(self, base_run_dir, config_path):
         """
