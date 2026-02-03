@@ -80,9 +80,10 @@ class Supervisor:
             if os.path.isfile(previous_run_batches):
                 with open(previous_run_batches, "r", encoding="ascii") as f:
                     previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
-                self.sampler.skip(previous_run_data["batch_number"] + 1)
                 self.batch_number = previous_run_data["batch_number"]
                 self.depth = previous_run_data["depth"]
+                if len(self.groups) > self.depth:
+                    self.groups[self.depth].sampler.skip(self.batch_number + 1)
             else:
                 raise RuntimeError(
                     "Tried to continue from previous sampling but no "
