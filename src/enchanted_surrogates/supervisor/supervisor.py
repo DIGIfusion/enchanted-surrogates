@@ -175,7 +175,11 @@ class Supervisor:
             self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
+<<<<<<< HEAD
         self.save_files(self.save_files_arg)
+=======
+        self.save_files(self.save_files)
+>>>>>>> 4f7d2c9 (feat: some linting issues fixed)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -483,18 +487,34 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
+<<<<<<< HEAD
     def save_files(self, argument: str):
         """
         Deletes files according to command given.
         """
         default_list = ["enchanted_dataset.csv", "runs.h5"]
+=======
+    def save_files(
+        self,
+        argument: str,
+        default_list: list = ["enchanted_dataset.csv", "runs.h5"]
+        ):
+        """
+        Deletes files according to command given.
+        """
+>>>>>>> 4f7d2c9 (feat: some linting issues fixed)
         if argument == "all":
             return
 
         if argument == "custom":
             saved_list = import_saved_files_list(self.args)
             allowed_files = set(default_list) | set(saved_list)
+<<<<<<< HEAD
         elif argument == "none":
+=======
+
+        if argument == "none":
+>>>>>>> 4f7d2c9 (feat: some linting issues fixed)
             allowed_files = set(default_list)
         else:
             return
