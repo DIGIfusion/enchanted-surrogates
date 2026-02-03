@@ -36,5 +36,10 @@ def run_simulation_task(
     runner_output.update(params)
     runner_output['run_dir'] = run_dir
     df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
+    
+    # Reorder columns so run_dir is always the last
+    rd_column = df_point.pop("run_dir")
+    df_point["run_dir"] = rd_column
+
     df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
     return runner_output
