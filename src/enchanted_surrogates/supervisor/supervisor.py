@@ -134,12 +134,13 @@ class Supervisor:
                 samples = group.sampler.get_next_samples()
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
-                expanded = samples
-                # TODO: Fix for seamless sampling
-                # for parent in rows:
-                #    for sample in samples:
-                #        merged = {**parent, **sample}
-                #        expanded.append(merged)
+                expanded = []
+                if not enchanted_dataset.empty:
+                    for parent in enchanted_dataset.to_dict(orient='records'):
+                        for sample in samples:
+                            expanded.append({**parent, **sample})
+                else:
+                    expanded = samples
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
@@ -150,13 +151,11 @@ class Supervisor:
                 group.executor.execute(zip(run_dirs, expanded), group.sampler)
 
                 # Wait processes of current batch to complete
-                # self.wait_all_processes(f"d{depth}_b{batch_number}")
                 self.wait_batch_dirs(run_dirs)
 
                 # Then the files in this batch should be saved into summary files
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
-                # enchanted_dataset = pd.concat([enchanted_dataset, batch_dataset])
 
                 data = {"batch_number": batch_number, "depth": depth}
                 path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
@@ -168,28 +167,20 @@ class Supervisor:
                     self.args.supervisor
                     and self.args.supervisor.get("summary_datatype") == "parquet"
                 ):
-                    enchanted_dataset.to_parquet(
+                    batch_dataset.to_parquet(
                         os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
                         engine="pyarrow",
                         index=True,
                     )
                 else:
-                    enchanted_dataset.to_csv(
+                    batch_dataset.to_csv(
                         os.path.join(self.base_run_dir, "enchanted_dataset.csv")
                     )
-
-                # Merge batch results with results of previous batches on current nesting level
-                # for run_dir, row in zip(run_dirs, expanded):
-                # datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
-                # if os.path.isfile(datapoint_file):
-                # result = pd.read_csv(datapoint_file).iloc[0].to_dict()
-                # combined = {**row, **result}
-                #   next_rows.append(combined)
 
                 batch_number += 1
 
             # Update data rows for next nesting level
-            enchanted_dataset = pd.concat([enchanted_dataset, batch_dataset])
+            enchanted_dataset = batch_dataset.copy()
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
