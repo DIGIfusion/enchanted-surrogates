@@ -3,11 +3,12 @@ executors:
     type: LocalExecutor
 samplers:
   s1:
-    type: RandomSampler
+    type: RandomSamplerWithKill
     bounds: [[0.0, 1.0], [0.0, 10.0]]
     budget: 400
     batch_size: 100
     parameters: ['c1', 'c2']
+    kill_after: 3
 runners:
   r1:
     type: ExampleRunner
