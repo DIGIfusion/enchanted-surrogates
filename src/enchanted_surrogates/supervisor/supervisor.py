@@ -188,8 +188,8 @@ class Supervisor:
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(enchanted_dataset)
 
-        # Clean unwanted files 
-        self.delete_files(self.save_files)
+        # Clean unwanted files
+        self.save_files(self.save_files)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -447,22 +447,23 @@ class Supervisor:
                     run_group.sampler.__class__.__name__
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
-        
-    def delete_files(self, argument: str, default_list: list = ["enchanted_dataset.csv", "runs.h5"]):
-        """
-        Deletes files according to command given
-        """
 
+    def save_files(
+        self,
+        argument: str,
+        default_list: list = ["enchanted_dataset.csv", "runs.h5"]
+        ):
+        """
+        Deletes files according to command given.
+        """
         if argument == "all":
             return
-        
+
         if argument == "custom":
-            # get the list, if not list, do same action as "none"
             saved_list = import_saved_files_list(self.args)
             allowed_files = set(default_list) | set(saved_list)
-            
+
         if argument == "none":
-            # here should be some logic to delete everything but default files
             allowed_files = set(default_list)
 
         for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
