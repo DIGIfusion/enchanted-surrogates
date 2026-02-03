@@ -1,4 +1,6 @@
 import pytest
+import os
+import pandas as pd
 from unittest.mock import MagicMock
 
 @pytest.fixture
@@ -31,6 +33,12 @@ def fake_executor():
     def _factory():
         executor = MagicMock()
         executor.__name__ = "MockExecutor"
+
+        def execute(input, sampler):
+            for run_dir, sample in input:
+                create_fake_output_csv(run_dir, sample)
+
+        executor.execute.side_effect = execute
         return executor
 
     return _factory
@@ -56,3 +64,14 @@ def patch_supervisor_imports(monkeypatch, fake_sampler, fake_executor):
         return sampler, executor
 
     return _factory
+
+def create_fake_output_csv(run_dir: str, sample: dict):
+    """Mock version of what run_simulation_task does"""
+    os.makedirs(run_dir, exist_ok=True)
+    output = {
+        'success': True,
+        **sample,
+        'run_dir': run_dir
+    }
+    df_point = pd.DataFrame({r:[v] for r,v in output.items()})
+    df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
