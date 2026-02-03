@@ -72,7 +72,7 @@ class Supervisor:
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
-        self.save_files = args.supervisor.get("save_files", "all")
+        self.save_files_arg = args.supervisor.get("save_files", "all")
 
         if self.base_run_dir is None:
             raise ValueError("base_run_dir is not set in the provided configuration")
@@ -189,7 +189,7 @@ class Supervisor:
             self.create_hdf5(enchanted_dataset)
 
         # Clean unwanted files
-        self.save_files(self.save_files)
+        self.save_files(self.save_files_arg)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -448,23 +448,21 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
-    def save_files(
-        self,
-        argument: str,
-        default_list: list = ["enchanted_dataset.csv", "runs.h5"]
-        ):
+    def save_files(self, argument: str):
         """
         Deletes files according to command given.
         """
+        default_list = ["enchanted_dataset.csv", "runs.h5"]
         if argument == "all":
             return
 
         if argument == "custom":
             saved_list = import_saved_files_list(self.args)
             allowed_files = set(default_list) | set(saved_list)
-
-        if argument == "none":
+        elif argument == "none":
             allowed_files = set(default_list)
+        else:
+            return
 
         for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
             # Remove files
