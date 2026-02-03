@@ -1,16 +1,26 @@
-executor:
-  type: LocalExecutor
-sampler:
-  type: RandomSampler
-  bounds: [[0.0, 1.0], [0.0, 10.0]]
-  budget: 1000
-  batch_size: 100
-  parameters: ['c1', 'c2']
-runner:
-  type: ExampleRunner
-  other_params: {}
+executors:
+  e1:
+    type: LocalExecutor
+samplers:
+  s1:
+    type: RandomSamplerWithKill
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 400
+    batch_size: 100
+    parameters: ['c1', 'c2']
+    kill_after: 3
+runners:
+  r1:
+    type: ExampleRunner
+    other_params: {}
+
 supervisor:
   base_run_dir: "data_dir/local"
-  run_mode: "fresh" # "fresh" / "resume" / "extend"
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+
 storage:
   type: hdf5

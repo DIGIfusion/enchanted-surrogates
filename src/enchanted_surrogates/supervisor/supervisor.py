@@ -80,16 +80,17 @@ class Supervisor:
             if os.path.isfile(previous_run_batches):
                 with open(previous_run_batches, "r", encoding="ascii") as f:
                     previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
-                self.sampler.skip(previous_run_data["batch_number"] + 1)
                 self.batch_number = previous_run_data["batch_number"]
                 self.depth = previous_run_data["depth"]
+                if len(self.groups) > self.depth:
+                    self.groups[self.depth].sampler.skip(self.batch_number + 1)
             else:
                 raise RuntimeError(
                     "Tried to continue from previous sampling but no "
                     " enchanted_run.yaml was found"
                 )
 
-            self.continue_with_base_run_dir(self.base_run_dir, config_path)
+            self.continue_with_base_run_dir(config_path)
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
@@ -115,21 +116,11 @@ class Supervisor:
 
                 if depth == self.depth and hasattr(self, "batch_number"):
                     batch_number = self.batch_number + 1
-                    if (
-                        self.args.supervisor
-                        and self.args.supervisor.get("summary_datatype") == "parquet"
-                    ):
-                        batch_dataset = pd.read_parquet(
-                            os.path.join(
-                                self.base_run_dir, "enchanted_dataset.parquet"
-                            ),
-                            engine="pyarrow",
-                        )
-                    else:
-                        # TODO: In nested runs, the previous complete dataset should also be stored and read into last_complete_dataset
-                        batch_dataset = pd.read_csv(
-                            os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                        )
+
+                    batch_dataset = self.read_summary()
+                    last_complete_dataset = self.read_summary(
+                        "last_complete_enchanted_dataset"
+                    )
 
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
@@ -137,7 +128,7 @@ class Supervisor:
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = []
                 if not last_complete_dataset.empty:
-                    for parent in last_complete_dataset.to_dict(orient='records'):
+                    for parent in last_complete_dataset.to_dict(orient="records"):
                         for sample in samples:
                             expanded.append({**parent, **sample})
                 else:
@@ -164,24 +155,18 @@ class Supervisor:
                     yaml.safe_dump(data, f)
 
                 # Create summary csv or parquet file
-                if (
-                    self.args.supervisor
-                    and self.args.supervisor.get("summary_datatype") == "parquet"
-                ):
-                    batch_dataset.to_parquet(
-                        os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
-                        engine="pyarrow",
-                        index=True,
-                    )
-                else:
-                    batch_dataset.to_csv(
-                        os.path.join(self.base_run_dir, "enchanted_dataset.csv")
-                    )
+                self.write_summary(batch_dataset)
 
                 batch_number += 1
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
+
+            if depth == len(self.groups):
+                continue
+
+            # Create a summary file with last_complete_dataset
+            self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
@@ -192,21 +177,70 @@ class Supervisor:
         for group in self.groups:
             group.executor.clean()
 
-    def continue_with_base_run_dir(self, base_run_dir, config_path):
+    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset"):
+        """
+        Writes a summary of dataset to base_run_dir/filename
+        This functionality is used within the start function to
+        enable seamless sampling.
+
+        Attributes:
+            dataset (pd.DataFrame): dataset to be written
+            filename (str): filename for the written file
+        """
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            dataset.to_parquet(
+                os.path.join(self.base_run_dir, f"{filename}.parquet"),
+                engine="pyarrow",
+                index=True,
+            )
+        else:
+            dataset.to_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+
+    def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
+        """
+        Reads the summary written by write_summary.
+
+        Attributes:
+            filename (str): file to be read
+
+        Returns:
+            pd.Dataframe: read dataset
+        """
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            file = os.path.join(self.base_run_dir, f"{filename}.parquet")
+            if os.path.exists(file):
+                return pd.read_parquet(
+                    file,
+                    engine="pyarrow",
+                )
+            return pd.DataFrame()
+
+        file = os.path.join(self.base_run_dir, f"{filename}.csv")
+        if os.path.exists(file):
+            return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+
+        return pd.DataFrame()
+
+    def continue_with_base_run_dir(self, config_path):
         """
         Deletes old unfinished bathes prompting the user if they want to keep them
         Creates a base_run_dir if one does not exist
 
         Attributes:
-            base_run_dir (str): Path where runner saves result files
             config_path (str or None): Optional path for configuration file where
                 configuration is fetched from
         """
 
-        if not os.path.exists(base_run_dir):
-            return self.create_base_run_dir(base_run_dir, config_path)
+        if not os.path.exists(self.base_run_dir):
+            return self.create_base_run_dir(self.base_run_dir, config_path)
 
-        dirs = glob.glob(f"{base_run_dir}/{self.batch_number + 1}*")
+        dirs = glob.glob(f"{self.base_run_dir}/d{self.depth}_b{self.batch_number + 1}*")
 
         if not dirs:
             return
