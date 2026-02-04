@@ -45,23 +45,34 @@ def fake_executor():
 
 @pytest.fixture
 def patch_supervisor_imports(monkeypatch, fake_sampler, fake_executor):
-    def _factory(sample_batches=None):
-        if sample_batches is None:
-            sample_batches = []
+    def _factory(sampler_batches=None):
+        if sampler_batches is None:
+            sampler_batches = []
 
-        sampler = fake_sampler(sample_batches)
-        executor = fake_executor()
+        batch_iter = iter(sampler_batches)
+        samplers = []
+        executors = []
+
+        def import_sampler(*args, **kwargs):
+            sampler = fake_sampler(next(batch_iter, [[{}]]))
+            samplers.append(sampler)
+            return sampler
+
+        def import_executor(*args, **kwargs):
+            executor = fake_executor()
+            executors.append(executor)
+            return executor
 
         monkeypatch.setattr(
             "enchanted_surrogates.supervisor.nested_imports.import_sampler",
-            lambda *args, **kwargs: sampler,
+            import_sampler
         )
         monkeypatch.setattr(
             "enchanted_surrogates.supervisor.nested_imports.import_executor",
-            lambda *args, **kwargs: executor,
+            import_executor
         )
 
-        return sampler, executor
+        return samplers, executors
 
     return _factory
 

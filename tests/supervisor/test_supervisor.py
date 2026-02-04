@@ -75,16 +75,18 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
             assert key in meta
 
 def test_start_calls_execute_for_each_sample(tmp_path, patch_supervisor_imports):
-    sampler, executor = patch_supervisor_imports([
-        [{"a": 1}, {"b": 2}],
-        [{"a": 3}],
+    samplers, executors = patch_supervisor_imports([
+        [ # sampler 1
+            [{"a": 1}, {"a": 2}],
+            [{"a": 3}]
+        ]
     ])
 
     supervisor = Supervisor(make_args(tmp_path))
     supervisor.start()
 
-    assert sampler.get_next_samples.call_count == 2
-    assert executor.execute.call_count == 2
+    assert samplers[-1].get_next_samples.call_count == 2
+    assert executors[-1].execute.call_count == 2
 
 def test_save_files_option_all(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
