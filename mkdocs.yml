@@ -1,0 +1,107 @@
+site_name: Enchanted Surrogates Documentation
+site_description: Documentation for Enchanted Surrogates
+#site_url: 
+
+theme:
+  name: material
+
+  # Color palette configuration
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+
+  # Logo displayed in the header instead of the site name
+  logo: img/logo.png
+
+  # Favicon shown in the browser tab
+  favicon: img/favicon.ico
+
+  # Custom HTML overrides
+  # This replaces Jekyll `_includes/head_custom.html`
+  # Files should be placed under: docs/overrides/partials/
+  custom_dir: docs/overrides
+
+  features:
+    - navigation.instant       # Instant page loading
+    - navigation.tracking      # URL updates based on scroll position
+    - navigation.sections      # Group navigation sections
+    - navigation.expand        # Expand navigation by default
+    - navigation.top           # Back-to-top button
+    - content.code.copy        # Copy button for code blocks
+    - content.tabs.link        # Sync tabs across pages
+
+  enable_mathjax: true
+
+plugins:
+  # Full-text search
+  - search
+
+  # Automatic documentation generation from Python docstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          # Path to the Python source code
+          paths:
+            - src
+          options:
+            # Google-style docstrings
+            docstring_style: google
+            # Show link to source code
+            show_source: true
+            # Separate function signature from description
+            separate_signature: true
+            # Merge __init__ docstring into class documentation
+            merge_init_into_class: true
+            # Disable runtime inspection (safer for CI)
+            allow_inspection: false
+
+markdown_extensions:
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+  # Tabbed content blocks
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  # Syntax highlighting and inline code improvements
+  - pymdownx.inlinehilite
+  - pymdownx.highlight
+  - pymdownx.snippets
+
+  # Math extension
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  # Main landing page
+  - Start: index.md
+
+  # Samplers documentation section
+  - Samplers:
+      - Array sampler: samplers/array_sampler.md
+      - Bayesian optimization sampler: samplers/bayesian_optimization_sampler.md
+      - Grid sampler: samplers/grid_sampler.md
+      - Nested sampler: samplers/nested_sampler.md
+      - Random sampler: samplers/random_sampler.md
+
+  # Executors documentation section
+  - Executors:
+      - Dask executor: executors/dask_executor.md
+      - Joblib executor: executors/joblib_executor.md
+      - Local executor: executors/local_executor.md
+  
+  - Supervisor: supervisor.md
+
+  # Plugins documentation section
+  - Plugins:
+      - Overview: plugins/index.md
+      - Helena plugin: plugins/helena_plugin.md
+      - Mishka plugin: plugins/mishka_plugin.md
+      - Dream plugin: plugins/dream_plugin.md
+      - Castor plugin: plugins/castor_plugin.md
+      - Gene plugin: plugins/gene_plugin.md
+  
+  - Releases: releases.md
