@@ -90,9 +90,10 @@ nav:
   # Executors documentation section
   - Executors:
       - Dask executor: executors/dask_executor.md
-      - Dask nested executor: executors/dask_nested_executor.md
       - Joblib executor: executors/joblib_executor.md
       - Local executor: executors/local_executor.md
+  
+  - Supervisor: supervisor.md
 
   # Plugins documentation section
   - Plugins:
