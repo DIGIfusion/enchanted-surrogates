@@ -30,35 +30,11 @@ class LocalExecutor(Executor):
         - Cleanup is minimal since no external resources are allocated.
     """
 
-    def start_runs(self):
-        """
-        Start execution of simulation runs.
-
-        ## Workflow
-
-        1. Initialize the sampler using the provided `sampler_config`.
-        2. While the sampler has remaining budget:
-            - Generate the next batch of samples.
-            - For each sample:
-                - Create a unique run directory.
-                - Execute the simulation task locally.
-                - Register the result with the sampler.
-
-        !!! notes
-            - Each simulation is executed synchronously.
-            - Run directories are created using UUIDs to avoid name collisions.
-            - This method blocks until all simulations are completed.
-        """
-        self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
-        while self.sampler.has_budget:
-            samples: list[dict] = self.sampler.get_next_samples()
-
-            for sample in samples:
-                sample_run_dir = os.path.join(self.base_run_dir, str(uuid.uuid4()))  # TODO. uuid.uuid should probably have a random seed ? 
-                new_future = run_simulation_task(
-                    self.runner_config, sample_run_dir, params=sample)
-                self.sampler.register_future(new_future)
+    def execute(self, input: list[(str, dict)], sampler):
+        for run_dir, sample in input:
+            new_future = run_simulation_task(
+                self.runner_config, run_dir, params=sample)
+            sampler.register_future(new_future)
 
     def clean(self):
         """

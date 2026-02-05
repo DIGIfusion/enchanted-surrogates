@@ -32,44 +32,22 @@ class JoblibExecutor(Executor):
         - No dynamic scaling or distributed execution is supported.
         - Cleanup is minimal since `joblib` runs in-process and does not leave persistent resources.
 
-    ---
-
     """
-    def __init__(self, *args, **kwargs):
+
+    def execute(self, input: list[(str, dict)], sampler):
         """
-        Initialize the JoblibExecutor.
+        Execute simulation tasks in parallel using joblib.
 
-        Args:
-            - *args: Additional positional arguments passed to the base Executor.
-            - **kwargs: Additional keyword arguments passed to the base Executor.
-
+        Params:
+            input (list[(str, dict)]): A list of simulation tasks to execute. Each element is a tuple consisting of path to the directory where the simulation run should be executed and dictionary of simulation parameters.
+            sampler (object): Sampler instance responsible for tracking submitted simulation tasks
         """
-        super().__init__(*args, **kwargs)
-        self.sampler = import_sampler(
-            type=self.sampler_config.pop("type"), sampler_config=self.sampler_config)
-
-    def start_runs(self):
-        """
-        Start execution of simulation runs.
-
-        ## Workflow
-
-        1. While the sampler has remaining budget:
-            - Generate the next batch of samples using the sampler.
-            - Create a unique directory for each sample run.
-            - Execute the simulation tasks in parallel using `joblib.Parallel`.
-            - Register the returned futures with the sampler.
-
-        """
-        while self.sampler.has_budget:
-            samples: list[dict] = self.sampler.get_next_samples()
-            sample_run_dirs = [os.path.join(self.base_run_dir, str(uuid.uuid4())) for _ in samples]
-            new_futures = joblib.Parallel(n_jobs=-1, verbose=10)(
-                joblib.delayed(run_simulation_task)(
-                    self.runner_config, sample_run_dir, params=sample)
-                for sample, sample_run_dir in zip(samples, sample_run_dirs)
-            )
-            self.sampler.register_futures(new_futures)
+        new_futures = joblib.Parallel(n_jobs=-1, verbose=10)(
+            joblib.delayed(run_simulation_task)(
+                self.runner_config, sample_run_dir, params=sample)
+            for sample_run_dir, sample in input
+        )
+        sampler.register_futures(new_futures)
 
     def clean(self):
         """
