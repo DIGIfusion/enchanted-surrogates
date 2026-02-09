@@ -1,10 +1,3 @@
----
-layout: default
-title: Plugins
-nav_order: 4
-has_children: true
----
-
 # Plugins
 
 Plugins extend the functionality of the `enchanted-surrogates` package by adding support for specific simulation codes. Each plugin typically consists of a parser and a runner that handle the specifics of reading/writing input/output files and executing simulations for a particular code.
