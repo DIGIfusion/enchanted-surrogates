@@ -2,6 +2,7 @@ from .base_runner import Runner
 import pandas as pd
 import warnings
 import numpy as np
+from dask.distributed import print
 
 class NearestNeighbourRunner(Runner):
     """
@@ -11,7 +12,7 @@ class NearestNeighbourRunner(Runner):
     - tolerance-based tie detection
     """
 
-    def __init__(self, data_csv, output_label=None):
+    def __init__(self, data_csv, output_label=None, *args, **kwargs):
         self.data_csv = data_csv
         
         self.data_df = pd.read_csv(self.data_csv)
@@ -25,6 +26,10 @@ class NearestNeighbourRunner(Runner):
                     f'TAKING FIRST: {output_col[0]}'
                 )
             self.output_label = output_col[0]
+        
+        self.fixed_params = kwargs.get('fixed_params', {})
+        
+        self.tag = kwargs.get('tag', '')
              
     def single_code_run(self, run_dir: str, params: dict = None, tol: float = 1e-12) -> dict:
         """
@@ -35,6 +40,8 @@ class NearestNeighbourRunner(Runner):
         - If multiple nearest neighbours are within tolerance of the minimum
           distance, warn and take the first.
         """
+        print('debug nearest neighbour runner. run_dir:', run_dir)
+        params = {**params, **self.fixed_params}
         if params is None or len(params) == 0:
             raise ValueError("params must be a non-empty dict of column:value pairs")
 
@@ -63,11 +70,11 @@ class NearestNeighbourRunner(Runner):
                 f"Taking the first match (index {matching_rows.index[0]})."
             )
             nearest_neighbour = matching_rows.iloc[0][self.output_label]
-            return {'success': True, self.output_label: nearest_neighbour}
+            return {'success': True, self.output_label+self.tag: nearest_neighbour}
 
         elif len(matching_rows) == 1:
             nearest_neighbour = matching_rows.iloc[0][self.output_label]
-            return {'success': True, self.output_label: nearest_neighbour}
+            return {'success': True, self.output_label+self.tag: nearest_neighbour}
 
         # --- 2. No exact match → compute Euclidean nearest neighbour ------------
         df_sub = self.data_df[list(params.keys())]
@@ -81,17 +88,17 @@ class NearestNeighbourRunner(Runner):
         # Identify all rows within tolerance of the minimum distance
         nearest_indices = np.where(np.isclose(distances, min_dist, atol=tol))[0]
 
+        idx = nearest_indices[0]
+        nearest_neighbour = self.data_df.loc[idx, self.output_label]
+
         if len(nearest_indices) > 1:
             warnings.warn(
                 f"Multiple nearest neighbours found within tolerance {tol} "
                 f"of minimum distance {min_dist}. "
-                f"Taking the first (index {nearest_indices[0]})."
+                f"Possible nearest neighbout outputs: {self.data_df.loc[nearest_indices, self.output_label].tolist()}"
+                f"Taking the first (index {nearest_neighbour})."
             )
-
-        idx = nearest_indices[0]
-        nearest_neighbour = self.data_df.loc[idx, self.output_label]
-
         return {
             'success': True,
-            self.output_label: nearest_neighbour
+            self.output_label+self.tag: nearest_neighbour
         }

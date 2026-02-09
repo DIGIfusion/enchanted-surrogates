@@ -481,8 +481,8 @@ class SgppSampler(Sampler):
         y = self.surrogate_predict(x.reshape(-1,1))
         plt.plot(x,y, label = 'Prediction')
         
-        x_grid = np.array(self.train.keys()).flatten()
-        y_grid = np.array(self.train.values()).flatten()
+        x_grid = np.array(list(self.train.keys()), dtype=float)
+        y_grid = np.array(list(self.train.values()), dtype=float)
         
         plt.plot(x_grid, y_grid, label='Sparse Grid')
         plt.legend()
@@ -1638,8 +1638,8 @@ class SgppSampler(Sampler):
                     with open(grid_file_path, 'r') as file:
                         serialized_grid = file.read()
                         self.grid = pysgpp.Grid.unserialize(serialized_grid)
-                        self.gridStorage = sgpp.grid.getStorage()
-                        self.gridGen = sgpp.grid.getGenerator()
+                        self.gridStorage = self.grid.getStorage()
+                        self.gridGen = self.grid.getGenerator()
                         surpluses = pysgpp.DataVector.fromFile(surpluses_file_path)
                         self.alpha = surpluses
                 except FileNotFoundError:

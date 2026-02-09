@@ -23,7 +23,7 @@ class RandomSampler(Sampler):
         samples = []
         for _ in range(self.batch_size):
             # Use the generator instead of np.random
-            params = [rng.uniform(low, high) for low, high in self.bounds]
+            params = [self.rng.uniform(low, high) for low, high in self.bounds]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             samples.append(param_dict)
         
