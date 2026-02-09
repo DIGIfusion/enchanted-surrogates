@@ -295,11 +295,14 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     # ---- training data / GP ---------------------------------------------------
 
-    def append_train_data(self, batch_dir):
-        new_data_df = pd.read_csv(os.path.join(batch_dir, 'enchanted_dataset.csv'))
+    def append_train_data(self, batch_dir=None):
+        if batch_dir is None:
+            new_data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'))
+        else:
+            new_data_df = pd.read_csv(os.path.join(batch_dir, 'enchanted_dataset.csv'))
         output_col = [col for col in new_data_df.columns if 'output' in col]
         if len(output_col) != 1:
-            raise RuntimeError('Exactly one output column required.')
+            raise RuntimeError(f'Exactly one output column required in training data but found: {output_col}')
         train_df = new_data_df[self.parameters + output_col]
         new_train = {
             tuple(row[col] for col in self.parameters): float(row[output_col[0]])
@@ -309,6 +312,9 @@ class GpyAnalyticSobolSamplerOld(Sampler):
         self.train.update(new_train)
 
     def _get_unitXY(self):
+        if len(self.train) == 0:
+            print('no training data, getting from base enchanted dataset')
+            self.append_train_data()
         X_real = np.array([list(k) for k in self.train.keys()], dtype=float)
         Y = np.array(list(self.train.values()), dtype=float).reshape(-1, 1)
         X_unit = self.to_unit(X_real)
@@ -535,15 +541,10 @@ class GpyAnalyticSobolSamplerOld(Sampler):
 
     def surrogate_predict(self, samples):
         """Accept samples in real bounds, scale to unit, predict with GP."""
-        if len(self.train) == 0:
-            raise RuntimeError('No training data to build surrogate.')
-        X_unit, Y = self._get_unitXY()
-        kernel = GPy.kern.RBF(input_dim=X_unit.shape[1], ARD=True)
-        self.gp_model = GPy.models.GPRegression(X_unit, Y, kernel)
-        try:
-            self.gp_model.optimize(messages=False)
-        except Exception:
-            pass
+        
+        if self.gp_model is None:
+            self.fit()
+
         samples_unit = self.to_unit(samples)
         ypred, _ = self.gp_model.predict(samples_unit)
         return ypred.flatten()
@@ -854,6 +855,20 @@ class GpyAnalyticSobolSamplerOld(Sampler):
             score = 4*var * ((mu-y_nearest)**2 + 2*var)
             return score
         
+        elif mode == "gradunc":
+            X_pool = np.atleast_2d(X_pool)
+            dmu, dvar = model.predictive_gradients(X_pool)
+
+            # dvar is (N, D)
+            if dvar.ndim != 2:
+                raise ValueError(f"Unexpected dvar shape: {dvar.shape}")
+
+            # Largest per-dimension gradient variance
+            grad_unc = np.max(dvar, axis=1)
+
+            return grad_unc
+
+                        
         elif mode in ("oracle_rmse", 'oracle_ipv', 'oracle'):
             print('ACQUISITION MODE: oracle')
             X_train, Y_train = self._get_unitXY()
@@ -921,16 +936,18 @@ class GpyAnalyticSobolSamplerOld(Sampler):
                 return ipv_orig - ipv_aug
 
 
-            from joblib import Parallel, delayed
+            from joblib import Parallel, delayed, cpu_count
+
+            print("Joblib sees", cpu_count(), "cores for oracle acquisition parallelism.")
 
             if mode in ('oracle_rmse', 'oracle'):
-                score = np.array(Parallel(n_jobs=-1, prefer="threads")(
+                score = np.array(Parallel(n_jobs=-1, prefer="threads", verbose=10)(
                     delayed(new_point_rmse_decrease)(xi, yi)
                     for xi, yi in zip(X_pool, pool_y)
                 ))
 
             if mode == 'oracle_ipv':
-                score = np.array(Parallel(n_jobs=-1, prefer="threads")(
+                score = np.array(Parallel(n_jobs=-1, prefer="threads", verbose=10)(
                     delayed(oracle_ipv_reduction)(xi, yi)
                     for xi, yi in zip(X_pool, pool_y)
                 ))
@@ -967,12 +984,12 @@ class GpyAnalyticSobolSamplerOld(Sampler):
         return new_model
 
 
-    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None):
+    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None, pool_y=None):
         results = []
         for i in range(0, len(X_pool), chunk_size):
             block = X_pool[i:i + chunk_size]
             results.append(
-                self._compute_acquisition_unchunked(block, mode=mode, model=model)
+                self._compute_acquisition_unchunked(block, mode=mode, model=model, pool_y=pool_y)
             )
         return np.concatenate(results)
 
