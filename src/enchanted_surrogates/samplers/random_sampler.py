@@ -49,12 +49,13 @@ class RandomSampler(Sampler):
 
      - The sampler maintains an internal counter (`self.submitted`) tracking
       the number of generated samples.
-      
+
      - The current implementation assumes continuous parameter spaces.
-    
+
     ---
 
     """
+
     BATCH_SAMPLE_SIZE = 1
 
     def __init__(self, bounds, budget, parameters, **kwargs):
@@ -95,9 +96,6 @@ class RandomSampler(Sampler):
         return list_param_dicts
 
     def register_future(self, future):
-<<<<<<< feature/enc-90-seamless-sampling-continuation
-        """Doesn't matter for random sampler TODO: Probably?"""
-=======
         """
         Registers a completed or scheduled evaluation.
 
@@ -111,7 +109,6 @@ class RandomSampler(Sampler):
         Returns:
           None
         """
->>>>>>> develop
         return None
 
     def register_futures(self, futures):
@@ -130,4 +127,3 @@ class RandomSampler(Sampler):
           None
         """
         return None
-    
