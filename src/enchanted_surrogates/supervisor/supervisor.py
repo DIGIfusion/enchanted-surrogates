@@ -159,6 +159,9 @@ class Supervisor:
                 # Create summary csv or parquet file
                 self.write_summary(batch_dataset)
 
+                # Clean unwanted files
+                self.delete_unwanted_files(self.save_files_arg)
+
                 batch_number += 1
 
             # Update data rows for next nesting level
@@ -167,7 +170,7 @@ class Supervisor:
             if depth == len(self.groups):
                 continue
 
-            # Create a summary file with last_complete_dataset
+            # Create a summary file with last_complete_dataset for nesting
             self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
         # Create HDF5 file by default
@@ -175,7 +178,7 @@ class Supervisor:
             self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
-        self.save_files(self.save_files_arg)
+        self.delete_unwanted_files(self.save_files_arg)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -483,7 +486,7 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
-    def save_files(self, argument: str):
+    def delete_unwanted_files(self, argument: str):
         """
         Deletes files according to command given.
         """
