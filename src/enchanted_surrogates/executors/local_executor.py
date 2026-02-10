@@ -1,5 +1,10 @@
+import os
+import uuid
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.executors.base_executor import Executor
 from enchanted_surrogates.executors.simulation_task import run_simulation_task
+
+log = get_logger(__name__)
 
 
 class LocalExecutor(Executor):
@@ -32,15 +37,9 @@ class LocalExecutor(Executor):
 
     def execute(self, input: list[(str, dict)], sampler):
         for run_dir, sample in input:
-            new_future = run_simulation_task(
-                self.runner_config, run_dir, params=sample)
+            new_future = run_simulation_task(self.runner_config, run_dir, params=sample)
             sampler.register_future(new_future)
 
     def clean(self):
-        """
-
-        LocalExecutor does not manage any external resources or worker processes. This method prints a message but does not perform any cleanup actions.
-        
-        """
-        print('Local runner doesn\'t clean up any resources')
+        log.warning("Local runner doesn't clean up any resources")
         return

@@ -1,4 +1,7 @@
 from importlib.metadata import entry_points
+from enchanted_surrogates.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def load_plugins():
@@ -24,11 +27,10 @@ def load_plugins():
 
     # Load each plugin and (if successful) store it in the dictionary
     for ep in eps:
-        print(f"Loading plugin: {ep.name}")
         try:
             plugin = ep.load()
             loaded_plugins[ep.name] = plugin
         except Exception as e:
-            print(f"Error loading plugin '{ep.name}': {e}")
+            log.error(f"Error loading plugin '{ep.name}': {e}")
 
     return loaded_plugins

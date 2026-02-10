@@ -13,9 +13,15 @@ from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.supervisor.nested_imports import (
-    RunGroup, import_executors, import_samplers, import_run_groups
+    RunGroup,
+    import_executors,
+    import_samplers,
+    import_run_groups,
 )
+
+log = get_logger(__name__)
 
 
 class Supervisor:
@@ -59,7 +65,7 @@ class Supervisor:
             run_group = RunGroup(
                 executors[group["executor"]],
                 samplers[group["sampler"]],
-                args.runners[group["runner"]]
+                args.runners[group["runner"]],
             )
             run_group.executor.runner_config = run_group.runner
             self.groups.append(run_group)
@@ -79,9 +85,11 @@ class Supervisor:
         are finished, creates summary file.
         """
 
-        print("Starting runs...")
+        log.info("Starting runs...")
 
-        rows = [{}] # Holds results for run of previous depth. Summary file is created from this.
+        rows = [
+            {}
+        ]  # Holds results for run of previous depth. Summary file is created from this.
         for depth, group in enumerate(self.groups):
             next_rows = []
             batch_number = 0
@@ -142,7 +150,7 @@ class Supervisor:
             self.create_hdf5(enchanted_dataset)
 
         # Clean run_dirs
-        print("Shutting down scheduler and workers...")
+        log.info("Shutting down scheduler and workers...")
         for group in self.groups:
             group.executor.clean()
 
@@ -221,7 +229,9 @@ class Supervisor:
             if not name_filter or str(name_filter) in str(name):
                 folder_path = os.path.join(self.base_run_dir, name)
                 if os.path.isdir(folder_path):
-                    datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
+                    datapoint_file = os.path.join(
+                        folder_path, "enchanted_datapoint.csv"
+                    )
                     if not os.path.isfile(datapoint_file):
                         return False
 
@@ -324,6 +334,10 @@ class Supervisor:
             run_groups = meta_group.create_group("run_groups")
             for i, run_group in enumerate(self.groups):
                 meta_run_group = run_groups.create_group(str(i))
-                meta_run_group.attrs["executor"] = str(run_group.executor.__class__.__name__)
-                meta_run_group.attrs["sampler"] = str(run_group.sampler.__class__.__name__)
+                meta_run_group.attrs["executor"] = str(
+                    run_group.executor.__class__.__name__
+                )
+                meta_run_group.attrs["sampler"] = str(
+                    run_group.sampler.__class__.__name__
+                )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
