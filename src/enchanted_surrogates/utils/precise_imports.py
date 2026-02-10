@@ -1,3 +1,7 @@
+"""
+TODO
+"""
+
 import re
 import importlib
 from enchanted_surrogates import load_plugins
@@ -108,7 +112,8 @@ def clear_import_cache():
 
 def cached_import(type_name: str, base_module: str):
     """
-    Imports a module entry point by name. All imports are cached, so overhead after first import is minimal.
+    Imports a module entry point by name. All imports are cached, 
+    so overhead after first import is minimal.
     
     Parameters
     ----------
@@ -120,7 +125,8 @@ def cached_import(type_name: str, base_module: str):
     Returns
     -------
     class
-        Class entry point. To construct an instance, use eg. cached_import(type_name, base_module)(**kwargs)
+        Class entry point. To construct an instance, 
+        use eg. cached_import(type_name, base_module)(**kwargs)
 
     Raises
     ------
@@ -135,10 +141,12 @@ def cached_import(type_name: str, base_module: str):
 
     if type_snake in __module_entry_points:
         return __module_entry_points[type_snake]
-    else:
-        imported_type = getattr(importlib.import_module(f"enchanted_surrogates.{base_module}.{type_snake}"), type_pascal)
-        __module_entry_points[type_snake] = imported_type
-        return imported_type
+
+    imported_type = getattr(importlib.import_module(
+        f"enchanted_surrogates.{base_module}.{type_snake}"), type_pascal)
+    # Cache for later use
+    __module_entry_points[type_snake] = imported_type
+    return imported_type
 
 def import_sampler(sampler_type, sampler_config):
     """
