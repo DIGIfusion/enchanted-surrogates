@@ -8,14 +8,15 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 log = get_logger(__name__)
 
+
 class JoblibExecutor(Executor):
     """
     ---
 
     ## Overview
 
-    An executor that runs simulations in parallel using `joblib.Parallel`. 
-    This executor integrates with an Enchanted Surrogates sampler to generate 
+    An executor that runs simulations in parallel using `joblib.Parallel`.
+    This executor integrates with an Enchanted Surrogates sampler to generate
     parameter configurations and execute tasks concurrently on the local machine.
 
     ---
@@ -46,11 +47,12 @@ class JoblibExecutor(Executor):
         """
         new_futures = joblib.Parallel(n_jobs=-1, verbose=10)(
             joblib.delayed(run_simulation_task)(
-                self.runner_config, sample_run_dir, params=sample)
+                self.runner_config, sample_run_dir, params=sample
+            )
             for sample_run_dir, sample in input
         )
         sampler.register_futures(new_futures)
 
     def clean(self):
-        log.warning('Joblib runner doesn\'t clean up any resources')
+        log.warning("Joblib runner doesn't clean up any resources")
         return

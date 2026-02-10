@@ -27,13 +27,15 @@ from enchanted_surrogates.utils.precise_imports import import_sampler
 
 from dask.distributed import WorkerPlugin
 
+
 # Console log handler for SLURM, uses dask.distributed.print
 class SLURMStreamHandler(logging.Handler):
-    def __init__(self)-> None:
+    def __init__(self) -> None:
         logging.Handler.__init__(self)
 
     def emit(self, record) -> None:
         dask_print(self.formatter.format(record))
+
 
 class SLURMLogPlugin(WorkerPlugin):
     def __init__(self, config: LoggerConfig):
@@ -51,13 +53,18 @@ class DaskLocalLogPlugin(WorkerPlugin):
 
     def setup(self, worker):
         log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
-        setup_logging(self.config, logging.StreamHandler(stream=sys.stdout), logging.FileHandler(filename=log_file))
+        setup_logging(
+            self.config,
+            logging.StreamHandler(stream=sys.stdout),
+            logging.FileHandler(filename=log_file),
+        )
 
 
 log = get_logger(__name__)
 
 # Alias the task function
 run_simulation_task = simulation_task.run_simulation_task
+
 
 class DaskExecutor(Executor):
     """
@@ -70,6 +77,7 @@ class DaskExecutor(Executor):
 
     ---
     """
+
     def __init__(self, *args, **kwargs):
         """
         Initializes the DaskExecutor.
@@ -175,18 +183,22 @@ class DaskExecutor(Executor):
 
                 hours, minutes, seconds = map(int, cpu_time.split(":"))
                 cpu_secs = hours * 3600 + minutes * 60 + seconds
-                
-                job_info.append({
-                    'cpu_time': cpu_time,
-                    'cpu_time_seconds': cpu_secs,
-                    'cpu_efficiency': cpu_efficiency,
-                    'memory_efficiency': memory_efficiency,
-                    'memory_used': memory_used,
-                    'job_id': job_id
-                })
+
+                job_info.append(
+                    {
+                        "cpu_time": cpu_time,
+                        "cpu_time_seconds": cpu_secs,
+                        "cpu_efficiency": cpu_efficiency,
+                        "memory_efficiency": memory_efficiency,
+                        "memory_used": memory_used,
+                        "job_id": job_id,
+                    }
+                )
             except Exception as e:
                 if self.is_running_on_slurm():
-                    log.error(f"Error fetching SLURM resource usage for job {job_id}: {e}")
+                    log.error(
+                        f"Error fetching SLURM resource usage for job {job_id}: {e}"
+                    )
                 else:
                     log.error("Not running on SLURM. skipping resources")
                     return [
@@ -251,7 +263,7 @@ class DaskExecutor(Executor):
             ValueError: If no workers are successfully started.
             Warning: If fewer workers than expected are started.
         """
-        log.info('Creating a cluster...')
+        log.info("Creating a cluster...")
         worker_logs_dir = None
 
         if self.SLURMcluster_config:
@@ -274,56 +286,69 @@ class DaskExecutor(Executor):
                     "-J enc_dask_worker",
                 ]
             else:
-                self.SLURMcluster_config['job_extra_directives']+=[f'-o {slurm_out_dir}/%x.%j.out',f'-e {slurm_out_dir}/%x.%j.err', '-J enc_dask_worker']
-            log.info(f'Output of SLURM workers saved in: {slurm_out_dir}')
+                self.SLURMcluster_config["job_extra_directives"] += [
+                    f"-o {slurm_out_dir}/%x.%j.out",
+                    f"-e {slurm_out_dir}/%x.%j.err",
+                    "-J enc_dask_worker",
+                ]
+            log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
             self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
-            log.debug(f'The job script for a worker is:\n{self.cluster.job_script()}')
-            
-            self.client = Client(self.cluster ,timeout=180)
+            log.debug(f"The job script for a worker is:\n{self.cluster.job_script()}")
+
+            self.client = Client(self.cluster, timeout=180)
 
             # Register the log plugin
             plugin = SLURMLogPlugin(LoggerConfig())
-            self.client.register_plugin(plugin, name='LogPlugin')
+            self.client.register_plugin(plugin, name="LogPlugin")
 
-            log.info(f'SCHEDULER ADDRESS: {self.cluster.scheduler_address}')
-            log.info(f'DASHBOARD LINK: {self.client.dashboard_link}')        
-            
+            log.info(f"SCHEDULER ADDRESS: {self.cluster.scheduler_address}")
+            log.info(f"DASHBOARD LINK: {self.client.dashboard_link}")
+
             if self.block_until_cluster_started:
-                log.info('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
+                log.info("WAIT UNTILL ALL dask-wor JOBS ARE RUNNING")
                 self.wait_for_all_dask_jobs_running()
 
         elif self.LocalCluster_config:
-            self.expected_number_of_workers = self.LocalCluster_config['n_workers']
+            self.expected_number_of_workers = self.LocalCluster_config["n_workers"]
             self.cluster = LocalCluster(silence_logs=False, **self.LocalCluster_config)
             self.client = Client(self.cluster)
 
             # Register the log plugin
             plugin = DaskLocalLogPlugin(LoggerConfig())
-            self.client.register_plugin(plugin, name='LogPlugin')
+            self.client.register_plugin(plugin, name="LogPlugin")
 
         if self.block_until_cluster_started:
-            log.info(f"Waiting for {self.expected_number_of_workers} workers to start...")
-            for i in range(1,self.expected_number_of_workers+2):
-                if i == self.expected_number_of_workers+1:
+            log.info(
+                f"Waiting for {self.expected_number_of_workers} workers to start..."
+            )
+            for i in range(1, self.expected_number_of_workers + 2):
+                if i == self.expected_number_of_workers + 1:
                     timeout_ = 3
                     try:
                         self.client.wait_for_workers(i, timeout=timeout_)
-                        log.warning(f'MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}')
+                        log.warning(
+                            f"MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}"
+                        )
                     except TimeoutError:
-                        log.error(f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n")
+                        log.error(
+                            f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n"
+                        )
                 else:
-                    self.client.wait_for_workers(i, timeout=self.expected_number_of_workers+120)
-                    log.info(f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n")
-                
-            workers = self.client.scheduler_info()["workers"]            
-            log.info('SOME WORKER INFORMATION:')
+                    self.client.wait_for_workers(
+                        i, timeout=self.expected_number_of_workers + 120
+                    )
+                    log.info(
+                        f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n"
+                    )
+
+            workers = self.client.scheduler_info()["workers"]
+            log.info("SOME WORKER INFORMATION:")
             for addr, info in workers.items():
                 log.info(f"Worker {addr}:")
                 log.info(f"  CPUs: {info['nthreads']}")
                 log.info(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
                 log.info(f"  Resources: {info.get('resources', {})}\n")
-
 
         # Only for SLURM cluster
         if hasattr(self.cluster, "workers"):
@@ -375,11 +400,11 @@ class DaskExecutor(Executor):
                     job_id = fields[0]
                     job_state = fields[4]  # Typically the 5th column is state
 
-                    if job_state == 'PD':
-                        log.info('='*100)
-                        log.info('\n'.join(dask_lines))
+                    if job_state == "PD":
+                        log.info("=" * 100)
+                        log.info("\n".join(dask_lines))
                         log.info(f"Job {job_id} is in state {job_state} — waiting...")
-                        log.info('='*100)
+                        log.info("=" * 100)
                         all_running = False
                         break
 
@@ -399,7 +424,7 @@ class DaskExecutor(Executor):
 
         This method is intended to be called when the executor is no longer needed.
         """
-        
+
         self.shutdown_cluster()
 
     def shutdown_cluster(self):
@@ -440,57 +465,49 @@ class DaskExecutor(Executor):
         Raises:
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
-        start = time.time()
-        assert self.base_run_dir
-        assert self.sampler
-        if not os.path.exists(self.base_run_dir):
-            log.info(f'MAKING BASE RUN DIR: {self.base_run_dir}')
-            os.makedirs(self.base_run_dir)
+        assert sampler
 
-        if self.sampler_type not in {'BayesianOptimizationSampler'}:
-            if os.path.exists(os.path.join(self.base_run_dir, 'ENCHANTED.FINISHED')):
-                raise FileExistsError(f'''The file: {self.base_run_dir}/ENCHANTED.FINISHED, exists.
-                                      This signifies that there is already data in this folder. 
-                                      Aborting to avoid accidental data mixing.''' )
-
-        log.info(f"STARTING RUNS FOR RUNNER {self.runner_config['type']}, FROM WITHIN A {__class__}")
+        inputlist = list(input)
+        self.base_run_dir = os.path.dirname(inputlist[0][0])
 
         if not self.client:
             self.start_cluster()
-        all_job_ids = self.get_all_dask_job_ids()
-        log.info('CLUSTER STARTED')
-        all_futures = []
+        log.info("CLUSTER STARTED")
 
-        while self.sampler.has_budget:
-            samples = self.sampler.get_next_samples()
-            futures = self.submit_batch(samples)
-            if self.sampler_type in {'BayesianOptimizationSampler'}:
-                try: 
-                    wait(futures, timeout=self.timeout)
-                except:
-                    log.error("TIMEOUT OF SOME OF THE SAMPLES")
-            all_futures.extend(futures)
-        log.info(f'{len(all_futures)} FUTURES HAVE BEEN SENT')
-        dfs = []
-        num_success = 0
-        if self.sampler_type in {'BayesianOptimizationSampler'}:
-            try: 
+        futures, fut_to_rundir = self.submit_batch(
+            inputlist, include_fut_to_rundir=True
+        )
+
+        for fut in futures:
+            try:
+                sampler.register_future(fut)
+            except Exception:
+                pass
+
+        sampler_type = (
+            getattr(sampler, "type", None)
+            or getattr(sampler, "__class__", None).__name__
+        )
+
+        if sampler_type in {"BayesianOptimizationSampler"}:
+            try:
                 wait(futures, timeout=self.timeout)
-                if self.sampler.plot_GPR_flag:
-                    # Build the result dictionary and set plot frequency to 1 to 
-                    # plot the GPR for the final state of the optimization.
-                    # Plotting is presently implemented in the train_surrogate function.
-                    self.sampler.build_result_dictionary(self.sampler.base_run_dir)
-                    self.sampler.plot_frequency = 1
-                    self.sampler.train_surrogate()
-            except:
-                log.error("Timeout of some of the samples")
+            except Exception:
+                print("Timeout or error while waiting for BO batch; continuing.")
+
+            if getattr(sampler, "plot_GPR_flag", False):
+                try:
+                    sampler.build_result_dictionary(self.base_run_dir)
+                    sampler.plot_frequency = 1
+                    sampler.train_surrogate()
+                except Exception as e:
+                    log.error("Error during sampler postprocessing:", e)
         else:
             dfs = []
             num_success = 0
             total = len(futures)
 
-            print(f"Collecting results from {total} futures...")
+            log.info(f"Collecting results from {total} futures...")
 
             for i, future in enumerate(as_completed(futures), start=1):
                 try:
@@ -506,7 +523,7 @@ class DaskExecutor(Executor):
                     df = pd.DataFrame({k: [v] for k, v in result.items()})
                     dfs.append(df)
                 except Exception as e:
-                    print("Failed to convert result to DataFrame:", e)
+                    log.error("Failed to convert result to DataFrame:", e)
                     continue
 
                 log.info(

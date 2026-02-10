@@ -21,6 +21,7 @@ execution namespace, and initializes the Supervisor responsible for
 managing sampling, execution, and result handling.
 """
 
+
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
     Loads configuration from a YAML file.
@@ -39,23 +40,23 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     log.debug(config)
     return config
 
+
 def main(arguments: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
 
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
-        config_path (str or None): Optional path for configuration file where 
+        config_path (str or None): Optional path for configuration file where
             configuration is fetched from.
     """
-    # Create the base run directory
-    if not os.path.exists(args.executor["base_run_dir"]):
-        os.makedirs(args.executor["base_run_dir"])
+
+    supervisor = Supervisor(arguments, config_path=config_path)
 
     # Setup logging
-    log_dir = os.path.join(args.executor['base_run_dir'], 'logs')
+    log_dir = os.path.join(supervisor.base_run_dir, "logs")
     log_file = os.path.join(log_dir, "main.log")
-    log_level = args.logging
+    log_level = arguments.logging
 
     # Store to logger config
     config = LoggerConfig(log_level=log_level, log_dir=log_dir)
@@ -64,23 +65,16 @@ def main(arguments: argparse.Namespace, config_path=None):
     if not os.path.exists(config.log_dir):
         os.makedirs(config.log_dir)
 
-    setup_logging(config, logging.StreamHandler(stream=sys.stdout), logging.FileHandler(filename=log_file))
+    setup_logging(
+        config,
+        logging.StreamHandler(stream=sys.stdout),
+        logging.FileHandler(filename=log_file),
+    )
 
-    log.info('Enchanted surrogates is starting.')
-    log.info(f'Base run directory: {args.executor["base_run_dir"]}')
+    log.info("Enchanted surrogates is starting.")
+    log.info(f"Base run directory: {supervisor.base_run_dir}")
 
-    # Copying the config file to the base run directory
-    if config_path is not None:
-        log.debug(f"Copying config file from {config_path} to {os.path.join(args.executor['base_run_dir'], os.path.basename(config_path))}")
-        try:
-            shutil.copy(config_path, os.path.join(args.executor["base_run_dir"], os.path.basename(config_path)))
-        except Exception as exe:
-            log.error(f"Copying the config file to the base run dir failed.\n \
-                        Try using the full path to the config file.\n \
-                        Exception raised:\n {exe}")
-    
     print(enchanted_wizard)
-    supervisor = Supervisor(arguments, config_path=config_path)
     supervisor.start()
 
 

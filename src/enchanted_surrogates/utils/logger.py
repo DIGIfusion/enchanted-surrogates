@@ -2,12 +2,15 @@ import logging
 
 LOG_FORMAT = "%(asctime)s [%(levelname)-5.5s] %(message)s"
 
+
 class Singleton(type):
     _instance = None
+
     def __call__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instance
+
 
 # Stores log level, log_dir etc.
 class LoggerConfig(metaclass=Singleton):
@@ -16,7 +19,12 @@ class LoggerConfig(metaclass=Singleton):
         self.log_dir = log_dir
         self.format = format
 
-def setup_logging(config: LoggerConfig, console_handler: logging.Handler, file_handler: logging.Handler):
+
+def setup_logging(
+    config: LoggerConfig,
+    console_handler: logging.Handler,
+    file_handler: logging.Handler,
+):
     """
     Sets up logging to console and file
     """
@@ -48,6 +56,3 @@ def get_logger(name: str) -> logging.Logger:
         logging.Logger: A configured logger.
     """
     return logging.getLogger().getChild(name)
-    
-
-
