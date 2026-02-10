@@ -20,6 +20,7 @@ from enchanted_surrogates.supervisor.nested_imports import (
     import_executors,
     import_samplers,
     import_run_groups,
+    import_saved_files_list,
 )
 
 
@@ -71,6 +72,7 @@ class Supervisor:
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
+        self.save_files_arg = args.supervisor.get("save_files", "all")
 
         if self.base_run_dir is None:
             raise ValueError("base_run_dir is not set in the provided configuration")
@@ -157,6 +159,9 @@ class Supervisor:
                 # Create summary csv or parquet file
                 self.write_summary(batch_dataset)
 
+                # Clean unwanted files
+                self.delete_unwanted_files(self.save_files_arg)
+
                 batch_number += 1
 
             # Update data rows for next nesting level
@@ -165,12 +170,15 @@ class Supervisor:
             if depth == len(self.groups):
                 continue
 
-            # Create a summary file with last_complete_dataset
+            # Create a summary file with last_complete_dataset for nesting
             self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(last_complete_dataset)
+
+        # Clean unwanted files
+        self.delete_unwanted_files(self.save_files_arg)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -477,3 +485,31 @@ class Supervisor:
                     run_group.sampler.__class__.__name__
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
+
+    def delete_unwanted_files(self, argument: str):
+        """
+        Deletes files according to command given.
+        """
+        default_list = ["enchanted_dataset.csv", "runs.h5"]
+        if argument == "all":
+            return
+
+        if argument == "custom":
+            saved_list = import_saved_files_list(self.args)
+            allowed_files = set(default_list) | set(saved_list)
+        elif argument == "none":
+            allowed_files = set(default_list)
+        else:
+            return
+
+        for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
+            # Remove files
+            for file in files:
+                if file not in allowed_files:
+                    file_path = os.path.join(root, file)
+                    os.remove(file_path)
+            # Remove dirs
+            for dir_ in dirs:
+                dir_path = os.path.join(root, dir_)
+                if not os.listdir(dir_path):
+                    os.rmdir(dir_path)
