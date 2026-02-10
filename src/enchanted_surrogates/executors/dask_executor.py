@@ -87,24 +87,7 @@ class DaskExecutor(Executor):
                 - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
         """
         super().__init__(*args, **kwargs)
-<<<<<<< HEAD
-        log.info('INITIALISING DASK EXECUTOR')
-
-        self.type = kwargs.get('type')
-        if self.sampler_config:
-            self.sampler_type = self.sampler_config.pop("type")
-            self.sampler = import_sampler(
-                sampler_type=self.sampler_type, sampler_config=self.sampler_config)
-        self.scale_n_jobs = kwargs.get('scale_n_jobs', 1)
-        self.timeout = kwargs.get('timeout', 1e10)
-        self.SLURMcluster_config = kwargs.get('SLURMcluster_config')
-        self.LocalCluster_config = kwargs.get('LocalCluster_config')
-        self.block_until_cluster_started = kwargs.get('block_until_cluster_started', False)  # for debugging purposes only
-        self.cluster = None
-        self.client = None
-        self.expected_number_of_workers = None     
-=======
-        print("INITIALISING DASK EXECUTOR")
+        log.info("INITIALISING DASK EXECUTOR")
         self.scale_n_jobs = kwargs.get("scale_n_jobs", 1)
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
@@ -116,7 +99,6 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
         self.slurm_job_ids = set()
->>>>>>> develop
 
     def find_line_in_seff_output(self, lines, entry):
         """

@@ -4,6 +4,7 @@ import sys
 import yaml
 import argparse
 from datetime import datetime
+from enchanted_surrogates.supervisor.supervisor import Supervisor
 from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
