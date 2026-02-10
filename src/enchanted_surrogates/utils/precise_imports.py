@@ -3,10 +3,18 @@ import re
 import importlib
 import sys
 from enchanted_surrogates import load_plugins
-src_dir = os.path.dirname(
+src_dir = os.path.dirname( # TODO what??
     os.sep.join(
         os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates") + 1]))
 sys.path.append(src_dir)
+
+import inspect
+import pkgutil
+from types import ModuleType
+from enchanted_surrogates import executors, samplers, runners
+from enchanted_surrogates.executors.base_executor import Executor
+from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.runners.base_runner import Runner
 
 
 def detect_case_style(s):
@@ -102,6 +110,31 @@ def get_snake_and_pascal(string):
             f"Input string '{string}' must be in either snake_case or PascalCase format.")
     return string_snake, string_pascal
 
+def load_builtin_modules():
+    registry = {}
+
+    base_modules: list[tuple[ModuleType, type]] = [
+        (executors, Executor), 
+        (samplers, Sampler), 
+        (runners, Runner)
+    ]
+
+    for package, base_class in base_modules:
+        print(base_modules)
+        for importer, module_name, ispkg in pkgutil.iter_modules(package.__path__):
+            print(module_name)
+            module = importlib.import_module(f"{package}.{module_name}", type_pascal))
+
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                if issubclass(obj, base_class) and obj is not base_class:
+                    registry[name] = obj
+
+    print(registry)
+
+def discover_all_modules():
+    plugin_end_points = load_plugins()
+    builtin_end_points = load_builtin_modules()
+    
 
 def import_sampler(sampler_type, sampler_config):
     """
@@ -126,7 +159,7 @@ def import_sampler(sampler_type, sampler_config):
     """
     type_snake, type_pascal = get_snake_and_pascal(sampler_type)
     eps = load_plugins()
-    if 'type' in sampler_config:
+    if 'type' in sampler_config: # TODO make a copy first
         sampler_config.pop('type')
     if type_snake in eps:
         sampler = eps[type_snake](**sampler_config)
