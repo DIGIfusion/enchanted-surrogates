@@ -1,7 +1,6 @@
 # run.py
 import os
 import sys
-import threading
 import yaml
 import argparse
 from datetime import datetime
@@ -13,6 +12,14 @@ import shutil
 
 log = get_logger(__name__)
 
+"""
+Command-line entry point for running Enchanted Surrogates.
+
+This module loads a YAML configuration file, constructs the corresponding
+execution namespace, and initializes the Supervisor responsible for
+managing sampling, execution, and result handling.
+"""
+
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
     Loads configuration from a YAML file.
@@ -23,32 +30,22 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Namespace containing the configuration parameters.
     """
-    with open(config_path, "r") as file:
+    with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
-    config.executor["config_filepath"] = config_path
+    config.supervisor["config_filepath"] = config_path
 
-    # In case sampler or runner is defined outside the executor.
-    # This only works for non nested workflows.
-    if 'sampler_config' not in config.executor:
-        if getattr(config, 'sampler', None):
-            config.executor['sampler_config'] = config.sampler
-        elif 'sampler' in config.executor:
-            config.executor['sampler_config'] = config.executor.pop('sampler')
-    if 'runner_config' not in config.executor:
-        if getattr(config, 'runner', None):
-            config.executor['runner_config'] = config.runner
-        elif 'runner' in config.executor:
-            config.executor['runner_config'] = config.executor.pop('runner')
     log.debug(config)
     return config
 
-def main(args: argparse.Namespace, config_path=None):
+def main(arguments: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
 
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
+        config_path (str or None): Optional path for configuration file where 
+            configuration is fetched from.
     """
     # Create the base run directory
     if not os.path.exists(args.executor["base_run_dir"]):
@@ -82,20 +79,9 @@ def main(args: argparse.Namespace, config_path=None):
                         Exception raised:\n {exe}")
     
     print(enchanted_wizard)
+    supervisor = Supervisor(arguments, config_path=config_path)
+    supervisor.start()
 
-    # Initialize executor
-    executor_type = args.executor.pop("type")
-    executor = import_executor(executor_type=executor_type, executor_config=args.executor)
-
-    if not os.path.exists(executor.base_run_dir):
-        os.makedirs(executor.base_run_dir)
-
-    log.info("Starting runs...")
-    executor.start_runs()
-    executor.clean()
-    log.info('Enchanted surrogates has finished.')
-
-    return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Runner")
