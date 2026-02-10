@@ -1,12 +1,6 @@
-import os
 import re
 import importlib
-import sys
 from enchanted_surrogates import load_plugins
-src_dir = os.path.dirname( # TODO what??
-    os.sep.join(
-        os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates") + 1]))
-sys.path.append(src_dir)
 
 # All imported module entry points are stored to ensure modules are only imported once.
 # Mapping from [module_name (str) -> class]
