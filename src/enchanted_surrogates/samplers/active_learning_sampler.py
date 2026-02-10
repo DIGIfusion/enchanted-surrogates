@@ -84,21 +84,26 @@ class ActiveLearningSampler(Sampler):
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
+
+        # Parameter values
         self.X = np.sort(
             np.concatenate(
-                (
-                    uniform_rvs(0, 1, 60),
-                    uniform_rvs(1, 0.5, 30),
-                    uniform_rvs(1.5, 0.5, 10),
-                )
+                [
+                    uniform.rvs(loc=min, scale=max - min, size=self.batch_size)
+                    for min, max in bounds
+                ]
             )
         ).reshape(-1, 1)
 
-        arr = np.array()
-        for min, max in bounds:
-            arr = np.concatenate(
-                arr, uniform.rvs(loc=min, scale=max - min, size=self.budget)
-            )
+        # Regression
+        self.reg = NICKernelRegressor(
+            metric_dict={"gamma": 15.0}
+        )  # TODO: import from config
+
+        # Query strategy
+        self.qs = GreedySamplingTarget()  # TODO: import from config
+
+        self.is_first_run = True
 
     def get_next_samples(self) -> list[dict]:
         """
@@ -112,8 +117,18 @@ class ActiveLearningSampler(Sampler):
               A batch of parameter dictionaries, where each dictionary maps
               parameter names to sampled numeric values.
         """
-        # TODO not use uniform?
-        # TODO batch samples
+        # TODO:
+        # Do things and then train
+
+        if self.is_first_run:
+            self.is_first_run = False
+            return []
+
+        y = self.X  # TODO: come up with a real Y
+
+        self.train_surrogate(self.X, y)
+
+        # TODO: replace with something useful
         list_param_dicts = []
         for _ in range(self.batch_size):
             params = [np.random.uniform(low, high) for low, high in self.bounds]
@@ -121,6 +136,23 @@ class ActiveLearningSampler(Sampler):
             list_param_dicts.append(param_dict)
         self.submitted += len(list_param_dicts)
         return list_param_dicts
+
+    def train_surrogate(self, X, y):
+        """
+        TODO: write this
+        """
+        self.reg.fit(X=X, y=y)
+        indices, utils = call_func(
+            self.qs.query,
+            X=X,
+            y=y,
+            reg=self.reg,
+            ensemble=SklearnRegressor(BaggingRegressor(self.reg, n_estimators=4)),
+            fit_reg=True,
+            return_utilities=True,
+        )
+
+        return (indices, utils)
 
     def register_future(self, future):
         """
