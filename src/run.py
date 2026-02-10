@@ -1,3 +1,17 @@
+import os
+import sys
+import yaml
+import argparse
+from datetime import datetime
+from enchanted_surrogates.supervisor.supervisor import Supervisor
+from enchanted_surrogates.utils.precise_imports import import_executor
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+import logging
+import shutil
+
+log = get_logger(__name__)
+
 """
 Command-line entry point for running Enchanted Surrogates.
 
@@ -6,12 +20,6 @@ execution namespace, and initializes the Supervisor responsible for
 managing sampling, execution, and result handling.
 """
 
-import argparse
-from datetime import datetime
-import yaml
-from dask.distributed import print as dask_print
-from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
@@ -28,8 +36,9 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     config = argparse.Namespace(**config)
     config.supervisor["config_filepath"] = config_path
 
-    dask_print(config)
+    log.debug(config)
     return config
+
 
 def main(arguments: argparse.Namespace, config_path=None):
     """
@@ -37,17 +46,40 @@ def main(arguments: argparse.Namespace, config_path=None):
 
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
-        config_path (str or None): Optional path for configuration file where 
+        config_path (str or None): Optional path for configuration file where
             configuration is fetched from.
     """
 
-    print(enchanted_wizard)
     supervisor = Supervisor(arguments, config_path=config_path)
+
+    # Setup logging
+    log_dir = os.path.join(supervisor.base_run_dir, "logs")
+    log_file = os.path.join(log_dir, "main.log")
+    log_level = "INFO"
+    if hasattr(arguments, "logging"):
+        log_level = arguments.logging
+
+    # Store to logger config
+    config = LoggerConfig(log_level=log_level, log_dir=log_dir)
+
+    # Create log dir
+    if not os.path.exists(config.log_dir):
+        os.makedirs(config.log_dir)
+
+    setup_logging(
+        config,
+        logging.StreamHandler(stream=sys.stdout),
+        logging.FileHandler(filename=log_file),
+    )
+
+    log.info("Enchanted surrogates is starting.")
+    log.info(f"Base run directory: {supervisor.base_run_dir}")
+
+    print(enchanted_wizard)
     supervisor.start()
 
 
 if __name__ == "__main__":
-    print(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
         "-cf",
@@ -59,4 +91,3 @@ if __name__ == "__main__":
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
     main(args, config_path=config_args.config_file)
-    print(f'{datetime.now()} - Enchanted surrogates finished.')
