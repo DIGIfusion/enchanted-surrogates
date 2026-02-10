@@ -1,5 +1,6 @@
 """
-TODO
+Utility functions for importing modules. During first import, all plugins are
+imported and cached.
 """
 
 import re
@@ -113,7 +114,8 @@ def clear_import_cache():
 def cached_import(type_name: str, base_module: str):
     """
     Imports a module entry point by name. All imports are cached, 
-    so overhead after first import is minimal.
+    so overhead after first import is minimal. This is for internal use only:
+    for importing modules use import_executor, import_sampler etc.
     
     Parameters
     ----------
