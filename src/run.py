@@ -1,4 +1,3 @@
-# run.py
 import os
 import sys
 import yaml
@@ -56,7 +55,9 @@ def main(arguments: argparse.Namespace, config_path=None):
     # Setup logging
     log_dir = os.path.join(supervisor.base_run_dir, "logs")
     log_file = os.path.join(log_dir, "main.log")
-    log_level = arguments.logging
+    log_level = "INFO"
+    if hasattr(arguments, "logging"):
+        log_level = arguments.logging
 
     # Store to logger config
     config = LoggerConfig(log_level=log_level, log_dir=log_dir)
