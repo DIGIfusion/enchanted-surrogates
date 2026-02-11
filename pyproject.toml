@@ -23,6 +23,7 @@ dependencies = [
     "scipy",
     "pyarrow",
     "h5py",
+    "scikit-activeml"
 ]
 
 [tool.setuptools]

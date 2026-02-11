@@ -8,8 +8,9 @@ from skactiveml.pool import (
 )
 from sklearn.ensemble import BaggingRegressor
 from skactiveml.regressor import NICKernelRegressor, SklearnRegressor
-from skactiveml.utils import call_func, is_labeled, MISSING_LABEL
-from scipy.stats import norm, uniform
+
+# from skactiveml.utils import call_func, is_labeled, MISSING_LABEL
+from scipy.stats import uniform
 
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
@@ -18,7 +19,7 @@ class ActiveLearningSampler(Sampler):
     """
 
     ---
-
+    TODO: Fix this
     ## Overview
 
     The random sampler generates samples randomly within the specified bounds
@@ -86,103 +87,122 @@ class ActiveLearningSampler(Sampler):
         self.batch_size = kwargs.get("batch_size", self.budget)
 
         # Parameter values
-        self.X = np.sort(
+        self.candidates = np.sort(
             np.concatenate(
                 [
                     uniform.rvs(loc=min, scale=max - min, size=self.batch_size)
                     for min, max in bounds
                 ]
             )
-        ).reshape(-1, 1)
+        )
+
+        self.X_obs = np.zeros((0, len(bounds)))
+        self.y_obs = np.zeros((0,))
+
+        self.submitted = 0
+        self.warmup = 0
 
         # Regression
-        self.reg = NICKernelRegressor(
-            metric_dict={"gamma": 15.0}
-        )  # TODO: import from config
+
+        # TODO: import from config instead
+        sklearn_wrapper = SklearnRegressor()
+        nick_regressor = NICKernelRegressor(sklearn_wrapper)
+        self.model = BaggingRegressor(base_estimator=nick_regressor, n_estimators=5)
 
         # Query strategy
         self.qs = GreedySamplingTarget()  # TODO: import from config
 
-        self.is_first_run = True
-
     def get_next_samples(self) -> list[dict]:
         """
-        Generates the next batch of randomly sampled parameter configurations.
+        Select the next batch of samples.
 
-        Each parameter value is sampled independently from a uniform distribution
-        within the specified bounds.
+        If insufficient observations are available (warmup phase),
+        random samples are returned.
 
-        Returns:
-           list[dict[str, float]]:
-              A batch of parameter dictionaries, where each dictionary maps
-              parameter names to sampled numeric values.
+        Otherwise, the surrogate model is trained and the query
+        strategy selects the most informative candidates.
+
+        Returns
+        -------
+        list[dict[str, float]]
+            A batch of parameter dictionaries.
         """
-        # TODO:
-        # Do things and then train
 
-        if self.is_first_run:
-            self.is_first_run = False
-            return []
+        if self.submitted < self.warmup or len(self.X_obs) == 0:
+            return self.get_fallback_samples()
 
-        y = self.X  # TODO: come up with a real Y
+        self.model.fit(self.X_obs, self.y_obs)
 
-        self.train_surrogate(self.X, y)
+        query_indices = self.qs.query(
+            X=self.X_obs,
+            y=self.y_obs,
+            reg=self.model,
+            X_cand=self.candidates,
+            batch_size=self.batch_size,
+        )
 
-        # TODO: replace with something useful
+        selected = self.candidates[query_indices]
+        self.submitted += len(selected)
+
+        return [
+            {key: value for key, value in zip(self.parameters, row)} for row in selected
+        ]
+
+    def get_fallback_samples(self) -> list[dict]:
+        """
+        Generate random samples within bounds.
+
+        Used during warmup phase or when no observations
+        are available.
+
+        Returns
+        -------
+        list[dict[str, float]]
+            Random parameter configurations.
+        """
         list_param_dicts = []
         for _ in range(self.batch_size):
             params = [np.random.uniform(low, high) for low, high in self.bounds]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
+
         self.submitted += len(list_param_dicts)
+
         return list_param_dicts
-
-    def train_surrogate(self, X, y):
-        """
-        TODO: write this
-        """
-        self.reg.fit(X=X, y=y)
-        indices, utils = call_func(
-            self.qs.query,
-            X=X,
-            y=y,
-            reg=self.reg,
-            ensemble=SklearnRegressor(BaggingRegressor(self.reg, n_estimators=4)),
-            fit_reg=True,
-            return_utilities=True,
-        )
-
-        return (indices, utils)
 
     def register_future(self, future):
         """
-        Registers a completed or scheduled evaluation.
+        Register a completed evaluation.
 
-        This method is part of the sampler interface but is not used by
-        the RandomSampler, as sampling does not depend on evaluation results.
+        Parameters
+        ----------
+        future : tuple or dict
+            Either:
+                (params_dict, y_value)
+            or
+                {"params": params_dict, "y": y_value}
 
-        Args:
-          future:
-              A future or handle representing an asynchronous evaluation.
-
-        Returns:
-          None
+        Adds the observation to the internal dataset.
         """
-        return None
+        if isinstance(future, dict):
+            params = future["params"]
+            y = future["y"]
+        else:
+            params, y = future
+
+        arr = np.array([params[k] for k in self.parameters]).reshape(1, -1)
+
+        self.X_obs = np.vstack([self.X_obs, arr])
+        self.y_obs = np.append(self.y_obs, y)
 
     def register_futures(self, futures):
         """
-        Registers multiple completed or scheduled evaluations.
+        Register multiple completed evaluations.
 
-        This method is part of the sampler interface but is not used by
-        the RandomSampler. It is implemented as a no-op.
-
-        Args:
-          futures:
-            An iterable of futures or handles representing asynchronous
-            evaluations.
-
-        Returns:
-          None
+        Parameters
+        ----------
+        futures : iterable
+            Iterable of tuples or dicts accepted by `register_future`.
         """
-        return None
+        for f in futures:
+            self.register_future(f)
