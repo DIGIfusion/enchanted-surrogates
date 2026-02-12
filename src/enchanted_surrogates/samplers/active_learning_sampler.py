@@ -87,13 +87,13 @@ class ActiveLearningSampler(Sampler):
         self.batch_size = kwargs.get("batch_size", self.budget)
 
         # Parameter values
-        self.candidates = np.sort(
-            np.concatenate(
-                [
-                    uniform.rvs(loc=min, scale=max - min, size=self.batch_size)
-                    for min, max in bounds
-                ]
-            )
+        n_candidates = self.batch_size  # or whatever pool size you want
+        n_parameters = len(self.bounds)
+        lows = np.array([b[0] for b in self.bounds])
+        highs = np.array([b[1] for b in self.bounds])
+
+        self.candidates = uniform.rvs(
+            loc=lows, scale=highs - lows, size=(n_candidates, n_parameters)
         )
 
         self.X_obs = np.zeros((0, len(bounds)))
