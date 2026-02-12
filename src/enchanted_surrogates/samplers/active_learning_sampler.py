@@ -105,9 +105,8 @@ class ActiveLearningSampler(Sampler):
         # Regression
 
         # TODO: import from config instead
-        sklearn_wrapper = SklearnRegressor()
-        nick_regressor = NICKernelRegressor(sklearn_wrapper)
-        self.model = BaggingRegressor(base_estimator=nick_regressor, n_estimators=5)
+        nick_regressor = NICKernelRegressor()
+        self.model = SklearnRegressor(BaggingRegressor(nick_regressor, n_estimators=5))
 
         # Query strategy
         self.qs = GreedySamplingTarget()  # TODO: import from config
@@ -137,7 +136,7 @@ class ActiveLearningSampler(Sampler):
             X=self.X_obs,
             y=self.y_obs,
             reg=self.model,
-            X_cand=self.candidates,
+            candidates=self.candidates,
             batch_size=self.batch_size,
         )
 
