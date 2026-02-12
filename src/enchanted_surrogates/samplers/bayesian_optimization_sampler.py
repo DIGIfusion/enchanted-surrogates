@@ -1,3 +1,11 @@
+"""
+samplers/bayesian_optimization_sampler.py
+
+This sampler Class uses Bayesian Optimization techniques to data efficiently
+sample through the search space to yield optimial information gain as 
+specified by the acquisition strategy.
+"""
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
 import pickle as pkl
@@ -13,7 +21,7 @@ import lampe.plots as plots
 from botorch.optim import optimize_acqf
 from botorch.utils.transforms import standardize, normalize, unnormalize
 
-
+log = get_logger(__name__)
 
 class BayesianOptimizationSampler(Sampler):
     """
@@ -102,7 +110,7 @@ class BayesianOptimizationSampler(Sampler):
             async_samp (bool, optional): Enable asynchronous sampling.
         
         """
-        print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
+        log.info('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
         self.base_run_dir      = kwargs.get('base_run_dir', '')
         self._budget           = kwargs.get('budget', 20)
         self.bounds            = kwargs.get('bounds', [None])
@@ -168,7 +176,7 @@ class BayesianOptimizationSampler(Sampler):
         batch_samples = []
 
         if self.collected_samples < self.initial_samples:
-            print(str(100*self.collected_samples/self.initial_samples),
+            log.info(str(100*self.collected_samples/self.initial_samples),
                   ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
             for _ in range(int(self.acq_batch_size)):
                 params = [
@@ -297,7 +305,7 @@ class BayesianOptimizationSampler(Sampler):
     # Fitting the GPR.
     def train_surrogate(self):
         if self.verbose:
-            print('FITTING THE GPR')
+            log.info('FITTING THE GPR')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
         distances = torch.tensor(self.result_dictionary['distances'][:])
@@ -332,7 +340,7 @@ class BayesianOptimizationSampler(Sampler):
             covar_module = gpytorch.kernels.RBFKernel(ard_num_dims=len(bounds.T))
         if self.fully_bayesian:
             if self.verbose:
-                print('SaasFullyBayesianSingleTaskGP')
+                log.info('SaasFullyBayesianSingleTaskGP')
             # Default kernel is Matern-5/2
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
                      input_vector, 
@@ -341,7 +349,7 @@ class BayesianOptimizationSampler(Sampler):
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
         else:
             if self.verbose:
-                print('SingleTaskGP')
+                log.info('SingleTaskGP')
             gp = botorch.models.SingleTaskGP(
                                              input_vector,
                                              distances, 
@@ -405,7 +413,7 @@ class BayesianOptimizationSampler(Sampler):
         result_dictionary = None
         result_dictionary_failed = None
         if self.verbose:
-            print('BUILDING RESULT DICTIONARY')    
+            log.info('BUILDING RESULT DICTIONARY')    
     
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 
@@ -549,9 +557,8 @@ class BayesianOptimizationSampler(Sampler):
                 self.plot_forward(run_dir, str(i))
         except:
             plt.close()
-            print('Result plotting did not work. Have you implemented',
-                  ' plotting features in the parser?')
-            
+            log.error('Result plotting did not work. Have you implemented plotting features in the parser?')
+
     def plot_forward(self, run_dir, label='_'):
         plt.figure(1)
         self.parser.collect_sample_information(

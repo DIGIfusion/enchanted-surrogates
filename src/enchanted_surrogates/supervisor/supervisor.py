@@ -15,6 +15,7 @@ import yaml
 import h5py
 import numpy as np
 import pandas as pd
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
     import_executors,
@@ -22,6 +23,8 @@ from enchanted_surrogates.supervisor.nested_imports import (
     import_run_groups,
     import_saved_files_list,
 )
+
+log = get_logger(__name__)
 
 
 class Supervisor:
@@ -104,7 +107,7 @@ class Supervisor:
         are finished, creates summary file.
         """
 
-        print("Starting runs...")
+        log.info("Starting runs...")
 
         last_complete_dataset = pd.DataFrame()
 
