@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from enchanted_surrogates.executors import LocalExecutor, JoblibExecutor, DaskExecutor
 from enchanted_surrogates.supervisor.supervisor import Supervisor
 
+#TODO: parameterize
 
 # https://docs.pytest.org/en/stable/how-to/tmp_path.html
 def test_full_workflow_local(tmp_path):
