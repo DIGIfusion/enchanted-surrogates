@@ -44,13 +44,37 @@ def main(args: argparse.Namespace, config_path=None):
     executor.clean()
     
     if hasattr(args, 'general'):
-        if args.general.get('pack_data_hdf5', True):
+        
+        # Exact filenames to skip
+        skip_delete = {
+            "enchanted_dataset_fail.csv",
+            "enchanted_dataset.csv",
+            "ENCHANTED.FINISHED",
+            "batch_info.csv",
+        }
+
+        # Glob-style patterns to skip
+        skip_patterns = [
+            "*.yaml",
+            "*worker_out*",
+        ]
+        
+        if args.general.get('pack_data_squashfs', False):
+            print('PACKING ALL RUN DATA INTO A SquashFS FILE')
+            from enchanted_surrogates.utils.convert_directory_to_squashfs import convert_directory_to_squashfs
+            convert_directory_to_squashfs(
+                args.executor['base_run_dir'],
+                squashfs_name="archive.sqsh",
+                skip_delete=skip_delete,
+                skip_patterns=skip_patterns,
+            )
+
+        if args.general.get('pack_data_hdf5', False):
+            print('PACKING ALL RUN DATA INTO A HDF5 FILE')
             # the import is placed here so that users don't need h5py installed in their enviroment to use run.py
             from enchanted_surrogates.utils.hdf5 import convert_directory_to_hdf5
             # reduce num files with hdf5
-            batch_dirs = get_batch_dirs(args.executor['base_run_dir'])
-            for batch_dir in batch_dirs:
-                convert_directory_to_hdf5(batch_dir, skip_delete=['enchanted_dataset.csv', 'batch_info.csv'])
+            convert_directory_to_hdf5(args.executor['base_run_dir'], skip_delete=skip_delete, skip_patterns=skip_patterns)
     return
 
 

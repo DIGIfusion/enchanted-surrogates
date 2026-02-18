@@ -5,7 +5,7 @@ import pandas as pd
 import uuid
 import sys
 from pprint import pformat
-            
+from time import time
 
 def run_simulation_task(
         runner_config: dict, run_dir: str, params: dict = None, future=None, return_errors=False) -> dict:
@@ -17,6 +17,7 @@ def run_simulation_task(
     Returns:
     Raises:
     """
+    start = time()
     runner_output = {**params}
     runner_output['run_dir'] = run_dir
 
@@ -51,7 +52,8 @@ def run_simulation_task(
             "python_version": sys.version,
             "module": exc.__class__.__module__,
         }
-        runner_output = {"success": False, "error_id": error_id}
+        runner_output["success"] = False
+        runner_output["error_id"] = error_id
         try:   
             print('\n'.join(msg), flush=True) # This can return a broken pipe error.
         except Exception as exc2:
@@ -64,6 +66,9 @@ def run_simulation_task(
     if os.path.exists(run_dir):
         df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
         df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
+    
+    end = time()
+    print('run_simulation_task took:', end-start)
     
     if return_errors:
         return runner_output, error_info

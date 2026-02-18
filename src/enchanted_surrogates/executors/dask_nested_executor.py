@@ -207,6 +207,7 @@ class DaskNestedExecutor(Executor):
                         result= self.get_result(future, timeout=5)
                         if result == (None, None):
                             continue
+                        print('debug result', result)
                         result, error_info = result
                         self.update_completion_stats(result, i-1)
 

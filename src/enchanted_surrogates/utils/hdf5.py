@@ -4,6 +4,8 @@ import shutil
 import json
 import numpy as np
 import fnmatch
+import tempfile
+        
 
 def convert_directory_to_hdf5(source_dir, hdf5_name="archive.h5", skip_delete=None, skip_patterns=None):
     """
@@ -217,6 +219,104 @@ You can also explore your HDF5 file using the browser-based tool [myHDF5](https:
 Enjoy your compact, HPC-friendly archive!
 """
         )
+
+
+
+# -------------------------------
+# Worker helper (static, picklable)
+# -------------------------------
+class HDF5RunExtractor:
+
+    @staticmethod
+    def extract_group(h5_group, out_root):
+        """Recursively extract an HDF5 group to a filesystem directory."""
+        for key in h5_group:
+            obj = h5_group[key]
+            out_path = os.path.join(out_root, key)
+
+            if isinstance(obj, h5py.Group):
+                os.makedirs(out_path, exist_ok=True)
+                HDF5RunExtractor.extract_group(obj, out_path)
+                continue
+
+            # Dataset
+            dtype = obj.attrs.get("type", "binary")
+            data = obj[()]
+
+            if dtype == "text":
+                if isinstance(data, bytes):
+                    data = data.decode("utf-8", errors="replace")
+                with open(out_path, "w", encoding="utf-8") as f:
+                    f.write(data)
+            else:
+                if isinstance(data, np.ndarray):
+                    data = bytes(data)
+                with open(out_path, "wb") as f:
+                    f.write(data)
+
+    # ---------------------------------------------------------
+    # NEW: Extract only a list of files (no recursion needed)
+    # ---------------------------------------------------------
+    @staticmethod
+    def extract_file_list(h5_group, out_root, file_list):
+        """
+        Extract only the files in file_list from this group.
+        file_list is a list of filenames like ["fort.10", "input.dat"].
+        """
+        for key in h5_group:
+            if key not in file_list:
+                continue
+
+            obj = h5_group[key]
+            out_path = os.path.join(out_root, key)
+
+            # If it's a dataset, extract it
+            if isinstance(obj, h5py.Dataset):
+                dtype = obj.attrs.get("type", "binary")
+                data = obj[()]
+
+                if dtype == "text":
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8", errors="replace")
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        f.write(data)
+                else:
+                    if isinstance(data, np.ndarray):
+                        data = bytes(data)
+                    with open(out_path, "wb") as f:
+                        f.write(data)
+
+            # If it's a subgroup, recurse into it
+            elif isinstance(obj, h5py.Group):
+                subdir = os.path.join(out_root, key)
+                os.makedirs(subdir, exist_ok=True)
+                HDF5RunExtractor.extract_file_list(obj, subdir, file_list)
+
+    # ---------------------------------------------------------
+    # NEW: Extract only selected files into a temp directory
+    # ---------------------------------------------------------
+    @staticmethod
+    def extract_files_to_temp(hdf5_path, group_path, file_list):
+        """
+        Extract only the files in file_list from the given group_path
+        into a temporary directory.
+        """
+        tmp = tempfile.mkdtemp(prefix="gene_run_")
+        with h5py.File(hdf5_path, "r") as h5f:
+            group = h5f[group_path]
+            HDF5RunExtractor.extract_file_list(group, tmp, file_list)
+        return tmp
+
+    @staticmethod
+    def extract_to_temp(hdf5_path, group_path):
+        """(Original) Extract entire group."""
+        tmp = tempfile.mkdtemp(prefix="gene_run_")
+        with h5py.File(hdf5_path, "r") as h5f:
+            group = h5f[group_path]
+            HDF5RunExtractor.extract_group(group, tmp)
+        return tmp
+
+
 
 if __name__ == "__main__":
     import sys

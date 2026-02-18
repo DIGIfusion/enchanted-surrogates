@@ -16,12 +16,13 @@ class SlicesSampler1D(Sampler):
     """
 
     def __init__(self, parameters, bounds, base_run_dir=None,
-                 res=100, fixed=None, budget=100000, type='SlicesSampler1D'):
+                 res=100, fixed=None, budget=np.inf, type='SlicesSampler1D', *args, **kwargs):
         self.parameters = parameters
         self.bounds = bounds
         self.base_run_dir = base_run_dir
         self.res = res
         self.budget = budget
+        self.output_col = kwargs.get('output_col', None)
 
         # default fixed values for non-slice dimensions
         self.fixed = fixed or {p: 0.5*(b[0]+b[1]) for p, b in zip(parameters, bounds)}
@@ -93,6 +94,16 @@ class SlicesSampler1D(Sampler):
             name=name
         )
     
+    def get_output_col(self, df):
+        if self.output_col is not None:
+            return self.output_col
+        else:
+            output_col = [c for c in df.columns if 'output' in c]
+            if len(output_col) != 1:
+                raise RuntimeError(f"Dataset must contain exactly one output column. Found: {output_col}")
+            return output_col[0]
+
+    
     def plot_slices_from_dataset(self, cmap='viridis', dataset_path=None,
                                  df=None, dots_x=None, predictor=None,
                                  save_dir=None, name=''):
@@ -111,10 +122,7 @@ class SlicesSampler1D(Sampler):
                 dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
             df = pd.read_csv(dataset_path)
 
-        output_col = [c for c in df.columns if 'output' in c]
-        if len(output_col) != 1:
-            raise RuntimeError(f"Dataset must contain exactly one output column. Found: {output_col}")
-        ycol = output_col[0]
+        ycol = self.get_output_col(df)
 
         d = len(self.parameters)
 

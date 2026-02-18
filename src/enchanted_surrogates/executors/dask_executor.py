@@ -137,14 +137,19 @@ class DaskExecutor(Executor):
             if self.block_until_cluster_started:
                 print('WAIT UNTILL ALL dask-wor JOBS ARE RUNNING')
                 self.wait_for_all_dask_jobs_running()
+            
+            if self.scale_n_jobs is not None:
+                self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
+            elif self.scale_n_jobs_min is not None:
+                self.expected_number_of_workers = self.scale_n_jobs_min * int(self.SLURMcluster_config.get('processes',1))
+
                                 
         elif self.LocalCluster_config:
             self.expected_number_of_workers = self.LocalCluster_config['n_workers']
             self.cluster = LocalCluster(**self.LocalCluster_config)
             self.client = Client(self.cluster)
-            
+
         if self.block_until_cluster_started:
-            self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
             print(f"Waiting for {self.expected_number_of_workers} workers to start...")
             for i in range(1,self.expected_number_of_workers+2):
                 if i == self.expected_number_of_workers+1:
