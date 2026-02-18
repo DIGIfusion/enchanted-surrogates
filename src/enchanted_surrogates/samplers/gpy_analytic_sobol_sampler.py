@@ -364,21 +364,9 @@ class GpyAnalyticSobolSampler(Sampler):
     #         except Exception as exc:
     #             print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc} \n TRACEBACK:\n{traceback.format_exc()}')
     
-    def _get_unitXY_with_noise(self, normalize_y = False):
-        """
-        Returns:
-        X_unit     : scaled inputs (unique points)
-        Y_unique   : averaged outputs at each unique point
-        noise_vars : variance of repeats at each point (jitter if none)
-        se_vars    : standard error of variance at each point
-        mean_sems  : standard error of the mean at each point
-        counts     : number of repeats at each point
-        """
-        start = time.time()
-        X_real, Y = self.get_data()
-
+    def _collapse_data(self, X, Y):
         # group by unique points
-        unique_points, inverse = np.unique(X_real, axis=0, return_inverse=True)
+        unique_points, inverse = np.unique(X, axis=0, return_inverse=True)
         noise_vars = np.zeros(len(unique_points))
         se_vars = np.zeros(len(unique_points))
         Y_unique = np.zeros(len(unique_points))
@@ -402,7 +390,24 @@ class GpyAnalyticSobolSampler(Sampler):
                 noise_vars[i] = self.global_noise + 1e-8  # jitter if no repeats
                 se_vars[i] = 1e-8     # jitter for SE as well
                 mean_sems[i] = 1e-8   # jitter for SEM
+        
+        return unique_points, Y_unique, noise_vars, se_vars, mean_sems, counts
+    
+    def _get_unitXY_with_noise(self, normalize_y = False):
+        """
+        Returns:
+        X_unit     : scaled inputs (unique points)
+        Y_unique   : averaged outputs at each unique point
+        noise_vars : variance of repeats at each point (jitter if none)
+        se_vars    : standard error of variance at each point
+        mean_sems  : standard error of the mean at each point
+        counts     : number of repeats at each point
+        """
+        start = time.time()
+        X_real, Y = self.get_data()
 
+        unique_points, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_real, Y)
+                
         X_unit = self.to_unit(unique_points)
         end = time.time()
         print(f'GETTING AND COLLAPSING DATA TOOK: {(end-start)/60} min')
@@ -1012,41 +1017,71 @@ class GpyAnalyticSobolSampler(Sampler):
                 raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
             X_test = test_df[self.parameters].values
             y_test = test_df[out_col[0]].values
-            y_pred, _ = self.surrogate_predict(X_test)
-            if self.max_y:
-                mask = y_pred <= self.max_y
-                X_test = X_test[mask]
-                y_test = y_test[mask]
-                y_pred = y_pred[mask]
-            print('debug, ytest n nans', np.isnan(y_test).sum())
-            print('debug, ypred n nans', np.isnan(y_pred).sum())
-            residuals = y_test - y_pred
-            fig = plt.figure()
-            plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-            residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-            if not os.path.exists(residuals_save_dir):
-                os.mkdir(residuals_save_dir)
-            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
-            plt.close(fig)
+            
+            X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
+            if np.sum(counts > 3) > len(counts) / 2 # if more than half have more than three counts then we take advantage of repeat measurements when assessing surrogate quality 
+                # take advantage of repeat measurements
+                y_pred_unique, _ = self.surrogate_predict(X_unique)
 
-            fig = plt.figure()
-            plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-            residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
-            if not os.path.exists(residuals_save_dir):
-                os.mkdir(residuals_save_dir)
-            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
-            plt.close(fig)
+                # RMSE on the mean response
+                rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
 
-            print('debug n nans', np.isnan(residuals).sum())
-            rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
-            if self.num_repeats > 1:
-                noise_pred, _ = self.predict_noise(X_test)
-                msse = np.nanmean((residuals/noise_pred) ** 2)
-                nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
-                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
+                # Empirical std from repeats
+                empirical_stds = np.sqrt(noise_vars)
+
+                # Predicted std from noise surrogate
+                noise_pred_unique, _ = self.predict_noise(X_unique)
+
+                # RMSE on the noise (std)
+                rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
+
+                regression_results = {
+                    f'rmse_mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
+                    f'rmse_noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
+                    f'n_repeats_used-{self.test_data_name}': [int(np.sum(counts > 3))]
+                }
+
+                return regression_results
+
             else:
-                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
-            return regression_results
+                # not enough test set repeats, falling back to more primitive measures of performance
+                y_pred, _ = self.surrogate_predict(X_test)
+                if self.max_y:
+                    mask = y_pred <= self.max_y
+                    X_test = X_test[mask]
+                    y_test = y_test[mask]
+                    y_pred = y_pred[mask]
+                print('debug, ytest n nans', np.isnan(y_test).sum())
+                print('debug, ypred n nans', np.isnan(y_pred).sum())
+                residuals = y_test - y_pred
+                fig = plt.figure()
+                plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+                plt.close(fig)
+
+                fig = plt.figure()
+                plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+                plt.close(fig)
+
+                print('debug n nans', np.isnan(residuals).sum())
+                rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
+                if self.num_repeats > 1:
+                    # Ensure the training set at least has some repeats to make this valid
+                    noise_pred, _ = self.predict_noise(X_test)
+                    msse = np.nanmean((residuals/noise_pred) ** 2)
+                    nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
+                    regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
+                else:
+                    # crude for noisy underlying functions but best we have
+                    regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
+                return regression_results
         
     def _write_batch_info_inner(self, batch_dir, name=''):
         uq_results = self.uq_analysis()
