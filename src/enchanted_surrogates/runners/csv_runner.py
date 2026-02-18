@@ -13,6 +13,7 @@ class CsvRunner(Runner):
     def __init__(self, csv_path, tol=1e-8, type='CsvRunner', **kwargs):
         self.csv_path = csv_path    
         self.remove_run_dir = kwargs.get('remove_run_dir', None)    
+        self.remove_from_cache = kwargs.get('remove_from_cache', False)
         global _df_cache
 
         if _df_cache is None:
@@ -70,6 +71,12 @@ class CsvRunner(Runner):
 
         # Extract the output value (first match)
         value = self.df.loc[mask, self.output_col].iloc[0]
+        
+        if self.remove_from_cache:
+            # remove the value from the df, ONLY REMOVES IT FROM THE CACHED VARIABLE ON ONE WORKER, THE CACHED VARIABLE ON OTHER WORKERS ARE NOT AFFECTED.
+            _df_cache = _df_cache.loc[~mask].copy()
+            self.df = _df_cache
+
         end = time()
         print('csv runner time taken, single code run: ', end-start)
         if self.remove_run_dir:
