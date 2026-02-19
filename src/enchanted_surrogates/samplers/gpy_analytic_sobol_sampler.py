@@ -73,7 +73,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.chunk_size = kwargs.get("chunk_size", 5000)
         self.test_data_csv = kwargs.get("test_data_csv", None)
         self.test_data_name = kwargs.get("test_data_name", "test")
-        self.normalize_y = kwargs.get("normalize_y", True)
+        self.do_normalize_y = kwargs.get("do_normalize_y", True)
         self.sampling_strategy = kwargs.get('sampling_strategy', 'random')
         self.n_ensembles = kwargs.get('n_ensembles', 1) #useful if using a single acquisition function to help spread out the samples.
         self.batch_size = kwargs.get('batch_size', None) or 2
@@ -342,10 +342,10 @@ class GpyAnalyticSobolSampler(Sampler):
 
         return X_real, Y
 
-    def _get_unitXY(self, normalize_y = False):
+    def _get_unitXY(self, do_normalize_y = False):
         X_real, Y = self.get_data()
         X_unit = self.to_unit(X_real)
-        if normalize_y:
+        if do_normalize_y:
             Y = self.normalize_y(Y)
         return X_unit, Y
         
@@ -393,7 +393,7 @@ class GpyAnalyticSobolSampler(Sampler):
         
         return unique_points, Y_unique, noise_vars, se_vars, mean_sems, counts
     
-    def _get_unitXY_with_noise(self, normalize_y = False):
+    def _get_unitXY_with_noise(self, do_normalize_y = False):
         """
         Returns:
         X_unit     : scaled inputs (unique points)
@@ -414,7 +414,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
         Y = Y_unique.reshape(-1,1)
 
-        if normalize_y:
+        if do_normalize_y:
             # --- Normalization for main GP target ---
             print('debug mean Y', np.mean(Y))
             print('debug std Y', np.std(Y))
@@ -495,7 +495,7 @@ class GpyAnalyticSobolSampler(Sampler):
         - Else → heteroscedastic GP using jitter/noise_vars.
         """
 
-        X, Y_norm, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+        X, Y_norm, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
         print('debug y norm', Y_norm.shape)
         input_dim = X.shape[1]
         kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
@@ -507,7 +507,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
             # scale noise after normalization
             nv = se_mean.reshape(-1, 1)
-            if self.normalize_y:
+            if self.do_normalize_y:
                 nv = (nv/self._y_std)**2
             self.gp_model.likelihood.variance[:] = nv
             self.gp_model.likelihood.variance.fix()
@@ -526,7 +526,7 @@ class GpyAnalyticSobolSampler(Sampler):
             self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
 
             nv = noise_vars.reshape(-1, 1)
-            if self.normalize_y:
+            if self.do_normalize_y:
                 nv = (nv/self._y_std)**2
             self.gp_model.likelihood.variance[:] = nv
             self.gp_model.likelihood.variance.fix()
@@ -857,7 +857,7 @@ class GpyAnalyticSobolSampler(Sampler):
     def surrogate_predict(self, X_test):
         X_unit_test = self.to_unit(X_test)
         mean, var = self.gp_model.predict_noiseless(X_unit_test)
-        if self.normalize_y:
+        if self.do_normalize_y:
             mean = mean.flatten() * self._y_std + self._y_mean
             var  = var.flatten() * (self._y_std**2)
         return mean, np.sqrt(var)
@@ -907,7 +907,7 @@ class GpyAnalyticSobolSampler(Sampler):
     def uq_analysis(self):
         print("\n\n\n ================================== \n\n\n")
 
-        X, y = self._get_unitXY(normalize_y=self.normalize_y)
+        X, y = self._get_unitXY(do_normalize_y=self.do_normalize_y)
         n, D = X.shape
         vol = 1 #np.prod([b[1] - b[0] for b in self.bounds])
         # real_vol = np.prod(self._range)   # real domain volume
@@ -982,7 +982,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
         # since the model was trained on normalised y values, the mean and std will be for the normalised values and need to be converted back to real values
 
-        if self.normalize_y:
+        if self.do_normalize_y:
             mu = mu * self._y_std + self._y_mean
             var_pred = var_pred * (self._y_std ** 2)
 
@@ -1015,73 +1015,119 @@ class GpyAnalyticSobolSampler(Sampler):
             out_col = [col for col in test_df.columns if 'output' in col]
             if len(out_col) > 2:
                 raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
-            X_test = test_df[self.parameters].values
-            y_test = test_df[out_col[0]].values
-            
-            X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
-            if np.sum(counts > 3) > len(counts) / 2 # if more than half have more than three counts then we take advantage of repeat measurements when assessing surrogate quality 
-                # take advantage of repeat measurements
-                y_pred_unique, _ = self.surrogate_predict(X_unique)
+        X_test = test_df[self.parameters].values
+        y_test = test_df[out_col[0]].values
 
-                # RMSE on the mean response
-                rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
+        X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
 
-                # Empirical std from repeats
-                empirical_stds = np.sqrt(noise_vars)
+        if np.sum(counts > 3) > len(counts) / 2:
 
-                # Predicted std from noise surrogate
-                noise_pred_unique, _ = self.predict_noise(X_unique)
+            # Predictions for mean
+            y_pred_unique, _ = self.surrogate_predict(X_unique)
+            rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
 
-                # RMSE on the noise (std)
-                rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
+            # Empirical stds
+            empirical_stds = np.sqrt(noise_vars)
 
-                regression_results = {
-                    f'rmse_mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
-                    f'rmse_noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
-                    f'n_repeats_used-{self.test_data_name}': [int(np.sum(counts > 3))]
-                }
+            # Predicted stds
+            noise_pred_unique, _ = self.predict_noise(X_unique)
+            rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
 
-                return regression_results
+            # ---------------------------------------------------------
+            # RMSE for quantiles of Y_unique (already added earlier)
+            # ---------------------------------------------------------
+            quantiles_y = np.quantile(Y_unique, [0.25, 0.5, 0.75])
+            q25_y, q50_y, q75_y = quantiles_y
 
+            def rmse_masked(mask, true_vals, pred_vals):
+                if np.sum(mask) == 0:
+                    return np.nan
+                return np.sqrt(np.nanmean((true_vals[mask] - pred_vals[mask])**2))
+
+            # Mean prediction quantile RMSEs
+            rmse_q_0_25   = rmse_masked(Y_unique <= q25_y, Y_unique, y_pred_unique)
+            rmse_q_0_50   = rmse_masked(Y_unique <= q50_y, Y_unique, y_pred_unique)
+            rmse_q_25_50  = rmse_masked((Y_unique > q25_y) & (Y_unique <= q50_y), Y_unique, y_pred_unique)
+            rmse_q_50_75  = rmse_masked((Y_unique > q50_y) & (Y_unique <= q75_y), Y_unique, y_pred_unique)
+            rmse_q_50_100 = rmse_masked(Y_unique > q50_y, Y_unique, y_pred_unique)
+            rmse_q_75_100 = rmse_masked(Y_unique > q75_y, Y_unique, y_pred_unique)
+
+            # ---------------------------------------------------------
+            # NEW: RMSE for quantiles of empirical_stds (noise)
+            # ---------------------------------------------------------
+            quantiles_std = np.quantile(empirical_stds, [0.25, 0.5, 0.75])
+            q25_s, q50_s, q75_s = quantiles_std
+
+            rmse_std_0_25   = rmse_masked(empirical_stds <= q25_s, empirical_stds, noise_pred_unique)
+            rmse_std_0_50   = rmse_masked(empirical_stds <= q50_s, empirical_stds, noise_pred_unique)
+            rmse_std_25_50  = rmse_masked((empirical_stds > q25_s) & (empirical_stds <= q50_s), empirical_stds, noise_pred_unique)
+            rmse_std_50_75  = rmse_masked((empirical_stds > q50_s) & (empirical_stds <= q75_s), empirical_stds, noise_pred_unique)
+            rmse_std_50_100 = rmse_masked(empirical_stds > q50_s, empirical_stds, noise_pred_unique)
+            rmse_std_75_100 = rmse_masked(empirical_stds > q75_s, empirical_stds, noise_pred_unique)
+
+            regression_results = {
+                f'rmse_mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
+                f'rmse_noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
+                f'n_repeats_used-{self.test_data_name}': [int(np.sum(counts > 3))],
+
+                # Mean quantile RMSEs
+                f'rmse_0_25-{self.test_data_name}': [rmse_q_0_25],
+                f'rmse_0_50-{self.test_data_name}': [rmse_q_0_50],
+                f'rmse_25_50-{self.test_data_name}': [rmse_q_25_50],
+                f'rmse_50_75-{self.test_data_name}': [rmse_q_50_75],
+                f'rmse_50_100-{self.test_data_name}': [rmse_q_50_100],
+                f'rmse_75_100-{self.test_data_name}': [rmse_q_75_100],
+
+                # Noise quantile RMSEs
+                f'rmse_std_0_25-{self.test_data_name}': [rmse_std_0_25],
+                f'rmse_std_0_50-{self.test_data_name}': [rmse_std_0_50],
+                f'rmse_std_25_50-{self.test_data_name}': [rmse_std_25_50],
+                f'rmse_std_50_75-{self.test_data_name}': [rmse_std_50_75],
+                f'rmse_std_50_100-{self.test_data_name}': [rmse_std_50_100],
+                f'rmse_std_75_100-{self.test_data_name}': [rmse_std_75_100],
+            }
+
+            return regression_results
+
+        else:
+            # not enough test set repeats, falling back to more primitive measures of performance
+            y_pred, _ = self.surrogate_predict(X_test)
+            if self.max_y:
+                mask = y_pred <= self.max_y
+                X_test = X_test[mask]
+                y_test = y_test[mask]
+                y_pred = y_pred[mask]
+            print('debug, ytest n nans', np.isnan(y_test).sum())
+            print('debug, ypred n nans', np.isnan(y_pred).sum())
+            residuals = y_test - y_pred
+            fig = plt.figure()
+            plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+            residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+            if not os.path.exists(residuals_save_dir):
+                os.mkdir(residuals_save_dir)
+            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+            plt.close(fig)
+
+            fig = plt.figure()
+            plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+            residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+            if not os.path.exists(residuals_save_dir):
+                os.mkdir(residuals_save_dir)
+            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+            plt.close(fig)
+
+            print('debug n nans', np.isnan(residuals).sum())
+            rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
+            if self.num_repeats > 1:
+                # Ensure the training set at least has some repeats to make this valid
+                noise_pred, _ = self.predict_noise(X_test)
+                msse = np.nanmean((residuals/noise_pred) ** 2)
+                nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
+                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
             else:
-                # not enough test set repeats, falling back to more primitive measures of performance
-                y_pred, _ = self.surrogate_predict(X_test)
-                if self.max_y:
-                    mask = y_pred <= self.max_y
-                    X_test = X_test[mask]
-                    y_test = y_test[mask]
-                    y_pred = y_pred[mask]
-                print('debug, ytest n nans', np.isnan(y_test).sum())
-                print('debug, ypred n nans', np.isnan(y_pred).sum())
-                residuals = y_test - y_pred
-                fig = plt.figure()
-                plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
-                plt.close(fig)
-
-                fig = plt.figure()
-                plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
-                plt.close(fig)
-
-                print('debug n nans', np.isnan(residuals).sum())
-                rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
-                if self.num_repeats > 1:
-                    # Ensure the training set at least has some repeats to make this valid
-                    noise_pred, _ = self.predict_noise(X_test)
-                    msse = np.nanmean((residuals/noise_pred) ** 2)
-                    nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
-                    regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
-                else:
-                    # crude for noisy underlying functions but best we have
-                    regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
-                return regression_results
+                # crude for noisy underlying functions but best we have
+                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
+            return regression_results
         
     def _write_batch_info_inner(self, batch_dir, name=''):
         uq_results = self.uq_analysis()
@@ -1177,7 +1223,7 @@ class GpyAnalyticSobolSampler(Sampler):
         elif mode == "var_distpen":
             print('ACQUISITION MODE: var_distpen') 
             if X_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.do_normalize_y)
 
             # GP posterior variance
             mu, var = model.predict_noiseless(X_pool)
@@ -1207,7 +1253,7 @@ class GpyAnalyticSobolSampler(Sampler):
 
         elif mode == "dist":
             if X_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
 
             # Compute kernel similarity between pool points and training points
             # K_xt_x = k(X_pool, X_train)
@@ -1231,7 +1277,7 @@ class GpyAnalyticSobolSampler(Sampler):
         elif mode == "eigf": # doi: 10.1016/j.ress.2024.109945
             print('ACQUISITION MODE: eigf')
             if X_train is None and Y_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
             if X_train is not None and Y_train is not None:
                 pass
             else:
@@ -1249,7 +1295,7 @@ class GpyAnalyticSobolSampler(Sampler):
         elif mode == "vigf": # doi:10.1016/j.ress.2024.109945
             print('ACQUISITION MODE: vigf')
             if X_train is None and Y_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
             if X_train is not None and Y_train is not None:
                 pass
             else:
@@ -1286,7 +1332,7 @@ class GpyAnalyticSobolSampler(Sampler):
         elif mode == "intVar":
             print('ACQUISITION MODE: intVar')
             if X_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
 
             score = self.integral_variance_reduction(X_pool, model=model, X_train=X_train)
 
@@ -1294,7 +1340,7 @@ class GpyAnalyticSobolSampler(Sampler):
             # TODO should use test set to get rmse if available
             print('ACQUISITION MODE: oracle')
             if X_train is None and Y_train is None:
-                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(normalize_y = self.normalize_y)
+                X_train, Y_train, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
             if X_train is not None and Y_train is not None:
                 pass
             else:
@@ -1305,8 +1351,8 @@ class GpyAnalyticSobolSampler(Sampler):
             assert y_pool is not None
             y_model, _ = self.gp_model.predict_noiseless(X_pool)
             
-            if self.normalize_y:
-                y_pool_norm = self.normalize_y(y_pool)
+            if self.do_normalize_y:
+                y_pool_norm = self.do_normalize_y(y_pool)
                 orig_rmse = np.sqrt(np.mean((y_model.flatten() - y_pool_norm.flatten())**2))
 
             else:
@@ -1328,7 +1374,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 y_model, _ = new_model.predict_noiseless(X_pool)
 
                 # Compute RMSE
-                if self.normalize_y:
+                if self.do_normalize_y:
                     rmse = np.sqrt(np.mean((y_model.flatten() - y_pool_norm.flatten())**2))
 
                 else:

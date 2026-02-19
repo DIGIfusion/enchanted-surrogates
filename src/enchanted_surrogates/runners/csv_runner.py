@@ -46,6 +46,8 @@ class CsvRunner(Runner):
         Look up the output corresponding to the given params.
         Uses tolerance-based matching for numeric columns.
         """
+        global _df_cache
+
         start = time()
         # Validate keys
         if not all(k in self.df.columns for k in params.keys()):
@@ -69,12 +71,15 @@ class CsvRunner(Runner):
         if not mask.any():
             return {'success': False, self.output_col: np.nan}
 
-        # Extract the output value (first match)
-        value = self.df.loc[mask, self.output_col].iloc[0]
-        
+        # Extract the row index of the selected value
+        row_index = self.df.loc[mask].index[0]
+
+        # Extract the value
+        value = self.df.loc[row_index, self.output_col]
+
         if self.remove_from_cache:
-            # remove the value from the df, ONLY REMOVES IT FROM THE CACHED VARIABLE ON ONE WORKER, THE CACHED VARIABLE ON OTHER WORKERS ARE NOT AFFECTED.
-            _df_cache = _df_cache.loc[~mask].copy()
+            # Remove ONLY that row
+            _df_cache = _df_cache.drop(index=row_index)
             self.df = _df_cache
 
         end = time()
