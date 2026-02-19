@@ -73,7 +73,12 @@ class Supervisor:
         self.base_run_dir = args.supervisor.get("base_run_dir")
 
         if self.base_run_dir is None:
-            raise ValueError("base_run_dir is not set in the provided configuration")
+            if sys.stdout.isatty():
+                self.base_run_dir = "base_run_dir"
+                log.warning("No config for base_run_dir was found, " \
+                "created base_run_dir folder to working directory")
+            else:
+                raise ValueError("base_run_dir is not set in the provided configuration")
 
         self.create_base_run_dir(self.base_run_dir, config_path)
 
