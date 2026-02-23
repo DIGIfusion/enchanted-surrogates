@@ -53,3 +53,7 @@ sampler:
   num_samples: [7, 3]
   parameters: ['ntor', 'helena_dir']
 ```
+
+::: mishka_plugin
+    options:
+      show_source: false
