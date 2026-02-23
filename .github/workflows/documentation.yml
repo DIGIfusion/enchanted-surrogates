@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - feature/enc-129-automated-documentation-from-plugins
 
 permissions:
   contents: read
