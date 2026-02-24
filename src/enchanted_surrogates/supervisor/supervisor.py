@@ -205,10 +205,13 @@ class Supervisor:
             dataset.to_parquet(
                 os.path.join(self.base_run_dir, f"{filename}.parquet"),
                 engine="pyarrow",
-                index=True,
+                index=False
             )
         else:
-            dataset.to_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+            dataset.to_csv(
+                os.path.join(self.base_run_dir, f"{filename}.csv"), 
+                index=False
+            )
 
     def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
         """
