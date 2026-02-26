@@ -49,6 +49,9 @@ plugins:
             merge_init_into_class: true
             # Disable runtime inspection (safer for CI)
             allow_inspection: false
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
 
 markdown_extensions:
   - attr_list

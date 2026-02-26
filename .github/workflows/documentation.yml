@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions
+          pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
 
       - name: Checkout private docs from plugin Mishka
         uses: actions/checkout@v4
