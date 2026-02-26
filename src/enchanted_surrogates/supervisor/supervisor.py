@@ -88,6 +88,11 @@ class Supervisor:
                 self.batch_number = previous_run_data["batch_number"]
                 self.depth = previous_run_data["depth"]
                 if len(self.groups) > self.depth:
+                    # Extending should run a the whole budget worth of sampling again so add the
+                    # amount of completed batches. TODO: There is an issue with this: not enough
+                    # batches are run depending on budget set in config. Needs to be fixed
+                    if self.run_mode == "extend":
+                        self.groups[self.depth].sampler.budget += (self.batch_number + 1)
                     self.groups[self.depth].sampler.skip(self.batch_number + 1)
             else:
                 raise RuntimeError(
@@ -170,11 +175,9 @@ class Supervisor:
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
 
-            if depth == len(self.groups):
-                continue
-
             # Create a summary file with last_complete_dataset for nesting
-            self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
+            if depth < len(self.groups) - 1:
+                self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
