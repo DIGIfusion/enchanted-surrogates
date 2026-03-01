@@ -87,12 +87,12 @@ class Supervisor:
                     previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
                 self.batch_number = previous_run_data["batch_number"]
                 self.depth = previous_run_data["depth"]
+                submitted_samples = previous_run_data["submitted_samples"]
                 if len(self.groups) > self.depth:
-                    # Extending should run a the whole budget worth of sampling again so add the
-                    # amount of completed batches. TODO: There is an issue with this: not enough
-                    # batches are run depending on budget set in config. Needs to be fixed
+                    # Extending should generate budget worth of new samples so add already submitted
+                    # amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[self.depth].sampler.budget += (self.batch_number + 1)
+                        self.groups[self.depth].sampler.budget += submitted_samples
                     self.groups[self.depth].sampler.skip(self.batch_number + 1)
             else:
                 raise RuntimeError(
@@ -159,7 +159,11 @@ class Supervisor:
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
 
-                data = {"batch_number": batch_number, "depth": depth}
+                data = {
+                    "batch_number": batch_number, 
+                    "depth": depth, 
+                    "submitted_samples": group.sampler.submitted
+                }
                 path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
                 with open(path, "w", encoding="ascii") as f:
                     yaml.safe_dump(data, f)
