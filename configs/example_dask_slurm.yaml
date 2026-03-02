@@ -24,6 +24,7 @@ runners:
 
 supervisor:
   base_run_dir: "data_dir/dask_slurm"
+  local_storage: TMPDIR
   run_order:
   - executor: e1
     sampler: s1

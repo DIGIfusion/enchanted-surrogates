@@ -69,6 +69,15 @@ class Supervisor:
         if self.base_run_dir is None:
             raise ValueError("base_run_dir is not set in the provided configuration")
 
+        self.local_storage = args.supervisor.get("local_storage")
+
+        if self.local_storage and not os.path.exists(self.local_storage):
+            env = self.local_storage
+            self.local_storage = os.environ.get(env)
+
+            if not self.local_storage:
+                print(f"Local storage environment variable {env} not set, ignoring...")
+
         self.create_base_run_dir(self.base_run_dir, config_path)
 
     def start(self):
@@ -80,6 +89,11 @@ class Supervisor:
         """
 
         print("Starting runs...")
+
+        if self.local_storage:
+            real_run_dir = self.local_storage
+        else:
+            real_run_dir = self.base_run_dir
 
         rows = [{}] # Holds results for run of previous depth. Summary file is created from this.
         for depth, group in enumerate(self.groups):
@@ -98,7 +112,7 @@ class Supervisor:
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
-                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_r{i}")
+                    os.path.join(real_run_dir, f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
                 ]
 
@@ -128,13 +142,13 @@ class Supervisor:
             and self.args.supervisor.get("summary_datatype") == "parquet"
         ):
             enchanted_dataset.to_parquet(
-                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+                os.path.join(self.real_run_dir, "enchanted_dataset.parquet"),
                 engine="pyarrow",
                 index=True,
             )
         else:
             enchanted_dataset.to_csv(
-                os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+                os.path.join(self.real_run_dir, "enchanted_dataset.csv")
             )
 
         # Create HDF5 file by default
@@ -145,6 +159,13 @@ class Supervisor:
         print("Shutting down scheduler and workers...")
         for group in self.groups:
             group.executor.clean()
+
+        # Copy output back from temporary local disk area, if needed 
+        if self.local_storage:
+            for item in os.listdir(self.local_storage):
+                src = os.path.join(self.local_storage, item)
+                dst = os.path.join(self.base_run_dir, item)
+                shutil.move(src, dst)
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
