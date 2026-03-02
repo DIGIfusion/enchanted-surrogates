@@ -12,13 +12,30 @@ def fake_sampler():
     def _factory(sample_batches: list[list[dict]]):
         sampler = MagicMock()
         sampler.__name__ = "MockSampler"
+        sampler._submitted = 0
+        sampler._budget = sum(len(batch) for batch in sample_batches)
 
         # On every function call, next list of dicts from sample_batches is returned
-        sampler.get_next_samples.side_effect = sample_batches
+        def _get_next_samples():
+            batch_index = sampler.get_next_samples.call_count - 1
+            batch = sample_batches[batch_index]
+            sampler._submitted += len(batch)
+            return batch
 
-        # Budget ends after all batches have been consumed
+        sampler.get_next_samples.side_effect = _get_next_samples
+
+        def _get_budget(self):
+            return self._budget
+
+        def _set_budget(self, value):
+            self._budget = value
+
+        type(sampler).budget = property(_get_budget, _set_budget)
+
+        type(sampler).submitted = property(lambda self: self._submitted)
+
         type(sampler).has_budget = property(
-            lambda self: self.get_next_samples.call_count < len(sample_batches)
+            lambda self: self._submitted < self._budget
         )
 
         return sampler
