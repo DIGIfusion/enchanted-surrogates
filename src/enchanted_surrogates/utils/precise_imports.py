@@ -1,13 +1,15 @@
-import os
+"""
+Utility functions for importing modules. During first import, all plugins are
+imported and cached.
+"""
+
 import re
 import importlib
-import sys
 from enchanted_surrogates import load_plugins
-src_dir = os.path.dirname(
-    os.sep.join(
-        os.path.normpath(__file__).split(os.sep)[:__file__.split(os.sep).index("enchanted_surrogates") + 1]))
-sys.path.append(src_dir)
 
+# All imported module entry points are stored to ensure modules are only imported once.
+# Mapping from [module_name (str) -> class]
+__module_entry_points = None
 
 def detect_case_style(s):
     """
@@ -102,6 +104,51 @@ def get_snake_and_pascal(string):
             f"Input string '{string}' must be in either snake_case or PascalCase format.")
     return string_snake, string_pascal
 
+def clear_import_cache():
+    """
+    Clears everything from import cache.
+    """
+    global __module_entry_points
+    __module_entry_points = None
+
+def cached_import(type_name: str, base_module: str):
+    """
+    Imports a module entry point by name. All imports are cached, 
+    so overhead after first import is minimal. This is for internal use only:
+    for importing modules use import_executor, import_sampler etc.
+    
+    Parameters
+    ----------
+    type_name : str
+        Class name of the type that should be imported.
+    base_module : str
+        For non-plugin modules, the module name. Eg. 'samplers'
+
+    Returns
+    -------
+    class
+        Class entry point. To construct an instance, 
+        use eg. cached_import(type_name, base_module)(**kwargs)
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    type_snake, type_pascal = get_snake_and_pascal(type_name)
+
+    global __module_entry_points
+    if not __module_entry_points:
+        __module_entry_points = load_plugins()
+
+    if type_snake in __module_entry_points:
+        return __module_entry_points[type_snake]
+
+    imported_type = getattr(importlib.import_module(
+        f"enchanted_surrogates.{base_module}.{type_snake}"), type_pascal)
+    # Cache for later use
+    __module_entry_points[type_snake] = imported_type
+    return imported_type
 
 def import_sampler(sampler_type, sampler_config):
     """
@@ -124,16 +171,10 @@ def import_sampler(sampler_type, sampler_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(sampler_type)
-    eps = load_plugins()
-    if 'type' in sampler_config:
-        sampler_config.pop('type')
-    if type_snake in eps:
-        sampler = eps[type_snake](**sampler_config)
-    else:
-        sampler = getattr(
-            importlib.import_module(
-                f'enchanted_surrogates.samplers.{type_snake}'), type_pascal)(**sampler_config)
+    config: dict = sampler_config.copy()
+    config.pop("type", None)
+
+    sampler = cached_import(sampler_type, "samplers")(**config)
     return sampler
 
 
@@ -158,15 +199,7 @@ def import_runner(runner_type, runner_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(runner_type)
-    eps = load_plugins()
-
-    if type_snake in eps:
-        runner = eps[type_snake](**runner_config)
-    else:
-        runner = getattr(
-            importlib.import_module(
-                f'enchanted_surrogates.runners.{type_snake}'), type_pascal)(**runner_config)
+    runner = cached_import(runner_type, "runners")(**runner_config)
     return runner
 
 
@@ -191,16 +224,8 @@ def import_executor(executor_type, executor_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(executor_type)
-    eps = load_plugins()
-
-    if type_snake in eps:
-        cls = eps[type_snake](**executor_config)
-    else:
-        cls = getattr(
-            importlib.import_module(
-                f'enchanted_surrogates.executors.{type_snake}'), type_pascal)(**executor_config)
-    return cls
+    executor = cached_import(executor_type, "executors")(**executor_config)
+    return executor
 
 def import_parser(parser_type, parser_config):
     """
@@ -223,11 +248,5 @@ def import_parser(parser_type, parser_config):
     ImportError
         If the module or class cannot be found.
     """
-    type_snake, type_pascal = get_snake_and_pascal(parser_type)
-    eps = load_plugins()
-
-    if type_snake in eps:
-        parser = eps[type_snake](**parser_config)
-    else:
-        parser = getattr(importlib.import_module(f'enchanted_surrogates.parsers.{type_snake}'),type_pascal)(**parser_config)
+    parser = cached_import(parser_type, "parsers")(**parser_config)
     return parser

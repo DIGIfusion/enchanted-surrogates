@@ -78,7 +78,12 @@ class Supervisor:
         self.save_files_arg = args.supervisor.get("save_files", "all")
 
         if self.base_run_dir is None:
-            raise ValueError("base_run_dir is not set in the provided configuration")
+            if sys.stdout.isatty():
+                self.base_run_dir = "base_run_dir"
+                log.warning("No config for base_run_dir was found, " \
+                "created base_run_dir folder to working directory")
+            else:
+                raise ValueError("base_run_dir is not set in the provided configuration")
 
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
