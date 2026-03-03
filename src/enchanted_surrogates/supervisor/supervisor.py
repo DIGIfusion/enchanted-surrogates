@@ -11,11 +11,11 @@ import warnings
 import shutil
 import glob
 from time import sleep
-import yaml
 import h5py
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
     import_executors,
@@ -80,20 +80,23 @@ class Supervisor:
         if self.base_run_dir is None:
             raise ValueError("base_run_dir is not set in the provided configuration")
 
+        self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
+        self.previous_run_data = None
+
         if self.run_mode in ("resume", "extend"):
-            previous_run_batches = os.path.join(self.base_run_dir, "enchanted_run.yaml")
-            if os.path.isfile(previous_run_batches):
-                with open(previous_run_batches, "r", encoding="ascii") as f:
-                    previous_run_data = yaml.load(f, Loader=yaml.SafeLoader)
-                self.batch_number = previous_run_data["batch_number"]
-                self.depth = previous_run_data["depth"]
-                submitted_samples = previous_run_data["submitted_samples"]
-                if len(self.groups) > self.depth:
-                    # Extending should generate budget worth of new samples so add already submitted
-                    # amount to the current budget
+            self.previous_run_data = RunData.load(self.previous_run_file)
+            if self.previous_run_data:
+                if len(self.groups) > self.previous_run_data.depth:
+                    # Extending should generate budget worth of new samples so add
+                    # already submitted amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[self.depth].sampler.budget += submitted_samples
-                    self.groups[self.depth].sampler.skip(self.batch_number + 1)
+                        self.groups[self.previous_run_data.depth].sampler.budget += (
+                            self.previous_run_data.submitted_samples
+                        )
+
+                    self.groups[self.previous_run_data.depth].sampler.skip(
+                        self.previous_run_data.batch_number + 1
+                    )
             else:
                 raise RuntimeError(
                     "Tried to continue from previous sampling but no "
@@ -120,12 +123,13 @@ class Supervisor:
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
-            if hasattr(self, "depth"):
-                if depth < self.depth:
+            # Restore run state from previous data, if needed and in correct position of the loops
+            if self.previous_run_data:
+                if depth < self.previous_run_data.depth:
                     continue
 
-                if depth == self.depth and hasattr(self, "batch_number"):
-                    batch_number = self.batch_number + 1
+                if depth == self.previous_run_data.depth:
+                    batch_number = self.previous_run_data.batch_number + 1
 
                     batch_dataset = self.read_summary()
                     last_complete_dataset = self.read_summary(
@@ -159,14 +163,12 @@ class Supervisor:
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
 
-                data = {
-                    "batch_number": batch_number, 
-                    "depth": depth, 
-                    "submitted_samples": group.sampler.submitted
-                }
-                path = os.path.join(self.base_run_dir, "enchanted_run.yaml")
-                with open(path, "w", encoding="ascii") as f:
-                    yaml.safe_dump(data, f)
+                run_data = RunData(
+                    batch_number=batch_number,
+                    depth=depth,
+                    submitted_samples=group.sampler.submitted
+                )
+                run_data.save(self.previous_run_file)
 
                 # Create summary csv or parquet file
                 self.write_summary(batch_dataset)
@@ -216,7 +218,7 @@ class Supervisor:
             )
         else:
             dataset.to_csv(
-                os.path.join(self.base_run_dir, f"{filename}.csv"), 
+                os.path.join(self.base_run_dir, f"{filename}.csv"),
                 index=False
             )
 
@@ -259,9 +261,11 @@ class Supervisor:
         """
 
         if not os.path.exists(self.base_run_dir):
-            return self.create_base_run_dir(self.base_run_dir, config_path)
+            self.create_base_run_dir(self.base_run_dir, config_path)
+            return
 
-        dirs = glob.glob(f"{self.base_run_dir}/d{self.depth}_b{self.batch_number + 1}*")
+        dirs = glob.glob(f"{self.base_run_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
 
         if not dirs:
             return
