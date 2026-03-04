@@ -171,6 +171,26 @@ class GpyAnalyticSobolSampler(Sampler):
         """Map unit inputs back to real bounds."""
         return self._lb + np.asarray(X_unit) * self._range
 
+
+    # ---------------------------
+    # selecting the output col
+    # ---------------------------
+    def get_output_col(self, df=None, csv_path=None):
+        
+        def output_from_df(df):
+            output_col = [col for col in df.columns if 'output' in col]
+            if len(output_col) != 1:
+                raise RuntimeError(f'Exactly one output column required in training data but found: {output_col}')
+            return output_col[0]
+        
+        if self.output_col:
+            return self.output_col
+        elif csv_path is not None:
+            df = pd.read_csv(csv_path)
+            return output_from_df(df)
+        elif df is not None:
+            return output_from_df(df)
+
     # ---------------------------
     # Pool management
     # ---------------------------
@@ -191,14 +211,28 @@ class GpyAnalyticSobolSampler(Sampler):
                 raise ValueError('THE POOL SAMPLER DID NOT RETURN ANY SAMPLES')
             else:
                 self.pool = np.array(collected, dtype=float)
+
         if self.pool_csv_path is not None:
             df = pd.read_csv(self.pool_csv_path)
-            self.pool = self.to_unit(df[self.parameters].to_numpy())
-            output_col = [col for col in df.columns if 'output' in col]
-            if len(output_col)>1:
-                warnings.warn(f'MORE THAN ONE OUTPUT WAS FOUND IN THE POOL CSV: {output_col}. THE FIRST WILL BE TAKEN AS THE OUTPUT OF INTEREST. {output_col[0]}')
-            output_col = output_col[0]
-            self.pool_y = df[output_col].to_numpy() # unormalised
+
+            # Identify output column
+            output_col = self.get_output_col(df=df)
+
+            # Identify numeric columns (float, int)
+            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+
+            # We only want to aggregate numeric columns that are NOT parameters
+            agg_cols = [col for col in numeric_cols if col not in self.parameters]
+
+            # Group by parameters and average numeric columns only
+            grouped = (
+                df.groupby(self.parameters, as_index=False)
+                .agg({col: 'mean' for col in agg_cols})
+            )
+
+            # Build pool and pool_y
+            self.pool = self.to_unit(grouped[self.parameters].to_numpy())
+            self.pool_y = grouped[output_col].to_numpy()
 
         else:
             self.pool = self.rng.uniform(low=0,
@@ -539,6 +573,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc}')
 
         # Fit noise GP if repeats exist
+        print('debug, before fit noise, counts, self.num_repeats', counts, self.num_repeats)
         if np.any(counts > 1) and self.num_repeats > 1:
             self.fit_noise(X, noise_vars, se_vars)
 
@@ -552,6 +587,24 @@ class GpyAnalyticSobolSampler(Sampler):
 
         # Convert variance ± error to std ± error
         std, std_err = self.var_to_std(noise_vars, se_vars)
+
+        # New: mask out points where std/std_err is 0 as this will kill the model
+        mask = np.isfinite(std) & np.isfinite(std_err) & (std > 0)
+        print("debug noise mask kept/total:", mask.sum(), len(mask))
+        X = X[mask]
+        std = std[mask]
+        std_err = std_err[mask]
+        
+        print('debug fit noise')
+        print("debug var min/max:", np.nanmin(noise_vars), np.nanmax(noise_vars))
+        print("debug se_vars min/max:", np.nanmin(se_vars), np.nanmax(se_vars))
+
+        print("debug std min/max:", np.nanmin(std), np.nanmax(std))
+        print("debug std_err min/max:", np.nanmin(std_err), np.nanmax(std_err))
+
+        print("debug std == 0 count:", np.sum(std == 0))
+        print("debug std_err nonfinite count:", np.sum(~np.isfinite(std_err)))
+
 
         # --- Independent normalization for noise GP ---
         self._noise_mean = float(np.mean(std))
@@ -569,10 +622,34 @@ class GpyAnalyticSobolSampler(Sampler):
         self.noise_gp.likelihood.variance[:] = (std_err_norm.reshape(-1, 1))**2
         self.noise_gp.likelihood.variance.fix()
 
+        print('debug fitting noise')
+
+        print("debug std min/max/mean:",
+            np.nanmin(std), np.nanmax(std), np.nanmean(std))
+        print("debug std_err min/max/mean:",
+            np.nanmin(std_err), np.nanmax(std_err), np.nanmean(std_err))
+        print("debug std_norm min/max/mean:",
+            np.nanmin(std_norm), np.nanmax(std_norm), np.nanmean(std_norm))
+        print("debug std_err_norm min/max/mean:",
+            np.nanmin(std_err_norm), np.nanmax(std_err_norm), np.nanmean(std_err_norm))
+
         try:
             self.noise_gp.optimize(messages=False)
         except Exception as exc:
             print(f'GLOBAL NOISE OPTIMIZE FAILED. ERROR: {exc}')
+
+        print("debug noise_gp objective:", self.noise_gp.objective_function())
+        print("debug noise_gp log_likelihood:", self.noise_gp.log_likelihood())
+        print("debug noise_gp gradient finite:", np.isfinite(self.noise_gp.gradient).all())
+        print("debug noise_gp gradient min/max:",
+            np.nanmin(self.noise_gp.gradient), np.nanmax(self.noise_gp.gradient))
+
+        print("debug noise_gp likelihood.variance shape:",
+            self.noise_gp.likelihood.variance.shape)
+        print("debug noise_gp likelihood.variance min/max:",
+            np.nanmin(self.noise_gp.likelihood.variance.values),
+            np.nanmax(self.noise_gp.likelihood.variance.values))
+
 
     def var_to_std(self, var, var_err):
         """
@@ -603,11 +680,65 @@ class GpyAnalyticSobolSampler(Sampler):
     def predict_noise(self, X_test):
         if not hasattr(self, 'noise_gp') or self.noise_gp is None:
             raise RuntimeError("Noise GP not fitted. Call fit() first with repeats.")
-
+        print('debug predict noise')
         X_unit_test = self.to_unit(X_test)
         pred_std_mean_norm, pred_std_var_norm = self.noise_gp.predict_noiseless(X_unit_test)
+        print('debug self.noise_gp')
+        print("X_unit_test dtype:", X_unit_test.dtype)
+        print("X_unit_test shape:", X_unit_test.shape)
+        print("X_unit_test finite:", np.isfinite(X_unit_test).all())
+        print("X_unit_test min/max:", np.nanmin(X_unit_test), np.nanmax(X_unit_test))
+
+        print(self.noise_gp)
+        print("lengthscale:", self.noise_gp.kern.lengthscale.values)
+        print("variance:", self.noise_gp.kern.variance.values)
+
+        if hasattr(self.noise_gp, 'Gaussian_noise'):
+            print("noise variance:", self.noise_gp.Gaussian_noise.variance.values)
+
+        K = self.noise_gp.kern.K(self.noise_gp.X)
+        print("K shape:", K.shape)
+        print("K finite:", np.isfinite(K).all())
+        print("K min/max:", np.nanmin(K), np.nanmax(K))
+
+        try:
+            L = np.linalg.cholesky(K + np.eye(K.shape[0]) * 1e-6)
+            print("Cholesky OK")
+        except Exception as e:
+            print("Cholesky failed:", e)
+
+        post = self.noise_gp.posterior
+
+        for name in ["mean", "covariance", "woodbury_vector"]:
+            arr = getattr(post, name)
+            print(f"posterior.{name} finite:", np.isfinite(arr).all())
+            if np.isfinite(arr).any():
+                print(f"posterior.{name} min/max:",
+                    np.nanmin(arr), np.nanmax(arr))
+            else:
+                print(f"posterior.{name} is all non‑finite")
+
+        print("Y shape:", self.noise_gp.Y.shape)
+        print("Y finite:", np.isfinite(self.noise_gp.Y).all())
+        print("Y min/max:", np.nanmin(self.noise_gp.Y), np.nanmax(self.noise_gp.Y))
+
+        norm = getattr(self.noise_gp, 'normalizer', None)
+        print("normalizer:", norm)
+
+        if norm is not None:
+            print("normalizer.mean:", norm.mean)
+            print("normalizer.std:", norm.std)
+            print("normalizer.std finite:", np.isfinite(norm.std).all())
+
+        print('debug predict noise, pred_std_mean_norm')
+        print("dtype:", pred_std_mean_norm.dtype)
+        print("shape:", pred_std_mean_norm.shape)
+        print("nan count:", np.isnan(pred_std_mean_norm).sum())
+        print("inf count:", np.isinf(pred_std_mean_norm).sum())
+        print("finite count:", np.isfinite(pred_std_mean_norm).sum())
 
         # Rescale using noise normalization
+        print('debug self noise_std, self.noise_mean', self._noise_std, self._noise_mean)
         pred_std_mean = pred_std_mean_norm.flatten() * self._noise_std + self._noise_mean
         pred_std_err  = np.sqrt(np.maximum(pred_std_var_norm.flatten(), 0.0)) * self._noise_std
         return pred_std_mean, pred_std_err
@@ -1019,19 +1150,30 @@ class GpyAnalyticSobolSampler(Sampler):
         y_test = test_df[out_col[0]].values
 
         X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
+        # filter to remove where noise_vars==0
+        X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = X_unique[noise_vars!=0], Y_unique[noise_vars!=0], noise_vars[noise_vars!=0], se_vars[noise_vars!=0], mean_sems[noise_vars!=0], counts[noise_vars!=0]
 
         if np.sum(counts > 3) > len(counts) / 2:
 
             # Predictions for mean
             y_pred_unique, _ = self.surrogate_predict(X_unique)
             rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
-
+            nnrmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2 / noise_vars))
             # Empirical stds
             empirical_stds = np.sqrt(noise_vars)
 
             # Predicted stds
             noise_pred_unique, _ = self.predict_noise(X_unique)
             rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
+            print('debug rmse_noise', type(rmse_noise), rmse_noise)
+            print('debug empirical_stds, min, max, mean', np.min(empirical_stds), np.max(empirical_stds), np.mean(empirical_stds))
+            print('debug noise_pred_unique, min, max, mean', np.min(noise_pred_unique), np.max(noise_pred_unique), np.mean(noise_pred_unique))
+
+            print("dtype:", noise_pred_unique.dtype)
+            print("shape:", noise_pred_unique.shape)
+            print("nan count:", np.isnan(noise_pred_unique).sum())
+            print("inf count:", np.isinf(noise_pred_unique).sum())
+            print("finite count:", np.isfinite(noise_pred_unique).sum())
 
             # ---------------------------------------------------------
             # RMSE for quantiles of Y_unique (already added earlier)
@@ -1066,25 +1208,26 @@ class GpyAnalyticSobolSampler(Sampler):
             rmse_std_75_100 = rmse_masked(empirical_stds > q75_s, empirical_stds, noise_pred_unique)
 
             regression_results = {
-                f'rmse_mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
-                f'rmse_noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
-                f'n_repeats_used-{self.test_data_name}': [int(np.sum(counts > 3))],
+                f'rmse-mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
+                f'nnrmse-mean_{len(Y_unique)}-{self.test_data_name}': [nnrmse_mean], # less than 1 means it is better than running a single simulation with the MC noise.
+                f'rmse-noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
+                f'n_repeats_used-{self.test_data_name}': [np.mean(counts)],
 
                 # Mean quantile RMSEs
-                f'rmse_0_25-{self.test_data_name}': [rmse_q_0_25],
-                f'rmse_0_50-{self.test_data_name}': [rmse_q_0_50],
-                f'rmse_25_50-{self.test_data_name}': [rmse_q_25_50],
-                f'rmse_50_75-{self.test_data_name}': [rmse_q_50_75],
-                f'rmse_50_100-{self.test_data_name}': [rmse_q_50_100],
-                f'rmse_75_100-{self.test_data_name}': [rmse_q_75_100],
+                f'rmse-mean-quantile_0_25-{self.test_data_name}': [rmse_q_0_25],
+                f'rmse-mean-quantile_0_50-{self.test_data_name}': [rmse_q_0_50],
+                f'rmse-mean-quantile_25_50-{self.test_data_name}': [rmse_q_25_50],
+                f'rmse-mean-quantile_50_75-{self.test_data_name}': [rmse_q_50_75],
+                f'rmse-mean-quantile_50_100-{self.test_data_name}': [rmse_q_50_100],
+                f'rmse-mean-quantile_75_100-{self.test_data_name}': [rmse_q_75_100],
 
                 # Noise quantile RMSEs
-                f'rmse_std_0_25-{self.test_data_name}': [rmse_std_0_25],
-                f'rmse_std_0_50-{self.test_data_name}': [rmse_std_0_50],
-                f'rmse_std_25_50-{self.test_data_name}': [rmse_std_25_50],
-                f'rmse_std_50_75-{self.test_data_name}': [rmse_std_50_75],
-                f'rmse_std_50_100-{self.test_data_name}': [rmse_std_50_100],
-                f'rmse_std_75_100-{self.test_data_name}': [rmse_std_75_100],
+                f'rmse-std-quantile_0_25-{self.test_data_name}': [rmse_std_0_25],
+                f'rmse-std-quantile_0_50-{self.test_data_name}': [rmse_std_0_50],
+                f'rmse-std-quantile_25_50-{self.test_data_name}': [rmse_std_25_50],
+                f'rmse-std-quantile_50_75-{self.test_data_name}': [rmse_std_50_75],
+                f'rmse-std-quantile_50_100-{self.test_data_name}': [rmse_std_50_100],
+                f'rmse-std-quantile_75_100-{self.test_data_name}': [rmse_std_75_100],
             }
 
             return regression_results

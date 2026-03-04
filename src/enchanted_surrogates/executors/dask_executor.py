@@ -332,11 +332,13 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                 samples = self.sampler.get_next_samples()
                 if not samples:
                     print("SAMPLER DID NOT RETURN ANY SAMPLES, EXITING")
-                    shutil.rmtree(batch_dir)
+                    if os.path.exists(batch_dir):
+                        shutil.rmtree(batch_dir)
                     break
                 if self.sampler.submitted > self.sampler.budget:
                     print(f'BUDGET REACHED | SUBMITTED={self.sampler.submitted} | BUDGET={self.sampler.budget} | EXITING')
-                    shutil.rmtree(batch_dir)
+                    if os.path.exists(batch_dir):
+                        shutil.rmtree(batch_dir)
                     break
                 
                 _futures = self.submit_batch(samples, base_run_dir=batch_dir, request_errors=True)

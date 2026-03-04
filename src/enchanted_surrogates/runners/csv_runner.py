@@ -51,6 +51,7 @@ class CsvRunner(Runner):
         start = time()
         # Validate keys
         if not all(k in self.df.columns for k in params.keys()):
+            print('debug not all params in stored df')
             return {'success': False, self.output_col: np.nan}
 
         # Start with all rows valid
@@ -69,6 +70,7 @@ class CsvRunner(Runner):
 
         # No match found
         if not mask.any():
+            print(f'debug no match found for params: {params}, closest:')
             return {'success': False, self.output_col: np.nan}
 
         # Extract the row index of the selected value

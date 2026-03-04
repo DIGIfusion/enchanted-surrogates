@@ -345,9 +345,19 @@ class GpyAnalyticSobolSamplerOld(Sampler):
         
         if self.pool_csv_path is not None:
             df = pd.read_csv(self.pool_csv_path)
-            self.pool = self.to_unit(df[self.parameters].to_numpy())
-            output_col = self.get_output_col(df = df)
-            self.pool_y = df[output_col].to_numpy() # unormalised
+
+            # Identify the output column using your existing helper
+            output_col = self.get_output_col(df=df)
+
+            # Group by parameter columns and average all other numeric columns
+            grouped = (
+                df.groupby(self.parameters, as_index=False)
+                .agg({col: 'mean' for col in df.columns if col not in self.parameters})
+            )
+
+            # Convert to numpy arrays
+            self.pool = self.to_unit(grouped[self.parameters].to_numpy())
+            self.pool_y = grouped[output_col].to_numpy()
 
         else:
             self.pool = rng.uniform(
