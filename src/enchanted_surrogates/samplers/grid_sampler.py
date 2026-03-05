@@ -1,5 +1,14 @@
 # samplers/grid_sampler.py
+"""
+---
 
+## Overview
+
+Creates a grid of equidistant points that spans bounds and num samples.
+i.e., (num_samples)**(len(parameters))
+
+---
+"""
 import numpy as np
 from itertools import product
 from enchanted_surrogates.samplers.base_sampler import Sampler
@@ -7,15 +16,6 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class GridSampler(Sampler):
     """
-    ---
-
-    ## Overview
-
-    Creates a grid of equidistant points that spans bounds and num samples.
-    i.e., (num_samples)**(len(parameters))
-
-    ---
-
     ## Configuration
 
     To use the grid sampler, you need to specify it in the configuration file as follows:

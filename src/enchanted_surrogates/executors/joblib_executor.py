@@ -1,3 +1,14 @@
+"""
+---
+
+## Overview
+
+An executor that runs simulations in parallel using `joblib.Parallel`.
+This executor integrates with an Enchanted Surrogates sampler to generate
+parameter configurations and execute tasks concurrently on the local machine.
+
+---
+"""
 import os
 import uuid
 import joblib
@@ -11,15 +22,6 @@ log = get_logger(__name__)
 
 class JoblibExecutor(Executor):
     """
-    ---
-
-    ## Overview
-
-    An executor that runs simulations in parallel using `joblib.Parallel`.
-    This executor integrates with an Enchanted Surrogates sampler to generate
-    parameter configurations and execute tasks concurrently on the local machine.
-
-    ---
 
     ## Features
 
