@@ -193,15 +193,3 @@ class ActiveLearningSampler(Sampler):
 
         self.X_obs = np.vstack([self.X_obs, arr])
         self.y_obs = np.append(self.y_obs, y)
-
-    def register_futures(self, futures):
-        """
-        Register multiple completed evaluations.
-
-        Parameters
-        ----------
-        futures : iterable
-            Iterable of tuples or dicts accepted by `register_future`.
-        """
-        for f in futures:
-            self.register_future(f)

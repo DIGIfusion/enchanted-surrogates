@@ -141,6 +141,7 @@ class Supervisor:
                         "last_complete_enchanted_dataset"
                     )
 
+            group.sampler.register_futures(last_complete_dataset)
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
 

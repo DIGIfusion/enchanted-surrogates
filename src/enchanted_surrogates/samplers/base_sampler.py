@@ -5,7 +5,9 @@ class Sampler(ABC):
     _budget: int = 100
     _submitted: int = 0
 
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         pass
 
     @abstractmethod
@@ -21,6 +23,18 @@ class Sampler(ABC):
         Should register a future from a submitted sample.
         """
         raise NotImplementedError("register_future method not implemented.")
+
+    def register_futures(self, futures):
+        """
+        Register multiple completed evaluations.
+
+        Parameters
+        ----------
+        futures : iterable
+            Iterable of tuples or dicts accepted by `register_future`.
+        """
+        for f in futures:
+            self.register_future(f)
 
     def skip(self, index: int):
         """
