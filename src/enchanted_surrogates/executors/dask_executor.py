@@ -1,8 +1,10 @@
 import os
 import subprocess
+import sys
 import time
-import warnings
 import pandas as pd
+import logging
+
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
@@ -17,15 +19,48 @@ from dask.distributed import (
 from dask.distributed import print as dask_print
 
 from .base_executor import Executor
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+
 from enchanted_surrogates.executors import simulation_task
 from enchanted_surrogates.utils.make_run_dir import make_run_dir
 from enchanted_surrogates.utils.precise_imports import import_sampler
 
+from dask.distributed import WorkerPlugin
 
-# Patch print inside the module if it uses bare `print()` calls
-simulation_task.print = dask_print
-# Override local print
-from dask.distributed import print
+
+# Console log handler for SLURM, uses dask.distributed.print
+class SLURMStreamHandler(logging.Handler):
+    def __init__(self) -> None:
+        logging.Handler.__init__(self)
+
+    def emit(self, record) -> None:
+        dask_print(self.formatter.format(record))
+
+
+class SLURMLogPlugin(WorkerPlugin):
+    def __init__(self, config: LoggerConfig):
+        self.config = config
+
+    def setup(self, worker):
+        log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
+        dask_handler = SLURMStreamHandler()
+        setup_logging(self.config, dask_handler, logging.FileHandler(filename=log_file))
+
+
+class DaskLocalLogPlugin(WorkerPlugin):
+    def __init__(self, config: LoggerConfig):
+        self.config = config
+
+    def setup(self, worker):
+        log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
+        setup_logging(
+            self.config,
+            logging.StreamHandler(stream=sys.stdout),
+            logging.FileHandler(filename=log_file),
+        )
+
+
+log = get_logger(__name__)
 
 # Alias the task function
 run_simulation_task = simulation_task.run_simulation_task
@@ -33,9 +68,14 @@ run_simulation_task = simulation_task.run_simulation_task
 
 class DaskExecutor(Executor):
     """
+    ---
+    ## Overview
+
     Handles execution of surrogate workflow on Dask.
     Supports both SLURMCluster and LocalCluster for distributed task execution.
     SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+
+    ---
     """
 
     def __init__(self, *args, **kwargs):
@@ -55,7 +95,7 @@ class DaskExecutor(Executor):
                 - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
         """
         super().__init__(*args, **kwargs)
-        print("INITIALISING DASK EXECUTOR")
+        log.info("INITIALISING DASK EXECUTOR")
         self.scale_n_jobs = kwargs.get("scale_n_jobs", 1)
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
@@ -156,9 +196,11 @@ class DaskExecutor(Executor):
                 )
             except Exception as e:
                 if self.is_running_on_slurm():
-                    print(f"Error fetching SLURM resource usage for job {job_id}: {e}")
+                    log.error(
+                        f"Error fetching SLURM resource usage for job {job_id}: {e}"
+                    )
                 else:
-                    print("Not running on SLURM. skipping resources")
+                    log.error("Not running on SLURM. skipping resources")
                     return [
                         {
                             "cpu_time": "00:00:00",
@@ -193,7 +235,7 @@ class DaskExecutor(Executor):
             ]
 
             if not dask_lines:
-                print("No Dask jobs found in queue.")
+                log.debug("No Dask jobs found in queue.")
                 return []
 
             for line in dask_lines:
@@ -204,7 +246,7 @@ class DaskExecutor(Executor):
 
         except Exception as e:
             if self.is_running_on_slurm():
-                print(f"Error while checking squeue: {e}")
+                log.warning(f"Error while checking squeue: {e}")
             return []
 
     def start_cluster(self, slurm_out_dir=None):
@@ -221,7 +263,7 @@ class DaskExecutor(Executor):
             ValueError: If no workers are successfully started.
             Warning: If fewer workers than expected are started.
         """
-        print("MAKING CLUSTER")
+        log.info("Creating a cluster...")
         worker_logs_dir = None
 
         if self.SLURMcluster_config:
@@ -249,54 +291,71 @@ class DaskExecutor(Executor):
                     f"-e {slurm_out_dir}/%x.%j.err",
                     "-J enc_dask_worker",
                 ]
-            print("FOR WORKER SLURM OUT, SEE:", slurm_out_dir)
-            self.cluster = SLURMCluster(**self.SLURMcluster_config)
+            log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
+            self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
-            print("THE JOB SCRIPT FOR A WORKER IS:")
-            print(self.cluster.job_script())
+            log.debug(f"The job script for a worker is:\n{self.cluster.job_script()}")
 
             self.client = Client(self.cluster, timeout=180)
-            print("SCHEDULER ADDRESS", self.cluster.scheduler_address)
-            print("DASHBOARD LINK", self.client.dashboard_link)
+
+            # Register the log plugin
+            plugin = SLURMLogPlugin(LoggerConfig())
+            self.client.register_plugin(plugin, name="LogPlugin")
+
+            log.info(f"SCHEDULER ADDRESS: {self.cluster.scheduler_address}")
+            log.info(f"DASHBOARD LINK: {self.client.dashboard_link}")
 
             if self.block_until_cluster_started:
-                print("WAIT UNTILL ALL dask-wor JOBS ARE RUNNING")
+                log.info("WAIT UNTILL ALL dask-wor JOBS ARE RUNNING")
                 self.wait_for_all_dask_jobs_running()
 
         elif self.LocalCluster_config:
             self.expected_number_of_workers = self.LocalCluster_config["n_workers"]
-            self.cluster = LocalCluster(**self.LocalCluster_config)
+            self.cluster = LocalCluster(silence_logs=False, **self.LocalCluster_config)
             self.client = Client(self.cluster)
 
+            # Register the log plugin
+            plugin = DaskLocalLogPlugin(LoggerConfig())
+            self.client.register_plugin(plugin, name="LogPlugin")
+
         if self.block_until_cluster_started:
-            print(f"Waiting for {self.expected_number_of_workers} workers to start...")
+            log.info(
+                f"Waiting for {self.expected_number_of_workers} workers to start..."
+            )
             for i in range(1, self.expected_number_of_workers + 2):
                 if i == self.expected_number_of_workers + 1:
                     timeout_ = 3
                     try:
                         self.client.wait_for_workers(i, timeout=timeout_)
-                        warnings.warn(
+                        log.warning(
                             f"MORE WORKERS WERE STARTED THAN THE EXPECTED {self.expected_number_of_workers}"
                         )
                     except TimeoutError:
-                        print(
+                        log.error(
                             f"IN {timeout_} SEC NO UNEXPECTED WORKERS WERE STARTED.\n"
                         )
                 else:
                     self.client.wait_for_workers(
                         i, timeout=self.expected_number_of_workers + 120
                     )
-                    print(
+                    log.info(
                         f"Connected to {i} workers out of expected {self.expected_number_of_workers}.\n"
                     )
 
             workers = self.client.scheduler_info()["workers"]
-            print("SOME WORKER INFORMATION:")
+            log.info("SOME WORKER INFORMATION:")
             for addr, info in workers.items():
-                print(f"Worker {addr}:")
-                print(f"  CPUs: {info['nthreads']}")
-                print(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
-                print(f"  Resources: {info.get('resources', {})}\n")
+                log.info(f"Worker {addr}:")
+                log.info(f"  CPUs: {info['nthreads']}")
+                log.info(f"  Memory: {info['memory_limit'] / 1e9:.2f} GB")
+                log.info(f"  Resources: {info.get('resources', {})}\n")
+
+        # Only for SLURM cluster
+        if hasattr(self.cluster, "workers"):
+            try:
+                self.slurm_job_ids.update(self.cluster.workers.keys())
+            except Exception:
+                pass
 
         # Only for SLURM cluster
         if hasattr(self.cluster, "workers"):
@@ -318,7 +377,7 @@ class DaskExecutor(Executor):
         Raises:
             Exception: If an error occurs while checking the SLURM queue.
         """
-        print("Waiting for all Dask jobs to enter RUNNING state...")
+        log.info("Waiting for all Dask jobs to enter RUNNING state...")
 
         while True:
             try:
@@ -337,7 +396,7 @@ class DaskExecutor(Executor):
                 ]
 
                 if not dask_lines:
-                    print("No Dask jobs found in queue.")
+                    log.info("No Dask jobs found in queue.")
                     time.sleep(poll_interval)
                     continue
 
@@ -349,21 +408,21 @@ class DaskExecutor(Executor):
                     job_state = fields[4]  # Typically the 5th column is state
 
                     if job_state == "PD":
-                        print("=" * 100)
-                        print("\n".join(dask_lines))
-                        print(f"Job {job_id} is in state {job_state} — waiting...")
-                        print("=" * 100)
+                        log.info("=" * 100)
+                        log.info("\n".join(dask_lines))
+                        log.info(f"Job {job_id} is in state {job_state} — waiting...")
+                        log.info("=" * 100)
                         all_running = False
                         break
 
                 if all_running:
-                    print("All Dask jobs are RUNNING.")
+                    log.info("All Dask jobs are RUNNING.")
                     return
 
                 time.sleep(poll_interval)
 
             except Exception as e:
-                print(f"Error while checking squeue: {e}")
+                log.error(f"Error while checking squeue: {e}")
                 time.sleep(poll_interval)
 
     def clean(self):
@@ -372,29 +431,6 @@ class DaskExecutor(Executor):
 
         This method is intended to be called when the executor is no longer needed.
         """
-
-        job_info = self.get_slurm_usage_info(self.slurm_job_ids)
-        total_cpu_time = sum(job["cpu_time_seconds"] for job in job_info) / 3600
-        print(f"Total CPU hours used: {total_cpu_time}")
-
-        try:
-            cpu_ps = subprocess.run(
-                ["ps", "--no-headers", "-o", "etimes=", "-p", str(os.getpid())],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            if cpu_ps.returncode == 0:
-                headnode_secs = int(cpu_ps.stdout.strip())
-                print(f"Total CPU time used by head node: {headnode_secs / 3600}")
-            else:
-                print(
-                    f"Fetching head node CPU time failed! STDOUT from ps: {cpu_ps.stdout}"
-                )
-        except Exception:
-            print(
-                "Fetching head node CPU time failed. Most likely due to running on Windows"
-            )
 
         self.shutdown_cluster()
 
@@ -439,11 +475,11 @@ class DaskExecutor(Executor):
         assert sampler
 
         inputlist = list(input)
-        self.base_run_dir = os.path.dirname(inputlist[0][0])  # This might not work lol
+        self.base_run_dir = os.path.dirname(inputlist[0][0])
 
         if not self.client:
             self.start_cluster()
-        print("CLUSTER STARTED")
+        log.info("CLUSTER STARTED")
 
         futures, fut_to_rundir = self.submit_batch(
             inputlist, include_fut_to_rundir=True
@@ -472,13 +508,13 @@ class DaskExecutor(Executor):
                     sampler.plot_frequency = 1
                     sampler.train_surrogate()
                 except Exception as e:
-                    print("Error during sampler postprocessing:", e)
+                    log.error("Error during sampler postprocessing:", e)
         else:
             dfs = []
             num_success = 0
             total = len(futures)
 
-            print(f"Collecting results from {total} futures...")
+            log.info(f"Collecting results from {total} futures...")
 
             for i, future in enumerate(as_completed(futures), start=1):
                 try:
@@ -494,17 +530,14 @@ class DaskExecutor(Executor):
                     df = pd.DataFrame({k: [v] for k, v in result.items()})
                     dfs.append(df)
                 except Exception as e:
-                    print("Failed to convert result to DataFrame:", e)
+                    log.error("Failed to convert result to DataFrame:", e)
                     continue
 
-                print(
+                log.info(
                     f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
                     f"[{num_success}/{i}] Futures Succeeded"
                 )
-                print("_" * 100)
-
-        # print('CLUSTER SHUTDOWN')
-        # self.shutdown_cluster()
+                log.info("_" * 100)
 
     def submit_batch(
         self,
@@ -538,7 +571,7 @@ class DaskExecutor(Executor):
             futures.append(new_future)
             fut_to_rundir[new_future.key] = run_dir
 
-        print(
+        log.info(
             f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}"
         )
         if include_fut_to_rundir:
