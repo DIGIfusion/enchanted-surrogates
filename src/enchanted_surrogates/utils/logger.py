@@ -11,6 +11,9 @@ class Singleton(type):
             cls._instance = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instance
 
+    def reset(cls):
+        cls._instance = None
+
 
 # Stores log level, log_dir etc.
 class LoggerConfig(metaclass=Singleton):
