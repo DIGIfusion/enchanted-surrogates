@@ -142,13 +142,13 @@ class Supervisor:
             and self.args.supervisor.get("summary_datatype") == "parquet"
         ):
             enchanted_dataset.to_parquet(
-                os.path.join(self.real_run_dir, "enchanted_dataset.parquet"),
+                os.path.join(real_run_dir, "enchanted_dataset.parquet"),
                 engine="pyarrow",
                 index=True,
             )
         else:
             enchanted_dataset.to_csv(
-                os.path.join(self.real_run_dir, "enchanted_dataset.csv")
+                os.path.join(real_run_dir, "enchanted_dataset.csv")
             )
 
         # Create HDF5 file by default
