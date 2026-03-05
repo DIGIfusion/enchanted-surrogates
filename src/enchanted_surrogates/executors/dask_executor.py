@@ -479,15 +479,7 @@ class DaskExecutor(Executor):
             self.start_cluster()
         log.info("CLUSTER STARTED")
 
-        futures, fut_to_rundir = self.submit_batch(
-            inputlist, include_fut_to_rundir=True
-        )
-
-        for fut in futures:
-            try:
-                sampler.register_future(fut)
-            except Exception:
-                pass
+        self.submit_batch(inputlist, include_fut_to_rundir=True)
 
         sampler_type = (
             getattr(sampler, "type", None)
