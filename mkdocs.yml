@@ -48,7 +48,7 @@ plugins:
             # Merge __init__ docstring into class documentation
             merge_init_into_class: true
             # Disable runtime inspection (safer for CI)
-            allow_inspection: false
+            allow_inspection: true
   - gen-files:
       scripts:
         - docs/gen_ref_pages.py
