@@ -54,6 +54,9 @@ sampler:
   parameters: ['ntor', 'helena_dir']
 ```
 
-::: enchanted_plugin_mishka.mishka_runner
+::: enchanted_plugin_mishka
     options:
-      show_source: false
+          show_source: false
+          show_submodules: true
+          members: true
+          show_root_heading: true
