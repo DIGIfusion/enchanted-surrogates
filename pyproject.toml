@@ -23,7 +23,6 @@ dependencies = [
     "scipy",
     "pyarrow",
     "h5py",
-    "scikit-activeml"
 ]
 
 [tool.setuptools]
@@ -65,4 +64,7 @@ hdf5 = [
 GPy = [
     "GPy",
     "scikit-learn",
+]
+activelearning = [
+    "scikit-activeml"
 ]
