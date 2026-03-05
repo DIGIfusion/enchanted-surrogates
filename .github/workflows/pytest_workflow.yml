@@ -3,9 +3,9 @@ name: Workflow testing with Pytest
 on: 
   workflow_call:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     types: [opened, synchronize, reopened]
 
 jobs:
