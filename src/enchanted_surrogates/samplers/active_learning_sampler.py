@@ -104,7 +104,7 @@ class ActiveLearningSampler(Sampler):
         self.model = SklearnRegressor(BaggingRegressor(nick_regressor, n_estimators=5))
 
         # Query strategy
-        self.qs = cached_import_external(query_strategy, "skactiveml.pool")
+        self.qs = cached_import_external(query_strategy, "skactiveml.pool")()
 
     def get_next_samples(self) -> list[dict]:
         """
