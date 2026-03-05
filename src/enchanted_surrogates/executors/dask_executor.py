@@ -479,7 +479,8 @@ class DaskExecutor(Executor):
             self.start_cluster()
         log.info("CLUSTER STARTED")
 
-        self.submit_batch(inputlist, include_fut_to_rundir=True)
+        # keep futures for BayesianOptimizationSampler
+        futures = self.submit_batch(inputlist)
 
         sampler_type = (
             getattr(sampler, "type", None)
