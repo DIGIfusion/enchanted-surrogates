@@ -3,7 +3,7 @@ import ast
 import mkdocs_gen_files
 import sys
 
-SRC_PATH = Path("src/enchanted-surrogates")
+SRC_PATH = Path("src/enchanted_surrogates")
 DOCS_PATH = Path("docs")
 
 sys.path.insert(0, str(SRC_PATH.resolve()))
