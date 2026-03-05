@@ -8,6 +8,8 @@ DOCS_PATH = Path("docs")
 
 sys.path.insert(0, str(SRC_PATH.resolve()))
 
+print("GEN_REF_PAGES STARTED")
+
 def ensure_init_files():
     for path in SRC_PATH.rglob("*"):
         if path.is_dir() and path != SRC_PATH:
@@ -81,12 +83,13 @@ for path in SRC_PATH.rglob("*.py"):
     existing_md = find_existing_md(module_parts, base_name)
     
     if existing_md:
+        print("Found existing md:", existing_md)
         # Check if module already documented
         if is_already_documented(existing_md, module_name):
             continue
         
         with mkdocs_gen_files.open(existing_md.relative_to(DOCS_PATH), "a") as f:
-            f.write(f"\n\n## Module `{module_name}`\n\n")
+            f.write(f"\n\n## Modul `{module_name}`\n\n")
             f.write(f"::: {module_name}\n")
     
     else:
