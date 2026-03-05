@@ -13,55 +13,62 @@ from enchanted_surrogates.utils.precise_imports import cached_import_external
 class ActiveLearningSampler(Sampler):
     """
 
-    ---
-    TODO: Fix this
-    ## Overview
+    ## ActiveLearningSampler
 
-    The random sampler generates samples randomly within the specified bounds
-    for each parameter.
+    ActiveLearningSampler provides an active-learning driven sampler that
+    proposes parameter configurations for evaluation using a surrogate
+    regressor and a pool-based query strategy.
 
-    ---
+    ### Purpose
+    - Maintain a pool of candidate parameter vectors and an internal
+      dataset of observed (parameter, objective) pairs.
+    - During a warmup period or when no observations exist, produce random
+      samples within provided bounds.
+    - After warmup, fit a surrogate regression model to observations and
+      use a specified pool-based query strategy to select the most
+      informative candidates to evaluate next.
 
-    ## Configuration
+    ### Key behavior
+    - Samples continuous parameter spaces; each parameter has an
+      independent [low, high] bound.
+    - Produces samples in batches (controlled by batch_size).
+    - Tracks how many samples have been generated via **self.submitted**
+      and stops at **self.budget** if enforced externally.
+    - Uses a surrogate regressor (default: `NICKernelRegressor` wrapped
+      in `BaggingRegressor` and `SklearnRegressor`) to estimate objective
+      values and uncertainties.
+    - Uses a pool-based query strategy (loaded dynamically from a module)
+      to select candidates from the current candidate pool.
 
-    To use the `RandomSampler`, specify it in the configuration file as in following example:
+    ### Configuration / Inputs
+    - **bounds** (list of (low, high) tuples): per-parameter sampling ranges.
+    - **budget** (int): total number of samples allowed.
+    - **parameters** (list of str): names of parameters; order must match
+      bounds.
+    - **query_strategy** (str): import path or name used by
+      `cached_import_external` to load a pool query strategy from
+      `skactiveml.pool`.
+    - Optional kwargs:
+      - **batch_size** (int): number of samples returned per call
+        (defaults to budget).
 
-    ```yaml
-      sampler:
-        type: RandomSampler
-        parameters: ['x', 'y']
-        bounds: [[1, 10], [0, 1]]
-        num_samples: 100
-    ```
+    ### Outputs
+    - `get_next_samples()` returns a list of dicts mapping parameter names
+      to sampled values for the next batch.
+    - `register_future(future)` accepts either `(params_dict, y)` or
+      `{"params": params_dict, "y": y}` and appends the observation to the
+      internal dataset.
 
-    Attributes:
-        self.budget (int): Total number of samples that can be generated.
-        self.bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
-        self.parameters (list[str]): Names of the parameters to be sampled.
-        self.batch_size (int): Number of samples returned per batch (defaults to full budget).
-        self.submitted (int): Counter tracking how many samples have been generated so far.
-        BATCH_SAMPLE_SIZE (int): Class-level default batch size (currently 1).
-
-    ---
-
-    ## Assumptions and Notes
-
-     - Parameter values are sampled independently using a uniform distribution
-      (`np.random.uniform`) within the specified bounds.
-
-     - The sampler generates samples in batches; the batch size is controlled
-      by `batch_size`.
-
-     - If `batch_size` is not provided, it defaults to the full sampling budget.
-     - The sampler does not adapt based on previous evaluations.
-
-     - The sampler maintains an internal counter (`self.submitted`) tracking
-      the number of generated samples.
-
-     - The current implementation assumes continuous parameter spaces.
-
-    ---
-
+    ### Implementation notes
+    - Candidates are sampled once at initialization from uniform
+      distributions over bounds; batch selection is done from this pool.
+    - Warmup behavior: while `self.submitted < self.warmup` or no
+      observations exist, `get_next_samples()` returns random fallback
+      samples.
+    - The surrogate model and query strategy are dynamically
+      instantiated; these should be made configurable (for example via
+      external config) if different regressors or ensemble parameters are
+      required.
     """
 
     BATCH_SAMPLE_SIZE = 1
