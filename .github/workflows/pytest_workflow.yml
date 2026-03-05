@@ -3,13 +3,10 @@ name: Workflow testing with Pytest
 on: 
   workflow_call:
   push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'bug/**'
-      - 'dev**'
+    branches: [main]
   pull_request:
-    types: [opened, reopened]
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 jobs:
   pytest:
