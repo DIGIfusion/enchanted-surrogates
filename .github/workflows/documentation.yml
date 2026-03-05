@@ -24,7 +24,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install h5py
           pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
+          pip install -e .
 
       - name: Checkout private docs from plugin Mishka
         uses: actions/checkout@v4
