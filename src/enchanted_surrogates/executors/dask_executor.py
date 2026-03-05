@@ -265,7 +265,7 @@ class DaskExecutor(Executor):
             Warning: If fewer workers than expected are started.
         """
         log.info("Creating a cluster...")
-        slurm_out_dir = os.path.join(LoggerConfig().log_dir, "worker_out_DaskExecutor")
+        slurm_out_dir = LoggerConfig().log_dir
         
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(
