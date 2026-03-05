@@ -357,13 +357,6 @@ class DaskExecutor(Executor):
             except Exception:
                 pass
 
-        # Only for SLURM cluster
-        if hasattr(self.cluster, "workers"):
-            try:
-                self.slurm_job_ids.update(self.cluster.workers.keys())
-            except Exception:
-                pass
-
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
         Waits for all Dask jobs submitted to SLURM to reach the RUNNING state.
