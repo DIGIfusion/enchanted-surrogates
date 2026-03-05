@@ -13,6 +13,8 @@ from skactiveml.regressor import NICKernelRegressor, SklearnRegressor
 from scipy.stats import uniform
 
 from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.utils import precise_imports
+from enchanted_surrogates.utils.precise_imports import cached_import_external
 
 
 class ActiveLearningSampler(Sampler):
@@ -71,7 +73,7 @@ class ActiveLearningSampler(Sampler):
 
     BATCH_SAMPLE_SIZE = 1
 
-    def __init__(self, bounds, budget, parameters, **kwargs):
+    def __init__(self, bounds, budget, parameters, query_strategy, **kwargs):
         """
         Initializes the ActiveLearningSampler.
 
@@ -109,7 +111,7 @@ class ActiveLearningSampler(Sampler):
         self.model = SklearnRegressor(BaggingRegressor(nick_regressor, n_estimators=5))
 
         # Query strategy
-        self.qs = GreedySamplingTarget()  # TODO: import from config
+        self.qs = cached_import_external(query_strategy, "sklearn.pool")
 
     def get_next_samples(self) -> list[dict]:
         """

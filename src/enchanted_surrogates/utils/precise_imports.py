@@ -11,6 +11,7 @@ from enchanted_surrogates import load_plugins
 # Mapping from [module_name (str) -> class]
 __module_entry_points = None
 
+
 def detect_case_style(s):
     """
     Detects the naming convention of a given string.
@@ -28,9 +29,9 @@ def detect_case_style(s):
 
     if "_" in s and s.lower() == s:
         return "snake_case"
-    elif re.match(r'^[a-z]+(?:[A-Z][a-z]*)+$', s):
+    elif re.match(r"^[a-z]+(?:[A-Z][a-z]*)+$", s):
         return "camelCase"
-    elif re.match(r'^[A-Z][a-z]+(?:[A-Z][a-z]*)*$', s):
+    elif re.match(r"^[A-Z][a-z]+(?:[A-Z][a-z]*)*$", s):
         return "PascalCase"
     elif "-" in s and s.lower() == s:
         return "kebab-case"
@@ -53,7 +54,7 @@ def snake_to_pascal(s):
         The converted PascalCase string.
     """
 
-    return ''.join(word.title() for word in s.split('_'))
+    return "".join(word.title() for word in s.split("_"))
 
 
 def camel_or_pascal_to_snake(s):
@@ -70,7 +71,7 @@ def camel_or_pascal_to_snake(s):
     str
         The converted snake_case string.
     """
-    return re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()
 
 
 def get_snake_and_pascal(string):
@@ -93,16 +94,18 @@ def get_snake_and_pascal(string):
     camelCase and other formats are not supported.
     """
     string_case = detect_case_style(string)
-    if string_case == 'snake_case':
+    if string_case == "snake_case":
         string_snake = string
         string_pascal = snake_to_pascal(string)
-    elif string_case == 'PascalCase':
+    elif string_case == "PascalCase":
         string_snake = camel_or_pascal_to_snake(string)
         string_pascal = string
     else:
         raise ValueError(
-            f"Input string '{string}' must be in either snake_case or PascalCase format.")
+            f"Input string '{string}' must be in either snake_case or PascalCase format."
+        )
     return string_snake, string_pascal
+
 
 def clear_import_cache():
     """
@@ -111,12 +114,13 @@ def clear_import_cache():
     global __module_entry_points
     __module_entry_points = None
 
+
 def cached_import(type_name: str, base_module: str):
     """
-    Imports a module entry point by name. All imports are cached, 
+    Imports a module entry point by name. All imports are cached,
     so overhead after first import is minimal. This is for internal use only:
     for importing modules use import_executor, import_sampler etc.
-    
+
     Parameters
     ----------
     type_name : str
@@ -127,7 +131,7 @@ def cached_import(type_name: str, base_module: str):
     Returns
     -------
     class
-        Class entry point. To construct an instance, 
+        Class entry point. To construct an instance,
         use eg. cached_import(type_name, base_module)(**kwargs)
 
     Raises
@@ -144,11 +148,52 @@ def cached_import(type_name: str, base_module: str):
     if type_snake in __module_entry_points:
         return __module_entry_points[type_snake]
 
-    imported_type = getattr(importlib.import_module(
-        f"enchanted_surrogates.{base_module}.{type_snake}"), type_pascal)
+    imported_type = getattr(
+        importlib.import_module(f"enchanted_surrogates.{base_module}.{type_snake}"),
+        type_pascal,
+    )
     # Cache for later use
     __module_entry_points[type_snake] = imported_type
     return imported_type
+
+
+def cached_import_external(type_name: str, module: str):
+    """
+    Imports a module entry point by name. All imports are cached,
+    so overhead after first import is minimal. This is for internal use only:
+    for importing modules use import_executor, import_sampler etc.
+
+    Parameters
+    ----------
+    type_name : str
+        Class name of the type that should be imported.
+    module : str
+        Name of the python module from which to import
+
+    Returns
+    -------
+    class
+        Class entry point. To construct an instance,
+        use eg. cached_import_external(type_name, module)(**kwargs)
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+
+    global __module_entry_points
+    if not __module_entry_points:
+        __module_entry_points = load_plugins()
+
+    if module + "." + type_name in __module_entry_points:
+        return __module_entry_points[module + "." + type_name]
+
+    imported_type = getattr(importlib.import_module(f"{module}"), type_name)
+    # Cache for later use
+    __module_entry_points[module + "." + type_name] = imported_type
+    return imported_type
+
 
 def import_sampler(sampler_type, sampler_config):
     """
@@ -226,6 +271,7 @@ def import_executor(executor_type, executor_config):
     """
     executor = cached_import(executor_type, "executors")(**executor_config)
     return executor
+
 
 def import_parser(parser_type, parser_config):
     """
