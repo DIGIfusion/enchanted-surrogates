@@ -177,21 +177,14 @@ class ActiveLearningSampler(Sampler):
 
         Parameters
         ----------
-        future : tuple or dict
-            Either:
-                (params_dict, y_value)
-            or
-                {"params": params_dict, "y": y_value}
+        future : a PD dataframe with output and params
 
         Adds the observation to the internal dataset.
         """
-        if isinstance(future, dict):
-            params = future["params"]
-            y = future["y"]
-        else:
-            params, y = future
+        print(future.columns)
+        print(self.parameters)
+        X = future[self.parameters].to_numpy()
+        y = future["output"].to_numpy()
 
-        arr = np.array([params[k] for k in self.parameters]).reshape(1, -1)
-
-        self.X_obs = np.vstack([self.X_obs, arr])
+        self.X_obs = np.vstack([self.X_obs, X])
         self.y_obs = np.append(self.y_obs, y)

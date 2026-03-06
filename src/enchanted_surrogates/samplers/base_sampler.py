@@ -24,18 +24,6 @@ class Sampler(ABC):
         """
         raise NotImplementedError("register_future method not implemented.")
 
-    def register_futures(self, futures):
-        """
-        Register multiple completed evaluations.
-
-        Parameters
-        ----------
-        futures : iterable
-            Iterable of tuples or dicts accepted by `register_future`.
-        """
-        for f in futures:
-            self.register_future(f)
-
     def skip(self, index: int):
         """
         Allows setting sampler state.

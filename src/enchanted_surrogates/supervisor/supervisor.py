@@ -80,10 +80,14 @@ class Supervisor:
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
-                log.warning("No config for base_run_dir was found, " \
-                "created base_run_dir folder to working directory")
+                log.warning(
+                    "No config for base_run_dir was found, "
+                    "created base_run_dir folder to working directory"
+                )
             else:
-                raise ValueError("base_run_dir is not set in the provided configuration")
+                raise ValueError(
+                    "base_run_dir is not set in the provided configuration"
+                )
 
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
@@ -95,9 +99,9 @@ class Supervisor:
                     # Extending should generate budget worth of new samples so add
                     # already submitted amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[self.previous_run_data.depth].sampler.budget += (
-                            self.previous_run_data.submitted_samples
-                        )
+                        self.groups[
+                            self.previous_run_data.depth
+                        ].sampler.budget += self.previous_run_data.submitted_samples
 
                     self.groups[self.previous_run_data.depth].sampler.skip(
                         self.previous_run_data.batch_number + 1
@@ -140,8 +144,8 @@ class Supervisor:
                     last_complete_dataset = self.read_summary(
                         "last_complete_enchanted_dataset"
                     )
+                    group.sampler.register_future(last_complete_dataset)
 
-            group.sampler.register_futures(last_complete_dataset)
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
 
@@ -168,11 +172,12 @@ class Supervisor:
                 # Then the files in this batch should be saved into summary files
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
+                group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=depth,
-                    submitted_samples=group.sampler.submitted
+                    submitted_samples=group.sampler.submitted,
                 )
                 run_data.save(self.previous_run_file)
 
@@ -189,7 +194,9 @@ class Supervisor:
 
             # Create a summary file with last_complete_dataset for nesting
             if depth < len(self.groups) - 1:
-                self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
+                self.write_summary(
+                    last_complete_dataset, "last_complete_enchanted_dataset"
+                )
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
@@ -220,12 +227,11 @@ class Supervisor:
             dataset.to_parquet(
                 os.path.join(self.base_run_dir, f"{filename}.parquet"),
                 engine="pyarrow",
-                index=False
+                index=False,
             )
         else:
             dataset.to_csv(
-                os.path.join(self.base_run_dir, f"{filename}.csv"),
-                index=False
+                os.path.join(self.base_run_dir, f"{filename}.csv"), index=False
             )
 
     def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
@@ -270,8 +276,10 @@ class Supervisor:
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
 
-        dirs = glob.glob(f"{self.base_run_dir}/"
-            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
+        dirs = glob.glob(
+            f"{self.base_run_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*"
+        )
 
         if not dirs:
             return
