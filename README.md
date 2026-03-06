@@ -13,7 +13,7 @@ See Github Pages: https://digifusion.github.io/enchanted-surrogates/.
 
 i.e., step 1. is repeated many times to fill volume spanned by 2. 
 
-The idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use mutliple searches types. 
+The idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use multiple searches types.
 
 In the simplest case, the iterative process could be automated via `batch` job submission on `SLURM`, but this doesn't scale well if we use different HPC systems. So, idea is to use [dask](https://jobqueue.dask.org/en/latest/examples.html#slurm-deployments). 
 
@@ -27,18 +27,22 @@ The main entry point is `run.py`, which you will run via shell for HPC or local 
 
 The `Executor` is robust to any combination of `Runner`, `Parser` and `Sampler`, i.e., things like changing directories are all handled in the code specific `Runner`. In this way, the `Executor` relies on the other classes via their `abstractmethod`s defined in the respective metaclasses, `base.py`. For example, the `Executor` relies on the `Runner`'s `single_code_run()` method.  
 
-Because of this, most variables that a user might wish to change, such as code to run, active learning sampler, parameters to vary, etc., are all defined in the config file, while the parameter that are simulation specific are handled by the derived meta-classes.  
+Because of this, most variables that a user might wish to change, such as code to run, active learning sampler, parameters to vary, etc., are all defined in the config file, while the parameter that are simulation specific are handled by the derived meta-classes.
 
+# TODO: Fix
 See `configs/tglf_config.yaml` for example configuration file. That which is commented `HPC`, `CODE`, `USER` refers to wether the config parameter is modified based on the HPC system used (e.g., `Mahti`), the simulation used (e.g., `TGLF`) or user, (e.g., specific directories).
 
 After modifying `SLURMrun.bash` to point to a specific configuration file, e.g, `tglf_config.yaml`, run with your slurm or local shell, e.g., `sbatch SLURMrun.bash`. This will dump `*.out` files for each worker specified in the config, while also dumping `run.out` for the nanny. The `SLURMrun.batch` creates a nanny, thus should be executed on an interactive node, not a compute node. The `run.py` nanny sets up `workers` (or equivilantly `jobs` as per below).
 
 Some extra notes on the config file: 
 
+# TODO: Fix - no n_jobs anymore
 - `n_jobs` will modify the number of `sbatch` commands sent, each of which is a `worker` (worker resources defined in the config under `worker_args`)
  
 
 #### Submodules 
+
+# TODO: Is this still true?
 
 If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
 Submodules are necessary also for running the pytests locally (although this is done in any PR). 
