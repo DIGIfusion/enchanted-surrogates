@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import pandas as pd
 from enchanted_surrogates.samplers.active_learning_sampler import ActiveLearningSampler
 
 # Helpers
@@ -58,9 +59,18 @@ def seed_observations(
         raise ValueError(f"Some points outside of bounds: {bounds}")
     if objective is None:
         objective = lambda row: float(np.sum(row))
+
+    rows = []
     for row in points:
-        params = dict(zip(parameters, row))
-        sampler.register_future((params, objective(row)))
+        rows.append(
+            {
+                **{p: v for p, v in zip(parameters, row)},
+                "output": objective(row),
+                "success": True,
+            }
+        )
+
+    sampler.register_future(pd.DataFrame(rows))
 
 
 # Tests
@@ -84,7 +94,12 @@ class TestInit:
 def test_parameter_order_preserved():
     sampler, bounds, parameters = make_sampler()
     point = make_seeding_points(bounds, n_points=1, seed=1)[0]
-    sampler.register_future((dict(zip(parameters, point)), 0.0))
+
+    df = pd.DataFrame(
+        [{**{p: v for p, v in zip(parameters, point)}, "output": 0.0, "success": True}]
+    )
+
+    sampler.register_future(df)
     assert sampler.X_obs[0, 0] == pytest.approx(point[0])
     assert sampler.X_obs[0, 1] == pytest.approx(point[1])
 
@@ -155,4 +170,3 @@ class TestGetNextSamples:
             points = np.array([[s[p] for p in parameters] for s in samples])
             seed_observations(sampler, parameters, bounds, points)
         assert sampler.X_obs.shape[0] == 50 * 5
-

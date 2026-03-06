@@ -71,8 +71,6 @@ class ActiveLearningSampler(Sampler):
       required.
     """
 
-    BATCH_SAMPLE_SIZE = 1
-
     def __init__(self, bounds, budget, parameters, query_strategy, **kwargs):
         """
         Initializes the ActiveLearningSampler.
@@ -181,8 +179,6 @@ class ActiveLearningSampler(Sampler):
 
         Adds the observation to the internal dataset.
         """
-        print(future.columns)
-        print(self.parameters)
         X = future[self.parameters].to_numpy()
         y = future["output"].to_numpy()
 
