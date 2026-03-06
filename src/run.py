@@ -2,13 +2,10 @@ import os
 import sys
 import yaml
 import argparse
-from datetime import datetime
 from enchanted_surrogates.supervisor.supervisor import Supervisor
-from enchanted_surrogates.utils.precise_imports import import_executor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
 import logging
-import shutil
 
 log = get_logger(__name__)
 
@@ -40,29 +37,20 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     return config
 
 
-def main(arguments: argparse.Namespace, config_path=None):
+def setup_logger(base_run_dir: str, log_level: str):
     """
-    Main function for running the simulation workflow.
+    Prepares the logging module and creates log directory
 
     Args:
-        args (argparse.Namespace): Namespace containing the configuration parameters.
-        config_path (str or None): Optional path for configuration file where
-            configuration is fetched from.
+        base_run_dir (str): The base run directory from supervisor
+        log_level (str): Logging level to use, for example INFO or DEBUG
     """
-
-    supervisor = Supervisor(arguments, config_path=config_path)
-
-    # Setup logging
-    log_dir = os.path.join(supervisor.base_run_dir, "logs")
+    log_dir = os.path.join(base_run_dir, "logs")
     log_file = os.path.join(log_dir, "main.log")
-    log_level = "INFO"
-    if hasattr(arguments, "logging"):
-        log_level = arguments.logging
 
     # Store to logger config
     config = LoggerConfig(log_level=log_level, log_dir=log_dir)
 
-    # Create log dir
     if not os.path.exists(config.log_dir):
         os.makedirs(config.log_dir)
 
@@ -72,6 +60,19 @@ def main(arguments: argparse.Namespace, config_path=None):
         logging.FileHandler(filename=log_file),
     )
 
+
+def main(arguments: argparse.Namespace, config_path=None):
+    """
+    Main function for running the simulation workflow.
+
+    Args:
+        args (argparse.Namespace): Namespace containing the configuration parameters.
+        config_path (str or None): Optional path for configuration file where
+            configuration is fetched from.
+    """
+    supervisor = Supervisor(arguments, config_path=config_path)
+
+    setup_logger(supervisor.base_run_dir, getattr(arguments, "logging", "INFO"))
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
 
