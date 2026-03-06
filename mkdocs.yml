@@ -1,4 +1,4 @@
-site_name: Enchanted Surrogates Documentation
+site_name: Enchanted Surrogates
 site_description: Documentation for Enchanted Surrogates
 #site_url: 
 
@@ -7,15 +7,25 @@ theme:
 
   # Color palette configuration
   palette:
+    # Palette toggle for light mode
     - scheme: default
-      primary: blue
-      accent: blue
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
 
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  
   # Logo displayed in the header instead of the site name
-  logo: img/logo.png
+  logo: #docs/img/logo.png
 
   # Favicon shown in the browser tab
-  favicon: img/favicon.ico
+  favicon: docs/img/favicon.ico
 
   # Custom HTML overrides
   # This replaces Jekyll `_includes/head_custom.html`
