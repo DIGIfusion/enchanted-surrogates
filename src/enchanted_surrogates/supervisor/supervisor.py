@@ -269,8 +269,11 @@ class Supervisor:
         if not os.path.exists(self.base_run_dir):
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
+        
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir, exist_ok=True)
 
-        dirs = glob.glob(f"{self.base_run_dir}/"
+        dirs = glob.glob(f"{self.data_dir}/"
             + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
 
         if not dirs:
@@ -319,11 +322,7 @@ class Supervisor:
 
         # Create base run dir and data dir inside it
         os.makedirs(base_run_dir, exist_ok=True)
-<<<<<<< HEAD
         os.makedirs(self.data_dir, exist_ok=True)
-=======
-        os.makedirs(os.path.join(base_run_dir, "data"), exist_ok=True)
->>>>>>> 174d4f5 (feat: added data, configs, logs subfolders to base_run_dir)
 
         # Move config path to base_run_dir if config path is given
         if config_path is not None:
@@ -359,16 +358,9 @@ class Supervisor:
             False If any runner has not yet created the csv file
         """
 
-<<<<<<< HEAD
         for name in os.listdir(self.data_dir):
             if not name_filter or str(name_filter) in str(name):
                 folder_path = os.path.join(self.data_dir, name)
-=======
-        data_path = os.path.join(self.base_run_dir, "data")
-        for name in os.listdir(data_path):
-            if not name_filter or str(name_filter) in str(name):
-                folder_path = os.path.join(data_path, name)
->>>>>>> 174d4f5 (feat: added data, configs, logs subfolders to base_run_dir)
                 if os.path.isdir(folder_path):
                     datapoint_file = os.path.join(
                         folder_path, "enchanted_datapoint.csv"
@@ -405,16 +397,9 @@ class Supervisor:
 
         """
         enchanted_dataset = pd.DataFrame()
-<<<<<<< HEAD
 
         for name in os.listdir(self.data_dir):
             folder_path = os.path.join(self.data_dir, name)
-=======
-        data_path = os.path.join(self.base_run_dir, "data")
-
-        for name in os.listdir(data_path):
-            folder_path = os.path.join(data_path, name)
->>>>>>> 174d4f5 (feat: added data, configs, logs subfolders to base_run_dir)
             if os.path.isdir(folder_path):
                 datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
                 if os.path.isfile(datapoint_file):
@@ -499,15 +484,9 @@ class Supervisor:
 
             # Run directory datasets
             runs_group = f.create_group("data/runs")
-            data_path = os.path.join(self.base_run_dir, "data")
 
-<<<<<<< HEAD
             for name in os.listdir(self.data_dir):
                 folder_path = os.path.join(self.data_dir, name)
-=======
-            for name in os.listdir(data_path):
-                folder_path = os.path.join(data_path, name)
->>>>>>> 174d4f5 (feat: added data, configs, logs subfolders to base_run_dir)
                 csv_path = os.path.join(folder_path, "enchanted_datapoint.csv")
 
                 if not os.path.isfile(csv_path):
