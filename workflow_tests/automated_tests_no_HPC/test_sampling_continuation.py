@@ -1,235 +1,119 @@
 """
 Full workflow tests for seamless sampling continuation.
 """
-
-import os
-
-from types import SimpleNamespace
 from enchanted_surrogates.supervisor.supervisor import Supervisor
+from workflow_tests.utils.test_utils import get_run_dir_count
 
-executor_config = {"type": "LocalExecutor"}
-runner_config = {"type": "ExampleRunner"}
-
-def test_simple_resume_after_interruption(tmp_path):
-    bounds = [[-5, 5], [0, 1]]
-    parameters = ["c1", "c2"]
-    budget = 50
-    kill_after = 4
-    batch_size = 10
-    sampler_config = {
-        "type": "RandomSamplerWithKill",
-        "bounds": bounds,
-        "budget": budget,
-        "parameters": parameters,
-        "batch_size": batch_size,
-        "kill_after": kill_after,  # kills when sample 4 is done
-    }
-
-    base_run_dir = tmp_path
-
-    args = SimpleNamespace(
-        executors={"e1": executor_config},
-        samplers={"s1": sampler_config},
-        runners={"r1": runner_config},
-        supervisor={
-            "run_mode": "fresh",
-            "base_run_dir": base_run_dir,
-            "run_order": [{"executor": "e1", "sampler": "s1", "runner": "r1"}],
-        },
+def test_simple_resume_after_interruption(tmp_path, run_config):
+    supervisor: Supervisor = run_config(
+        "test_configs/simple_resume_after_interruption.yaml",
+        call_start = False
     )
 
-    supervisor = Supervisor(args)
     try:
         supervisor.start()
         assert False  # This shouldn't happen
     except Exception:
         pass  # This should happen
 
-    assert len(next(os.walk(tmp_path))[1]) == kill_after * batch_size
+    # Read the parameters used for asserts
+    sampler = supervisor.args.samplers["random_kill"]
+    kill_after: int = sampler["kill_after"]
+    batch_size: int = sampler["batch_size"]
+    budget: int = sampler["budget"]
 
-    args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
-    args.samplers["s1"]["kill_after"] = None  # don't kill the poor sampler
+    assert get_run_dir_count(tmp_path) == kill_after * batch_size
 
-    supervisor2 = Supervisor(args)
+    supervisor.args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
+    supervisor.args.samplers["random_kill"]["kill_after"] = None  # don't kill the poor sampler
+
+    # Create new supervisor from the old args with some changes
+    supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert len(next(os.walk(tmp_path))[1]) == budget
+    assert get_run_dir_count(tmp_path) == budget
 
-def test_nested_resume_after_interruption(tmp_path):
-    bounds = [[-5, 5], [0, 1]]
-    budget = 9
-    batch_size = 3
-    kill_after = 2
-    sampler_config_first = {
-        "type": "RandomSampler",
-        "bounds": bounds,
-        "budget": budget,
-        "parameters": ["c1", "c2"],
-        "batch_size": batch_size
-    }
-    sampler_config_second = {
-        "type": "RandomSamplerWithKill",
-        "bounds": bounds,
-        "budget": budget,
-        "parameters": ["c3", "c4"],
-        "batch_size": batch_size,
-        "kill_after": kill_after
-    }
-
-    base_run_dir = tmp_path
-
-    args = SimpleNamespace(
-        executors={"e1": executor_config},
-        samplers={"s1": sampler_config_first, "s2": sampler_config_second},
-        runners={"r1": runner_config},
-        supervisor={
-            "run_mode": "fresh",
-            "base_run_dir": base_run_dir,
-            "run_order": [
-                {"executor": "e1", "sampler": "s1", "runner": "r1"},
-                {"executor": "e1", "sampler": "s2", "runner": "r1"}
-            ],
-        },
+def test_nested_resume_after_interruption(tmp_path, run_config):
+    supervisor: Supervisor = run_config(
+        "test_configs/nested_resume_after_interruption.yaml",
+        call_start = False
     )
 
-    supervisor = Supervisor(args)
     try:
         supervisor.start()
         assert False  # This shouldn't happen
     except Exception:
         pass  # This should happen
 
-    assert len(next(os.walk(tmp_path))[1]) == budget + budget * kill_after * batch_size
+    # Read the parameters used for asserts
+    sampler = supervisor.args.samplers["random_kill"]
+    kill_after: int = sampler["kill_after"]
+    batch_size: int = sampler["batch_size"]
 
-    args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
-    args.samplers["s2"]["kill_after"] = None  # don't kill the poor sampler
+    budget_1: int = supervisor.args.samplers["random"]["budget"]
+    budget_2: int = sampler["budget"]
 
-    supervisor2 = Supervisor(args)
+    assert get_run_dir_count(tmp_path) == budget_1 + budget_1 * kill_after * batch_size
+
+    supervisor.args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
+    supervisor.args.samplers["random_kill"]["kill_after"] = None  # don't kill the poor sampler
+
+    # Create new supervisor from the old args with some changes
+    supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert len(next(os.walk(tmp_path))[1]) == budget + budget * budget
+    assert get_run_dir_count(tmp_path) == budget_1 + budget_1 * budget_2
 
-def test_simple_resume_with_increased_budget(tmp_path):
-    old_budget = 15
-    new_budget = 25
+def test_simple_resume_with_increased_budget(tmp_path, run_config):
+    supervisor: Supervisor = run_config("test_configs/simple_budget_increase.yaml")
 
-    sampler_config = {
-        "type": "RandomSampler",
-        "bounds": [[-5, 5], [0, 1]],
-        "budget": old_budget,
-        "parameters": ["c1", "c2"],
-        "batch_size": 5
-    }
+    old_budget = supervisor.args.samplers["random"]["budget"]
+    new_budget = old_budget + 10
 
-    args = SimpleNamespace(
-        executors={"e1": executor_config},
-        samplers={"s1": sampler_config},
-        runners={"r1": runner_config},
-        supervisor={
-            "run_mode": "fresh",
-            "base_run_dir": tmp_path,
-            "run_order": [{"executor": "e1", "sampler": "s1", "runner": "r1"}],
-        }
-    )
-
-    # Run until the end
-    supervisor = Supervisor(args)
-    supervisor.start()
-    assert len(next(os.walk(tmp_path))[1]) == old_budget
+    assert get_run_dir_count(tmp_path) == old_budget
 
     # Increase budget and re-run with resume, (new_budget - old_budget) new samples should be got
-    args.supervisor["run_mode"] = "resume"
-    args.samplers["s1"]["budget"] = new_budget  # increase budget
+    supervisor.args.supervisor["run_mode"] = "resume"
+    supervisor.args.samplers["random"]["budget"] = new_budget  # increase budget
 
-    supervisor2 = Supervisor(args)
+    supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert len(next(os.walk(tmp_path))[1]) == new_budget
+    assert get_run_dir_count(tmp_path) == new_budget
 
-def test_simple_extend(tmp_path):
-    old_budget = 15
+def test_simple_extend(tmp_path, run_config):
+    supervisor: Supervisor = run_config("test_configs/simple_budget_increase.yaml")
+
+    old_budget = supervisor.args.samplers["random"]["budget"]
     extend_budget_by = 10
 
-    sampler_config = {
-        "type": "RandomSampler",
-        "bounds": [[-5, 5], [0, 1]],
-        "budget": old_budget,
-        "parameters": ["c1", "c2"],
-        "batch_size": 5
-    }
-
-    args = SimpleNamespace(
-        executors={"e1": executor_config},
-        samplers={"s1": sampler_config},
-        runners={"r1": runner_config},
-        supervisor={
-            "run_mode": "fresh",
-            "base_run_dir": tmp_path,
-            "run_order": [{"executor": "e1", "sampler": "s1", "runner": "r1"}],
-        }
-    )
-
-    # Run until the end
-    supervisor = Supervisor(args)
-    supervisor.start()
-    assert len(next(os.walk(tmp_path))[1]) == old_budget
+    assert get_run_dir_count(tmp_path) == old_budget
 
     # Set budget and re-run with extend, (extend_budget_by) new samples should be got
-    args.supervisor["run_mode"] = "extend"
-    args.samplers["s1"]["budget"] = extend_budget_by  # increase budget
+    supervisor.args.supervisor["run_mode"] = "extend"
+    supervisor.args.samplers["random"]["budget"] = extend_budget_by  # increase budget
 
-    supervisor2 = Supervisor(args)
+    supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert len(next(os.walk(tmp_path))[1]) == old_budget + extend_budget_by
+    assert get_run_dir_count(tmp_path) == old_budget + extend_budget_by
 
-def test_nested_extend(tmp_path):
-    first_budget = 9
-    second_budget = 9
-    batch_size = 3
+def test_nested_extend(tmp_path, run_config):
+    supervisor: Supervisor = run_config("test_configs/nested_budget_increase.yaml")
+
+    first_budget = supervisor.args.samplers["s1"]["budget"]
+    second_budget = supervisor.args.samplers["s2"]["budget"]
     extend_budget_by = 3
 
-    sampler_config_first = {
-        "type": "RandomSampler",
-        "bounds": [[-5, 5], [0, 1]],
-        "budget": first_budget,
-        "parameters": ["c1", "c2"],
-        "batch_size": batch_size
-    }
-    sampler_config_second = {
-        "type": "RandomSampler",
-        "bounds": [[-5, 5], [0, 1]],
-        "budget": second_budget,
-        "parameters": ["c1", "c2"],
-        "batch_size": batch_size
-    }
-
-    args = SimpleNamespace(
-        executors={"e1": executor_config},
-        samplers={"s1": sampler_config_first, "s2": sampler_config_second},
-        runners={"r1": runner_config},
-        supervisor={
-            "run_mode": "fresh",
-            "base_run_dir": tmp_path,
-            "run_order": [
-                {"executor": "e1", "sampler": "s1", "runner": "r1"},
-                {"executor": "e1", "sampler": "s2", "runner": "r1"}
-            ]
-        }
-    )
-
-    # Run until the end
-    supervisor = Supervisor(args)
-    supervisor.start()
-    assert len(next(os.walk(tmp_path))[1]) == first_budget + first_budget * second_budget
+    assert get_run_dir_count(tmp_path) == first_budget + first_budget * second_budget
 
     # Set budget and re-run with extend, (extend_budget_by) new samples should be got
-    args.supervisor["run_mode"] = "extend"
-    args.samplers["s2"]["budget"] = extend_budget_by
+    supervisor.args.supervisor["run_mode"] = "extend"
+    supervisor.args.samplers["s2"]["budget"] = extend_budget_by
 
-    supervisor2 = Supervisor(args)
+    supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert len(next(os.walk(tmp_path))[1]) == (
+    assert get_run_dir_count(tmp_path) == (
         first_budget + first_budget * (second_budget + extend_budget_by)
     )
