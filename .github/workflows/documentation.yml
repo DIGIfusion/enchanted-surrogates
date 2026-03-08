@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feature/automated-documentation-from-docstrings
+      - develop
 
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
           path: site
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     needs: build
     runs-on: ubuntu-latest
 

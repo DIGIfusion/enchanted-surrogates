@@ -1,0 +1,12 @@
+#!/bin/sh
+# adjust PATH or activate venv if needed
+files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+[ -z "$files" ] && exit 0
+# run pylint on staged Python files
+pylint $files --disable=R,C,W,E0401
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "Pylint failed; aborting commit."
+  exit $rc
+fi
+exit 0
