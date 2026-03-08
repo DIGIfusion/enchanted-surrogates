@@ -1,5 +1,6 @@
 # pylint: disable=E1101
 
+import os
 import pandas as pd
 import h5py
 from enchanted_surrogates.supervisor.supervisor import Supervisor
@@ -86,23 +87,46 @@ def test_start_calls_execute_for_each_sample(tmp_path, patch_supervisor_imports)
     assert sampler.get_next_samples.call_count == 2
     assert executor.execute.call_count == 2
 
-def make_args(tmp_path, summary="csv"):
+def test_local_storage(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+
+    run_dir = os.path.join(tmp_path, "run_dir")
+    fast_dir = os.path.join(tmp_path, "fast_dir")
+
+    os.makedirs(run_dir)
+    os.makedirs(fast_dir)
+
+    supervisor = Supervisor(make_args(run_dir, local_storage=fast_dir))
+
+    assert supervisor.local_storage == fast_dir
+
+    os.environ["abcdef123456"] = fast_dir
+    supervisor = Supervisor(make_args(run_dir, local_storage="abcdef123456"))
+
+    assert supervisor.local_storage == fast_dir
+
+def make_args(tmp_path, summary="csv", local_storage=None):
     """
     Helper function to create constructor arguments
     """
+    supervisor = {
+        "base_run_dir": str(tmp_path),
+        "summary_datatype": summary,
+        "run_order": [{
+            "executor": "testexecutor",
+            "sampler": "testsampler",
+            "runner": "testrunner",
+        }]
+    }
+
+    if local_storage is not None:
+        supervisor["local_storage"] = local_storage
+
     return SimpleNamespace(
         executors={"testexecutor": {"type": "mock"}},
         samplers={"testsampler": {"type": "mock"}},
         runners={"testrunner": {"type": "mock"}},
-        supervisor={
-            "base_run_dir": str(tmp_path),
-            "summary_datatype": summary,
-            "run_order": [{
-                "executor": "testexecutor",
-                "sampler": "testsampler",
-                "runner": "testrunner",
-            }]
-        },
+        supervisor=supervisor,
         runner={"type": "mock"},
         storage={"type": "mock"},
     )
