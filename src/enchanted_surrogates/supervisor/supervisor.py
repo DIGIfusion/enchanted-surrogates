@@ -85,6 +85,7 @@ class Supervisor:
             else:
                 raise ValueError("base_run_dir is not set in the provided configuration")
 
+        self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
