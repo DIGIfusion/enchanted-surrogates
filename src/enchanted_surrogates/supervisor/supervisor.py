@@ -9,16 +9,19 @@ import os
 import sys
 import warnings
 import shutil
+import glob
 from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
     import_executors,
     import_samplers,
     import_run_groups,
+    import_saved_files_list,
 )
 
 log = get_logger(__name__)
@@ -71,6 +74,8 @@ class Supervisor:
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
+        self.run_mode = args.supervisor.get("run_mode", "fresh")
+        self.save_files_arg = args.supervisor.get("save_files", "all")
 
         if self.base_run_dir is None:
             if sys.stdout.isatty():
@@ -80,7 +85,32 @@ class Supervisor:
             else:
                 raise ValueError("base_run_dir is not set in the provided configuration")
 
-        self.create_base_run_dir(self.base_run_dir, config_path)
+        self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
+        self.previous_run_data = None
+
+        if self.run_mode in ("resume", "extend"):
+            self.previous_run_data = RunData.load(self.previous_run_file)
+            if self.previous_run_data:
+                if len(self.groups) > self.previous_run_data.depth:
+                    # Extending should generate budget worth of new samples so add
+                    # already submitted amount to the current budget
+                    if self.run_mode == "extend":
+                        self.groups[self.previous_run_data.depth].sampler.budget += (
+                            self.previous_run_data.submitted_samples
+                        )
+
+                    self.groups[self.previous_run_data.depth].sampler.skip(
+                        self.previous_run_data.batch_number + 1
+                    )
+            else:
+                raise RuntimeError(
+                    "Tried to continue from previous sampling but no "
+                    " enchanted_run.yaml was found"
+                )
+
+            self.continue_with_base_run_dir(config_path)
+        else:
+            self.create_base_run_dir(self.base_run_dir, config_path)
 
     def start(self):
         """
@@ -92,22 +122,36 @@ class Supervisor:
 
         log.info("Starting runs...")
 
-        rows = [
-            {}
-        ]  # Holds results for run of previous depth. Summary file is created from this.
+        last_complete_dataset = pd.DataFrame()
+
         for depth, group in enumerate(self.groups):
-            next_rows = []
             batch_number = 0
+            batch_dataset = pd.DataFrame()
+
+            # Restore run state from previous data, if needed and in correct position of the loops
+            if self.previous_run_data:
+                if depth < self.previous_run_data.depth:
+                    continue
+
+                if depth == self.previous_run_data.depth:
+                    batch_number = self.previous_run_data.batch_number + 1
+
+                    batch_dataset = self.read_summary()
+                    last_complete_dataset = self.read_summary(
+                        "last_complete_enchanted_dataset"
+                    )
 
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = []
-                for parent in rows:
-                    for sample in samples:
-                        merged = {**parent, **sample}
-                        expanded.append(merged)
+                if not last_complete_dataset.empty:
+                    for parent in last_complete_dataset.to_dict(orient="records"):
+                        for sample in samples:
+                            expanded.append({**parent, **sample})
+                else:
+                    expanded = samples
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
@@ -118,46 +162,121 @@ class Supervisor:
                 group.executor.execute(zip(run_dirs, expanded), group.sampler)
 
                 # Wait processes of current batch to complete
-                self.wait_all_processes(f"d{depth}_b{batch_number}")
+                self.wait_batch_dirs(run_dirs)
 
-                # Merge batch results with results of previous batches on current nesting level
-                for run_dir, row in zip(run_dirs, expanded):
-                    datapoint_file = os.path.join(run_dir, "enchanted_datapoint.csv")
-                    if os.path.isfile(datapoint_file):
-                        result = pd.read_csv(datapoint_file).iloc[0].to_dict()
-                        combined = {**row, **result}
-                        next_rows.append(combined)
+                # Then the files in this batch should be saved into summary files
+                df_batch = self.load_batch_to_df(run_dirs)
+                batch_dataset = pd.concat([batch_dataset, df_batch])
+
+                run_data = RunData(
+                    batch_number=batch_number,
+                    depth=depth,
+                    submitted_samples=group.sampler.submitted
+                )
+                run_data.save(self.previous_run_file)
+
+                # Create summary csv or parquet file
+                self.write_summary(batch_dataset)
+
+                # Clean unwanted files
+                self.delete_unwanted_files(self.save_files_arg)
 
                 batch_number += 1
 
             # Update data rows for next nesting level
-            rows = next_rows
+            last_complete_dataset = batch_dataset.copy()
 
-        enchanted_dataset = pd.DataFrame(rows)
+            # Create a summary file with last_complete_dataset for nesting
+            if depth < len(self.groups) - 1:
+                self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
 
-        # Create summary csv or parquet file
+        # Create HDF5 file by default
+        if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
+            self.create_hdf5(last_complete_dataset)
+
+        # Clean unwanted files
+        self.delete_unwanted_files(self.save_files_arg)
+
+        # Clean run_dirs
+        print("Shutting down scheduler and workers...")
+        for group in self.groups:
+            group.executor.clean()
+
+    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset"):
+        """
+        Writes a summary of dataset to base_run_dir/filename
+        This functionality is used within the start function to
+        enable seamless sampling.
+
+        Attributes:
+            dataset (pd.DataFrame): dataset to be written
+            filename (str): filename for the written file
+        """
         if (
             self.args.supervisor
             and self.args.supervisor.get("summary_datatype") == "parquet"
         ):
-            enchanted_dataset.to_parquet(
-                os.path.join(self.base_run_dir, "enchanted_dataset.parquet"),
+            dataset.to_parquet(
+                os.path.join(self.base_run_dir, f"{filename}.parquet"),
                 engine="pyarrow",
-                index=True,
+                index=False
             )
         else:
-            enchanted_dataset.to_csv(
-                os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+            dataset.to_csv(
+                os.path.join(self.base_run_dir, f"{filename}.csv"),
+                index=False
             )
 
-        # Create HDF5 file by default
-        if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
-            self.create_hdf5(enchanted_dataset)
+    def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
+        """
+        Reads the summary written by write_summary.
 
-        # Clean run_dirs
-        log.info("Shutting down scheduler and workers...")
-        for group in self.groups:
-            group.executor.clean()
+        Attributes:
+            filename (str): file to be read
+
+        Returns:
+            pd.Dataframe: read dataset
+        """
+        if (
+            self.args.supervisor
+            and self.args.supervisor.get("summary_datatype") == "parquet"
+        ):
+            file = os.path.join(self.base_run_dir, f"{filename}.parquet")
+            if os.path.exists(file):
+                return pd.read_parquet(
+                    file,
+                    engine="pyarrow",
+                )
+            return pd.DataFrame()
+
+        file = os.path.join(self.base_run_dir, f"{filename}.csv")
+        if os.path.exists(file):
+            return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
+
+        return pd.DataFrame()
+
+    def continue_with_base_run_dir(self, config_path):
+        """
+        Deletes old unfinished bathes prompting the user if they want to keep them
+        Creates a base_run_dir if one does not exist
+
+        Attributes:
+            config_path (str or None): Optional path for configuration file where
+                configuration is fetched from
+        """
+
+        if not os.path.exists(self.base_run_dir):
+            self.create_base_run_dir(self.base_run_dir, config_path)
+            return
+
+        dirs = glob.glob(f"{self.base_run_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
+
+        if not dirs:
+            return
+
+        for path in dirs:
+            shutil.rmtree(path)
 
     def create_base_run_dir(self, base_run_dir, config_path):
         """
@@ -280,6 +399,48 @@ class Supervisor:
                     )
         return enchanted_dataset
 
+    def batch_dirs_done(self, run_dirs: list[str]) -> bool:
+        """
+        Checks if enchanted_datapoint.csv files exist in the directories list given
+
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+
+        Return:
+            False if any of the datapoint files in the run_dirs is missing
+            True if all datapoint files are found
+        """
+        for d in run_dirs:
+            if not os.path.isfile(os.path.join(d, "enchanted_datapoint.csv")):
+                return False
+        return True
+
+    def wait_batch_dirs(self, run_dirs: list[str]):
+        """
+        Waits for batch_dirs_done function to return True
+
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+        """
+        while not self.batch_dirs_done(run_dirs):
+            sleep(1)
+
+    def load_batch_to_df(self, run_dirs: list[str]):
+        """
+        Creates pd.DataFrame combining enchanted_datapoint.csv files in given path list folders
+
+        Attributes:
+            run_dirs (list[str]): List of running directories within the batch
+
+        Returns:
+            pd.DataFrame containing batch datapoints combined
+        """
+        dfs = []
+        for d in run_dirs:
+            file = os.path.join(d, "enchanted_datapoint.csv")
+            dfs.append(pd.read_csv(file))
+        return pd.concat(dfs)
+
     def create_hdf5(self, enchanted_dataset: pd.DataFrame):
         """
         Creates hdf5 and saves storage file in base_run_dir with name runs.h5
@@ -346,3 +507,31 @@ class Supervisor:
                     run_group.sampler.__class__.__name__
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
+
+    def delete_unwanted_files(self, argument: str):
+        """
+        Deletes files according to command given.
+        """
+        default_list = ["enchanted_dataset.csv", "runs.h5"]
+        if argument == "all":
+            return
+
+        if argument == "custom":
+            saved_list = import_saved_files_list(self.args)
+            allowed_files = set(default_list) | set(saved_list)
+        elif argument == "none":
+            allowed_files = set(default_list)
+        else:
+            return
+
+        for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
+            # Remove files
+            for file in files:
+                if file not in allowed_files:
+                    file_path = os.path.join(root, file)
+                    os.remove(file_path)
+            # Remove dirs
+            for dir_ in dirs:
+                dir_path = os.path.join(root, dir_)
+                if not os.listdir(dir_path):
+                    os.rmdir(dir_path)

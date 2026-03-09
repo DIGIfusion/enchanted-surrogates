@@ -75,16 +75,55 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
             assert key in meta
 
 def test_start_calls_execute_for_each_sample(tmp_path, patch_supervisor_imports):
-    sampler, executor = patch_supervisor_imports([
-        [{"a": 1}, {"b": 2}],
-        [{"a": 3}],
+    samplers, executors = patch_supervisor_imports([
+        [ # sampler 1
+            [{"a": 1}, {"a": 2}],
+            [{"a": 3}]
+        ]
     ])
 
     supervisor = Supervisor(make_args(tmp_path))
     supervisor.start()
 
-    assert sampler.get_next_samples.call_count == 2
-    assert executor.execute.call_count == 2
+    assert samplers[-1].get_next_samples.call_count == 2
+    assert executors[-1].execute.call_count == 2
+
+def test_save_files_option_all(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    create_dummy_files(path=tmp_path)
+    supervisor.delete_unwanted_files(argument="all")
+
+    assert (tmp_path / "config.yaml").exists()
+    assert (tmp_path / "enchanted_dataset.csv").exists()
+    assert (tmp_path / "runs.h5").exists()
+
+    assert (tmp_path / "subfolder" / "subfile.txt").exists()
+    assert (tmp_path / "subfolder" / "keep_me.txt").exists()
+
+def test_save_files_option_custom(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    create_dummy_files(path=tmp_path)
+    supervisor.delete_unwanted_files("custom")
+    assert not (tmp_path / "config.yaml").exists()
+    assert (tmp_path / "enchanted_dataset.csv").exists()
+    assert (tmp_path / "runs.h5").exists()
+
+    assert not (tmp_path / "subfolder" / "subfile.txt").exists()
+    assert (tmp_path / "subfolder" / "keep_me.txt").exists()
+
+def test_save_files_option_none(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    create_dummy_files(path=tmp_path)
+    supervisor.delete_unwanted_files("none")
+    assert not (tmp_path / "config.yaml").exists()
+    assert (tmp_path / "enchanted_dataset.csv").exists()
+    assert (tmp_path / "runs.h5").exists()
+
+    assert not (tmp_path / "subfolder" / "subfile.txt").exists()
+    assert not (tmp_path / "subfolder" / "keep_me.txt").exists()
 
 def make_args(tmp_path, summary="csv"):
     """
@@ -101,7 +140,10 @@ def make_args(tmp_path, summary="csv"):
                 "executor": "testexecutor",
                 "sampler": "testsampler",
                 "runner": "testrunner",
-            }]
+            }],
+            "save_files_list": [
+                "keep_me.txt"
+            ] 
         },
         runner={"type": "mock"},
         storage={"type": "mock"},
@@ -115,3 +157,16 @@ def create_run_folders(tmp_path, amount):
         d = tmp_path / f"d0_b{i}_r0"
         d.mkdir()
         pd.DataFrame([{"x":i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
+
+def create_dummy_files(path):
+    subfolder = path / "subfolder"
+    subfolder.mkdir()
+
+    # Files in the root
+    (path / "config.yaml").write_text("dummy")
+    (path / "enchanted_dataset.csv").write_text("dummy")
+    (path / "runs.h5").write_text("dummy")
+
+    # Files in the subfolder
+    (subfolder / "subfile.txt").write_text("dummy")
+    (subfolder / "keep_me.txt").write_text("dummy")

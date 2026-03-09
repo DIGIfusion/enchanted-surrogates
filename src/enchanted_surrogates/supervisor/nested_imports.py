@@ -55,3 +55,12 @@ def import_run_groups(args) -> list[dict]:
         to their unique names.
     """
     return args.supervisor["run_order"]
+
+def import_saved_files_list(args) -> list[str]:
+    """
+    Imports supervisor/save_files_list from config.
+    
+    Returns
+        List of strings containing names of files to be saved
+    """
+    return args.supervisor.get("save_files_list",[])
