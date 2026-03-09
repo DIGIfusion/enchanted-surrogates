@@ -152,6 +152,7 @@ class DaskExecutor(Executor):
         self.client = None
         self.expected_number_of_workers = None
         self.slurm_job_ids = set()
+        self.is_closed = False
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -469,8 +470,12 @@ class DaskExecutor(Executor):
 
         This method is intended to be called when the executor is no longer needed.
         """
+        if self.is_closed:
+            log.debug("Trying to close cluster that has already been closed!")
+            return
 
         self.shutdown_cluster()
+        self.is_closed = True
 
     def shutdown_cluster(self):
         """

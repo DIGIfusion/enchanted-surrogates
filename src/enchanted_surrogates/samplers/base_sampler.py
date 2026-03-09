@@ -22,6 +22,16 @@ class Sampler(ABC):
         """
         raise NotImplementedError("register_future method not implemented.")
 
+    def skip(self, index: int):
+        """
+        Allows setting sampler state.
+        Used to allow program restarts.
+        """
+        # Just run get_next_samples 'index' times
+        for _ in range(index):
+            if self.has_budget:
+                self.get_next_samples()
+
     @property
     def has_budget(self) -> bool:
         return self.submitted < self.budget

@@ -18,6 +18,7 @@ runners:
 
 supervisor:
   base_run_dir: "data_dir/dask_local"
+  run_mode: "fresh" # "resume" / "extend"
   run_order:
   - executor: e1
     sampler: s1

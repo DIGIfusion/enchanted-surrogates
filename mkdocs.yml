@@ -1,4 +1,4 @@
-site_name: Enchanted Surrogates Documentation
+site_name: Enchanted Surrogates
 site_description: Documentation for Enchanted Surrogates
 #site_url: 
 
@@ -7,6 +7,7 @@ theme:
 
   # Color palette configuration
   palette:
+    # Palette toggle for light mode
     - scheme: default
       primary: blue
       accent: blue

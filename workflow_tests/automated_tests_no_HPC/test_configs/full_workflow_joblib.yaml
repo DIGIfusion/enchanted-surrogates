@@ -1,0 +1,18 @@
+executors:
+  e1: 
+    type: JoblibExecutor
+samplers:
+  s1: 
+    type: RandomSampler
+    bounds: [[-5, 5], [0, 1]]
+    budget: 50
+    parameters: ['c1', 'c2']
+runners:
+  r1: 
+    type: ExampleRunner
+supervisor:
+  base_run_dir: tmp_path
+  run_order:
+  - executor: 'e1'
+    sampler: 's1'
+    runner : 'r1'

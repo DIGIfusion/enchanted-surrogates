@@ -23,7 +23,6 @@ i.e., step 1. is repeated many times to fill volume spanned by 2.
 
 The idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use mutliple searches types. 
 
-In the simplest case, the iterative process could be automated via `batch` job submission on `SLURM`, but this doesn't scale well if we use different HPC systems. So, idea is to use [dask](https://jobqueue.dask.org/en/latest/examples.html#slurm-deployments). 
 
 ## How to install
 
@@ -98,36 +97,20 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 ```
 
 
-
 ## Code structure
 
-See specific sections for detailed information about the different options. 
+The Supervisor is the entry point. The Supervisor reads parameters and has Sampler, Executor and Runner. 
+The Executor is chosen based on the system where the code is running. It sends samples for execution. 
+A Runner is a code-specific module for running the code in question. Commonly paired with a code-specific parser.
+A Parser is a code-specific module for reading and writing files produced by the code. 
+Runners and Parsers are developed as plugins.
 
-### Supervisor
-Entry point for Enchanted surrogates. Orchestrates use of other modules.
-
-### Samplers
-Modules for generating samples according to some rule set. 
-
-### Executors
-Modules for distributing and executing the runs. 
- 
-### Runners
-Code-specific modules for executing the code in question. Commonly paired with a code-specific parser.
-
-### Parsers
-Code-specific modules for reading and writing files produced by the code. 
-
-### General code structure
-The supervisor is the entry point. The supervisor reads parameters and has Sampler, Executor and Runner. 
-Supervisor initializes Sampler and fetches samples from it. 
-Supervisor gives samples to executor. Executor initializes some cluster or job queue or similar. 
-Executor calls `simulation_task.py` which initializes Runner and creates files. Supervisor creates 
+The Supervisor initializes a Sampler and fetches samples from it. 
+The Supervisor gives samples to the Executor. The Executor initializes some cluster or job queue or similar. 
+The Executor calls `simulation_task.py` which initializes a Runner and creates files. The Supervisor creates 
 data structures from the files created to specified running directory.
 
 See documentation for [Supervisor](supervisor.md) for a graph about module structure.
-
-
 
 
 ## Contribution guidlines

@@ -57,3 +57,22 @@ def test_randomness_with_fixed_seed():
 
     # With the same seed, results should be reproducible
     assert samples1 == samples2
+
+
+def test_skip():
+    bounds = [(0, 1)]
+    params = ["a"]
+    budget = 100
+    batch_size = 2
+    sampler = RandomSampler(
+        bounds=bounds, budget=budget, parameters=params, batch_size=batch_size
+    )
+
+    jump = 25
+    sampler.skip(jump)
+
+    batches = []
+    while sampler.has_budget:
+        batches.append(sampler.get_next_samples())
+
+    assert len(batches) == (budget / batch_size) - jump
