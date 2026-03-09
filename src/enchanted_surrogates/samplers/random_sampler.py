@@ -49,12 +49,13 @@ class RandomSampler(Sampler):
 
      - The sampler maintains an internal counter (`self.submitted`) tracking
       the number of generated samples.
-      
+
      - The current implementation assumes continuous parameter spaces.
-    
+
     ---
 
     """
+
     BATCH_SAMPLE_SIZE = 1
 
     def __init__(self, bounds, budget, parameters, **kwargs):
@@ -126,4 +127,3 @@ class RandomSampler(Sampler):
           None
         """
         return None
-    

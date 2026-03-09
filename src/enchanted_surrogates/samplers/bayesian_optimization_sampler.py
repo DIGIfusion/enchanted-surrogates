@@ -857,6 +857,7 @@ class BayesianOptimizationSampler(Sampler):
         self.cp_figure = fig
 
     
-        
+    def skip(self, index):
+        raise NotImplementedError("skip not implemented for BayesianOptimizationSampler.")
 
 

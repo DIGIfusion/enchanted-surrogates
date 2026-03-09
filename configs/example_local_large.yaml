@@ -1,14 +1,14 @@
-logging: DEBUG
-
 executors:
   e1:
     type: LocalExecutor
 samplers:
   s1:
-    type: RandomSampler
+    type: RandomSamplerWithKill
     bounds: [[0.0, 1.0], [0.0, 10.0]]
-    budget: 4
+    budget: 400
+    batch_size: 100
     parameters: ['c1', 'c2']
+    kill_after: 3
 runners:
   r1:
     type: ExampleRunner
@@ -16,12 +16,7 @@ runners:
 
 supervisor:
   base_run_dir: "data_dir/local"
-  local_storage: TMPDIR
   run_mode: "fresh" # "resume" / "extend"
-  save_files: "all" # or "custom" or "none"
-  save_files_list:
-    - enchanted_dataset.csv
-    - example_local.csv
   run_order:
   - executor: e1
     sampler: s1
