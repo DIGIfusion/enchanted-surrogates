@@ -42,7 +42,7 @@ jobs:
     - name: Generate Coverage Report  
       # working-directory: enchanted_surrogates
       run: |  
-        coverage report -m
+        coverage report -m >coverage_summary.txt
         coverage html
 
     - name: Upload coverage artifact
@@ -50,3 +50,10 @@ jobs:
       with:
         name: coverage-report-html
         path: htmlcov/
+
+    - name: Add coverage summary
+      run: |
+        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat coverage_summary.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
