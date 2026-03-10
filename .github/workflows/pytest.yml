@@ -2,14 +2,14 @@ name: Unit testing with Pytest
 
 on: 
   workflow_call:
-  push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'bug/**'
-      - 'dev**'
+  # push:
+  #   branches:
+  #     - main
+  #     - 'feature/**'
+  #     - 'bug/**'
+  #     - 'dev**'
   pull_request:
-    types: [opened, reopened]
+    types: [opened, synchronize, reopened]
 
 jobs:
   pytest:
