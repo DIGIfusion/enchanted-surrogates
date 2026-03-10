@@ -3,7 +3,7 @@ import sys
 import yaml
 import argparse
 from enchanted_surrogates.supervisor.supervisor import Supervisor
-from enchanted_surrogates.utils.ascii_art import enchanted_wizard
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
 import logging
 
