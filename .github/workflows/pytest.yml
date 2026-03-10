@@ -43,7 +43,7 @@ jobs:
       # working-directory: enchanted_surrogates
       run: |  
         coverage report -m
-        coverage html --omit tests/*
+        coverage html
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4
