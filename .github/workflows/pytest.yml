@@ -44,6 +44,7 @@ jobs:
       run: |  
         coverage report -m >coverage_summary.txt
         coverage html
+        coverage xml
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4
@@ -58,47 +59,8 @@ jobs:
         cat coverage_summary.txt >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
-    - name: Comment coverage in PR
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+    - name: Code Coverage Summary
+      uses: irongut/CodeCoverageSummary@v1.3.0
       with:
-        script: |
-          const fs = require('fs');
-          const coverage = fs.readFileSync('coverage_summary.txt', 'utf8');
-
-          const body = `## Automated Test Coverage Report
-
-          \`\`\`
-          ${coverage}
-          \`\`\`
-          `;
-
-          const { owner, repo } = context.repo;
-          const issue_number = context.issue.number;
-
-          const comments = await github.rest.issues.listComments({
-            owner,
-            repo,
-            issue_number
-          });
-
-          const botComment = comments.data.find(comment =>
-            comment.user.type === 'Bot' &&
-            comment.body.includes('Automated Test Coverage Report')
-          );
-
-          if (botComment) {
-            await github.rest.issues.updateComment({
-              owner,
-              repo,
-              comment_id: botComment.id,
-              body
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number,
-              body
-            });
-          }
+        filename: coverage.xml
+        badge: true
