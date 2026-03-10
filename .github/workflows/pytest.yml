@@ -2,18 +2,15 @@ name: Unit testing with Pytest
 
 on: 
   workflow_call:
-  # push:
-  #   branches:
-  #     - main
-  #     - 'feature/**'
-  #     - 'bug/**'
-  #     - 'dev**'
+  push:
+    branches:
+      - main
+      - develop
   pull_request:
     types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   pytest:
@@ -50,62 +47,13 @@ jobs:
         echo '```' >> $GITHUB_STEP_SUMMARY
         coverage report -m >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-        coverage html
+        coverage html --omit "tests/*"
         coverage xml --omit "tests/*"
 
-    - name: Upload coverage artifact
+    - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-report-html
-        path: htmlcov/
-
-    - name: Code Coverage Summary
-      uses: irongut/CodeCoverageSummary@v1.3.0
-      with:
-        filename: coverage.xml
-        badge: true
-        format: markdown
-        output: both
-        hide_complexity: true
-
-    - name: Comment coverage in PR
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const coverage = fs.readFileSync('code-coverage-results.md', 'utf8');
-
-          const body = `## Test Coverage Report
-          ${coverage}
-          `;
-
-          const { owner, repo } = context.repo;
-          const issue_number = context.issue.number;
-
-          const comments = await github.rest.issues.listComments({
-            owner,
-            repo,
-            issue_number
-          });
-
-          const botComment = comments.data.find(comment =>
-            comment.user.type === 'Bot' &&
-            comment.body.includes('Test Coverage Report')
-          );
-
-          if (botComment) {
-            await github.rest.issues.updateComment({
-              owner,
-              repo,
-              comment_id: botComment.id,
-              body
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number,
-              body
-            });
-          }
+        name: coverage-artifacts
+        path: |
+          coverage.xml
+          htmlcov/

@@ -1,0 +1,93 @@
+name: Coverage Report
+
+on:
+  workflow_run:
+    workflows: ["Unit testing with Pytest"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Download artifacts from the test workflow
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-artifacts
+          path: coverage
+
+      # Generate coverage summary / badge
+      - name: Code Coverage Summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage/coverage.xml
+          badge: true
+          format: markdown
+          output: both
+          hide_complexity: true
+
+      - name: Comment coverage in PR
+        if: ${{ github.event.workflow_run.head_branch != 'main' && github.event.workflow_run.head_branch != 'develop' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverage = fs.readFileSync('code-coverage-results.md', 'utf8');
+
+            const body = `## Test Coverage Report
+            ${coverage}
+            `;
+
+            const { owner, repo } = context.repo;
+
+            // Find the PR associated with this branch
+            const pulls = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${context.event.workflow_run.head_branch}`,
+              state: 'open'
+            });
+
+            if (pulls.data.length === 0) {
+              console.log("PR not found!");
+              return;
+            }
+
+            const pr_number = pulls.data[0].number;
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pr_number
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Test Coverage Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr_number,
+                body
+              });
+            }
