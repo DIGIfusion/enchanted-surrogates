@@ -1,3 +1,58 @@
+"""
+---
+## Overview
+
+Handles execution of surrogate workflow on Dask.
+Supports both SLURMCluster and LocalCluster for distributed task execution.
+SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+
+---
+
+## Clusters
+
+### Local cluster
+
+Can be used for running on a local machine with multiple cores. Useful for testing or small scale runs.
+
+Arguments:
+
+```
+n_workers: 2,
+threads_per_worker: 1,
+memory_limit: '12GB', 
+processes: 1
+```
+
+Example configuration: /configs/example_dask_local.yaml
+
+### SLURM cluster
+
+Arguments for the SLURM workers.
+
+```
+account: 'project_xxx', 
+queue: 'medium', 
+cores: 1, 
+memory: '12GB', 
+processes: 1, 
+walltime: '00:20:00',
+config_name: 'slurm', 
+interface: 'ib0', 
+```
+
+Example configuration: /configs/example_dask_slurm.yaml
+
+### Notes
+
+Other arguments:
+
+```
+job_script_prologue: ['module load your-modules-here',], 
+job_extra_directives: [
+    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out', 
+    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'], 
+```
+"""
 import os
 import subprocess
 import sys
@@ -67,16 +122,6 @@ run_simulation_task = simulation_task.run_simulation_task
 
 
 class DaskExecutor(Executor):
-    """
-    ---
-    ## Overview
-
-    Handles execution of surrogate workflow on Dask.
-    Supports both SLURMCluster and LocalCluster for distributed task execution.
-    SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
-
-    ---
-    """
 
     def __init__(self, *args, **kwargs):
         """
