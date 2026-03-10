@@ -89,6 +89,7 @@ class Supervisor:
                     "base_run_dir is not set in the provided configuration"
                 )
 
+        self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
@@ -160,7 +161,7 @@ class Supervisor:
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
-                    os.path.join(self.base_run_dir, f"d{depth}_b{batch_number}_r{i}")
+                    os.path.join(self.data_dir, f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
                 ]
 
@@ -275,11 +276,12 @@ class Supervisor:
         if not os.path.exists(self.base_run_dir):
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
+        
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir, exist_ok=True)
 
-        dirs = glob.glob(
-            f"{self.base_run_dir}/"
-            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*"
-        )
+        dirs = glob.glob(f"{self.data_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
 
         if not dirs:
             return
@@ -287,6 +289,7 @@ class Supervisor:
         for path in dirs:
             shutil.rmtree(path)
 
+        # Create also data and logs folders if they don't exist
     def create_base_run_dir(self, base_run_dir, config_path):
         """
         Creates base directory for simulation run results. Checks if base_run_dir
@@ -313,7 +316,7 @@ class Supervisor:
                 else:
                     print(
                         str(os.path.abspath(base_run_dir))
-                        + "\nFolders have content. If you wish to continue. Go delete them"
+                        + "\nFolders have content. If you wish to continue, go delete them"
                     )
                     value = "n"
 
@@ -324,12 +327,16 @@ class Supervisor:
                     print("No content was deleted. Enchanted surrogates is exited.")
                     sys.exit(1)
 
-        # Create base run dir
+        # Create base run dir and data dir inside it
         os.makedirs(base_run_dir, exist_ok=True)
+        os.makedirs(self.data_dir, exist_ok=True)
 
         # Move config path to base_run_dir if config path is given
         if config_path is not None:
-            new_config_path = os.path.join(base_run_dir, os.path.basename(config_path))
+            os.makedirs(os.path.join(base_run_dir, "config"), exist_ok=True)
+            config_dir = os.path.join(base_run_dir, "config")
+
+            new_config_path = os.path.join(config_dir, os.path.basename(config_path))
             print(f"Moving config file... from {config_path} to {new_config_path}")
             try:
                 shutil.copy(config_path, new_config_path)
@@ -358,9 +365,9 @@ class Supervisor:
             False If any runner has not yet created the csv file
         """
 
-        for name in os.listdir(self.base_run_dir):
+        for name in os.listdir(self.data_dir):
             if not name_filter or str(name_filter) in str(name):
-                folder_path = os.path.join(self.base_run_dir, name)
+                folder_path = os.path.join(self.data_dir, name)
                 if os.path.isdir(folder_path):
                     datapoint_file = os.path.join(
                         folder_path, "enchanted_datapoint.csv"
@@ -397,8 +404,9 @@ class Supervisor:
 
         """
         enchanted_dataset = pd.DataFrame()
-        for name in os.listdir(self.base_run_dir):
-            folder_path = os.path.join(self.base_run_dir, name)
+
+        for name in os.listdir(self.data_dir):
+            folder_path = os.path.join(self.data_dir, name)
             if os.path.isdir(folder_path):
                 datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
                 if os.path.isfile(datapoint_file):
@@ -484,8 +492,8 @@ class Supervisor:
             # Run directory datasets
             runs_group = f.create_group("data/runs")
 
-            for name in os.listdir(self.base_run_dir):
-                folder_path = os.path.join(self.base_run_dir, name)
+            for name in os.listdir(self.data_dir):
+                folder_path = os.path.join(self.data_dir, name)
                 csv_path = os.path.join(folder_path, "enchanted_datapoint.csv")
 
                 if not os.path.isfile(csv_path):
