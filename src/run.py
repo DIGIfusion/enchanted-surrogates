@@ -76,7 +76,7 @@ def main(arguments: argparse.Namespace, config_path=None):
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
 
-    print(enchanted_wizard)
+    print(enchanted_wizard_version_7)
     supervisor.start()
 
 
