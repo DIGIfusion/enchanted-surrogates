@@ -1,10 +1,7 @@
 name: Coverage Report
 
 on:
-  workflow_run:
-    workflows: ["Unit testing with Pytest"]
-    types:
-      - completed
+  workflow_call:
 
 permissions:
   contents: read
@@ -49,26 +46,12 @@ jobs:
             `;
 
             const { owner, repo } = context.repo;
-
-            // Find the PR associated with this branch
-            const pulls = await github.rest.pulls.list({
-              owner,
-              repo,
-              head: `${owner}:${context.event.workflow_run.head_branch}`,
-              state: 'open'
-            });
-
-            if (pulls.data.length === 0) {
-              console.log("PR not found!");
-              return;
-            }
-
-            const pr_number = pulls.data[0].number;
+            const issue_number = context.issue.number;
 
             const comments = await github.rest.issues.listComments({
               owner,
               repo,
-              issue_number: pr_number
+              issue_number
             });
 
             const botComment = comments.data.find(comment =>

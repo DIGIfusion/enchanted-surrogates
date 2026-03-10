@@ -57,3 +57,8 @@ jobs:
         path: |
           coverage.xml
           htmlcov/
+
+  coverage:
+    needs: pytest
+    if: success()
+    uses: ./.github/workflows/coverage-report.yml
