@@ -1,21 +1,15 @@
----
-layout: default
-title: Start
-nav_order: 1
-has_children: true
----
-
 # Enchanted surrogates
 
+<span class="hero-subtitle">
 A framework for creating databases for surrogate models of complex physics codes.
-{: .fs-6 .fw-300 }
-
-[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 }
+</span>
+    
+[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){ .md-button .md-button--primary }
 
 ---
 
-{: .warning }
-This documentation is under development.
+!!! warning
+    This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data, which is often generated using complex and computationally expensive simulation codes. The `enchanted-surrogates` package provides a flexible framework for creating databases for surrogate models of such complex physics codes.
 Database generation for a simulation consists of: 
@@ -29,7 +23,6 @@ i.e., step 1. is repeated many times to fill volume spanned by 2.
 
 The idea is to abstract away the iterative process, and just uniquely handle 1. for each individual code, while being able to use mutliple searches types. 
 
-In the simplest case, the iterative process could be automated via `batch` job submission on `SLURM`, but this doesn't scale well if we use different HPC systems. So, idea is to use [dask](https://jobqueue.dask.org/en/latest/examples.html#slurm-deployments). 
 
 ## How to install
 
@@ -75,15 +68,24 @@ python enchanted-surrogates/src/run.py -cf path/to/config/file
 ```
 
 Make sure to replace `path/to/config/file` with the actual path to your configuration file. 
-The configuration file should be in YAML format and specify the runner, sampler, executor, and other parameters needed for the simulation. 
+The configuration file should be in YAML format and specify the runner, sampler, executor, supervisor and other parameters needed for the simulation. 
   
 ```yaml
-executor:
-    type: ...
-sampler: 
-    type: ...
-runner:
-    type: ...
+executors:
+    e1:
+        type: ...
+samplers:
+    s1:
+        type: ...
+runners:
+    r1:
+        type: ...
+supervisor:
+    base_run_dir: ...
+    run_order:
+    -   executor: e1
+        sampler: s1
+        runner: r1
 ```
 
 ### Quick start example
@@ -95,29 +97,20 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 ```
 
 
-
 ## Code structure
 
-See specific sections for detailed intormation about the different options. 
+The Supervisor is the entry point. The Supervisor reads parameters and has Sampler, Executor and Runner. 
+The Executor is chosen based on the system where the code is running. It sends samples for execution. 
+A Runner is a code-specific module for running the code in question. Commonly paired with a code-specific parser.
+A Parser is a code-specific module for reading and writing files produced by the code. 
+Runners and Parsers are developed as plugins.
 
-### Samplers
-Modules for generating samples according to some rule set. 
+The Supervisor initializes a Sampler and fetches samples from it. 
+The Supervisor gives samples to the Executor. The Executor initializes some cluster or job queue or similar. 
+The Executor calls `simulation_task.py` which initializes a Runner and creates files. The Supervisor creates 
+data structures from the files created to specified running directory.
 
-### Executors
-Modules for distributing and executing the runs. 
- 
-### Runners
-Code-specific modules for executing the code in question. Commonly paired with a code-specific parser. 
-
-### Parsers
-Code-specific modules for reading and writing files produced by the code. 
-
-
-The executor initalizes a sampler and fetches samples from it. The executor initialized some cluster or job queue or similar. 
-The sampler generates a batch of samples. A sample is sent to the Runner. 
-The Runner initalizes and uses a Parser for writing input files based on the sample parameters and postprocessing output files. 
-
-
+See documentation for [Supervisor](supervisor.md) for a graph about module structure.
 
 
 ## Contribution guidlines

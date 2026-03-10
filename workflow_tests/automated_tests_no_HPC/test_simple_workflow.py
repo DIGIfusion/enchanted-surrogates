@@ -1,102 +1,18 @@
 """
 Basic tests for the full workflow with different executors.
 Each executor should be tested in a separate function to avoid conflicts."""
-import os
-import glob
-import shutil
 
-from ..utils.append_es_to_path import append_es_to_path
-append_es_to_path()
-from enchanted_surrogates.executors import LocalExecutor, JoblibExecutor, DaskExecutor
+import pytest
+from workflow_tests.utils.test_utils import *
 
+@pytest.mark.parametrize("config_file", [
+    "test_configs/full_workflow_local.yaml",
+    "test_configs/full_workflow_joblib.yaml",
+    "test_configs/full_workflow_dask.yaml"
+])
+def test_full_workflow(tmp_path, run_config, config_file):
+    supervisor = run_config(config_file)
+    run_group = supervisor.groups[0]
 
-# https://docs.pytest.org/en/stable/how-to/tmp_path.html
-def test_full_workflow_local(tmp_path):
-    config = {}
-    # -- sampler
-    # TODO: test different samplers
-    bounds = [[-5, 5], [0, 1]]
-    parameters = ['c1', 'c2']
-    budget = 10
-    sampler_config = {
-        'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-    runner_config = {
-        'type': 'ExampleRunner'
-    }
-
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
-
-    executor = LocalExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    executor.start_runs()
-    # This should create {budget} folders with ??? inside
-
-    assert len(glob.glob(os.path.join(base_run_dir, "*"))) == budget
-    executor.clean()
-
-    # Clean up test
-    shutil.rmtree(base_run_dir)
-
-
-def test_full_workflow_joblib(tmp_path):
-    config = {}
-    # -- sampler
-    # TODO: test different samplers
-    bounds = [[-5, 5], [0, 1]]
-    parameters = ['c1', 'c2']
-    budget = 50
-    sampler_config = {
-        'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-
-    # -- runner args
-    runner_config = {
-        'type': 'ExampleRunner'
-    }
-
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
-    executor = JoblibExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    executor.start_runs()
-    # This should create {budget} folders with ??? inside
-
-    created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
-    assert len(created_rundirs) == budget
-    executor.clean()
-
-
-def test_full_workflow_dask(tmp_path):
-    config = {}
-    # -- sampler
-    # TODO: test different samplers
-    bounds = [[-5, 5], [0, 1]]
-    parameters = ['c1', 'c2']
-    budget = 50
-    sampler_config = {
-        'type': 'RandomSampler', 'bounds': bounds, 'budget': budget, 'parameters': parameters}
-
-    # -- runner args
-    runner_config = {
-        'type': 'ExampleRunner'
-    }
-
-    base_run_dir = tmp_path  # f"{os.path.dirname(__file__)}/example"
-    # create the executor
-    executor = DaskExecutor(
-        sampler_config=sampler_config,
-        runner_config=runner_config,
-        base_run_dir=base_run_dir,
-        **config)
-    # executor.start_runs()   # Dask executor missing local cluster option
-    # This should create {budget} folders with ??? inside
-
-    # created_rundirs = glob.glob(os.path.join(base_run_dir, "*"))
-    # assert len(created_rundirs) == budget
-    # executor.clean()
+    # This should create {budget} folders
+    assert get_run_dir_count(tmp_path / "data") == run_group.sampler.budget

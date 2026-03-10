@@ -1,13 +1,28 @@
-executor:
-  type: DaskExecutor
+logging: DEBUG
+
+executors:
+  e1:
+    type: DaskExecutor
+    LocalCluster_config:
+      n_workers: 1
+samplers:
+  s1:
+    type: RandomSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 4
+    parameters: ['c1', 'c2']
+runners:
+  r1:
+    type: ExampleRunner
+    other_params: {}
+
+supervisor:
   base_run_dir: "data_dir/dask_local"
-  LocalCluster_config:
-    n_workers: 1
-sampler:
-  type: RandomSampler
-  bounds: [[0.0, 1.0], [0.0, 10.0]]
-  budget: 4
-  parameters: ['c1', 'c2']
-runner:
-  type: ExampleRunner
-  other_params: {}
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+
+storage:
+  type: hdf5

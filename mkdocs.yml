@@ -1,0 +1,74 @@
+site_name: Enchanted Surrogates
+site_description: Documentation for Enchanted Surrogates
+#site_url: 
+
+theme:
+  name: material
+
+  # Color palette configuration
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: blue
+
+  # Custom HTML overrides
+  # This replaces Jekyll `_includes/head_custom.html`
+  # Files should be placed under: docs/overrides/partials/
+  custom_dir: docs/overrides
+
+  features:
+    - navigation.instant       # Instant page loading
+    - navigation.tracking      # URL updates based on scroll position
+    - navigation.sections      # Group navigation sections
+    - navigation.expand        # Expand navigation by default
+    - navigation.top           # Back-to-top button
+    - content.code.copy        # Copy button for code blocks
+    - content.tabs.link        # Sync tabs across pages
+
+  enable_mathjax: true
+
+plugins:
+  # Full-text search
+  - search
+
+  # Automatic documentation generation from Python docstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          # Path to the Python source code
+          paths:
+            - src
+          options:
+            # Google-style docstrings
+            docstring_style: google
+            # Show link to source code
+            show_source: true
+            # Separate function signature from description
+            separate_signature: true
+            # Merge __init__ docstring into class documentation
+            merge_init_into_class: true
+            # Disable runtime inspection (safer for CI)
+            allow_inspection: true
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+
+markdown_extensions:
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+  # Tabbed content blocks
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  # Syntax highlighting and inline code improvements
+  - pymdownx.inlinehilite
+  - pymdownx.highlight
+  - pymdownx.snippets
+
+  # Math extension
+  - pymdownx.arithmatex:
+      generic: true

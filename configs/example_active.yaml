@@ -1,0 +1,41 @@
+logging: DEBUG
+
+executors:
+  e1:
+    type: LocalExecutor
+  e2:
+    type: LocalExecutor
+samplers:
+  s1:
+    type: ActiveLearningSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 16
+    batch_size: 4
+    parameters: ['c1', 'c2']
+    query_strategy: GreedySamplingTarget
+  s2:
+    type: ActiveLearningSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 16
+    batch_size: 4
+    parameters: ['c1', 'c2']
+    query_strategy: GreedySamplingTarget
+
+runners:
+  r1:
+    type: ExampleRunner
+    other_params: {}
+  r2:
+    type: ExampleRunner
+    other_params: {}
+
+supervisor:
+  base_run_dir: "data_dir/active_ml"
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+  - executor: e2
+    sampler: s2
+    runner: r2

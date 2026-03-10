@@ -1,13 +1,23 @@
-# run.py
 import os
-import warnings
+import sys
 import yaml
 import argparse
-from datetime import datetime
-from dask.distributed import print
-from enchanted_surrogates.utils.precise_imports import import_executor
+from enchanted_surrogates.supervisor.supervisor import Supervisor
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard
-import shutil
+from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+import logging
+
+log = get_logger(__name__)
+
+"""
+Command-line entry point for running Enchanted Surrogates.
+
+This module loads a YAML configuration file, constructs the corresponding
+execution namespace, and initializes the Supervisor responsible for
+managing sampling, execution, and result handling.
+"""
+
+
 def load_configuration(config_path: str) -> argparse.Namespace:
     """
     Loads configuration from a YAML file.
@@ -18,61 +28,59 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Namespace containing the configuration parameters.
     """
-    with open(config_path, "r") as file:
+    with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
-    config.executor["config_filepath"] = config_path
+    config.supervisor["config_filepath"] = config_path
 
-    # In case sampler or runner is defined outside the executor.
-    # This only works for non nested workflows.
-    if 'sampler_config' not in config.executor:
-        if getattr(config, 'sampler', None):
-            config.executor['sampler_config'] = config.sampler
-        elif 'sampler' in config.executor:
-            config.executor['sampler_config'] = config.executor.pop('sampler')
-    if 'runner_config' not in config.executor:
-        if getattr(config, 'runner', None):
-            config.executor['runner_config'] = config.runner
-        elif 'runner' in config.executor:
-            config.executor['runner_config'] = config.executor.pop('runner')
-    print(config)
+    log.debug(config)
     return config
 
 
-def main(args: argparse.Namespace, config_path=None):
+def setup_logger(base_run_dir: str, log_level: str):
+    """
+    Prepares the logging module and creates log directory
+
+    Args:
+        base_run_dir (str): The base run directory from supervisor
+        log_level (str): Logging level to use, for example INFO or DEBUG
+    """
+    log_dir = os.path.join(base_run_dir, "logs")
+    log_file = os.path.join(log_dir, "main.log")
+
+    # Store to logger config
+    config = LoggerConfig(log_level=log_level, log_dir=log_dir)
+
+    if not os.path.exists(config.log_dir):
+        os.makedirs(config.log_dir)
+
+    setup_logging(
+        config,
+        logging.StreamHandler(stream=sys.stdout),
+        logging.FileHandler(filename=log_file),
+    )
+
+
+def main(arguments: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
 
     Args:
         args (argparse.Namespace): Namespace containing the configuration parameters.
+        config_path (str or None): Optional path for configuration file where
+            configuration is fetched from.
     """
+    supervisor = Supervisor(arguments, config_path=config_path)
 
-    show_ascii_art = getattr(args, "show_ascii_art", True)
-    if show_ascii_art:
-        print(enchanted_wizard)
+    setup_logger(supervisor.base_run_dir, getattr(arguments, "logging", "INFO"))
+    log.info("Enchanted surrogates is starting.")
+    log.info(f"Base run directory: {supervisor.base_run_dir}")
 
-    executor_type = args.executor.pop("type")
-    executor = import_executor(type=executor_type, executor_config=args.executor)
-    if not os.path.exists(executor.base_run_dir):
-        os.makedirs(executor.base_run_dir)
-    
-    if config_path is not None:
-        print(f"Moving config file... from {config_path} to {os.path.join(executor.base_run_dir, os.path.basename(config_path))}")
-        try:
-            shutil.copy(config_path, os.path.join(executor.base_run_dir, os.path.basename(config_path)))
-        except Exception as exe:
-            warnings.warn(f"Copying the config file to the base run dir failed.\n \
-                            Try using the full path to the config file.\n \
-                            Here is the exception raised:\n {exe}")
-    
-    print("Starting runs...")
-    executor.start_runs()
-    print("Shutting down scheduler and workers...")
-    executor.clean()
-    return
+    print(enchanted_wizard)
+    supervisor.start()
+
 
 if __name__ == "__main__":
-    print(f'{datetime.now()} - Starting Enchanted surrogates.')
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
         "-cf",
@@ -84,4 +92,3 @@ if __name__ == "__main__":
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
     main(args, config_path=config_args.config_file)
-    print(f'{datetime.now()} - Enchanted surrogates finished.')

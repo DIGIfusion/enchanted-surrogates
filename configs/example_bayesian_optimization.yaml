@@ -1,40 +1,54 @@
-sampler:
-  type: BayesianOptimizationSampler
-  budget: 50
-  acquisition_batch_size: 1
-  bounds: [[0.001, 1.0]]
-  parameters: ['x']
-  base_run_dir: /path/to/dir
-  dry_run: False
-  parser: ExampleBayesianOptimizationParser
-  verbose: True
-  initial_samples: 3
-  acquisition_function: LEI
-  async_samp: True
-  random_fraction: 0.5
-  plot_GPR: True
-  plot_file: True
+logging: DEBUG
 
-runner:
-  type: ExampleBayesianOptimizationRunner
+samplers:
+  s1:
+    type: BayesianOptimizationSampler
+    budget: 50
+    acquisition_batch_size: 1
+    bounds: [[0.001, 1.0]]
+    parameters: ['x']
+    base_run_dir: /path/to/dir
+    dry_run: False
+    parser: ExampleBayesianOptimizationParser
+    verbose: True
+    initial_samples: 3
+    acquisition_function: LEI
+    async_samp: True
+    random_fraction: 0.5
+    plot_GPR: True
+    plot_file: True
 
-executor:
-  type: DaskExecutor
+runners:
+  r1:
+    type: ExampleBayesianOptimizationRunner
+
+executors:
+  e1:
+    type: DaskExecutor
+    SLURMcluster_config: 
+        account: "project_xxxxxx"
+        queue: "small"
+        cores: 1
+        memory: "8GB"
+        processes: 1
+        walltime: "6:00:00" 
+        interface: "ib0"
+        local_directory: "/path/to/dir/ENCHSUR_RUN/SLURMlog_primary"
+        job_script_prologue: 
+          - 'export OMP_NUM_THREADS=1'
+          - 'module load python-data'
+          - 'module load gsl'
+          - 'module load hdf5'
+          - 'source /path/to/venv/bin/activate'
+          - 'export PYTHONPATH=$PYTHONPATH:/path/to/enchanted-surrogates/src' 
+          - 'cd /path/to/dir/ENCHSUR_RUN'
+
+supervisor:
   base_run_dir: /path/to/dir
-  SLURMcluster_config: 
-      account: "project_xxxxxx"
-      queue: "small"
-      cores: 1
-      memory: "8GB"
-      processes: 1
-      walltime: "6:00:00" 
-      interface: "ib0"
-      local_directory: "/path/to/dir/ENCHSUR_RUN/SLURMlog_primary"
-      job_script_prologue: 
-        - 'export OMP_NUM_THREADS=1'
-        - 'module load python-data'
-        - 'module load gsl'
-        - 'module load hdf5'
-        - 'source /path/to/venv/bin/activate'
-        - 'export PYTHONPATH=$PYTHONPATH:/path/to/enchanted-surrogates/src' 
-        - 'cd /path/to/dir/ENCHSUR_RUN'
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+
+storage:
+  type: None

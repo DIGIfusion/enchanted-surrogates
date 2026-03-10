@@ -1,3 +1,6 @@
+"""
+Example runner
+"""
 import os
 import sys
 import subprocess
@@ -8,10 +11,10 @@ from time import sleep
 import numpy as np
 
 from .base_runner import Runner
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.is_package_available import is_package_available
 
-if is_package_available('dask'):
-    from dask.distributed import print
+log = get_logger(__name__)
 
 
 def is_number(x):
@@ -82,8 +85,8 @@ class ExampleRunner(Runner):
     """
 
     def __init__(self, *args, **kwargs):
-        self.sleep_sec = kwargs.get('sleep_sec', 0.01)
-        self.fail_prob = kwargs.get('fail_prob', 0)
+        self.sleep_sec = kwargs.get("sleep_sec", 0.01)
+        self.fail_prob = kwargs.get("fail_prob", 0)
 
     def get_sleep_sec(self):
         """
@@ -122,18 +125,18 @@ class ExampleRunner(Runner):
             seq = list(self.sleep_sec)
             if len(seq) != 2:
                 raise ValueError(
-                    'RANDOM SLEEP BOUNDS MUST BE AN ITERABLE WITH EXACTLY TWO VALUES:'
-                    ' LOWER BOUND AND UPPER BOUND. SELF.SLEEP_SEC HAS LENGTH '
-                    f'{len(seq)}'
+                    "RANDOM SLEEP BOUNDS MUST BE AN ITERABLE WITH EXACTLY TWO VALUES:"
+                    " LOWER BOUND AND UPPER BOUND. SELF.SLEEP_SEC HAS LENGTH "
+                    f"{len(seq)}"
                 )
             low, high = seq
             if not (is_number(low) and is_number(high)):
-                raise TypeError('RANDOM SLEEP BOUNDS MUST BE NUMERIC')
+                raise TypeError("RANDOM SLEEP BOUNDS MUST BE NUMERIC")
             if float(low) > float(high):
-                raise ValueError('LOWER BOUND MUST BE <= UPPER BOUND FOR RANDOM SLEEP')
+                raise ValueError("LOWER BOUND MUST BE <= UPPER BOUND FOR RANDOM SLEEP")
             return float(np.random.uniform(float(low), float(high)))
         else:
-            raise TypeError('SELF.SLEEP_SEC MUST BE A NUMBER OR A TWO-ELEMENT ITERABLE')
+            raise TypeError("SELF.SLEEP_SEC MUST BE A NUMBER OR A TWO-ELEMENT ITERABLE")
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         """
@@ -191,32 +194,36 @@ class ExampleRunner(Runner):
         try:
             c1 = float(c1)
         except Exception:
-            raise TypeError(f'Parameter c1 is not numeric: {c1!r}')
+            raise TypeError(f"Parameter c1 is not numeric: {c1!r}")
         try:
             c2 = float(c2)
         except Exception:
-            raise TypeError(f'Parameter c2 is not numeric: {c2!r}')
+            raise TypeError(f"Parameter c2 is not numeric: {c2!r}")
 
         # Execute a tiny Python one-liner that prints the sum and append to outfile
-        cmd = [sys.executable, '-c', f'print({c1} + {c2})']
+        cmd = [sys.executable, "-c", f"print({c1} + {c2})"]
 
-        with open(outfile, 'a') as f:
+        with open(outfile, "a") as f:
             result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE)
 
         if result.returncode != 0:
-            raise RuntimeError(f'Command execution failed with exit code {result.returncode}')
+            raise RuntimeError(
+                f"Command execution failed with exit code {result.returncode}"
+            )
 
         # Read output and convert to float (strip whitespace)
-        with open(outfile, 'r') as f:
+        with open(outfile, "r") as f:
             contents = f.read().strip()
         try:
             output = float(contents)
         except Exception as exc:
-            raise RuntimeError(f'Failed to parse numeric output from {outfile}: {contents!r}') from exc
+            raise RuntimeError(
+                f"Failed to parse numeric output from {outfile}: {contents!r}"
+            ) from exc
 
         # Sleep for configured duration
         sleep_sec = self.get_sleep_sec()
-        print(f'{datetime.now()} IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}')
+        log.info(f"IN EXAMPLE RUNNER - SLEEPING FOR: {sleep_sec}")
         sleep(sleep_sec)
 
         result = {"output": output, "success": True}
@@ -224,9 +231,11 @@ class ExampleRunner(Runner):
         # Synthetic failure injection for testing distributed failure handling
         if self.fail_prob is not None and self.fail_prob > 0:
             if not (is_number(self.fail_prob) and 0.0 <= float(self.fail_prob) <= 1.0):
-                raise ValueError('fail_prob must be a number between 0 and 1')
+                raise ValueError("fail_prob must be a number between 0 and 1")
             flip = np.random.uniform()
             if flip < float(self.fail_prob):
-                raise RuntimeError(f'THE RUN FAILED BECAUSE IT WAS UNLUCKY, fail_prob:{self.fail_prob}')
+                raise RuntimeError(
+                    f"THE RUN FAILED BECAUSE IT WAS UNLUCKY, fail_prob:{self.fail_prob}"
+                )
 
         return result

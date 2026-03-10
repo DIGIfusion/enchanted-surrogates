@@ -1,10 +1,4 @@
-"""
-samplers/bayesian_optimization_sampler.py
-
-This sampler Class uses Bayesian Optimization techniques to data efficiently
-sample through the search space to yield optimial information gain as 
-specified by the acquisition strategy.
-"""
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
 import pickle as pkl
@@ -20,47 +14,74 @@ import lampe.plots as plots
 from botorch.optim import optimize_acqf
 from botorch.utils.transforms import standardize, normalize, unnormalize
 
-
+log = get_logger(__name__)
 
 class BayesianOptimizationSampler(Sampler):
     """
+    ---
+
+    ## Overview
+
+    This sampler Class uses Bayesian Optimization techniques to data efficiently
+    sample through the search space to yield optimial information gain as 
+    specified by the acquisition strategy.
     Bayesian Optimization sampler using the BoTorch library.
 
+    ---
+
+    ## Configuration
+
+    To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
+    ```yaml
+    sampler:
+      type: BayesianOptimizationSampler
+      budget: 50
+      initial_samples: 20
+      acquisition_batch_size: 10
+      acquisition_function: qEI
+      random_fraction: 0.2
+      bounds: [[0.0, 1.0], [1.0, 5.0]]
+      parameters: ['x', 'y']
+      observations: ['distance']
+      base_run_dir: ./runs
+      fully_bayesian: false
+      async_samp: false
+      failure_prob_filter: false
+      ucb_beta: 2.0
+      parser: Parser
+      parser_config:
+        key: value
+    ```
+    
     Attributes:
-        base_run_dir (str):           Base run directory
-        budget (int):                 Sampling budget
-        bounds (list):                List of search bounds     
-        parameters (list):            List of parameter names
+        initial_samples (int): Number of initial samples required.
+        verbose (bool): Whether to print verbose output.
+        fully_bayesian (bool): Whether to use fully Bayesian models.
+        acquisition_batch_size (int): Number of samples in each acquisition batch.
+        observations (list): List of observations.
+        bounds (list): Bounds for the search space.
+        acquisition_function (str): Acquisition function to use.
+        random_fraction (float): Fraction of random samples.
+        failure_prob_filter (bool): Whether to filter based on failure probability.
+        ucb_beta (float): Beta parameter for UCB acquisition function.
+        async_samp (bool): Whether to use asynchronous sampling.
+        parameters (list): List of parameter names.
+        parser (type): Parser type for collecting sample information.
+        parser_config: Parser kwargs
 
-        observations (dict):          Dictionary of observations
-                                      for distance calculation
-        parser (type):                Parser type for collecting 
-                                      sample information
-        parser_config:                Parser kwargs
+    ---
+    
+    ## Assumptions and notes
 
-        initial_samples (int):        Number of initial samples
-        acquisition_batch_size (int): Number of samples in each 
-                                      acquisition batch
-        acquisition_function (str):   Acquisition function to use
-        random_fraction (float):      Fraction of random samples
-        failure_prob_filter (bool):   True for using failure information
-                                      to filter samples
-        ucb_beta (float):             Beta parameter for the UCB 
-                                      acquisition function
-        async_samp (bool):            True for asynchronous sampling
+     - The sampler assumes continuous numeric parameters and bounded search spaces.
 
-        fully_bayesian (bool):        True for fully Bayesian models
-        covar_kernel (str):           Covariance kernel to be used
+     - Bayesian optimization relies on existing evaluation results stored in base_run_dir.
 
-        verbose (bool):               True for detailed output
-        plot_GPR (bool):              True for plotting GPR
-        GPR_plot_dim (list):          List of dimensions to plot for GPR
-        plot_file (bool):             True for plottining in file (vs. screen)
-        plot_frequency (int):         Frequency of plotting (vs. # samples)
-        plot_debug (bool):            True for debugging plotting
-        plot_labels ([str]):          Labels to be used in the plots
-        plot_progress (bool):         Whether to generate progress plots
+     - Sampling proceeds in two phases:
+          Random sampling until initial_samples are collected.
+          Model-based sampling using a Gaussian Process surrogate.
 
+    ---
     """
 
     def __init__(
@@ -71,8 +92,18 @@ class BayesianOptimizationSampler(Sampler):
         """
         Initializes the BayesianOptimization sampler 
         with the given parameters.
+
+        Args:
+            bounds (list[tuple[float, float]]): Search space bounds.
+            parameters (list[str]): Parameter names.
+            initial_samples (int, optional): Number of initial random samples.
+            acquisition_function (str, optional): Acquisition strategy.
+            acquisition_batch_size (int, optional): Number of samples per batch.
+            random_fraction (float, optional): Fraction of random exploration.
+            async_samp (bool, optional): Enable asynchronous sampling.
+        
         """
-        print('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
+        log.info('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
         self.base_run_dir      = kwargs.get('base_run_dir', '')
         self._budget           = kwargs.get('budget', 20)
         self.bounds            = kwargs.get('bounds', [None])
@@ -138,7 +169,7 @@ class BayesianOptimizationSampler(Sampler):
         batch_samples = []
 
         if self.collected_samples < self.initial_samples:
-            print(str(100*self.collected_samples/self.initial_samples),
+            log.info(str(100*self.collected_samples/self.initial_samples),
                   ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
             for _ in range(int(self.acq_batch_size)):
                 params = [
@@ -267,7 +298,7 @@ class BayesianOptimizationSampler(Sampler):
     # Fitting the GPR.
     def train_surrogate(self):
         if self.verbose:
-            print('FITTING THE GPR')
+            log.info('FITTING THE GPR')
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
         distances = torch.tensor(self.result_dictionary['distances'][:])
@@ -302,7 +333,7 @@ class BayesianOptimizationSampler(Sampler):
             covar_module = gpytorch.kernels.RBFKernel(ard_num_dims=len(bounds.T))
         if self.fully_bayesian:
             if self.verbose:
-                print('SaasFullyBayesianSingleTaskGP')
+                log.info('SaasFullyBayesianSingleTaskGP')
             # Default kernel is Matern-5/2
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
                      input_vector, 
@@ -311,7 +342,7 @@ class BayesianOptimizationSampler(Sampler):
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
         else:
             if self.verbose:
-                print('SingleTaskGP')
+                log.info('SingleTaskGP')
             gp = botorch.models.SingleTaskGP(
                                              input_vector,
                                              distances, 
@@ -375,7 +406,7 @@ class BayesianOptimizationSampler(Sampler):
         result_dictionary = None
         result_dictionary_failed = None
         if self.verbose:
-            print('BUILDING RESULT DICTIONARY')    
+            log.info('BUILDING RESULT DICTIONARY')    
     
         # Load a stored result_dictionary file, if such a file exists.
         if os.path.isfile(os.path.join(base_run_directory, 
@@ -519,9 +550,8 @@ class BayesianOptimizationSampler(Sampler):
                 self.plot_forward(run_dir, str(i))
         except:
             plt.close()
-            print('Result plotting did not work. Have you implemented',
-                  ' plotting features in the parser?')
-            
+            log.error('Result plotting did not work. Have you implemented plotting features in the parser?')
+
     def plot_forward(self, run_dir, label='_'):
         plt.figure(1)
         self.parser.collect_sample_information(
@@ -820,6 +850,7 @@ class BayesianOptimizationSampler(Sampler):
         self.cp_figure = fig
 
     
-        
+    def skip(self, index):
+        raise NotImplementedError("skip not implemented for BayesianOptimizationSampler.")
 
 
