@@ -46,7 +46,10 @@ jobs:
     - name: Generate Coverage Report  
       # working-directory: enchanted_surrogates
       run: |  
-        coverage report -m >coverage_summary.txt
+        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        coverage report -m >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
         coverage html
         coverage xml --omit "tests/*"
 
@@ -55,13 +58,6 @@ jobs:
       with:
         name: coverage-report-html
         path: htmlcov/
-
-    - name: Add coverage summary
-      run: |
-        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        cat coverage_summary.txt >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Code Coverage Summary
       uses: irongut/CodeCoverageSummary@v1.3.0
