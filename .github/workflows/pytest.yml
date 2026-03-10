@@ -28,21 +28,18 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
-      # working-directory: enchanted_surrogates
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[activelearning]" # ← Editable install, required for importlib to do precise imports
+        pip install -e ".[activelearning]" # Editable install, required for importlib to do precise imports
         pip install coverage
         git submodule init
         git submodule update
 
     - name: Running pytest
-      # working-directory: enchanted_surrogates
       run: |
         coverage run -m pytest tests/ -v -s
 
-    - name: Generate Coverage Report  
-      # working-directory: enchanted_surrogates
+    - name: Generate Coverage Report
       run: |  
         echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY

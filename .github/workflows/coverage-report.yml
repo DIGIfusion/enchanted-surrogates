@@ -11,14 +11,12 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      # Download artifacts from the test workflow
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
         with:
           name: coverage-artifacts
           path: coverage
 
-      # Generate coverage summary / badge
       - name: Code Coverage Summary
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
