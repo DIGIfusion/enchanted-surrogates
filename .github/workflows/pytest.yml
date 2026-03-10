@@ -61,5 +61,4 @@ jobs:
 
   coverage:
     needs: pytest
-    if: success()
     uses: ./.github/workflows/coverage-report.yml
