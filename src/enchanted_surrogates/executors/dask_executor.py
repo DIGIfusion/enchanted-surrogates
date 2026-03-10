@@ -250,7 +250,7 @@ class DaskExecutor(Executor):
                 log.warning(f"Error while checking squeue: {e}")
             return []
 
-    def start_cluster(self, slurm_out_dir=None):
+    def start_cluster(self):
         """
         Starts a Dask cluster using either SLURMCluster or LocalCluster.
 
@@ -265,33 +265,13 @@ class DaskExecutor(Executor):
             Warning: If fewer workers than expected are started.
         """
         log.info("Creating a cluster...")
-        worker_logs_dir = None
-
+        slurm_out_dir = LoggerConfig().log_dir
+        
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(
                 self.SLURMcluster_config.get("processes", 1)
             )
 
-            if not slurm_out_dir:
-                slurm_out_dir = os.path.join(
-                    self.base_run_dir, "worker_out_DaskExecutor"
-                )
-            worker_logs_dir = slurm_out_dir
-            if not os.path.exists(slurm_out_dir):
-                os.makedirs(slurm_out_dir)
-            jed = self.SLURMcluster_config.get("job_extra_directives")
-            if not jed:
-                self.SLURMcluster_config["job_extra_directives"] = [
-                    f"-o {slurm_out_dir}/%x.%j.out",
-                    f"-e {slurm_out_dir}/%x.%j.err",
-                    "-J enc_dask_worker",
-                ]
-            else:
-                self.SLURMcluster_config["job_extra_directives"] += [
-                    f"-o {slurm_out_dir}/%x.%j.out",
-                    f"-e {slurm_out_dir}/%x.%j.err",
-                    "-J enc_dask_worker",
-                ]
             log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
             self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)

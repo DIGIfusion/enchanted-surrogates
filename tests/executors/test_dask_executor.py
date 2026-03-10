@@ -43,9 +43,6 @@ def test_start_cluster_uses_SLURMCluster(mock_SLURM, mock_Client, tmp_path):
     assert mock_cluster.scale.call_count == 1
     assert executor.cluster == mock_cluster
 
-    expected_slurm_out_dir = os.path.join(tmp_path, "worker_out_DaskExecutor")
-    assert os.path.exists(expected_slurm_out_dir)
-
     # scale_n_jobs times processes
     assert executor.expected_number_of_workers == 6
 
