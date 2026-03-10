@@ -30,6 +30,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[activelearning]" # ← Editable install, required for importlib to do precise imports
+        pip install coverage
         git submodule init
         git submodule update
 
@@ -42,3 +43,10 @@ jobs:
       # working-directory: enchanted_surrogates
       run: |  
         coverage report -m
+        coverage html --omit tests/*
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report-html
+        path: htmlcov/
