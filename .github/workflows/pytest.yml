@@ -48,7 +48,7 @@ jobs:
       run: |  
         coverage report -m >coverage_summary.txt
         coverage html
-        coverage xml
+        coverage xml --omit "tests/*"
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4
@@ -70,6 +70,7 @@ jobs:
         badge: true
         format: markdown
         output: both
+        hide_complexity: true
 
     - name: Comment coverage in PR
       if: github.event_name == 'pull_request'
@@ -79,7 +80,7 @@ jobs:
           const fs = require('fs');
           const coverage = fs.readFileSync('code-coverage-results.md', 'utf8');
 
-          const body = `## Test Coverage
+          const body = `## Test Coverage Report
           ${coverage}
           `;
 
@@ -94,7 +95,7 @@ jobs:
 
           const botComment = comments.data.find(comment =>
             comment.user.type === 'Bot' &&
-            comment.body.includes('Test Coverage')
+            comment.body.includes('Test Coverage Report')
           );
 
           if (botComment) {
