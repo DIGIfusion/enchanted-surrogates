@@ -42,15 +42,14 @@ jobs:
             const coverage = fs.readFileSync('code-coverage-results.md', 'utf8');
             const cov_by_file = fs.readFileSync('coverage/coverage_by_file.txt', 'utf8');
 
-            const body = `## Test Coverage Report
-            ${coverage}
-            <details>
-            <summary>Coverage by file</summary>
-            ```
-            ${cov_by_file}
-            ```
-            </details>
-            `;
+            const body = "## Test Coverage Report\n"
+              + coverage
+              + "\n<details>\n"
+              + "<summary>Coverage by file</summary>\n"
+              + "\n```text\n"
+              + cov_by_file
+              + "\n```"
+              + "\n</details>";
 
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;

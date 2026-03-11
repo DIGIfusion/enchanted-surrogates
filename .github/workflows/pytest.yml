@@ -41,7 +41,7 @@ jobs:
 
     - name: Generate Coverage Report
       run: |  
-        coverage report -m >coverage_by_file.txt
+        coverage report -m > coverage_by_file.txt
         coverage html --omit "tests/*"
         coverage xml --omit "tests/*"
 
