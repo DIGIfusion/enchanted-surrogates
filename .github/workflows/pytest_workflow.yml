@@ -2,11 +2,10 @@ name: Workflow testing with Pytest
 
 on: 
   workflow_call:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-    types: [opened, synchronize, reopened]
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
 
 jobs:
   pytest:
@@ -23,19 +22,20 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
-      # working-directory: enchanted_surrogates
       run: |
         python -m pip install --upgrade pip
         pip install -e . # ← Editable install, required for importlib to do precise imports
+        pip install coverage
         git submodule init
         git submodule update
 
     - name: Running pytest
-      # working-directory: enchanted_surrogates
       run: |
-        coverage run -m pytest workflow_tests/automated_tests_no_HPC
+        coverage run --source=src --data-file=workflow.coverage -m pytest workflow_tests/automated_tests_no_HPC
 
-    - name: Generate Coverage Report  
-      # working-directory: enchanted_surrogates
-      run: |  
-        coverage report -m
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: workflow_coverage
+        path: |
+          workflow.coverage

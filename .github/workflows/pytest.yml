@@ -2,15 +2,10 @@ name: Unit testing with Pytest
 
 on: 
   workflow_call:
-  push:
-    branches:
-      - main
-      - develop
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  contents: read
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
 
 jobs:
   pytest:
@@ -36,26 +31,11 @@ jobs:
 
     - name: Running pytest
       run: |
-        coverage run -m pytest tests/ -v -s
-
-    - name: Generate Coverage Report
-      run: |  
-        coverage report -m > coverage_by_file.txt
-        coverage html --omit "tests/*"
-        coverage xml --omit "tests/*"
+        coverage run --source=src --data-file=unit.coverage -m pytest tests/ -v -s
 
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-artifacts
+        name: unit_coverage
         path: |
-          coverage_by_file.txt
-          coverage.xml
-          htmlcov/
-
-  coverage:
-    needs: pytest
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: ./.github/workflows/coverage-report.yml
+          unit.coverage
