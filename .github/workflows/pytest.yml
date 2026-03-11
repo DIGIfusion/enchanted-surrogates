@@ -31,11 +31,12 @@ jobs:
 
     - name: Running pytest
       run: |
-        coverage run --source=src --data-file=unit.coverage -m pytest tests/ -v -s
+        coverage run --source=src --data-file=.coverage.unit -m pytest tests/ -v -s
 
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
       with:
         name: unit_coverage
+        include-hidden-files: true
         path: |
-          unit.coverage
+          .coverage.unit

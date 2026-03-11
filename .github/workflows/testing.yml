@@ -39,17 +39,18 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: unit_coverage
-        path: coverage_data
+        path: coverage
 
     - name: Download workflow test coverage
       uses: actions/download-artifact@v4
       with:
         name: workflow_coverage
-        path: coverage_data
+        path: coverage
 
     - name: Combine and generate coverage report
-      run: |  
-        coverage combine coverage_data
+      run: |
+        ls coverage
+        coverage combine coverage
         coverage report -m > coverage_by_file.txt
         coverage xml
 

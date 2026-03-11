@@ -31,11 +31,12 @@ jobs:
 
     - name: Running pytest
       run: |
-        coverage run --source=src --data-file=workflow.coverage -m pytest workflow_tests/automated_tests_no_HPC
+        coverage run --source=src --data-file=.coverage.workflow -m pytest workflow_tests/automated_tests_no_HPC
 
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
       with:
         name: workflow_coverage
+        include-hidden-files: true
         path: |
-          workflow.coverage
+          .coverage.workflow
