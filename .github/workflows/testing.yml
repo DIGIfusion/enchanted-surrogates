@@ -11,13 +11,19 @@ on:
 
 jobs:
   unit_tests:
+    name: Unit tests
     uses: ./.github/workflows/pytest.yml
 
   workflow_tests:
+    name: Workflow tests
     uses: ./.github/workflows/pytest_workflow.yml
 
-  combine_coverage:
+  generate_coverage:
+    name: Generate coverage report
     needs: [unit_tests, workflow_tests]
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,10 +67,6 @@ jobs:
         path: |
           coverage_by_file.txt
           coverage.xml
-    
-  coverage:
-    needs: combine_coverage
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: ./.github/workflows/coverage_report.yml
+
+    - name: Post coverage report
+      uses: ./.github/workflows/coverage_report.yml
