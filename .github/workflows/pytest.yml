@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   pytest:
@@ -56,4 +55,7 @@ jobs:
 
   coverage:
     needs: pytest
+    permissions:
+      contents: read
+      pull-requests: write
     uses: ./.github/workflows/coverage-report.yml
