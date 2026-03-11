@@ -69,4 +69,4 @@ jobs:
           coverage.xml
 
     - name: Post coverage report
-      uses: ./.github/workflows/coverage_report.yml
+      uses: ./.github/actions/coverage_report
