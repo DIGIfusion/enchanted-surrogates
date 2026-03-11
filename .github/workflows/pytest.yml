@@ -41,10 +41,7 @@ jobs:
 
     - name: Generate Coverage Report
       run: |  
-        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        coverage report -m >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
+        coverage report -m >coverage_by_file.txt
         coverage html --omit "tests/*"
         coverage xml --omit "tests/*"
 
@@ -53,6 +50,7 @@ jobs:
       with:
         name: coverage-artifacts
         path: |
+          coverage_by_file.txt
           coverage.xml
           htmlcov/
 
