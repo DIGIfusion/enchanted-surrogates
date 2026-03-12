@@ -4,7 +4,7 @@ A framework for creating databases for surrogate models of complex physics codes
 
 See Github Pages: https://digifusion.github.io/enchanted-surrogates/.
 
-## Database generation for a simulation consists of: 
+### Database generation for a simulation consists of: 
 
 1. Running the code
     - Every code has it's own runtime entry points (e.g., I/O, actual execution)
@@ -45,42 +45,35 @@ Some extra notes on the config file:
 
 If the run crashes or you run out of time with HPC, or if you want to generate additional samples to a dataset, it is possible with seamless sampling. 
 
-Configuration is under supervisor like below:
-
-```yaml
-supervisor:
-    ...
-    run_mode: fresh # or resume or extend
-    ...
-```
+Configuration is under supervisor like, see the `run_mode` for example in `configs/example_local.yaml`
 
 Options:
-- fresh: Default option, a new run.
-- resume: Running resume means continuing with previous interrupted or completed run to the budget limit defined in configuration. Supervisor keeps track how many batches have been saved.
-- extend: Option for just adding more samples, now setting sampler `budget:10` means that 10 additional samples are created.
+- `fresh`: Default option, a new run.
+- `resume`: Running resume means continuing with previous interrupted or completed run to the budget limit defined in configuration. Supervisor keeps track how many batches have been saved.
+- `extend`: Option for just adding more samples, now setting sampler `budget:10` means that 10 additional samples are created.
 
 ### Nested sampling
 
 Supervisor supports configuring the order of nested samplers and reuse of single type of module. For example if runner and executor are same for each nesting level but sampling is differing, it is possible to set it in `Supervisor` configuration parameter `run_order`. See `configs/example_nexted.yaml` for example.
 
+### Saving files
+
+If running in HPC environment, the amount of files possible to save might be limited. For this issue it is possible to save only the summary file or selected files. 
+
+Options:
+- `all`: All files are saved
+- `none`: Only `enchanted_dataset.csv` and `runs.h5` are saved
+- `custom`: Files as a list that are saved additional to `enchanted_dataset.csv` and `runs.h5`
 
 ### Optional dependencies
 
-There is possibility to have active learning sampler. This requires installing 
-
-# active ml
-# anything other
+There is possibility to have active learning sampler. This requires `scikit-activeml` package installed, which can be done with `pip install -e enchanted-surrogates[activelearning]`. See `configs/example_active_yaml` for configuration. Key thing is to include `query_strategy` in sampler.
 
 #### Submodules 
 
-# TODO: Is this still true?
-# Work in progress
-
-If one plans on doing active learning, the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is necessary, and has to be added to paths as well (see example configuration file and `SLURM.bash`). 
-Submodules are necessary also for running the pytests locally (although this is done in any PR). 
+Active learning with the submodule [`bmdal`](https://github.com/BlackHC/2302.08981/tree/main) is to be supported in the future.
 
 To add submodules: 
-
     git submodule update --init --recursive
 
 ## What we do not plan to handle
