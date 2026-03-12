@@ -58,7 +58,7 @@ jobs:
         ls coverage
         coverage combine coverage
         coverage report -m > coverage_by_file.txt
-        coverage xml
+        coverage json
 
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
@@ -66,7 +66,7 @@ jobs:
         name: combined_coverage
         path: |
           coverage_by_file.txt
-          coverage.xml
+          coverage.json
 
     - name: Post coverage report
       uses: ./.github/actions/coverage_report
