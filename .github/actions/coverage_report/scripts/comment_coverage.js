@@ -3,6 +3,10 @@ const path = require('path');
 
 const { readCoverage, diffCoverage } = require('./get_coverage_diff');
 
+/**
+ * Reads `coverage.json` files from folders `coverage` and `base_coverage`,
+ * creates the diff report from those and sends it as a comment on the PR.
+ */
 module.exports = async ({ github, context }) => {
     const base_coverage = readCoverage("base_coverage/coverage.json");
     const pr_coverage = readCoverage("coverage/coverage.json");

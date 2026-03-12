@@ -1,6 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 
+/**
+ * Extract coverage data by package/folder from the given json file.
+ * @param {string} file_path - Path to the coverage json
+ * @returns {{ total: number, files: Record<string, number> }}
+ *   - total: Overall project coverage as a percentage
+ *   - files: Mapping package names to coverage percentages
+ */
 function readCoverage(file_path) {
     if (!fs.existsSync(file_path)) {
         console.log(`Coverage file not found: ${file_path}`);
@@ -29,7 +36,6 @@ function readCoverage(file_path) {
     }
 
     const coverage = {};
-
     for (const [folder, stats] of Object.entries(folders)) {
         coverage[folder] = (stats.covered / stats.total) * 100;
     }
@@ -40,6 +46,12 @@ function readCoverage(file_path) {
     };
 }
 
+/**
+ * Computes the coverage differences between two coverage objects and generates markdown table.
+ * @param {{ total: number, files: Record<string, number> }} base - Coverage data for the base (target) branch.
+ * @param {{ total: number, files: Record<string, number> }} pr - Coverage data for the pull request branch.
+ * @returns {string} Markdown-formatted table showing coverage per folder/package and diff
+ */
 function diffCoverage(base, pr) {
     // All unique file names
     const files = new Set([
@@ -48,7 +60,6 @@ function diffCoverage(base, pr) {
     ]);
 
     const result = [];
-
     for (const file of files) {
         const base_cov = base.files[file] ?? 0;
         const pr_cov = pr.files[file] ?? 0;
@@ -61,8 +72,11 @@ function diffCoverage(base, pr) {
         });
     }
 
+    // Sort packages by biggest change on top
+    result.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
     // Create markdown table
-    let table = "| File | Line Rate | Change |\n";
+    let table = "| Package | Line Rate | Change |\n";
     table += "| :--- | :---: | ---: |\n";
 
     for (const row of result) {

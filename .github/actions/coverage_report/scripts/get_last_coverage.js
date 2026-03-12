@@ -1,5 +1,9 @@
 const fs = require('fs');
 
+/**
+ * Downloads the latest successful coverage artifact from the base branch
+ * of a pull request and saves it locally as `base_coverage.zip`.
+ */
 module.exports = async ({ github, context }) => {
     if (!context.payload.pull_request) {
         console.log("Not a pull request event, exiting.");
@@ -43,7 +47,6 @@ module.exports = async ({ github, context }) => {
         return;
     }
 
-    //const downloadUrl = coverageArtifact.archive_download_url;
     const download = await github.rest.actions.downloadArtifact({
         owner,
         repo,
