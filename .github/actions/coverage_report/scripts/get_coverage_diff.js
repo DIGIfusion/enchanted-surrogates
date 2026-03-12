@@ -3,7 +3,10 @@ const fs = require("fs");
 function readCoverage(path) {
     if (!fs.existsSync(path)) {
         console.log(`Coverage file not found: ${path}`);
-        return {};
+        return {
+            total: 0,
+            files: {}
+        };
     }
 
     const data = JSON.parse(fs.readFileSync(path, "utf8"));
@@ -13,21 +16,24 @@ function readCoverage(path) {
         coverage[file] = info.summary.percent_covered;
     }
 
-    return coverage;
+    return {
+        total: data.totals.percent_covered,
+        files: coverage
+    };
 }
 
 function diffCoverage(base, pr) {
     // All unique file names
     const files = new Set([
-        ...Object.keys(base),
-        ...Object.keys(pr)
+        ...Object.keys(base.files),
+        ...Object.keys(pr.files)
     ]);
 
     const result = [];
 
     for (const file of files) {
-        const base_cov = base[file] ?? 0;
-        const pr_cov = pr[file] ?? 0;
+        const base_cov = base.files[file] ?? 0;
+        const pr_cov = pr.files[file] ?? 0;
 
         result.push({
             file,
@@ -38,13 +44,25 @@ function diffCoverage(base, pr) {
     }
 
     // Create markdown table
-    let table = "| File | PR | Base | Diff |\n";
-    table += "|---|---|---|---|\n";
+    let table = "| File | Line Rate | Change |\n";
+    table += "| :--- | :---: | ---: |\n";
 
     for (const row of result) {
         const sign = row.diff > 0 ? "+" : "";
-        table += `| ${row.file} | ${row.pr.toFixed(1)}% | ${row.base.toFixed(1)}% | ${sign}${row.diff.toFixed(1)}% |\n`;
+        const icon =
+            row.diff > 0 ? "🟢" :
+            row.diff < 0 ? "🔴" :
+            "⚪";
+        table += `| ${row.file} | ${row.pr.toFixed(1)}% | ${sign}${row.diff.toFixed(1)}% ${icon} |\n`;
     }
+
+    const total_diff = pr.total - base.total;
+    const sign = total_diff > 0 ? "+" : "";
+    const icon =
+        total_diff > 0 ? "🟢" :
+        total_diff < 0 ? "🔴" :
+        "⚪";
+    table += `| **Summary** | **${pr.total.toFixed(1)}%** | **${sign}${total_diff.toFixed(1)}%** ${icon} |\n`;
 
     return table;
 }
