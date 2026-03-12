@@ -29,7 +29,7 @@ module.exports = async ({ github, context }) => {
         run_id: latestRunId
     });
 
-    if (!runs.data.artifacts || runs.data.artifacts.length === 0) {
+    if (!artifacts.data.artifacts || artifacts.data.artifacts.length === 0) {
         console.log("No artifacts were found for run id " + latestRunId.toString());
         return;
     }
