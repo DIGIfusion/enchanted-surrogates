@@ -1,15 +1,16 @@
 const fs = require("fs");
+const path = require("path");
 
-function readCoverage(path) {
-    if (!fs.existsSync(path)) {
-        console.log(`Coverage file not found: ${path}`);
+function readCoverage(file_path) {
+    if (!fs.existsSync(file_path)) {
+        console.log(`Coverage file not found: ${file_path}`);
         return {
             total: 0,
             files: {}
         };
     }
 
-    const data = JSON.parse(fs.readFileSync(path, "utf8"));
+    const data = JSON.parse(fs.readFileSync(file_path, "utf8"));
     const folders = {};
 
     // Get accumulated coverage for each file in a folder
