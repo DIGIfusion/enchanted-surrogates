@@ -10,10 +10,27 @@ function readCoverage(path) {
     }
 
     const data = JSON.parse(fs.readFileSync(path, "utf8"));
+    const folders = {};
+
+    // Get accumulated coverage for each file in a folder
+    for (const [file, info] of Object.entries(data.files)) {
+        const folder = path.dirname(file);
+
+        if (!folders[folder]) {
+            folders[folder] = {
+                covered: 0,
+                total: 0
+            };
+        }
+
+        folders[folder].covered += info.summary.covered_lines;
+        folders[folder].total += info.summary.num_statements;
+    }
+
     const coverage = {};
 
-    for (const [file, info] of Object.entries(data.files)) {
-        coverage[file] = info.summary.percent_covered;
+    for (const [folder, stats] of Object.entries(folders)) {
+        coverage[folder] = (stats.covered / stats.total) * 100;
     }
 
     return {
