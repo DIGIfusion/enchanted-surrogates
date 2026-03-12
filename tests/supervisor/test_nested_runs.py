@@ -25,7 +25,7 @@ def test_supervisor_batches(batch_count_a, batch_count_b, patch_supervisor_impor
     assert samplers[1].get_next_samples.call_count == batch_count_b
     assert executors[0].execute.call_count == batch_count_a
     assert executors[1].execute.call_count == batch_count_b
-    assert len(next(os.walk(tmp_path))[1]) == 2 * batch_count_a + 2 * batch_count_a * 2 * batch_count_b
+    assert len(next(os.walk(tmp_path / "data"))[1]) == 2 * batch_count_a + 2 * batch_count_a * 2 * batch_count_b
 
 def make_nested_args(tmp_path, nested_count: int):
     """

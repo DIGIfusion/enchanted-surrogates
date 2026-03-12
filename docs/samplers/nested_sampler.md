@@ -1,1 +1,1 @@
-::: enchanted_surrogates.samplers.nested_sampler
+Documentation in nested sampler docstrings.

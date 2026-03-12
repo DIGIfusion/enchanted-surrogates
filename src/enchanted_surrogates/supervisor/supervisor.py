@@ -80,10 +80,14 @@ class Supervisor:
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
-                log.warning("No config for base_run_dir was found, " \
-                "created base_run_dir folder to working directory")
+                log.warning(
+                    "No config for base_run_dir was found, "
+                    "created base_run_dir folder to working directory"
+                )
             else:
-                raise ValueError("base_run_dir is not set in the provided configuration")
+                raise ValueError(
+                    "base_run_dir is not set in the provided configuration"
+                )
 
         self.local_storage = args.supervisor.get("local_storage")
 
@@ -94,6 +98,7 @@ class Supervisor:
             if not self.local_storage:
                 log.warning(f"Local storage environment variable {env} not set, ignoring...")
 
+        self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
@@ -104,9 +109,9 @@ class Supervisor:
                     # Extending should generate budget worth of new samples so add
                     # already submitted amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[self.previous_run_data.depth].sampler.budget += (
-                            self.previous_run_data.submitted_samples
-                        )
+                        self.groups[
+                            self.previous_run_data.depth
+                        ].sampler.budget += self.previous_run_data.submitted_samples
 
                     self.groups[self.previous_run_data.depth].sampler.skip(
                         self.previous_run_data.batch_number + 1
@@ -154,6 +159,7 @@ class Supervisor:
                     last_complete_dataset = self.read_summary(
                         "last_complete_enchanted_dataset"
                     )
+                    group.sampler.register_future(last_complete_dataset)
 
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
@@ -169,7 +175,7 @@ class Supervisor:
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
-                    os.path.join(real_run_dir, f"d{depth}_b{batch_number}_r{i}")
+                    os.path.join(real_run_dir, "data", f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
                 ]
 
@@ -181,11 +187,12 @@ class Supervisor:
                 # Then the files in this batch should be saved into summary files
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
+                group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=depth,
-                    submitted_samples=group.sampler.submitted
+                    submitted_samples=group.sampler.submitted,
                 )
                 run_data.save(self.previous_run_file)
 
@@ -204,7 +211,9 @@ class Supervisor:
 
             # Create a summary file with last_complete_dataset for nesting
             if depth < len(self.groups) - 1:
-                self.write_summary(last_complete_dataset, "last_complete_enchanted_dataset")
+                self.write_summary(
+                    last_complete_dataset, "last_complete_enchanted_dataset"
+                )
 
             self.fetch_from_local_storage()
 
@@ -237,12 +246,11 @@ class Supervisor:
             dataset.to_parquet(
                 os.path.join(self.base_run_dir, f"{filename}.parquet"),
                 engine="pyarrow",
-                index=False
+                index=False,
             )
         else:
             dataset.to_csv(
-                os.path.join(self.base_run_dir, f"{filename}.csv"),
-                index=False
+                os.path.join(self.base_run_dir, f"{filename}.csv"), index=False
             )
 
     def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
@@ -286,8 +294,11 @@ class Supervisor:
         if not os.path.exists(self.base_run_dir):
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
+        
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir, exist_ok=True)
 
-        dirs = glob.glob(f"{self.base_run_dir}/"
+        dirs = glob.glob(f"{self.data_dir}/"
             + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
 
         if not dirs:
@@ -296,6 +307,7 @@ class Supervisor:
         for path in dirs:
             shutil.rmtree(path)
 
+        # Create also data and logs folders if they don't exist
     def create_base_run_dir(self, base_run_dir, config_path):
         """
         Creates base directory for simulation run results. Checks if base_run_dir
@@ -322,7 +334,7 @@ class Supervisor:
                 else:
                     print(
                         str(os.path.abspath(base_run_dir))
-                        + "\nFolders have content. If you wish to continue. Go delete them"
+                        + "\nFolders have content. If you wish to continue, go delete them"
                     )
                     value = "n"
 
@@ -333,12 +345,16 @@ class Supervisor:
                     print("No content was deleted. Enchanted surrogates is exited.")
                     sys.exit(1)
 
-        # Create base run dir
+        # Create base run dir and data dir inside it
         os.makedirs(base_run_dir, exist_ok=True)
+        os.makedirs(self.data_dir, exist_ok=True)
 
         # Move config path to base_run_dir if config path is given
         if config_path is not None:
-            new_config_path = os.path.join(base_run_dir, os.path.basename(config_path))
+            os.makedirs(os.path.join(base_run_dir, "config"), exist_ok=True)
+            config_dir = os.path.join(base_run_dir, "config")
+
+            new_config_path = os.path.join(config_dir, os.path.basename(config_path))
             print(f"Moving config file... from {config_path} to {new_config_path}")
             try:
                 shutil.copy(config_path, new_config_path)
@@ -367,9 +383,9 @@ class Supervisor:
             False If any runner has not yet created the csv file
         """
 
-        for name in os.listdir(self.base_run_dir):
+        for name in os.listdir(self.data_dir):
             if not name_filter or str(name_filter) in str(name):
-                folder_path = os.path.join(self.base_run_dir, name)
+                folder_path = os.path.join(self.data_dir, name)
                 if os.path.isdir(folder_path):
                     datapoint_file = os.path.join(
                         folder_path, "enchanted_datapoint.csv"
@@ -406,8 +422,9 @@ class Supervisor:
 
         """
         enchanted_dataset = pd.DataFrame()
-        for name in os.listdir(self.base_run_dir):
-            folder_path = os.path.join(self.base_run_dir, name)
+
+        for name in os.listdir(self.data_dir):
+            folder_path = os.path.join(self.data_dir, name)
             if os.path.isdir(folder_path):
                 datapoint_file = os.path.join(folder_path, "enchanted_datapoint.csv")
                 if os.path.isfile(datapoint_file):
@@ -493,8 +510,8 @@ class Supervisor:
             # Run directory datasets
             runs_group = f.create_group("data/runs")
 
-            for name in os.listdir(self.base_run_dir):
-                folder_path = os.path.join(self.base_run_dir, name)
+            for name in os.listdir(self.data_dir):
+                folder_path = os.path.join(self.data_dir, name)
                 csv_path = os.path.join(folder_path, "enchanted_datapoint.csv")
 
                 if not os.path.isfile(csv_path):

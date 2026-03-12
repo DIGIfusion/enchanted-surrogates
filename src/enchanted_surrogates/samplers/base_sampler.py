@@ -5,7 +5,9 @@ class Sampler(ABC):
     _budget: int = 100
     _submitted: int = 0
 
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         pass
 
     @abstractmethod

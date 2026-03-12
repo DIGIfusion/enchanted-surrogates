@@ -1,3 +1,6 @@
+"""
+Example Bayesian optimization runner
+"""
 import os
 import numpy as np
 

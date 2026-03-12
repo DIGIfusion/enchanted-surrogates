@@ -1,1 +1,1 @@
-::: enchanted_surrogates.executors.local_executor
+Documentation in local sampler docstrings.

@@ -11,7 +11,7 @@ def test_nested_dask_executors(tmp_path, run_config):
 
     budget_first = supervisor.groups[0].sampler.budget
     budget_second = supervisor.groups[1].sampler.budget
-    assert get_run_dir_count(tmp_path) == budget_first + budget_first * budget_second
+    assert get_run_dir_count(tmp_path / "data") == budget_first + budget_first * budget_second
 
 
 def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
@@ -24,7 +24,7 @@ def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
     budget_first = supervisor.groups[0].sampler.budget
     budget_second = supervisor.groups[1].sampler.budget
     budget_third = supervisor.groups[2].sampler.budget
-    assert get_run_dir_count(tmp_path) == (
+    assert get_run_dir_count(tmp_path / "data") == (
         budget_first
          + budget_first * budget_second
          + budget_first * budget_second * budget_third

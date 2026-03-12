@@ -1,3 +1,15 @@
+"""
+---
+
+## Overview
+
+An executor that runs simulation tasks sequentially on the local machine.
+This executor is intended for simple workflows, debugging, and environments
+where parallel or distributed execution is not required.
+Example configuration: /configs/example_local.yaml
+
+---
+"""
 import os
 import uuid
 from enchanted_surrogates.utils.logger import get_logger
@@ -9,16 +21,6 @@ log = get_logger(__name__)
 
 class LocalExecutor(Executor):
     """
-    ---
-
-    ## Overview
-
-    An executor that runs simulation tasks sequentially on the local machine.
-    This executor is intended for simple workflows, debugging, and environments
-    where parallel or distributed execution is not required.
-    Example configuration: /configs/example_local.yaml
-
-    ---
 
     ## Features
 
@@ -38,7 +40,6 @@ class LocalExecutor(Executor):
     def execute(self, input: list[(str, dict)], sampler):
         for run_dir, sample in input:
             new_future = run_simulation_task(self.runner_config, run_dir, params=sample)
-            sampler.register_future(new_future)
 
     def clean(self):
         log.warning("Local runner doesn't clean up any resources")

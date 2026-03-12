@@ -10,7 +10,7 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    one_run_dir = tmp_path / "d0_b0_r0"
+    one_run_dir = tmp_path / "data" / "d0_b0_r0"
     one_run_dir.mkdir()
     assert supervisor.all_processes_done() is False
 
@@ -20,8 +20,9 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
 def test_create_dataset_combines_csv_files(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
-
-    create_run_folders(tmp_path, 3)
+    
+    data_path = tmp_path / "data"
+    create_run_folders(data_path, 3)
 
     df = supervisor.create_dataset()
     assert len(df) == 3
@@ -30,7 +31,9 @@ def test_create_dataset_combines_csv_files(tmp_path, patch_supervisor_imports):
 def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
-    create_run_folders(tmp_path, 3)
+
+    data_path = tmp_path / "data"
+    create_run_folders(data_path, 3)
 
     df = supervisor.create_dataset()
     supervisor.create_hdf5(df)
@@ -138,6 +141,8 @@ def test_local_storage(tmp_path, patch_supervisor_imports):
     supervisor = Supervisor(make_args(run_dir, local_storage=fast_dir))
 
     assert supervisor.local_storage == fast_dir
+
+    os.rmdir(os.path.join(run_dir, "data"))
 
     os.environ["abcdef123456"] = fast_dir
     supervisor = Supervisor(make_args(run_dir, local_storage="abcdef123456"))

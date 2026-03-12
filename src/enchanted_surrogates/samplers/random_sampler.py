@@ -1,19 +1,19 @@
+"""
+---
+
+## Overview
+
+The random sampler generates samples randomly within the specified bounds
+for each parameter.
+
+---
+"""
 import numpy as np
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
 
 class RandomSampler(Sampler):
     """
-
-    ---
-
-    ## Overview
-
-    The random sampler generates samples randomly within the specified bounds
-    for each parameter.
-
-    ---
-
     ## Configuration
 
     To use the `RandomSampler`, specify it in the configuration file as in following example:

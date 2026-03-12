@@ -24,7 +24,19 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mkdocs mkdocstrings[python] mkdocs-material
+          pip install h5py
+          pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
+          pip install -e .
+
+      - name: Checkout private docs from plugin Mishka
+        uses: actions/checkout@v4
+        with:
+          repository: DIGIfusion/enchanted-plugin-mishka
+          token: ${{ secrets.MISHKA_TOKEN }}
+          path: plugins_docs/mishka_plugin
+
+      - name: Add private plugin to PYTHONPATH
+        run: echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
 
       - name: Build MkDocs site
         run: mkdocs build

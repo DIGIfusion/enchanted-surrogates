@@ -53,3 +53,10 @@ sampler:
   num_samples: [7, 3]
   parameters: ['ntor', 'helena_dir']
 ```
+
+::: enchanted_plugin_mishka
+    options:
+          show_source: false
+          show_submodules: true
+          members: true
+          show_root_heading: true
