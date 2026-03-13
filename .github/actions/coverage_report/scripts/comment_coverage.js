@@ -23,10 +23,10 @@ module.exports = async ({ github, context }) => {
 
     const body = "## Test Coverage Report\n"
         + diff
-        + "_" + branch_text + "_\n"
+        + "\n_" + branch_text + "_\n"
         + "\n<details>\n"
         + "<summary>Coverage by file</summary>\n"
-        + diff_by_file
+        + "\n" + diff_by_file + "\n"
         + "\n</details>";
 
     const { owner, repo } = context.repo;
