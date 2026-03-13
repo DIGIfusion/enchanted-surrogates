@@ -4,11 +4,12 @@ const path = require("path");
 /**
  * Extract coverage data by package/folder from the given json file.
  * @param {string} file_path - Path to the coverage json
+ * @param {boolean} folder_level - If true get coverage on folder level, otherwise file level
  * @returns {{ total: number, files: Record<string, number> }}
  *   - total: Overall project coverage as a percentage
  *   - files: Mapping package names to coverage percentages
  */
-function readCoverage(file_path) {
+function readCoverage(file_path, folder_level) {
     if (!fs.existsSync(file_path)) {
         console.log(`Coverage file not found: ${file_path}`);
         return {
@@ -18,26 +19,33 @@ function readCoverage(file_path) {
     }
 
     const data = JSON.parse(fs.readFileSync(file_path, "utf8"));
-    const folders = {};
+    const coverage = {};
 
-    // Get accumulated coverage for each file in a folder
-    for (const [file, info] of Object.entries(data.files)) {
-        const folder = path.dirname(file);
+    if (folder_level) {
+        const folders = {};
 
-        if (!folders[folder]) {
-            folders[folder] = {
-                covered: 0,
-                total: 0
-            };
+        // Get accumulated coverage for each file in a folder
+        for (const [file, info] of Object.entries(data.files)) {
+            const folder = path.dirname(file);
+
+            if (!folders[folder]) {
+                folders[folder] = {
+                    covered: 0,
+                    total: 0
+                };
+            }
+
+            folders[folder].covered += info.summary.covered_lines;
+            folders[folder].total += info.summary.num_statements;
         }
 
-        folders[folder].covered += info.summary.covered_lines;
-        folders[folder].total += info.summary.num_statements;
-    }
-
-    const coverage = {};
-    for (const [folder, stats] of Object.entries(folders)) {
-        coverage[folder] = (stats.covered / stats.total) * 100;
+        for (const [folder, stats] of Object.entries(folders)) {
+            coverage[folder] = (stats.covered / stats.total) * 100;
+        }
+    } else {
+        for (const [file, info] of Object.entries(data.files)) {
+            coverage[file] = info.summary.percent_covered;
+        }
     }
 
     return {
@@ -76,7 +84,7 @@ function diffCoverage(base, pr) {
     result.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
 
     // Create markdown table
-    let table = "| Package | Line Rate | Change |\n";
+    let table = "| Name | Line Rate | Change |\n";
     table += "| :--- | :---: | ---: |\n";
 
     for (const row of result) {
