@@ -17,7 +17,7 @@ module.exports = async ({ github, context }) => {
     const diff_by_file = diffCoverage(base_coverage_by_file, pr_coverage_by_file);
 
     const base_name = context.payload.pull_request.base.ref ?? "N/A"
-    const branch_text = pr_coverage.total > 0 
+    const branch_text = base_coverage.total > 1
         ? "Comparing to coverage data from branch " + base_name 
         : "Coverage data for base branch " + base_name + " was not available"
 
