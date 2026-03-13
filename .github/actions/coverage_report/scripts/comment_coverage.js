@@ -26,9 +26,7 @@ module.exports = async ({ github, context }) => {
         + "_" + branch_text + "_\n"
         + "\n<details>\n"
         + "<summary>Coverage by file</summary>\n"
-        + "\n```text\n"
         + diff_by_file
-        + "\n```"
         + "\n</details>";
 
     const { owner, repo } = context.repo;
