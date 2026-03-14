@@ -1,0 +1,72 @@
+logging: DEBUG
+
+executors:
+  e1:
+    type: LocalExecutor
+  e2:
+    type: LocalExecutor
+  e3:
+    type: LocalExecutor
+
+# HAVING A DIFFERENT SAMPLER FOR EACH RUNNER LIKE THIS IS USEFUL FOR NON-ACTIVE DATASETS WHERE
+# FOR EACH OF THE SAMPLES OF THE PARENT RUNNER YOU WANT TO RUN THE NEXT RUNNER MULTPLE TIMES 
+# KEEPING THE PARENT PARAMETERS THE SAME
+
+# FOR THE FRIEDMAN PROBLEM THIS IS NOT THE CASE, YOU WANT TO ACHIEVE A UNIFORM COVERAGE OF ALL THE PARAMETERS
+# NOT HAVE THIS CURRENT SET UP WHERE THERE ARE ONLY 3 OF THE X1,X2 PARAMETERS, 9 OF X3 AND 27 OF X4, X5
+# IN THIS TOY PROBLEM ONE COULD SIMPLY HAVE ONE RUNNER
+# IN A REAL PROBLEM THE DIFFERENT RUNNERS MAY NEED DIFFERENT HARDWARE AND THUS DIFFERENT EXECUTORS
+# THIS MAKES THE NESTED SET UP IDEAL
+# TO UNIFORMLY SAMPLE THE SPACE OR HAVE ACTIVE SAMPLING WE NEED TO USE 1 SAMPLER TO SAMPLE THE SPACE FOR ALL RUNNERS
+# THEN THE SAMPLES ARE PASSED THROUGH EACH RUNNER IN ORDER
+
+samplers:
+  s1:
+    type: random_sampler
+    bounds: [[0.0, 1.0], [0.0, 1]]
+    budget: 3
+    batch_size: 1
+    parameters: ['x1', 'x2']
+  s2:
+    type: random_sampler
+    bounds: [[0.0, 1.0]]
+    budget: 3
+    batch_size: 1
+    parameters: ['x3']
+  s3:
+    type: random_sampler
+    bounds: [[0.0, 1.0],[0.0, 1.0]]
+    budget: 3
+    batch_size: 1
+    parameters: ['x4','x5']
+
+runners:
+  fr_int:
+    type: friedman_interaction
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+  fr_quad:
+    type: friedman_quadratic
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+  fr_lin:
+    type: friedman_linear
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+
+supervisor:
+  base_run_dir: "data_dir/nested_friedman_test"
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: fr_int
+  - executor: e2
+    sampler: s2
+    runner: fr_quad
+  - executor: e3
+    sampler: s3
+    runner: fr_lin
