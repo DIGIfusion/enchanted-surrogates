@@ -89,6 +89,15 @@ class Supervisor:
                     "base_run_dir is not set in the provided configuration"
                 )
 
+        self.local_storage = args.supervisor.get("local_storage")
+
+        if self.local_storage and not os.path.exists(self.local_storage):
+            env = self.local_storage
+            self.local_storage = os.environ.get(env)
+
+            if not self.local_storage:
+                log.warning(f"Local storage environment variable {env} not set, ignoring...")
+
         self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
@@ -127,6 +136,11 @@ class Supervisor:
 
         log.info("Starting runs...")
 
+        if self.local_storage:
+            real_run_dir = self.local_storage
+        else:
+            real_run_dir = self.base_run_dir
+
         last_complete_dataset = pd.DataFrame()
 
         for depth, group in enumerate(self.groups):
@@ -161,7 +175,7 @@ class Supervisor:
 
                 # Create run directories named by depth, batch and sample numbers
                 run_dirs = [
-                    os.path.join(self.data_dir, f"d{depth}_b{batch_number}_r{i}")
+                    os.path.join(real_run_dir, "data", f"d{depth}_b{batch_number}_r{i}")
                     for i in range(len(expanded))
                 ]
 
@@ -185,8 +199,10 @@ class Supervisor:
                 # Create summary csv or parquet file
                 self.write_summary(batch_dataset)
 
+                self.fetch_from_local_storage()
+
                 # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg)
+                self.delete_unwanted_files(self.save_files_arg, real_run_dir)
 
                 batch_number += 1
 
@@ -199,12 +215,14 @@ class Supervisor:
                     last_complete_dataset, "last_complete_enchanted_dataset"
                 )
 
+            self.fetch_from_local_storage()
+
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg)
+        self.delete_unwanted_files(self.save_files_arg, real_run_dir)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -525,7 +543,7 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
-    def delete_unwanted_files(self, argument: str):
+    def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
         Deletes files according to command given.
         """
@@ -540,8 +558,11 @@ class Supervisor:
             allowed_files = set(default_list)
         else:
             return
+        
+        if base_dir == None:
+            base_dir = self.base_run_dir
 
-        for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
+        for root, dirs, files in os.walk(base_dir, topdown=False):
             # Remove files
             for file in files:
                 if file not in allowed_files:
@@ -552,3 +573,13 @@ class Supervisor:
                 dir_path = os.path.join(root, dir_)
                 if not os.listdir(dir_path):
                     os.rmdir(dir_path)
+
+    def fetch_from_local_storage(self):
+        """
+        Moves all files from local_storage to base_run_dir, if local_storage is defined.
+        """
+        if self.local_storage:
+            for item in os.listdir(self.local_storage):
+                src = os.path.join(self.local_storage, item)
+                dst = os.path.join(self.base_run_dir, item)
+                shutil.move(src, dst)
