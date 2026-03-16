@@ -137,7 +137,8 @@ The `tests` folder contains unit tests. These can be run manually by using the c
 
 and will also be automatically run by Github Actions at certain pushes and pull requests. It is recommended to locally run the tests before making a commit.
 
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests. 
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. 
+<!-- **NB:** submodules are necessary to run the tests.  -->
 
 #### Workflow tests
 The `workflow_tests` folder contains larger workflow tests. These can be run manually by using the command:
@@ -187,13 +188,20 @@ If you use this package in your research, please cite:
 }
 ```
 
-### Acknowledgements
-The development of this framework has been support by multiple funding sources:
-- Research Council of Finland project numbers: 355460, 358941.
-- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
-- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
+
+### Contributors
+
+**Feel free to contribute!**
 
 <a href = "https://github.com/Tanu-N-Prabhu/Python/graphs/contributors">
-  <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/>
-</a>
+  <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/></a>
 
+
+### Acknowledgements
+The development of this framework has been support by multiple funding sources:
+
+- Research Council of Finland project numbers: 355460, 358941.
+
+- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
+  
+- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
