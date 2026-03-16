@@ -199,12 +199,12 @@ class Supervisor:
                 # Create summary csv or parquet file
                 self.write_summary(batch_dataset)
 
+                self.fetch_from_local_storage()
+
                 # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg)
+                self.delete_unwanted_files(self.save_files_arg, real_run_dir)
 
                 batch_number += 1
-
-                self.fetch_from_local_storage()
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
@@ -222,7 +222,7 @@ class Supervisor:
             self.create_hdf5(last_complete_dataset)
 
         # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg)
+        self.delete_unwanted_files(self.save_files_arg, real_run_dir)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -543,7 +543,7 @@ class Supervisor:
                 )
                 meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
 
-    def delete_unwanted_files(self, argument: str):
+    def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
         Deletes files according to command given.
         """
@@ -558,8 +558,11 @@ class Supervisor:
             allowed_files = set(default_list)
         else:
             return
+        
+        if base_dir == None:
+            base_dir = self.base_run_dir
 
-        for root, dirs, files in os.walk(self.base_run_dir, topdown=False):
+        for root, dirs, files in os.walk(base_dir, topdown=False):
             # Remove files
             for file in files:
                 if file not in allowed_files:
