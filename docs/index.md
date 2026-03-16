@@ -8,7 +8,7 @@ A framework for creating databases for surrogate models of complex physics codes
 
 ---
 
-!!! warning
+!!! note
     This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data, which is often generated using complex and computationally expensive simulation codes. The `enchanted-surrogates` package provides a flexible framework for creating databases for surrogate models of such complex physics codes.
@@ -99,11 +99,7 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 
 ## Code structure
 
-The Supervisor is the entry point. The Supervisor reads parameters and has Sampler, Executor and Runner. 
-The Executor is chosen based on the system where the code is running. It sends samples for execution. 
-A Runner is a code-specific module for running the code in question. Commonly paired with a code-specific parser.
-A Parser is a code-specific module for reading and writing files produced by the code. 
-Runners and Parsers are developed as plugins.
+The Supervisor is the entry point. The Supervisor reads parameters and has Sampler, Executor and Runner. The Executor is chosen based on the system where the code is running. It sends samples for execution. A Runner is a code-specific module for running the code in question. Commonly paired with a code-specific parser. A Parser is a code-specific module for reading and writing files produced by the code. Code-specific Runners and Parsers are developed as plugins.
 
 The Supervisor initializes a Sampler and fetches samples from it. 
 The Supervisor gives samples to the Executor. The Executor initializes some cluster or job queue or similar. 
@@ -141,7 +137,8 @@ The `tests` folder contains unit tests. These can be run manually by using the c
 
 and will also be automatically run by Github Actions at certain pushes and pull requests. It is recommended to locally run the tests before making a commit.
 
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. **NB:** submodules are necessary to run the tests. 
+If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. 
+<!-- **NB:** submodules are necessary to run the tests.  -->
 
 #### Workflow tests
 The `workflow_tests` folder contains larger workflow tests. These can be run manually by using the command:
@@ -191,8 +188,20 @@ If you use this package in your research, please cite:
 }
 ```
 
+
+### Contributors
+
+**Feel free to contribute!**
+
+<a href = "https://github.com/Tanu-N-Prabhu/Python/graphs/contributors">
+  <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/></a>
+
+
 ### Acknowledgements
 The development of this framework has been support by multiple funding sources:
+
 - Research Council of Finland project numbers: 355460, 358941.
+
 - EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
+  
 - Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
