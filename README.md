@@ -76,6 +76,10 @@ Active learning with the submodule [`bmdal`](https://github.com/BlackHC/2302.089
 To add submodules: 
     git submodule update --init --recursive
 
+#### Contributing to project
+
+If you are opening any PR:s, please install pre commit hook with command `git config core.hooksPath .githooks`.
+
 ## What we do not plan to handle
 
 1. Compiling code
