@@ -8,7 +8,7 @@ A framework for creating databases for surrogate models of complex physics codes
 
 ---
 
-!!! warning
+!!! note
     This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data, which is often generated using complex and computationally expensive simulation codes. The `enchanted-surrogates` package provides a flexible framework for creating databases for surrogate models of such complex physics codes.
