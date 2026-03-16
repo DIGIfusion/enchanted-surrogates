@@ -19,7 +19,7 @@ In the simplest case, the iterative process could be automated via `batch` job s
 
 ### Practicalities
 
-The main entry point is `run.py`, which you will run via shell for HPC or local (see `SLURMrun.bash`). `run.py` takes one argument, a path to a config file. In the config, the following items are specified: 
+The main entry point is `run.py`, which you will run via shell for HPC or local. `run.py` takes one argument, a path to a config file. In the config, the following items are specified: 
 
 - `Supervisor` which orchestrates the run is given base running directory path and order of executor, sampler and runner.
 - Code to be executed in terms of the `Runner` and `Parser` classes and associated arguments 
@@ -27,7 +27,7 @@ The main entry point is `run.py`, which you will run via shell for HPC or local 
 - How multiple/parallel code running is executed, or `Executor`
 - Storage type (csv, parquet, hdf5)
 
-`Supervisor` is responsible for data handling and calling the needed classes for creating database. It is robust to any combination of `Sampler`, `Executor`, `Runner` and `Parser`. Supervisor receives samples from `Sampler`, gives samples to `Executor` which parallelizes code running set in `Runner`. Support of different combinations is enabled by `abstracmethod`s defined in each base class, which defines clear borders of responsibilities.
+`Supervisor` is responsible for data handling and calling the needed classes for creating database. It is robust to any combination of `Sampler`, `Executor`, `Runner` and `Parser`. `Supervisor` receives samples from `Sampler`, gives samples to `Executor` which parallelizes code running set in `Runner`. Support of different combinations is enabled by `abstractmethod`s defined in each base class, which defines clear borders of responsibilities.
 
 Because of this, most variables that a user might wish to change, such as code to run, samplers or other modules used, nesting order, parameters to vary, etc., are all defined in the config file, while the parameter that are simulation specific are handled by the derived meta-classes.
 
@@ -45,16 +45,16 @@ Some extra notes on the config file:
 
 If the run crashes or you run out of time with HPC, or if you want to generate additional samples to a dataset, it is possible with seamless sampling. 
 
-Configuration is under supervisor like, see the `run_mode` for example in `configs/example_local.yaml`
+Configuration is under `Supervisor` like, see the `run_mode` for example in `configs/example_local.yaml`
 
 Options:
 - `fresh`: Default option, a new run.
-- `resume`: Running resume means continuing with previous interrupted or completed run to the budget limit defined in configuration. Supervisor keeps track how many batches have been saved.
+- `resume`: Running resume means continuing with previous interrupted or completed run to the budget limit defined in configuration. `Supervisor` keeps track how many batches have been saved.
 - `extend`: Option for just adding more samples, now setting sampler `budget:10` means that 10 additional samples are created.
 
 ### Nested sampling
 
-Supervisor supports configuring the order of nested samplers and reuse of single type of module. For example if runner and executor are same for each nesting level but sampling is differing, it is possible to set it in `Supervisor` configuration parameter `run_order`. See `configs/example_nexted.yaml` for example.
+`Supervisor` supports configuring the order of nested samplers and reuse of single type of module. For example if runner and executor are same for each nesting level but sampling is differing, it is possible to set it in `Supervisor` configuration parameter `run_order`. See `configs/example_nested.yaml` for example.
 
 ### Saving files
 
