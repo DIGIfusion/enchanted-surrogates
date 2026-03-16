@@ -46,4 +46,21 @@ storage:
     type: "hdf5" # or "None"
 ```
 
+It is possible to delete unnecessary files from base_run_dir and keep only wanted files.
+By default all is saved. Option custom saves only described files. None does not save 
+any files. 
+
+**Note: `enchanted_dataset.csv` and `runs.h5` are saved by default.**
+
+```yaml
+supervisor:
+  save_files: "all" # or "custom" or "none"
+  # if using custom, only described files are saved
+  save_files_list:
+    - file.txt
+    - file2.txt 
+
+```
+
+
 See config folder for a config file examples.

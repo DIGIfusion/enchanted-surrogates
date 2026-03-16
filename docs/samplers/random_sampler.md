@@ -1,1 +1,1 @@
-::: enchanted_surrogates.samplers.random_sampler
+Documentation in random sampler docstrings.

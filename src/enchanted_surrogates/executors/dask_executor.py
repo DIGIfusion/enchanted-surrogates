@@ -1,3 +1,58 @@
+"""
+---
+## Overview
+
+Handles execution of surrogate workflow on Dask.
+Supports both SLURMCluster and LocalCluster for distributed task execution.
+SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+
+---
+
+## Clusters
+
+### Local cluster
+
+Can be used for running on a local machine with multiple cores. Useful for testing or small scale runs.
+
+Arguments:
+
+```
+n_workers: 2,
+threads_per_worker: 1,
+memory_limit: '12GB', 
+processes: 1
+```
+
+Example configuration: /configs/example_dask_local.yaml
+
+### SLURM cluster
+
+Arguments for the SLURM workers.
+
+```
+account: 'project_xxx', 
+queue: 'medium', 
+cores: 1, 
+memory: '12GB', 
+processes: 1, 
+walltime: '00:20:00',
+config_name: 'slurm', 
+interface: 'ib0', 
+```
+
+Example configuration: /configs/example_dask_slurm.yaml
+
+### Notes
+
+Other arguments:
+
+```
+job_script_prologue: ['module load your-modules-here',], 
+job_extra_directives: [
+    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out', 
+    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'], 
+```
+"""
 import os
 import subprocess
 import sys
@@ -67,16 +122,6 @@ run_simulation_task = simulation_task.run_simulation_task
 
 
 class DaskExecutor(Executor):
-    """
-    ---
-    ## Overview
-
-    Handles execution of surrogate workflow on Dask.
-    Supports both SLURMCluster and LocalCluster for distributed task execution.
-    SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
-
-    ---
-    """
 
     def __init__(self, *args, **kwargs):
         """
@@ -250,7 +295,7 @@ class DaskExecutor(Executor):
                 log.warning(f"Error while checking squeue: {e}")
             return []
 
-    def start_cluster(self, slurm_out_dir=None):
+    def start_cluster(self):
         """
         Starts a Dask cluster using either SLURMCluster or LocalCluster.
 
@@ -265,33 +310,13 @@ class DaskExecutor(Executor):
             Warning: If fewer workers than expected are started.
         """
         log.info("Creating a cluster...")
-        worker_logs_dir = None
-
+        slurm_out_dir = LoggerConfig().log_dir
+        
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(
                 self.SLURMcluster_config.get("processes", 1)
             )
 
-            if not slurm_out_dir:
-                slurm_out_dir = os.path.join(
-                    self.base_run_dir, "worker_out_DaskExecutor"
-                )
-            worker_logs_dir = slurm_out_dir
-            if not os.path.exists(slurm_out_dir):
-                os.makedirs(slurm_out_dir)
-            jed = self.SLURMcluster_config.get("job_extra_directives")
-            if not jed:
-                self.SLURMcluster_config["job_extra_directives"] = [
-                    f"-o {slurm_out_dir}/%x.%j.out",
-                    f"-e {slurm_out_dir}/%x.%j.err",
-                    "-J enc_dask_worker",
-                ]
-            else:
-                self.SLURMcluster_config["job_extra_directives"] += [
-                    f"-o {slurm_out_dir}/%x.%j.out",
-                    f"-e {slurm_out_dir}/%x.%j.err",
-                    "-J enc_dask_worker",
-                ]
             log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
             self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
@@ -479,15 +504,8 @@ class DaskExecutor(Executor):
             self.start_cluster()
         log.info("CLUSTER STARTED")
 
-        futures, fut_to_rundir = self.submit_batch(
-            inputlist, include_fut_to_rundir=True
-        )
-
-        for fut in futures:
-            try:
-                sampler.register_future(fut)
-            except Exception:
-                pass
+        # keep futures for BayesianOptimizationSampler
+        futures = self.submit_batch(inputlist)
 
         sampler_type = (
             getattr(sampler, "type", None)

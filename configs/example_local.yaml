@@ -16,6 +16,12 @@ runners:
 
 supervisor:
   base_run_dir: "data_dir/local"
+  local_storage: TMPDIR
+  run_mode: "fresh" # "resume" / "extend"
+  save_files: "all" # or "custom" or "none"
+  save_files_list:
+    - enchanted_dataset.csv
+    - example_local.csv
   run_order:
   - executor: e1
     sampler: s1

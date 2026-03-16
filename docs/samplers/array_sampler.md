@@ -1,1 +1,1 @@
-::: enchanted_surrogates.samplers.array_sampler
+Documentation in array sampler docstrings.

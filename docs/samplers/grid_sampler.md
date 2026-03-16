@@ -1,1 +1,1 @@
-::: enchanted_surrogates.samplers.grid_sampler
+Documentation in grid sampler docstrings.

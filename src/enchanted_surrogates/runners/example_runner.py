@@ -1,3 +1,6 @@
+"""
+Example runner
+"""
 import os
 import sys
 import subprocess
