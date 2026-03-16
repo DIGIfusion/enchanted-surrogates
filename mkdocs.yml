@@ -63,7 +63,10 @@ plugins:
             # Merge __init__ docstring into class documentation
             merge_init_into_class: true
             # Disable runtime inspection (safer for CI)
-            allow_inspection: false
+            allow_inspection: true
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
 
 markdown_extensions:
   - attr_list
@@ -83,34 +86,3 @@ markdown_extensions:
   # Math extension
   - pymdownx.arithmatex:
       generic: true
-
-nav:
-  # Main landing page
-  - Start: index.md
-
-  # Samplers documentation section
-  - Samplers:
-      - Array sampler: samplers/array_sampler.md
-      - Bayesian optimization sampler: samplers/bayesian_optimization_sampler.md
-      - Grid sampler: samplers/grid_sampler.md
-      - Nested sampler: samplers/nested_sampler.md
-      - Random sampler: samplers/random_sampler.md
-
-  # Executors documentation section
-  - Executors:
-      - Dask executor: executors/dask_executor.md
-      - Joblib executor: executors/joblib_executor.md
-      - Local executor: executors/local_executor.md
-  
-  - Supervisor: supervisor.md
-
-  # Plugins documentation section
-  - Plugins:
-      - Overview: plugins/index.md
-      - Helena plugin: plugins/helena_plugin.md
-      - Mishka plugin: plugins/mishka_plugin.md
-      - Dream plugin: plugins/dream_plugin.md
-      - Castor plugin: plugins/castor_plugin.md
-      - Gene plugin: plugins/gene_plugin.md
-  
-  - Releases: releases.md

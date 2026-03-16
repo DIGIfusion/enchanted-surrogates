@@ -1,4 +1,18 @@
 # sampler/grid.py
+"""
+---
+
+## Overview
+`NestedSampler` composes multiple samplers into a single sampler by
+generating the Cartesian product of their initial sample sets.
+
+Each nested sampler is initialized independently, and all combinations
+of their initial samples are merged into joint parameter configurations.
+The sampler produces exactly one batch of samples and does not support
+iterative or adaptive sampling.
+
+---
+"""
 
 # from .base import Sampler
 from itertools import product
@@ -10,19 +24,6 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class NestedSampler(Sampler):
     """
-    ---
-
-    ## Overview
-    `NestedSampler` composes multiple samplers into a single sampler by
-    generating the Cartesian product of their initial sample sets.
-
-    Each nested sampler is initialized independently, and all combinations
-    of their initial samples are merged into joint parameter configurations.
-    The sampler produces exactly one batch of samples and does not support
-    iterative or adaptive sampling.
-
-    ---
-
     ## Configuration
 
     The `NestedSampler` is configured by specifying a dictionary of sub-samplers,

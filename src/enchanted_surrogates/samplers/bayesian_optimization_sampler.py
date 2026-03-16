@@ -1,10 +1,3 @@
-"""
-samplers/bayesian_optimization_sampler.py
-
-This sampler Class uses Bayesian Optimization techniques to data efficiently
-sample through the search space to yield optimial information gain as 
-specified by the acquisition strategy.
-"""
 from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
@@ -857,6 +850,7 @@ class BayesianOptimizationSampler(Sampler):
         self.cp_figure = fig
 
     
-        
+    def skip(self, index):
+        raise NotImplementedError("skip not implemented for BayesianOptimizationSampler.")
 
 

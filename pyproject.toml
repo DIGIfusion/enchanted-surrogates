@@ -65,3 +65,6 @@ GPy = [
     "GPy",
     "scikit-learn",
 ]
+activelearning = [
+    "scikit-activeml"
+]
