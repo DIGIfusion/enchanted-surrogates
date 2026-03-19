@@ -16,7 +16,7 @@ class LatinHypercubeSampler(Sampler):
     """
     ## Configuration
 
-    To use the `LatinHypercubeSampler`, specify it in the configuration file as in following example:
+    To use the `LatinHypercubeSampler`, specify it in the configuration file like following example:
 
     ```yaml
       samplers:
@@ -41,7 +41,8 @@ class LatinHypercubeSampler(Sampler):
     ## Assumptions and Notes
      - Parameter values are sampled in such way that each parameter bound range is split into 
       n = `batch_size` gaps, and each parameter gets one value from one gap
-     - `LatinHypercubeSampler` generates samples in batches, the batch size is controlled by `batch_size`.
+     - `LatinHypercubeSampler` generates samples in batches, the batch size is controlled by 
+      `batch_size`.
       if `batch_size` is not provided, it defaults to the full sampling `budget`.
      - If the budget is not divisible by `batch_size`, the last batch will have less gaps than other
       batches.
