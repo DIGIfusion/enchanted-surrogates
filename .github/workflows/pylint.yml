@@ -30,4 +30,4 @@ jobs:
     - name: Analysing the code with ruff
       # working-directory: enchanted_surrogates
       run: |
-        ruff check $(git ls-files '*.py') --select E  --ignore=PLR,PLC,PLW,E401 --line-length 100
+        ruff check $(git ls-files '*.py')

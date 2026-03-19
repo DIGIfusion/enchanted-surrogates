@@ -25,6 +25,10 @@ dependencies = [
     "h5py",
 ]
 
+[tool.ruff.lint]
+select = ["F"]
+ignore = ["F401", "F403", "F405"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
