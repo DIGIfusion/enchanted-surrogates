@@ -193,24 +193,22 @@ class Supervisor:
                 else:
                     expanded = samples
 
-                # Create run directories named by depth, batch and sample numbers
-                run_dirs = []
-
                 for i, executor in enumerate(group.executors):
-                    executor_run_dirs = [
+                    run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"d{depth}_b{batch_number}_r{j}_s{i}"
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(zip(executor_run_dirs, expanded), group.sampler)
-                    run_dirs.extend(executor_run_dirs)
+                    executor.execute(zip(run_dirs, expanded), group.sampler)
 
-                # Wait processes of current batch to complete
-                self.wait_batch_dirs(run_dirs)
+                    # Wait processes of current batch to complete
+                    self.wait_batch_dirs(run_dirs)
 
-                # Then the files in this batch should be saved into summary files
-                df_batch = self.load_batch_to_df(run_dirs)
+                    # Then the files in this batch should be saved into summary files
+                    df_batch = self.load_batch_to_df(run_dirs)
+                    expanded = df_batch.to_dict(orient="records")
+
                 batch_dataset = pd.concat([batch_dataset, df_batch])
                 group.sampler.register_future(batch_dataset)
 
