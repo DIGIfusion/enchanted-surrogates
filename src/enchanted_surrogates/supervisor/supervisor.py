@@ -65,12 +65,30 @@ class Supervisor:
 
         self.groups: list[RunGroup] = []
         for group in group_configs:
-            run_group = RunGroup(
-                executors[group["executor"]],
-                samplers[group["sampler"]],
-                args.runners[group["runner"]],
+            group_executors = (
+                group["executor"]
+                if type(group["executor"]) is list
+                else [group["executor"]]
             )
-            run_group.executor.runner_config = run_group.runner
+
+            group_runners = (
+                group["runner"] if type(group["runner"]) is list else [group["runner"]]
+            )
+
+            if len(group_runners) != len(group_executors):
+                raise ValueError(
+                    "The lengths of runners and executors does not match, potentially a misconfiguration"
+                )
+
+            run_group = RunGroup(
+                [executors[e] for e in group_executors],
+                samplers[group["sampler"]],
+                [args.runners[e] for e in group_runners],
+            )
+
+            for i in range(len(group_executors)):
+                run_group.executors[i].runner_config = run_group.runners[i]
+
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
@@ -96,7 +114,9 @@ class Supervisor:
             self.local_storage = os.environ.get(env)
 
             if not self.local_storage:
-                log.warning(f"Local storage environment variable {env} not set, ignoring...")
+                log.warning(
+                    f"Local storage environment variable {env} not set, ignoring..."
+                )
 
         self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
@@ -174,12 +194,17 @@ class Supervisor:
                     expanded = samples
 
                 # Create run directories named by depth, batch and sample numbers
-                run_dirs = [
-                    os.path.join(real_run_dir, "data", f"d{depth}_b{batch_number}_r{i}")
-                    for i in range(len(expanded))
-                ]
+                run_dirs = []
 
-                group.executor.execute(zip(run_dirs, expanded), group.sampler)
+                for i, executor in enumerate(group.executors):
+                    executor_run_dirs = [
+                        os.path.join(
+                            real_run_dir, "data", f"d{depth}_b{batch_number}_r{j}_s{i}"
+                        )
+                        for j in range(len(expanded))
+                    ]
+                    executor.execute(zip(executor_run_dirs, expanded), group.sampler)
+                    run_dirs.extend(executor_run_dirs)
 
                 # Wait processes of current batch to complete
                 self.wait_batch_dirs(run_dirs)
@@ -227,7 +252,8 @@ class Supervisor:
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
         for group in self.groups:
-            group.executor.clean()
+            for executor in group.executors:
+                executor.clean()
 
     def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset"):
         """
@@ -294,12 +320,14 @@ class Supervisor:
         if not os.path.exists(self.base_run_dir):
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
-        
+
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir, exist_ok=True)
 
-        dirs = glob.glob(f"{self.data_dir}/"
-            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
+        dirs = glob.glob(
+            f"{self.data_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*"
+        )
 
         if not dirs:
             return
@@ -308,6 +336,7 @@ class Supervisor:
             shutil.rmtree(path)
 
         # Create also data and logs folders if they don't exist
+
     def create_base_run_dir(self, base_run_dir, config_path):
         """
         Creates base directory for simulation run results. Checks if base_run_dir
@@ -535,13 +564,21 @@ class Supervisor:
             run_groups = meta_group.create_group("run_groups")
             for i, run_group in enumerate(self.groups):
                 meta_run_group = run_groups.create_group(str(i))
-                meta_run_group.attrs["executor"] = str(
-                    run_group.executor.__class__.__name__
-                )
+
                 meta_run_group.attrs["sampler"] = str(
                     run_group.sampler.__class__.__name__
                 )
-                meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
+                meta_run_group.attrs["executors"] = []
+                meta_run_group.attrs["runners"] = []
+                for j in range(len(run_group.executors)):
+                    np.append(
+                        meta_run_group.attrs["executors"],
+                        str(run_group.executors[j].__class__.__name__),
+                    )
+                    np.append(
+                        meta_run_group.attrs["runners"],
+                        str(run_group.runners[j].get("type")),
+                    )
 
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
@@ -558,8 +595,8 @@ class Supervisor:
             allowed_files = set(default_list)
         else:
             return
-        
-        if base_dir == None:
+
+        if not base_dir:
             base_dir = self.base_run_dir
 
         for root, dirs, files in os.walk(base_dir, topdown=False):

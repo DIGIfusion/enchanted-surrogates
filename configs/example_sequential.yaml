@@ -1,0 +1,40 @@
+executors:
+  code1_executor:
+    type: LocalExecutor
+  code2_executor:
+    type: LocalExecutor
+  code3_executor:
+    type: LocalExecutor
+samplers:
+  code1_sampler:
+    type: GridSampler
+    bounds: [[-5, 5], [0, 1]]
+    parameters: ['c1', 'c2']
+    num_samples: 2
+runners:
+  code1_runner:
+    type: ExampleRunner
+    parameter_mode: 0
+    sleep_sec: 0.1
+  code2_runner:
+    type: ExampleRunner
+    parameter_mode: 1
+    sleep_sec: 0.1
+  code3_runner:
+    type: ExampleRunner
+    parameter_mode: 2
+    sleep_sec: 0.1
+
+supervisor:
+  base_run_dir: "data_dir/nested_local"
+  run_order:
+  - sampler: code1_sampler
+    executor:
+      - code1_executor
+      - code2_executor
+      - code3_executor
+    runner:
+      - code1_runner
+      - code2_runner
+      - code3_runner
+

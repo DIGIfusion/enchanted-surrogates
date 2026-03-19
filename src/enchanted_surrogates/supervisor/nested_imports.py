@@ -7,19 +7,22 @@ from enchanted_surrogates.executors.base_executor import Executor
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
+
 @dataclass
 class RunGroup:
     """
     Container for a group of executors, samplers, and runners
     """
-    executor: Executor
+
+    executors: list[Executor]
     sampler: Sampler
-    runner: dict
+    runners: list[dict]
+
 
 def import_executors(args) -> dict[str, Executor]:
     """
     Imports all executors from config, under 'executors' key
-    
+
     Args
         Dictionary or namespace object, parsed from yaml
     Returns
@@ -31,10 +34,11 @@ def import_executors(args) -> dict[str, Executor]:
 
     return executors
 
+
 def import_samplers(args) -> dict[str, Sampler]:
     """
     Imports all samplers from config, under 'samplers' key
-    
+
     Args
         Dictionary or namespace object, parsed from yaml
     Returns
@@ -46,9 +50,10 @@ def import_samplers(args) -> dict[str, Sampler]:
 
     return samplers
 
+
 def import_run_groups(args) -> list[dict]:
     """
-    Imports supervisor/run_order from config. 
+    Imports supervisor/run_order from config.
 
     Returns
         List of dicts with keys 'executor', 'sampler' and 'runner' mapping
@@ -56,11 +61,12 @@ def import_run_groups(args) -> list[dict]:
     """
     return args.supervisor["run_order"]
 
+
 def import_saved_files_list(args) -> list[str]:
     """
     Imports supervisor/save_files_list from config.
-    
+
     Returns
         List of strings containing names of files to be saved
     """
-    return args.supervisor.get("save_files_list",[])
+    return args.supervisor.get("save_files_list", [])
