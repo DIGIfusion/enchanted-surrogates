@@ -15,7 +15,7 @@ dependencies = [
     "dask[complete]",
     "dask-jobqueue",
     "pandas",
-    "pylint",
+    "ruff",
     "coverage",
     "matplotlib",
     "plotly",

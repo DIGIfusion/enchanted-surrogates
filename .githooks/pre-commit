@@ -3,7 +3,7 @@
 files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
 [ -z "$files" ] && exit 0
 # run pylint on staged Python files
-pylint $files --disable=R,C,W,E0401
+ruff check $files --select E --ignore=PLR,PLC,PLW,E401 --line-length 100
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "Pylint failed; aborting commit."

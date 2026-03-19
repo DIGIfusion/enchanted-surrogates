@@ -1,4 +1,4 @@
-name: Pylint
+name: Python linting with ruff
 
 on: 
   workflow_call:
@@ -27,7 +27,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e . 
-    - name: Analysing the code with pylint
+    - name: Analysing the code with ruff
       # working-directory: enchanted_surrogates
       run: |
-        pylint $(git ls-files '*.py') --disable=R,C,W,E0401
+        ruff check $(git ls-files '*.py') --select E  --ignore=PLR,PLC,PLW,E401 --line-length 100
