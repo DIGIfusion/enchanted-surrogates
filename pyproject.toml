@@ -26,8 +26,8 @@ dependencies = [
 ]
 
 [tool.ruff.lint]
-select = ["F"]
-ignore = ["F401", "F403", "F405"]
+select = ["PLE", "E"]
+ignore = ["E401", "E501", "E402", "E731", "E711", "E722", "PLE1205"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
