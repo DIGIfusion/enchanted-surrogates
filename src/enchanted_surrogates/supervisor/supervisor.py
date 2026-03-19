@@ -86,9 +86,6 @@ class Supervisor:
                 [args.runners[e] for e in group_runners],
             )
 
-            for i in range(len(group_executors)):
-                run_group.executors[i].runner_config = run_group.runners[i]
-
             self.groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
@@ -200,7 +197,7 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(zip(run_dirs, expanded), group.sampler)
+                    executor.execute(zip(run_dirs, expanded), group.runners[i], group.sampler)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
