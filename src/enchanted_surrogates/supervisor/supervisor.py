@@ -61,7 +61,7 @@ class Supervisor:
         samplers = import_samplers(args)
         group_configs = import_run_groups(args)
 
-        self.groups: list[RunGroup] = []
+        self.nested_groups: list[RunGroup] = []
         for group in group_configs:
             group_sampler, group_executors, group_runners = parse_sequential_group(group)
             run_group = RunGroup(
@@ -70,7 +70,7 @@ class Supervisor:
                 [args.runners[e] for e in group_runners],
             )
 
-            self.groups.append(run_group)
+            self.nested_groups.append(run_group)
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
@@ -106,15 +106,15 @@ class Supervisor:
         if self.run_mode in ("resume", "extend"):
             self.previous_run_data = RunData.load(self.previous_run_file)
             if self.previous_run_data:
-                if len(self.groups) > self.previous_run_data.depth:
+                if len(self.nested_groups) > self.previous_run_data.depth:
                     # Extending should generate budget worth of new samples so add
                     # already submitted amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[
+                        self.nested_groups[
                             self.previous_run_data.depth
                         ].sampler.budget += self.previous_run_data.submitted_samples
 
-                    self.groups[self.previous_run_data.depth].sampler.skip(
+                    self.nested_groups[self.previous_run_data.depth].sampler.skip(
                         self.previous_run_data.batch_number + 1
                     )
             else:
@@ -144,7 +144,7 @@ class Supervisor:
 
         last_complete_dataset = pd.DataFrame()
 
-        for depth, group in enumerate(self.groups):
+        for depth, group in enumerate(self.nested_groups):
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
@@ -217,7 +217,7 @@ class Supervisor:
             last_complete_dataset = batch_dataset.copy()
 
             # Create a summary file with last_complete_dataset for nesting
-            if depth < len(self.groups) - 1:
+            if depth < len(self.nested_groups) - 1:
                 self.write_summary(
                     last_complete_dataset, "last_complete_enchanted_dataset"
                 )
@@ -233,7 +233,7 @@ class Supervisor:
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
-        for group in self.groups:
+        for group in self.nested_groups:
             for executor in group.executors:
                 executor.clean()
 
@@ -544,7 +544,7 @@ class Supervisor:
             # Metadata
             meta_group = f.create_group("metadata")
             run_groups = meta_group.create_group("run_groups")
-            for i, run_group in enumerate(self.groups):
+            for i, run_group in enumerate(self.nested_groups):
                 meta_run_group = run_groups.create_group(str(i))
 
                 meta_run_group.attrs["sampler"] = str(

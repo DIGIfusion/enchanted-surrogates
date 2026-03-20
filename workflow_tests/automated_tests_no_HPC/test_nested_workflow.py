@@ -9,10 +9,10 @@ from workflow_tests.utils.test_utils import *
 
 def test_nested_dask_executors(tmp_path, run_config):
     supervisor: Supervisor = run_config("test_configs/nested_dask_executors.yaml")
-    assert len(supervisor.groups) == 2
+    assert len(supervisor.nested_groups) == 2
 
-    budget_first = supervisor.groups[0].sampler.budget
-    budget_second = supervisor.groups[1].sampler.budget
+    budget_first = supervisor.nested_groups[0].sampler.budget
+    budget_second = supervisor.nested_groups[1].sampler.budget
     assert (
         get_run_dir_count(tmp_path / "data")
         == budget_first + budget_first * budget_second
