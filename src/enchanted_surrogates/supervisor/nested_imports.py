@@ -3,10 +3,12 @@ Utilies for importing multiple executors, samplers and runners.
 """
 
 from dataclasses import dataclass
+from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.executors.base_executor import Executor
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
 
+log = get_logger(__name__)
 
 @dataclass
 class RunGroup:
@@ -18,6 +20,19 @@ class RunGroup:
     executors: list[Executor]
     sampler: Sampler
     runners: list[dict]
+
+    def validate(self):
+        """
+        Raises ValueError if the run group is not set up correctly.
+        """
+        if len(self.executors) != len(self.runners):
+            raise ValueError("The amount of runners and executors should be the same!")
+        if len(self.executors) == 0:
+            raise ValueError("At least one executor should be specified!")
+        if len(self.runners) == 0:
+            raise ValueError("At least one runner should be specified!")
+        if not self.sampler:
+            raise ValueError("Sampler should be specified!")
 
 
 def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str]]:
@@ -42,12 +57,6 @@ def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str
         if type(group_config["runner"]) is list
         else [group_config["runner"]]
     )
-
-    if len(group_runners) != len(group_executors):
-        raise ValueError(
-            "Error when parsing run group config: the amount of runners and "
-            + "executors does not match! Config was: " + str(group_config)
-        )
     
     sampler = group_config["sampler"]
 
@@ -118,6 +127,14 @@ def parse_all_run_groups(args) -> list[RunGroup]:
             samplers[group_sampler],
             [args.runners[e] for e in group_runners],
         )
+
+        try:
+            run_group.validate()
+        except ValueError as error:
+            raise ValueError(
+                "Parsing run group config failed: " + str(error)
+                + " Given config was: " + str(group)
+            )
 
         nested_groups.append(run_group)
 
