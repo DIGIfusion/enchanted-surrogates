@@ -1,7 +1,7 @@
 import os
 import re
+import pandas as pd
 from pathlib import Path
-from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 
 def get_run_dir_count(path: str, pattern: str = r"^d\d+_b\d+_r\d+_s\d+$"):
@@ -16,3 +16,8 @@ def get_run_dir_count(path: str, pattern: str = r"^d\d+_b\d+_r\d+_s\d+$"):
     regex = re.compile(pattern)
 
     return sum(1 for p in base.iterdir() if p.is_dir() and regex.match(p.name))
+
+def read_summary_file(path: str, filename: str = "enchanted_dataset.csv"):
+    file = os.path.join(path, filename)
+    assert os.path.exists(file)    
+    return pd.read_csv(os.path.join(path, filename))
