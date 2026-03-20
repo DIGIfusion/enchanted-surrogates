@@ -18,6 +18,7 @@ from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
+    parse_sequential_group,
     import_executors,
     import_samplers,
     import_run_groups,
@@ -34,9 +35,6 @@ class Supervisor:
 
     Attributes:
         args (argparse.Namespace):  Namespace containing the configuration parameters
-        executor (Executor): Executor for this run
-        sampler (Sampler): Sampler for this run
-        base_run_dir (str): Path where runner saves result files
 
     Methods:
         start: Starts the simulation process. Main function of supervisor.
@@ -65,24 +63,10 @@ class Supervisor:
 
         self.groups: list[RunGroup] = []
         for group in group_configs:
-            group_executors = (
-                group["executor"]
-                if type(group["executor"]) is list
-                else [group["executor"]]
-            )
-
-            group_runners = (
-                group["runner"] if type(group["runner"]) is list else [group["runner"]]
-            )
-
-            if len(group_runners) != len(group_executors):
-                raise ValueError(
-                    "The lengths of runners and executors does not match, potentially a misconfiguration"
-                )
-
+            group_sampler, group_executors, group_runners = parse_sequential_group(group)
             run_group = RunGroup(
                 [executors[e] for e in group_executors],
-                samplers[group["sampler"]],
+                samplers[group_sampler],
                 [args.runners[e] for e in group_runners],
             )
 
@@ -190,14 +174,17 @@ class Supervisor:
                 else:
                     expanded = samples
 
-                for i, executor in enumerate(group.executors):
+                # Run for each sequential runner/executor combination
+                df_batch = pd.DataFrame()
+                for i, (executor, runner) in enumerate(zip(group.executors, group.runners)):
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"d{depth}_b{batch_number}_r{j}_s{i}"
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(zip(run_dirs, expanded), group.runners[i], group.sampler)
+                    # TODO: next runner also needs to have access to the previous run_dir(s)
+                    executor.execute(zip(run_dirs, expanded), runner, group.sampler)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -484,7 +471,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
 
-    def load_batch_to_df(self, run_dirs: list[str]):
+    def load_batch_to_df(self, run_dirs: list[str]) -> pd.DataFrame:
         """
         Creates pd.DataFrame combining enchanted_datapoint.csv files in given path list folders
 

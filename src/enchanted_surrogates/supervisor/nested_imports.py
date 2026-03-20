@@ -13,10 +13,43 @@ class RunGroup:
     """
     Container for a group of executors, samplers, and runners
     """
-
     executors: list[Executor]
     sampler: Sampler
     runners: list[dict]
+
+
+def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str]]:
+    """
+    Parse sampler and sequential executors and runners from group config. Executors and runners
+    can be defined either as a single value or a list.
+
+    Args:
+        group_config (dict): Configuration dictionary parsed from yaml
+    Returns:
+        out (tuple[str, list[str], list[str]]): Tuple containg name of sampler, list of names
+            of executors and list of names of runners
+    """
+    group_executors = (
+        group_config["executor"]
+        if type(group_config["executor"]) is list
+        else [group_config["executor"]]
+    )
+
+    group_runners = (
+        group_config["runner"]
+        if type(group_config["runner"]) is list
+        else [group_config["runner"]]
+    )
+
+    if len(group_runners) != len(group_executors):
+        raise ValueError(
+            "Error when parsing run group config: the amount of runners and "
+            + "executors does not match! Config was: " + str(group_config)
+        )
+    
+    sampler = group_config["sampler"]
+
+    return (sampler, group_executors, group_runners)
 
 
 def import_executors(args) -> dict[str, Executor]:
