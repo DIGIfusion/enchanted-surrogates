@@ -18,10 +18,7 @@ from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
-    parse_sequential_group,
-    import_executors,
-    import_samplers,
-    import_run_groups,
+    parse_all_run_groups,
     import_saved_files_list,
 )
 
@@ -57,21 +54,8 @@ class Supervisor:
                 configuration is fetched from.
         """
         self.args = args
-        executors = import_executors(args)
-        samplers = import_samplers(args)
-        group_configs = import_run_groups(args)
 
-        self.nested_groups: list[RunGroup] = []
-        for group in group_configs:
-            group_sampler, group_executors, group_runners = parse_sequential_group(group)
-            run_group = RunGroup(
-                [executors[e] for e in group_executors],
-                samplers[group_sampler],
-                [args.runners[e] for e in group_runners],
-            )
-
-            self.nested_groups.append(run_group)
-
+        self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")

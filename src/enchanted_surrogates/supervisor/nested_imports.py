@@ -11,7 +11,9 @@ from enchanted_surrogates.utils.precise_imports import import_sampler, import_ex
 @dataclass
 class RunGroup:
     """
-    Container for a group of executors, samplers, and runners
+    Container for a group of executors, samplers, and runners. Represents one level of depth
+    in nested execution. If multiple executors or runners are defined, sequential execution is
+    (also) used.
     """
     executors: list[Executor]
     sampler: Sampler
@@ -20,7 +22,7 @@ class RunGroup:
 
 def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str]]:
     """
-    Parse sampler and sequential executors and runners from group config. Executors and runners
+    Parses sampler and sequential executors and runners from group config. Executors and runners
     can be defined either as a single value or a list.
 
     Args:
@@ -93,6 +95,33 @@ def import_run_groups(args) -> list[dict]:
         to their unique names.
     """
     return args.supervisor["run_order"]
+
+
+def parse_all_run_groups(args) -> list[RunGroup]:
+    """
+    Imports and parses all run groups defined in config args in correct nesting order.
+
+    Args:
+        args: Namespace/dict parsed from yaml.
+    Returns:
+        out (list[RunGroup]): List of nested run groups.
+    """
+    executors = import_executors(args)
+    samplers = import_samplers(args)
+    group_configs = import_run_groups(args)
+
+    nested_groups: list[RunGroup] = []
+    for group in group_configs:
+        group_sampler, group_executors, group_runners = parse_sequential_group(group)
+        run_group = RunGroup(
+            [executors[e] for e in group_executors],
+            samplers[group_sampler],
+            [args.runners[e] for e in group_runners],
+        )
+
+        nested_groups.append(run_group)
+
+    return nested_groups
 
 
 def import_saved_files_list(args) -> list[str]:
