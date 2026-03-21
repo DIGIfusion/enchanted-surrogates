@@ -1,10 +1,3 @@
----
-layout: default
-title: Supervisor
-nav_order: 2
-has_children: false
----
-
 # Supervisor
 
 Supervisor is where the main loop of Enchanted Surrogates is ran. 
