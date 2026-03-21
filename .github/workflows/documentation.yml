@@ -44,7 +44,7 @@ jobs:
 
       - name: Checkout plugins from config
         env:
-          GH_PAT: ${{ PLUGINS_TOKEN }}
+          GH_PAT: ${{ secrets.PLUGINS_TOKEN }}
         run: python docs/scripts/checkout_plugins.py
   
       - name: Set PYTHONPATH
