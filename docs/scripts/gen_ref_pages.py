@@ -97,13 +97,6 @@ for path in SRC_PATH.rglob("*.py"):
         print(f"[DEBUG] Failed to parse {path}: {e}")
         continue
 
-    # Attempt to import the module
-    try:
-        __import__(module_name)
-        print(f"[DEBUG] Import OK: {module_name}")
-    except ImportError as e:
-        print(f"[DEBUG] Import FAILED: {module_name} -> {e}")
-        continue
 
     # Find existing Markdown file
     existing_md = find_existing_md(module_parts, base_name)
