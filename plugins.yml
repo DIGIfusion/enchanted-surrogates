@@ -1,0 +1,13 @@
+# configuration file using for import documentation of plugins
+# if you want import new plugin add your plugin to the list in following structure
+
+plugins:
+  - name: mishka_plugin
+    repo: DIGIfusion/enchanted-plugin-miskha
+    module: enchanted_plugin_mishka
+    src_path: src
+
+  - name: helena_plugin
+    repo: DIGIfusion/enchanted-plugin-helena
+    module: enchanted_plugin_helena
+    src_path: src
