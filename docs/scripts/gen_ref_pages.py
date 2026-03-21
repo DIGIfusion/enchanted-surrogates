@@ -2,6 +2,7 @@ from pathlib import Path
 import ast
 import mkdocs_gen_files
 import sys
+import importlib
 
 SRC_PATH = Path("src/enchanted_surrogates")
 DOCS_PATH = Path("docs")
@@ -95,8 +96,17 @@ for path in SRC_PATH.rglob("*.py"):
             continue
     except Exception as e:
         print(f"[DEBUG] Failed to parse {path}: {e}")
-        continue
+        continue  
 
+    try:
+        importlib.import_module(module_name)
+        print(f"[DEBUG] Import OK: {module_name}")
+    except ModuleNotFoundError as e:
+        if e.name == module_name.split('.')[0]:
+            print(f"[DEBUG] Import FAILED: {module_name} -> {e}")
+            continue
+        else:
+            print(f"[DEBUG] Dependency missing (ignored): {module_name} -> {e}")
 
     # Find existing Markdown file
     existing_md = find_existing_md(module_parts, base_name)
