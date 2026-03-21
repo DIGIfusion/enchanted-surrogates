@@ -196,18 +196,35 @@ There are three main approaches to documenting modules or classes:
 ##### Mathematical/physics formulas in documentation
 Mathematical formulas are supported in the documentation and are rendered using LaTeX syntax. You can include both inline and block equations depending on the context.
 
-Inline formulas: use \(...\) or $...$
+Inline formulas: use \(...\)
 
-Block formulas: use \[...\] or $$...$$
+Block formulas: use \[...\]
 
 This allows you to properly represent complex mathematical expressions within your documentation pages.
 
-As example:
+As example of syntax:
 ```
-$ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} $
+Inline variant
+
+\( \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \)
+
+More than one expession
+
+\[
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}, \quad
+\lim_{x \to 0} \frac{\sin x}{x} = 1
+\]
+
 ```
 
-$ \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} $
+First:
+\( \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \)
+
+Second:
+\[
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}, \quad
+\lim_{x \to 0} \frac{\sin x}{x} = 1
+\]
 
 #### Plugin documentation
 Documentation for plugins can also be imported from docstrings contained within plugin modules and classes. The same three documentation approaches described above can be applied to plugins as well.
