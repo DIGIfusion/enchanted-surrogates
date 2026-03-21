@@ -1,3 +1,6 @@
+"""
+Active Learning sampler
+"""
 import numpy as np
 
 from sklearn.ensemble import BaggingRegressor
@@ -13,7 +16,7 @@ from enchanted_surrogates.utils.precise_imports import cached_import_external
 class ActiveLearningSampler(Sampler):
     """
 
-    ## ActiveLearningSampler
+    ## Overview
 
     ActiveLearningSampler provides an active-learning driven sampler that
     proposes parameter configurations for evaluation using a surrogate
