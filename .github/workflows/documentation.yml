@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - feat/enc-176-documentation-from-the-rest-of-plugins
 
 permissions:
   contents: read
@@ -24,19 +25,38 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install h5py
-          pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
+          pip install \
+            mkdocs==1.6.1 \
+            mkdocs-material==9.7.6 \
+            mkdocs-autorefs==1.4.4 \
+            mkdocs-gen-files==0.6.1 \
+            mkdocs-get-deps==0.2.2 \
+            mkdocs-material-extensions==1.3.1 \
+            mkdocstrings==1.0.3 \
+            mkdocstrings-python==2.0.3 \
+            markdown==3.10.2 \
+            pymdown-extensions==10.21 \
+            jinja2==3.1.6 \
+            pygments==2.19.2 \
+            pyyaml==6.0.3 \
+            h5py==3.16.0
           pip install -e .
 
-      - name: Checkout private docs from plugin Mishka
-        uses: actions/checkout@v4
-        with:
-          repository: DIGIfusion/enchanted-plugin-mishka
-          token: ${{ secrets.MISHKA_TOKEN }}
-          path: plugins_docs/mishka_plugin
+      - name: Checkout plugins from config
+        env:
+          GH_PAT: ${{ PLUGINS_TOKEN }}
+        run: python docs/scripts/checkout_plugins.py
+  
+      - name: Set PYTHONPATH
+        run: |
+           PY_PATH=""
+           for dir in plugins/*; do
+             PY_PATH="$PY_PATH:$(pwd)/$dir/src"
+           done
+           echo "PYTHONPATH=$PY_PATH" >> $GITHUB_ENV
 
-      - name: Add private plugin to PYTHONPATH
-        run: echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
+      - name: Generate plugin docs
+        run: python docs/scripts/generate_plugin_docs.py    
 
       - name: Build MkDocs site
         run: mkdocs build
