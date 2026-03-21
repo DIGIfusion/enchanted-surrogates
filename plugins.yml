@@ -3,11 +3,16 @@
 
 plugins:
   - name: mishka_plugin
-    repo: DIGIfusion/enchanted-plugin-miskha
+    repo: DIGIfusion/enchanted-plugin-mishka
     module: enchanted_plugin_mishka
     src_path: src
 
   - name: helena_plugin
     repo: DIGIfusion/enchanted-plugin-helena
     module: enchanted_plugin_helena
+    src_path: src
+
+  - name: castor_plugin
+    repo: DIGIfusion/enchanted-plugin-castor
+    module: enchanted_plugin_castor
     src_path: src
