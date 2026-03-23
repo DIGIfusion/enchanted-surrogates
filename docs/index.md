@@ -84,8 +84,14 @@ configuration file. The configuration file should be in YAML format and specify
 the runners, samplers, executors, supervisor and other parameters needed for the
 simulation.
 
+The configuration file should list all the executors, samplers and runners to be
+used. The supervisor `run_order` should then be specified for the desired
+workflow. For a simple, non-nested workflow, `run_order` contains only one
+executor, sampler and runner. For nested workflows, see
+[Nested execution](supervisor.md#nested-execution) for more information.
+
 ```yaml
-logging: ... # default DEBUG, see Python logging levels for more
+logging: # NOTSET, DEBUG (default), INFO, WARNING, ERROR, CRITICAL
 
 executors:
   e1:
@@ -103,6 +109,35 @@ supervisor:
       sampler: s1
       runner: r1
 ```
+
+### Output
+
+```
+base_run_dir/
+├── data/
+│    └── ... 
+├── logs/
+│    └── ... 
+├── config/
+│    └── ... 
+├── enchanted_datapoints.csv
+└── runs.h5
+```
+
+#### data
+
+Contains the enchanted_datapoint.csv files and runner outputs.
+
+#### logs
+
+Contains all log files from the supervisor and workers.
+
+#### config
+
+Contains a copy of the configuration file.
+
+**Note: Output files to be saved can be configured, see
+[Configuring output files](supervisor.md#configuring-output-files).**
 
 ### Quick start example
 
@@ -144,6 +179,13 @@ details.
 - `develop` branch is for latest development code (merges from feature branches)
 - `develop/{feature}` or `develop/{user}` for changes.
 - `bug/{descriptive_name}` for bug fixes.
+- Enable linting pre-commit hook (stops the commit if violated linting rules) by
+  running:
+
+      git config core.hooksPath .githooks
+
+  (Can be overridden with `git commit --no-verify` if needed)
+
 - **One feature or fix per pull request**. This ensures that changes are
   isolated and easier to review. Be respectful of your fellow developers and
   create small, focused pull requests.
@@ -161,6 +203,10 @@ The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used.
 Although we will likely lint with `flake` so don't worry too much about it.
 
 ### Testing
+
+#### New samplers
+
+TODO
 
 #### Automated Testing at Pull Requests
 

@@ -20,11 +20,11 @@ follows:
 
 ```yaml
 supervisor:
-    base_run_dir: "path/to/folder"
-    run_order:
-        - executor: ...
-          sampler: ...
-          runner: ...
+  base_run_dir: "path/to/folder"
+  run_order:
+    - executor: ...
+      sampler: ...
+      runner: ...
 ```
 
 ### Nested execution
@@ -38,31 +38,33 @@ This type of workflow could be configured by
 
 ```yaml
 executors:
-    A: ...
-    B: ...
+  A: ...
+  B: ...
 
 samplers:
-    SamplerA: ...
-    SamplerB: ...
+  SomeSampler: ...
 
 runners:
-    RunnerA: ...
-    RunnerB: ...
+  RunnerA: ...
+  RunnerB: ...
 
 supervisor:
-    base_run_dir: ...
-    run_order:
-        - executor: A
-          sampler: SamplerA
-          runner: RunnerA
-        - executor: B
-          sampler: SamplerB
-          runner: RunnerB
+  base_run_dir: ...
+  run_order:
+    - executor: A
+      sampler: SomeSampler
+      runner: RunnerA
+    - executor: B
+      sampler: SomeSampler
+      runner: RunnerB
 ```
 
-would create the following
+In this example configuration, the output of `RunnerA` can be used as input to
+`RunnerB`. Executors, samplers and runners can be used multiple times in
+different stages of the workflow, note that in this example, both runners use
+`SomeSampler`.
 
-See `example_nested.yaml` in example configs.
+See [example_nested.yaml](../configs/example_nested.yaml).
 
 ### Resuming/extending previous runs
 
@@ -72,12 +74,12 @@ desired. This is configured with the `run_mode` config option.
 
 ```yaml
 supervisor:
-    base_run_dir: ...
-    run_mode: "fresh" # "resume" / "extend"
-    run_order:
-        - executor: ...
-          sampler: ...
-          runner: ...
+  base_run_dir: ...
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+    - executor: ...
+      sampler: ...
+      runner: ...
 ```
 
 #### "fresh"
@@ -113,8 +115,11 @@ potentially improve I/O operation performance.
 
 ```yaml
 supervisor:
-    local_storage: TMPDIR
+  local_storage: TMPDIR
 ```
+
+CSC users, see for example
+https://docs.csc.fi/computing/disk/#temporary-local-disk-areas
 
 ### Optional attributes
 
@@ -124,7 +129,7 @@ configuration.
 
 ```yaml
 supervisor:
-    summary_datatype: "parquet" # csv by default
+  summary_datatype: "parquet" # csv by default
 ```
 
 ### Configuring output files
@@ -135,13 +140,13 @@ configured by `save_files` and `save_files_list` supervisor config options:
 
 ```yaml
 supervisor:
-    base_run_dir: ...
-    save_files: "all" # or "custom" or "none"
-    # if using custom, only the specified files are saved
-    save_files_list:
-        - enchanted_dataset.csv
-        - example_local.csv
-        - ...
+  base_run_dir: ...
+  save_files: "all" # or "custom" or "none"
+  # if using custom, only the specified files are saved
+  save_files_list:
+    - enchanted_dataset.csv
+    - example_local.csv
+    - ...
 ```
 
 Hdf5 storage file is not saved if type for it is None. It is created in every
@@ -149,7 +154,7 @@ other case.
 
 ```yaml
 storage:
-    type: "hdf5" # or "None"
+  type: "hdf5" # or "None"
 ```
 
 It is possible to delete unnecessary files from base_run_dir and keep only
@@ -160,11 +165,11 @@ None does not save any files.
 
 ```yaml
 supervisor:
-    save_files: "all" # or "custom" or "none"
-    # if using custom, only described files are saved
-    save_files_list:
-        - file.txt
-        - file2.txt
+  save_files: "all" # or "custom" or "none"
+  # if using custom, only described files are saved
+  save_files_list:
+    - file.txt
+    - file2.txt
 ```
 
 See config folder for example configurations.
