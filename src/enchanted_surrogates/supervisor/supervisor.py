@@ -212,7 +212,9 @@ class Supervisor:
             # Create a summary file with last_complete_dataset for nesting
             if depth < len(self.groups) - 1:
                 self.write_summary(
-                    last_complete_dataset, "last_complete_enchanted_dataset"
+                    dataset=last_complete_dataset,
+                    filename="last_complete_enchanted_dataset",
+                    write_mode="w"
                 )
 
             self.fetch_from_local_storage()
@@ -232,21 +234,24 @@ class Supervisor:
         for group in self.groups:
             group.executor.clean()
 
-    def write_summary(self, batch: pd.DataFrame, filename: str = "enchanted_dataset"):
+    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset", write_mode: str = "a"):
         """
         Writes a summary of dataset to base_run_dir/filename
         This functionality is used within the start function to
-        enable seamless sampling. It appends each batch on top of the
-        previous dataset.
+        enable seamless sampling. It appends each dataset on top of the
+        previous dataset by default.
 
         Attributes:
-            batch (pd.DataFrame): batch to be written
+            dataset (pd.DataFrame): batch to be written
             filename (str): base filename without extension for the written file
+            write_mode (str): style of writing summary. appending ("a") is default, write ("w")
+                is used for overwriting summary
         """
 
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = not os.path.exists(csv_path)
-        batch.to_csv(csv_path, mode="a", header=write_header, index=False)
+        dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
+
 
 
     def finalize_summary(self, filename: str = "enchanted_dataset"):
