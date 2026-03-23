@@ -1,6 +1,6 @@
 site_name: Enchanted Surrogates
 site_description: Documentation for Enchanted Surrogates
-#site_url: 
+site_url: https://digifusion.github.io/enchanted-surrogates/
 
 theme:
   name: material
