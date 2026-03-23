@@ -15,7 +15,7 @@ dependencies = [
     "dask[complete]",
     "dask-jobqueue",
     "pandas",
-    "pylint",
+    "ruff",
     "coverage",
     "matplotlib",
     "plotly",
@@ -24,6 +24,10 @@ dependencies = [
     "pyarrow",
     "h5py",
 ]
+
+[tool.ruff.lint]
+select = ["PLE", "E"]
+ignore = ["E401", "E501", "E402", "E731", "E711", "E722", "PLE1205"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
