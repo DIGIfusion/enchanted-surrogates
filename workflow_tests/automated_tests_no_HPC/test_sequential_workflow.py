@@ -21,7 +21,7 @@ def test_sequential_workflow(tmp_path, run_config):
     return
 
     supervisor = run_config("test_configs/sequential_local.yaml")
-    run_group = supervisor.groups[0]
+    run_group = supervisor.nested_groups[0]
 
     # This should create {budget} folders
     assert get_run_dir_count(tmp_path / "data") == run_group.sampler.budget

@@ -21,14 +21,14 @@ def test_nested_dask_executors(tmp_path, run_config):
 
 def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
     supervisor = run_config("test_configs/nested_executor_reuse.yaml")
-    assert len(supervisor.groups) == 3
+    assert len(supervisor.nested_groups) == 3
 
-    assert supervisor.groups[0].executors[0] == supervisor.groups[1].executors[0]
-    assert supervisor.groups[1].executors[0] == supervisor.groups[2].executors[0]
+    assert supervisor.nested_groups[0].executors[0] == supervisor.nested_groups[1].executors[0]
+    assert supervisor.nested_groups[1].executors[0] == supervisor.nested_groups[2].executors[0]
 
-    budget_first = supervisor.groups[0].sampler.budget
-    budget_second = supervisor.groups[1].sampler.budget
-    budget_third = supervisor.groups[2].sampler.budget
+    budget_first = supervisor.nested_groups[0].sampler.budget
+    budget_second = supervisor.nested_groups[1].sampler.budget
+    budget_third = supervisor.nested_groups[2].sampler.budget
     assert get_run_dir_count(tmp_path / "data") == (
         budget_first
         + budget_first * budget_second
