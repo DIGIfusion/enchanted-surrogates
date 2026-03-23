@@ -31,7 +31,7 @@ supervisor:
 
 TODO
 
-### Resuming previous runs
+### Resuming/extending previous runs
 
 The supervisor supports seamlessly resuming a previous run, in case of crashes
 or timeouts. The previous run can also be extended with more sample points if
@@ -71,6 +71,17 @@ Normal run and the default
 - Extend a previous run:
   - Set `run_mode: extend` under `Supervisor` in the config file
   - Now setting sampler budget to 10 means that 10 new samples are created.
+
+### HPC cluster local storage
+
+Some partitions on some HPC clusters have access to local memory on the run
+node. Setting the `local_storage` environment variable appropriately could
+potentially improve I/O operation performance.
+
+```yaml
+supervisor:
+    local_storage: TMPDIR
+```
 
 ### Optional attributes
 
