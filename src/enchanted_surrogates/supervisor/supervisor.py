@@ -243,12 +243,12 @@ class Supervisor:
             batch (pd.DataFrame): batch to be written
             filename (str): base filename without extension for the written file
         """
-        
+
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = not os.path.exists(csv_path)
         batch.to_csv(csv_path, mode="a", header=write_header, index=False)
 
-    
+
     def finalize_summary(self, filename: str = "enchanted_dataset"):
         """
         Finalizes summary after all the batches have been processed. Currently
@@ -285,7 +285,7 @@ class Supervisor:
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         if os.path.exists(csv_path):
             return pd.read_csv(csv_path)
- 
+
         return pd.DataFrame()
 
     def continue_with_base_run_dir(self, config_path):
@@ -565,8 +565,8 @@ class Supervisor:
             allowed_files = set(default_list)
         else:
             return
-        
-        if base_dir == None:
+
+        if base_dir is None:
             base_dir = self.base_run_dir
 
         for root, dirs, files in os.walk(base_dir, topdown=False):
