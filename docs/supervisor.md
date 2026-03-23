@@ -29,7 +29,40 @@ supervisor:
 
 ### Nested execution
 
-TODO
+Nested execution allows for running nested sampling schemes, which is useful
+when one code is used to generate input for another code.
+
+![Nested chart](./img/nested.png)
+
+This type of workflow could be configured by
+
+```yaml
+executors:
+    A: ...
+    B: ...
+
+samplers:
+    SamplerA: ...
+    SamplerB: ...
+
+runners:
+    RunnerA: ...
+    RunnerB: ...
+
+supervisor:
+    base_run_dir: ...
+    run_order:
+        - executor: A
+          sampler: SamplerA
+          runner: RunnerA
+        - executor: B
+          sampler: SamplerB
+          runner: RunnerB
+```
+
+would create the following
+
+See `example_nested.yaml` in example configs.
 
 ### Resuming/extending previous runs
 
@@ -92,6 +125,23 @@ configuration.
 ```yaml
 supervisor:
     summary_datatype: "parquet" # csv by default
+```
+
+### Configuring output files
+
+Enchanted surrogates creates lots of intermediate files and by default, all are
+retained after execution. Keeping or automatically deleting these files can be
+configured by `save_files` and `save_files_list` supervisor config options:
+
+```yaml
+supervisor:
+    base_run_dir: ...
+    save_files: "all" # or "custom" or "none"
+    # if using custom, only the specified files are saved
+    save_files_list:
+        - enchanted_dataset.csv
+        - example_local.csv
+        - ...
 ```
 
 Hdf5 storage file is not saved if type for it is None. It is created in every
