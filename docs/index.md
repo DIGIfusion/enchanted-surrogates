@@ -147,16 +147,16 @@ The `workflow_tests` folder contains larger workflow tests. These can be run man
 
 
 #### Linting Tests
-A Github Actions workflow is also used for running Pylint tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://pylint.pycqa.org/en/latest/user_guide/messages/messages_overview.html).
+A Github Actions workflow is also used for running Ruff tests. These are currently only testing for issues categorized as Errors or Fatal. Message overview [here](https://docs.astral.sh/ruff/rules/). The list of enabled rules can be found in pyproject.toml
 To check the linting locally and get a full overview of all possible issues, run:  
 
 For single file check:  
 
-    pylint /path/to/file.py --disable=R,C,W,E0401
+    ruff /path/to/file.py
 
 For all python files in $PWD:  
 
-    pylint $(find $PWD -name "*.py") --disable=R,C,W,E0401
+    ruff $(find $PWD -name "*.py")
 
 
 #### Machine Specific Tests
