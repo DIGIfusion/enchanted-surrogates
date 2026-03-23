@@ -178,8 +178,10 @@ class Supervisor:
                     expanded = df_batch.to_dict(orient="records")
 
                 batch_dataset = pd.concat([batch_dataset, df_batch])
-                if depth == len(self.groups) -1:
-                    self.write_summary(df_batch)
+                if batch_number == 0:
+                    self.write_summary(df_batch, write_mode='w')
+                else:
+                    self.write_summary(df_batch, write_mode='a')
                 group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
@@ -240,7 +242,7 @@ class Supervisor:
         """
 
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
-        write_header = not os.path.exists(csv_path)
+        write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
 
 
