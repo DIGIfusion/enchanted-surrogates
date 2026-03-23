@@ -185,8 +185,11 @@ class Supervisor:
                 self.wait_batch_dirs(run_dirs)
 
                 # Then the files in this batch should be saved into summary files
+                # If nesting, this happens only in the last depth
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
+                if depth == len(self.groups) -1:
+                    self.write_summary(df_batch)
                 group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
@@ -195,9 +198,6 @@ class Supervisor:
                     submitted_samples=group.sampler.submitted,
                 )
                 run_data.save(self.previous_run_file)
-
-                # Create summary csv or parquet file
-                self.write_summary(batch_dataset)
 
                 self.fetch_from_local_storage()
 
@@ -217,6 +217,9 @@ class Supervisor:
 
             self.fetch_from_local_storage()
 
+        # Convert summary now after batches if configured
+        self.finalize_summary()
+
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.create_hdf5(last_complete_dataset)
@@ -229,56 +232,60 @@ class Supervisor:
         for group in self.groups:
             group.executor.clean()
 
-    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset"):
+    def write_summary(self, batch: pd.DataFrame, filename: str = "enchanted_dataset"):
         """
         Writes a summary of dataset to base_run_dir/filename
         This functionality is used within the start function to
-        enable seamless sampling.
+        enable seamless sampling. It appends each batch on top of the
+        previous dataset.
 
         Attributes:
-            dataset (pd.DataFrame): dataset to be written
-            filename (str): filename for the written file
+            batch (pd.DataFrame): batch to be written
+            filename (str): base filename without extension for the written file
         """
+        
+        csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
+        write_header = not os.path.exists(csv_path)
+        batch.to_csv(csv_path, mode="a", header=write_header, index=False)
+
+    
+    def finalize_summary(self, filename: str = "enchanted_dataset"):
+        """
+        Finalizes summary after all the batches have been processed. Currently
+        creates parquet summary file if configured in the configuration file.
+
+        Attributes:
+            filename (str): base filename without extension for summarized file
+        """
+
         if (
             self.args.supervisor
             and self.args.supervisor.get("summary_datatype") == "parquet"
         ):
-            dataset.to_parquet(
-                os.path.join(self.base_run_dir, f"{filename}.parquet"),
-                engine="pyarrow",
-                index=False,
-            )
-        else:
-            dataset.to_csv(
-                os.path.join(self.base_run_dir, f"{filename}.csv"), index=False
-            )
+            csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
+            if os.path.exists(csv_path):
+                df = pd.read_csv(csv_path)
+                df.to_parquet(
+                    os.path.join(self.base_run_dir, f"{filename}.parquet"),
+                    engine="pyarrow",
+                    index=False,
+                )
 
     def read_summary(self, filename: str = "enchanted_dataset") -> pd.DataFrame:
         """
         Reads the summary written by write_summary.
 
         Attributes:
-            filename (str): file to be read
+            filename (str): base filename without extension for the file to be read
 
         Returns:
-            pd.Dataframe: read dataset
+            pd.Dataframe: dataset from the disk or an empty DataFrame if not found
         """
-        if (
-            self.args.supervisor
-            and self.args.supervisor.get("summary_datatype") == "parquet"
-        ):
-            file = os.path.join(self.base_run_dir, f"{filename}.parquet")
-            if os.path.exists(file):
-                return pd.read_parquet(
-                    file,
-                    engine="pyarrow",
-                )
-            return pd.DataFrame()
 
-        file = os.path.join(self.base_run_dir, f"{filename}.csv")
-        if os.path.exists(file):
-            return pd.read_csv(os.path.join(self.base_run_dir, f"{filename}.csv"))
-
+        csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
+        if os.path.exists(csv_path):
+            return pd.read_csv(csv_path)
+ 
         return pd.DataFrame()
 
     def continue_with_base_run_dir(self, config_path):
