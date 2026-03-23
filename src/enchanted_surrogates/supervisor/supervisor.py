@@ -160,6 +160,7 @@ class Supervisor:
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
+                previous_run_dirs = []
                 for i, (executor, runner) in enumerate(zip(group.executors, group.runners)):
                     run_dirs = [
                         os.path.join(
@@ -167,8 +168,10 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    # TODO: next runner also needs to have access to the previous run_dir(s)
-                    executor.execute(zip(run_dirs, expanded), runner, group.sampler)
+
+                    ex_runner = runner.copy()
+                    ex_runner["previous_run_dirs"] = previous_run_dirs
+                    executor.execute(zip(run_dirs, expanded), ex_runner, group.sampler)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -176,6 +179,7 @@ class Supervisor:
                     # Then the files in this batch should be saved into summary files
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
+                    previous_run_dirs = run_dirs
 
                 batch_dataset = pd.concat([batch_dataset, df_batch])
                 if batch_number == 0:
