@@ -8,11 +8,15 @@ from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 def test_sequential_workflow(tmp_path, run_config):
     supervisor: Supervisor = run_config("test_configs/sequential_local.yaml")
+    sequence_count = len(supervisor.args.supervisor["run_order"][0]["runner"])
+    
     run_group = supervisor.nested_groups[0]
-    sequences = len(run_group.runners)
+
+    # Sequence count in config matches one in Supervisor
+    assert len(run_group.runners) == sequence_count
 
     # This should create {budget * sequence_count} folders
-    assert get_run_dir_count(tmp_path / "data") == run_group.sampler.budget * sequences
+    assert get_run_dir_count(tmp_path / "data") == run_group.sampler.budget * sequence_count
 
     # Summary file should only contain output from the final sequence
     summary = read_summary_file(tmp_path)

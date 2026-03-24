@@ -16,3 +16,4 @@ def test_full_workflow(tmp_path, run_config, config_file):
 
     # This should create {budget} folders
     assert get_run_dir_count(tmp_path / "data") == run_group.sampler.budget
+    assert len(read_summary_file(tmp_path)) == run_group.sampler.budget

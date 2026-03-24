@@ -17,6 +17,7 @@ def test_nested_dask_executors(tmp_path, run_config):
         get_run_dir_count(tmp_path / "data")
         == budget_first + budget_first * budget_second
     )
+    assert len(read_summary_file(tmp_path)) == budget_first * budget_second
 
 
 def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
@@ -26,6 +27,10 @@ def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
     assert supervisor.nested_groups[0].executors[0] == supervisor.nested_groups[1].executors[0]
     assert supervisor.nested_groups[1].executors[0] == supervisor.nested_groups[2].executors[0]
 
+    # Even though executors are reused, runners are not
+    assert supervisor.nested_groups[0].runners[0] != supervisor.nested_groups[1].runners[0]
+    assert supervisor.nested_groups[1].runners[0] != supervisor.nested_groups[2].runners[0]
+
     budget_first = supervisor.nested_groups[0].sampler.budget
     budget_second = supervisor.nested_groups[1].sampler.budget
     budget_third = supervisor.nested_groups[2].sampler.budget
@@ -34,4 +39,4 @@ def test_nested_dask_executors_with_executor_reuse(tmp_path, run_config):
         + budget_first * budget_second
         + budget_first * budget_second * budget_third
     )
-    # TODO assert that the executors still are using different runners!
+    assert len(read_summary_file(tmp_path)) == budget_first * budget_second * budget_third
