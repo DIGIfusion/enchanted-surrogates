@@ -206,7 +206,11 @@ Although we will likely lint with `flake` so don't worry too much about it.
 
 #### New samplers
 
-TODO
+In addition to any sampler-specific features, new samplers should be tested to
+- return values within sampler bounds
+- return correct number of samples specified by the batch size
+- respect sampler budget
+
 
 #### Automated Testing at Pull Requests
 
