@@ -11,11 +11,14 @@ samplers:
     batch_size: 1
     parameters: ['c1', 'c2']
 runners:
+  # First runner: output = c1 + c2 (= 6)
+  # Second runner: output = prev_output + c1 + c2 (= 12)
   r1:
-    type: ExampleRunner # TODO if this runner did calculation output1=c1+c2 = 5+1 = 6
+    type: SumRunner
+    params_to_sum: [c1, c2]
   r2:
-    type: ExampleRunner # TODO if this runner did calculation output2=output1+c1+c2 = 6+5+1 = 12
-    # Then resulting CSV file should have output = 12 for all lines
+    type: SumRunner 
+    params_to_sum: [output, c1, c2]
 supervisor:
   base_run_dir: tmp_path
   run_order:
