@@ -13,20 +13,17 @@ samplers:
     num_samples: 2
 runners:
   code1_runner:
-    type: ExampleRunner
-    parameter_mode: 0
-    sleep_sec: 0.1
+    type: SumRunner
+    params_to_sum: [c1, c2]
   code2_runner:
-    type: ExampleRunner
-    parameter_mode: 1
-    sleep_sec: 0.1
+    type: SumRunner
+    params_to_sum: [output, c1, c2]
   code3_runner:
-    type: ExampleRunner
-    parameter_mode: 2
-    sleep_sec: 0.1
+    type: SumRunner
+    params_to_sum: [output, c1, c2]
 
 supervisor:
-  base_run_dir: "data_dir/nested_local"
+  base_run_dir: "data_dir/sequential_local"
   run_order:
   - sampler: code1_sampler
     executor:
