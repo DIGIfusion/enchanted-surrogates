@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: DIGIfusion/enchanted-plugin-mishka
-          token: ${{ secrets.MISHKA_TOKEN }}
+          token: ${{ secrets.PLUGINS_TOKEN }}
           path: plugins_docs/mishka_plugin
 
       - name: Add private plugin to PYTHONPATH
