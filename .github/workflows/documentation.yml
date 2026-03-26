@@ -21,10 +21,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-          cache: "pip"
+
+      - name: Restore cached virtualenv
+        uses: actions/cache/restore@v5
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          path: .venv
 
       - name: Install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           pip install h5py
           pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
           pip install -e .
@@ -46,6 +53,12 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+      - name: Saved cached virtualenv
+        uses: actions/cache/save@v5
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          path: .venv
 
   deploy:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'

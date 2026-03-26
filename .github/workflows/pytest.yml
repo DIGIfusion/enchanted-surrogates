@@ -20,10 +20,19 @@ jobs:
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
-        cache: "pip"
+
+
+    - name: Restore cached virtualenv
+      uses: actions/cache/restore@v5
+      with:
+        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+
 
     - name: Install dependencies
       run: |
+        python -m venv .venv
+        source .venv/bin/activate
         python -m pip install --upgrade pip
         pip install -e ".[activelearning]" # Editable install, required for importlib to do precise imports
         pip install coverage
@@ -41,3 +50,11 @@ jobs:
         include-hidden-files: true
         path: |
           .coverage.unit
+
+
+    - name: Saved cached virtualenv
+      uses: actions/cache/save@v5
+      with:
+        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+

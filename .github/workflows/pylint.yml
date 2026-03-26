@@ -18,17 +18,33 @@ jobs:
         python-version: ["3.11"]
     steps:
     - uses: actions/checkout@v6
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
-        cache: "pip"
+
+    - name: Restore cached virtualenv
+      uses: actions/cache/restore@v5
+      with:
+        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+
     - name: Install dependencies
       # working-directory: enchanted_surrogates
       run: |
+        python -m venv .venv
+        source .venv/bin/activate
         python -m pip install --upgrade pip
         pip install -e . 
     - name: Analysing the code with ruff
       # working-directory: enchanted_surrogates
       run: |
         ruff check $(git ls-files '*.py')
+
+    - name: Saved cached virtualenv
+      uses: actions/cache/save@v5
+      with:
+        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+
