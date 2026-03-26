@@ -33,19 +33,15 @@ jobs:
     - name: Install dependencies
       # working-directory: enchanted_surrogates
       run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install -e . 
+        if [ ! -d ".venv" ]; then
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -e . 
+        fi
     - name: Analysing the code with ruff
       # working-directory: enchanted_surrogates
       run: |
         source .venv/bin/activate
         ruff check $(git ls-files '*.py')
-
-    - name: Saved cached virtualenv
-      uses: actions/cache/save@v5
-      with:
-        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
-        path: .venv
 
