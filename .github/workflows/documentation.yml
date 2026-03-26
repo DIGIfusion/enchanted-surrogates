@@ -22,16 +22,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Restore cached virtualenv
-        uses: actions/cache/restore@v5
-        with:
-          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
-          path: .venv
-
       - name: Install dependencies
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
           pip install h5py
           pip install mkdocs mkdocstrings[python] mkdocs-material pymdown-extensions mkdocs-gen-files
           pip install -e .
@@ -44,25 +36,15 @@ jobs:
           path: plugins_docs/mishka_plugin
 
       - name: Add private plugin to PYTHONPATH
-        run: |
-          source .venv/bin/activate
-          echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
 
       - name: Build MkDocs site
-        run: |
-          source .venv/bin/activate
-          mkdocs build
+        run: mkdocs build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-      - name: Saved cached virtualenv
-        uses: actions/cache/save@v5
-        with:
-          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
-          path: .venv
 
   deploy:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
