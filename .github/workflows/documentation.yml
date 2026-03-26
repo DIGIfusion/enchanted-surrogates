@@ -44,10 +44,14 @@ jobs:
           path: plugins_docs/mishka_plugin
 
       - name: Add private plugin to PYTHONPATH
-        run: echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
+        run: |
+          source .venv/bin/activate
+          echo "PYTHONPATH=$(pwd)/plugins_docs/mishka_plugin/src" >> $GITHUB_ENV
 
       - name: Build MkDocs site
-        run: mkdocs build
+        run: |
+          source .venv/bin/activate
+          mkdocs build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

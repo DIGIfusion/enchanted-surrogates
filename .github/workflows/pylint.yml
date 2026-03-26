@@ -40,6 +40,7 @@ jobs:
     - name: Analysing the code with ruff
       # working-directory: enchanted_surrogates
       run: |
+        source .venv/bin/activate
         ruff check $(git ls-files '*.py')
 
     - name: Saved cached virtualenv

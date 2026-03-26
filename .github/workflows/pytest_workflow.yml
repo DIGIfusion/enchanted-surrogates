@@ -39,6 +39,7 @@ jobs:
 
     - name: Running pytest
       run: |
+        source .venv/bin/activate
         coverage run --source=src --data-file=.coverage.workflow -m pytest workflow_tests/automated_tests_no_HPC
 
     - name: Upload coverage artifacts

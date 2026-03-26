@@ -41,6 +41,7 @@ jobs:
 
     - name: Running pytest
       run: |
+        source .venv/bin/activate
         coverage run --source=src --data-file=.coverage.unit -m pytest tests/ -v -s
 
     - name: Upload coverage artifacts
