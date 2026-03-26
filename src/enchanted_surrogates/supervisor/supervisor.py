@@ -33,15 +33,6 @@ class Supervisor:
     Attributes:
         args (argparse.Namespace):  Namespace containing the configuration parameters
 
-    Methods:
-        start: Starts the simulation process. Main function of supervisor.
-        create_base_run_dir: Creates base directory for simulation run results.
-        all_processes_done: Returns true when all simulations are done.
-        wait_all_processes: Waits in while loop until all simulations are done.
-        create_dataset: Creates pandas DataFrame that includes all the
-            "enchanted_datapoints.csv" files of running directories.
-        create_hdf5: Creates hdf5 structured file that includes numeric data of
-            enchanted_dataset and metadata
     """
 
     def __init__(self, args, config_path=None):
@@ -160,7 +151,9 @@ class Supervisor:
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
-                for i, (executor, runner) in enumerate(zip(group.executors, group.runners)):
+                for i, (executor, runner) in enumerate(
+                    zip(group.executors, group.runners)
+                ):
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"d{depth}_b{batch_number}_s{j}_r{i}"
@@ -178,9 +171,9 @@ class Supervisor:
 
                 batch_dataset = pd.concat([batch_dataset, df_batch])
                 if batch_number == 0:
-                    self.write_summary(df_batch, write_mode='w')
+                    self.write_summary(df_batch, write_mode="w")
                 else:
-                    self.write_summary(df_batch, write_mode='a')
+                    self.write_summary(df_batch, write_mode="a")
                 group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
@@ -205,7 +198,7 @@ class Supervisor:
                 self.write_summary(
                     dataset=last_complete_dataset,
                     filename="last_complete_enchanted_dataset",
-                    write_mode="w"
+                    write_mode="w",
                 )
 
             self.fetch_from_local_storage()
@@ -226,7 +219,12 @@ class Supervisor:
             for executor in group.executors:
                 executor.clean()
 
-    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset", write_mode: str = "a"):
+    def write_summary(
+        self,
+        dataset: pd.DataFrame,
+        filename: str = "enchanted_dataset",
+        write_mode: str = "a",
+    ):
         """
         Writes a summary of dataset to base_run_dir/filename
         This functionality is used within the start function to
@@ -243,8 +241,6 @@ class Supervisor:
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
-
-
 
     def finalize_summary(self, filename: str = "enchanted_dataset"):
         """
