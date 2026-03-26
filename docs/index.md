@@ -200,7 +200,6 @@ details.
 ### Coding Style Standards
 
 The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used.
-Although we will likely lint with `flake` so don't worry too much about it.
 
 ### Testing
 
