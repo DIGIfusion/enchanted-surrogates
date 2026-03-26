@@ -163,7 +163,7 @@ class Supervisor:
                 for i, (executor, runner) in enumerate(zip(group.executors, group.runners)):
                     run_dirs = [
                         os.path.join(
-                            real_run_dir, "data", f"d{depth}_b{batch_number}_r{j}_s{i}"
+                            real_run_dir, "data", f"d{depth}_b{batch_number}_s{j}_r{i}"
                         )
                         for j in range(len(expanded))
                     ]

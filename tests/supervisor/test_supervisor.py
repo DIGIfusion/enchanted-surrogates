@@ -11,7 +11,7 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    one_run_dir = tmp_path / "data" / "d0_b0_r0"
+    one_run_dir = tmp_path / "data" / "d0_b0_s0_r0"
     one_run_dir.mkdir()
     assert supervisor.all_processes_done() is False
 
@@ -69,8 +69,8 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
         assert agg_columns.tolist() == [b"x"]
 
         # Check run dimensions and values
-        run_values = file["data/runs/d0_b2_r0/values"][:]
-        run_columns = file["data/runs/d0_b2_r0/columns"][:]
+        run_values = file["data/runs/d0_b2_s0_r0/values"][:]
+        run_columns = file["data/runs/d0_b2_s0_r0/columns"][:]
 
         assert run_values.shape == (1, 1)
         assert run_values[0, 0] == 2
@@ -195,7 +195,7 @@ def create_run_folders(tmp_path, amount):
     Helper function to create run folders
     """
     for i in range(amount):
-        d = tmp_path / f"d0_b{i}_r0"
+        d = tmp_path / f"d0_b{i}_s0_r0"
         d.mkdir()
         pd.DataFrame([{"x": i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
 
