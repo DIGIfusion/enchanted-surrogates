@@ -121,8 +121,20 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
    - The plugin template contains a GitHub Actions workflow setup to automate testing and deployment. Make sure the tests pass.
 
 7. **Documentation**:
+  
    - Update the `README.md` file with information about your plugin, including installation instructions, usage examples, and any other relevant details.
    - In case you want to add your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins.
+   - You can also add 
+   - If you have a documentation in docstrings in your plugin and you want to import it to main site, fill out the configuration file plugins.yml in main repo as shown below and as done with other plugins, and create a pull request with the updated configuration file. Docstrings will be added automatically.
+
+   Example of filling configuration file for template plugin:
+   ``` yml
+     - name: templete_plugin
+       repo: DIGIfusion/enchanted-plugin-templete
+       module: enchanted_plugin_templete
+       src_path: src
+   ```
+   Module import all module in templete plugin. 
 
 
 ## Existing plugins
