@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -29,10 +29,10 @@ jobs:
           pip install -e .
 
       - name: Checkout private docs from plugin Mishka
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: DIGIfusion/enchanted-plugin-mishka
-          token: ${{ secrets.MISHKA_TOKEN }}
+          token: ${{ secrets.PLUGINS_TOKEN }}
           path: plugins_docs/mishka_plugin
 
       - name: Add private plugin to PYTHONPATH
