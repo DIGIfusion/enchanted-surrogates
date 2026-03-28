@@ -179,7 +179,7 @@ class Supervisor:
                     for i in range(len(expanded))
                 ]
 
-                group.executor.execute(zip(run_dirs, expanded), group.sampler)
+                group.executor.execute(list(zip(run_dirs, expanded)), group.sampler)
 
                 # Wait processes of current batch to complete
                 self.wait_batch_dirs(run_dirs)

@@ -128,7 +128,6 @@ class DaskExecutor(Executor):
         Initializes the DaskExecutor.
 
         Args:
-            base_run_dir (str): Base directory for storing run outputs.
             sampler_config (dict): Arguments for the sampler, including its type.
             runner_config (dict): Arguments for the runner.
             *args: Additional positional arguments.
@@ -497,68 +496,45 @@ class DaskExecutor(Executor):
         """
         assert sampler
 
-        inputlist = list(input)
-        self.base_run_dir = os.path.dirname(inputlist[0][0])
-
         if not self.client:
             self.start_cluster()
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(inputlist)
+        futures = self.submit_batch(input)
+        
+        dfs = []
+        num_success = 0
+        total = len(futures)
 
-        sampler_type = (
-            getattr(sampler, "type", None)
-            or getattr(sampler, "__class__", None).__name__
-        )
+        log.info(f"Collecting results from {total} futures...")
 
-        if sampler_type in {"BayesianOptimizationSampler"}:
+        for i, future in enumerate(as_completed(futures), start=1):
             try:
-                wait(futures, timeout=self.timeout)
-            except Exception:
-                print("Timeout or error while waiting for BO batch; continuing.")
+                result = future.result()
+            except Exception as e:
+                log.error(f"[{i}/{total}] Future failed with exception:", e)
+                continue
+            
+            if isinstance(result, dict) and result.get("success") is True:
+                num_success += 1
 
-            if getattr(sampler, "plot_GPR_flag", False):
-                try:
-                    sampler.build_result_dictionary(self.base_run_dir)
-                    sampler.plot_frequency = 1
-                    sampler.train_surrogate()
-                except Exception as e:
-                    log.error("Error during sampler postprocessing:", e)
-        else:
-            dfs = []
-            num_success = 0
-            total = len(futures)
-
-            log.info(f"Collecting results from {total} futures...")
-
-            for i, future in enumerate(as_completed(futures), start=1):
-                try:
-                    result = future.result()
-                except Exception as e:
-                    print(f"[{i}/{total}] Future failed with exception:", e)
-                    continue
-
-                if isinstance(result, dict) and result.get("success") is True:
-                    num_success += 1
-
-                try:
-                    df = pd.DataFrame({k: [v] for k, v in result.items()})
-                    dfs.append(df)
-                except Exception as e:
-                    log.error("Failed to convert result to DataFrame:", e)
-                    continue
-
-                log.info(
-                    f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
-                    f"[{num_success}/{i}] Futures Succeeded"
-                )
-                log.info("_" * 100)
+            try:
+                df = pd.DataFrame({k: [v] for k, v in result.items()})
+                dfs.append(df)
+            except Exception as e:
+                log.error("Failed to convert result to DataFrame:", e)
+                continue
+            
+            log.info(
+                f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
+                f"[{num_success}/{i}] Futures Succeeded"
+            )
+            log.info("_" * 100)
 
     def submit_batch(
         self,
         run_dir_sample_pairs,
-        base_run_dir=None,
         client=None,
         include_fut_to_rundir=False,
     ):
