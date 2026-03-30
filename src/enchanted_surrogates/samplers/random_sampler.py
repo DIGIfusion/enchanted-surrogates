@@ -65,8 +65,10 @@ class RandomSampler(Sampler):
         Args:
           bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
           budget (int): Total number of samples that can be generated.
-          parameters (list[str]): Names of the parameters to be sampled. The order must correspond to the order of bounds.
-          batch_size (int, optional): Number of samples returned per call to `get_next_samples`. Defaults to the full sampling budget.
+          parameters (list[str]): Names of the parameters to be sampled.
+              The order must correspond to the order of bounds.
+          batch_size (int, optional): Number of samples returned per call
+              to `get_next_samples`. Defaults to the full sampling budget.
         """
         self.budget = budget
         self.bounds = bounds
@@ -132,6 +134,18 @@ class RandomSampler(Sampler):
         return None
 
     def sample_from_distribution(self, low, high):
+        """ Sample from different distributions. 
+        
+        Args:
+          low:
+            A float or integer defining the lower boundary of the distribution.
+          high:
+            A float or integer defining the higher boundary of the distribution.
+
+        Returns:
+          sample:
+            A float or integer.
+        """
         if self.distribution == "uniform":
             return np.random.uniform(low, high)
 
@@ -140,7 +154,7 @@ class RandomSampler(Sampler):
             return np.exp(np.random.uniform(np.log(low), np.log(high)))
 
         elif self.distribution == "normal":
-            # interpret bounds as 3σ limits (common convention)
+            # interpret bounds as 3std limits (common convention)
             mean = (low + high) / 2
             std = (high - low) / 6
             return np.random.normal(mean, std)
