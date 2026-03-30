@@ -72,6 +72,7 @@ class RandomSampler(Sampler):
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
+        self.distribution = "uniform"
 
     def get_next_samples(self) -> list[dict]:
         """
@@ -85,11 +86,13 @@ class RandomSampler(Sampler):
               A batch of parameter dictionaries, where each dictionary maps
               parameter names to sampled numeric values.
         """
-        # TODO not use uniform?
         # TODO batch samples
         list_param_dicts = []
         for _ in range(self.batch_size):
-            params = [np.random.uniform(low, high) for low, high in self.bounds]
+            params = [
+              self.sample_from_distribution(low, high)
+              for low, high in self.bounds
+            ]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
         self.submitted += len(list_param_dicts)
@@ -127,3 +130,23 @@ class RandomSampler(Sampler):
           None
         """
         return None
+
+    def sample_from_distribution(self, low, high):
+        if self.distribution == "uniform":
+            return np.random.uniform(low, high)
+
+        elif self.distribution == "loguniform":
+            # useful when parameters span orders of magnitude
+            return np.exp(np.random.uniform(np.log(low), np.log(high)))
+
+        elif self.distribution == "normal":
+            # interpret bounds as 3σ limits (common convention)
+            mean = (low + high) / 2
+            std = (high - low) / 6
+            return np.random.normal(mean, std)
+
+        elif self.distribution == "int_uniform":
+            return np.random.randint(low, high + 1)
+
+        else:
+            raise ValueError(f"Unknown distribution: {self.distribution}")
