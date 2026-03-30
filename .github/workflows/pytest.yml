@@ -35,7 +35,7 @@ jobs:
           python -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -e ".[activelearning]" # Editable install, required for importlib to do precise imports
+          pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
           pip install coverage
         fi
         git submodule init
