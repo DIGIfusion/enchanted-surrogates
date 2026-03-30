@@ -1,15 +1,32 @@
+"""
+ExampleRunner is a minimal Runner implementation that executes a tiny example calculation,
+reads a numeric output from a file, and returns a simple result dictionary.
+
+---
+
+## Overview
+- Performs a single short Python one-liner that sums two parameters and appends the
+    numeric result to "<run_dir>/output.txt".
+
+- Supports three parameter modes (0, 1, 2); each mode expects two parameter keys
+    and returns a single primary numeric output under "output_1", "output_2", or
+    "output_3" respectively, together with a boolean "success" flag and optional
+    diagnostic strings.
+
+- Intended as a lightweight example and template for implementing real runners.
+
+---
+"""
 import os
 import sys
 import subprocess
 import numbers
 from collections.abc import Iterable
-from datetime import datetime
 from time import sleep
 import numpy as np
 
 from .base_runner import Runner
 from enchanted_surrogates.utils.logger import get_logger
-from enchanted_surrogates.utils.is_package_available import is_package_available
 
 log = get_logger(__name__)
 
@@ -28,21 +45,12 @@ def is_iterable(x, *, treat_strings_as_iterable=True):
 
 class ExampleRunner(Runner):
     """
-    ExampleRunner: a minimal Runner implementation that executes a tiny example calculation,
-    reads a numeric output from a file, and returns a simple result dictionary.
-
-    Overview
-    - Performs a single short Python one-liner that sums two parameters and appends the
-      numeric result to "<run_dir>/output.txt".
-    - Supports three parameter modes (0, 1, 2); each mode expects two parameter keys
-      and returns a single primary numeric output under "output_1", "output_2", or
-      "output_3" respectively, together with a boolean "success" flag and optional
-      diagnostic strings.
-    - Intended as a lightweight example and template for implementing real runners.
-
+    
     Initialization parameters (via kwargs)
+
     - sleep_sec (number or two-element iterable, default 0.01): controls the pause
       after executing the example command. See Sleep sec behavior below.
+
     - fail_prob (float in [0, 1], default 0): probability that the run raises a
       synthetic RuntimeError after successful execution. This is useful for testing
       failure handling in distributed schedulers and pipelines. The failure is raised
@@ -50,35 +58,40 @@ class ExampleRunner(Runner):
       computed sleep duration. When fail_prob == 0 no synthetic failures are triggered.
 
     Sleep sec behavior
+
     - Fixed sleep: pass a number (int, float, numpy scalar). The runner will sleep
       that many seconds after execution.
+
     - Random sleep: pass a two-element iterable [low, high] (list, tuple, numpy array).
       Each run will draw a single sample from a uniform distribution on [low, high]
       and sleep that many seconds.
+
     - Validation: the implementation expects exactly two bounds for random sleep; if
       a provided iterable has length not equal to two the runner should raise ValueError.
       Ensure bounds are numeric and optionally enforce low <= high.
+
     - Usage: call sleep(self.get_sleep_sec()) so the numeric duration returned by
       get_sleep_sec is passed to time.sleep.
 
     single_code_run behavior and return contract
+
     - Writes to and reads from "<run_dir>/output.txt"; repeated runs append unless
       the file is cleared by the caller.
+
     - Converts the file contents to float and places that value in the primary output
       key. Non-numeric or multi-line contents will raise an exception.
+
     - Returned dictionary values should be non-iterable base types (int, float, str, bool)
       so they integrate cleanly with dataset creation and surrogate tooling.
 
     Errors and edge cases
     - Raises ValueError for invalid random sleep bounds (not exactly two values or low > high).
+
     - Raises TypeError if sleep_sec is neither a number nor a two-element iterable.
+
     - If fail_prob is set in (0,1], a RuntimeError may be raised after a successful run
       to simulate stochastic failures; the probability of raising is equal to fail_prob.
 
-    Example usage
-    - runner = ExampleRunner(sleep_sec=(0.1, 0.5), fail_prob=0.1)
-    - runner.single_code_run("/tmp/run1", params={"c1": 1.2, "c2": 2.3})
-      -> {"output": 3.5, "success": True}
     """
 
     def __init__(self, *args, **kwargs):

@@ -1,5 +1,14 @@
 # samplers/array_sampler.py
+"""
+---
 
+## Overview
+
+The array sampler will generate samples by taking the Cartesian product of the provided discrete values for each parameter.
+The samples are directly specified in 'bounds' in the config file.
+
+---
+"""
 import numpy as np
 from itertools import product
 from enchanted_surrogates.samplers.base_sampler import Sampler
@@ -7,16 +16,6 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class ArraySampler(Sampler):
     """
-
-    ---
-
-    ## Overview
-
-    The array sampler will generate samples by taking the Cartesian product of the provided discrete values for each parameter.
-    The samples are directly specified in 'bounds' in the config file.
-
-    ---
-
     ## Configuration
 
     To use the `ArraySampler`, specify it in the configuration file as in following example:

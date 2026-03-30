@@ -1,5 +1,6 @@
 # pylint: disable=E1101
 
+import os
 import pandas as pd
 import h5py
 from enchanted_surrogates.supervisor.supervisor import Supervisor
@@ -9,7 +10,7 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
 
-    one_run_dir = tmp_path / "d0_b0_r0"
+    one_run_dir = tmp_path / "data" / "d0_b0_r0"
     one_run_dir.mkdir()
     assert supervisor.all_processes_done() is False
 
@@ -19,8 +20,9 @@ def test_all_processes_done_returns_correct_values(tmp_path, patch_supervisor_im
 def test_create_dataset_combines_csv_files(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
-
-    create_run_folders(tmp_path, 3)
+    
+    data_path = tmp_path / "data"
+    create_run_folders(data_path, 3)
 
     df = supervisor.create_dataset()
     assert len(df) == 3
@@ -29,7 +31,9 @@ def test_create_dataset_combines_csv_files(tmp_path, patch_supervisor_imports):
 def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
     patch_supervisor_imports()
     supervisor = Supervisor(make_args(tmp_path))
-    create_run_folders(tmp_path, 3)
+
+    data_path = tmp_path / "data"
+    create_run_folders(data_path, 3)
 
     df = supervisor.create_dataset()
     supervisor.create_hdf5(df)
@@ -125,26 +129,51 @@ def test_save_files_option_none(tmp_path, patch_supervisor_imports):
     assert not (tmp_path / "subfolder" / "subfile.txt").exists()
     assert not (tmp_path / "subfolder" / "keep_me.txt").exists()
 
-def make_args(tmp_path, summary="csv"):
+def test_local_storage(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+
+    run_dir = os.path.join(tmp_path, "run_dir")
+    fast_dir = os.path.join(tmp_path, "fast_dir")
+
+    os.makedirs(run_dir)
+    os.makedirs(fast_dir)
+
+    supervisor = Supervisor(make_args(run_dir, local_storage=fast_dir))
+
+    assert supervisor.local_storage == fast_dir
+
+    os.rmdir(os.path.join(run_dir, "data"))
+
+    os.environ["abcdef123456"] = fast_dir
+    supervisor = Supervisor(make_args(run_dir, local_storage="abcdef123456"))
+
+    assert supervisor.local_storage == fast_dir
+
+def make_args(tmp_path, summary="csv", local_storage=None):
     """
     Helper function to create constructor arguments
     """
+    supervisor = {
+        "base_run_dir": str(tmp_path),
+        "summary_datatype": summary,
+        "run_order": [{
+            "executor": "testexecutor",
+            "sampler": "testsampler",
+            "runner": "testrunner",
+        }],
+        "save_files_list": [
+            "keep_me.txt"
+        ] 
+    }
+
+    if local_storage is not None:
+        supervisor["local_storage"] = local_storage
+
     return SimpleNamespace(
         executors={"testexecutor": {"type": "mock"}},
         samplers={"testsampler": {"type": "mock"}},
         runners={"testrunner": {"type": "mock"}},
-        supervisor={
-            "base_run_dir": str(tmp_path),
-            "summary_datatype": summary,
-            "run_order": [{
-                "executor": "testexecutor",
-                "sampler": "testsampler",
-                "runner": "testrunner",
-            }],
-            "save_files_list": [
-                "keep_me.txt"
-            ] 
-        },
+        supervisor=supervisor,
         runner={"type": "mock"},
         storage={"type": "mock"},
     )

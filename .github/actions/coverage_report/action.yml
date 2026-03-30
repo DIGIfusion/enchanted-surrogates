@@ -1,0 +1,45 @@
+name: "Coverage Report"
+description: "Post coverage report to PR and workflow summary"
+runs:
+  using: "composite"
+  steps:
+    - name: Download coverage artifacts
+      uses: actions/download-artifact@v7
+      with:
+        name: combined_coverage
+        path: coverage
+
+    - name: Write workflow summary
+      shell: bash
+      run: |
+        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat coverage/coverage_by_file.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: Fetch coverage artifact of target branch
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const path = require('path');
+          const run = require(path.join(process.env.GITHUB_ACTION_PATH, 'scripts/get_last_coverage.js'));
+          await run({ github, context });
+
+    - name: Unzip and handle target branch coverage
+      if: ${{ github.event_name == 'pull_request' }}
+      shell: bash
+      run: |
+        if test -f base_coverage.zip; then
+          unzip -d base_coverage base_coverage.zip
+          ls base_coverage
+        fi
+
+    - name: Post coverage comment
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const path = require('path');
+          const run = require(path.join(process.env.GITHUB_ACTION_PATH, 'scripts/comment_coverage.js'));
+          await run({ github, context });

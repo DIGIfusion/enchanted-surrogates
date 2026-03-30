@@ -3,7 +3,7 @@ import sys
 import yaml
 import argparse
 from enchanted_surrogates.supervisor.supervisor import Supervisor
-from enchanted_surrogates.utils.ascii_art import enchanted_wizard
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
 import logging
 
@@ -73,10 +73,10 @@ def main(arguments: argparse.Namespace, config_path=None):
     supervisor = Supervisor(arguments, config_path=config_path)
 
     setup_logger(supervisor.base_run_dir, getattr(arguments, "logging", "INFO"))
+    log.info("\n" + enchanted_wizard_version_7)
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
 
-    print(enchanted_wizard)
     supervisor.start()
 
 

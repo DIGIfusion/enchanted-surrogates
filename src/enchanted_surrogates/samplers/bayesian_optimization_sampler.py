@@ -1,10 +1,17 @@
+# samplers/bayesian_optimization_sampler.py
 """
-samplers/bayesian_optimization_sampler.py
+---
+
+## Overview
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
 sample through the search space to yield optimial information gain as 
 specified by the acquisition strategy.
+Bayesian Optimization sampler using the BoTorch library.
+
+---
 """
+
 from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
@@ -12,54 +19,45 @@ import pickle as pkl
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-import scienceplots
+# import matplotlib as mpl
+# import scienceplots
 import scipy.optimize as optimize
 
-import botorch, gpytorch, torch, pyro, lampe
+import botorch, gpytorch, torch, pyro  #, lampe
 import lampe.plots as plots
 from botorch.optim import optimize_acqf
 from botorch.utils.transforms import standardize, normalize, unnormalize
 
 log = get_logger(__name__)
 
+
 class BayesianOptimizationSampler(Sampler):
     """
-    ---
-
-    ## Overview
-
-    This sampler Class uses Bayesian Optimization techniques to data efficiently
-    sample through the search space to yield optimial information gain as 
-    specified by the acquisition strategy.
-    Bayesian Optimization sampler using the BoTorch library.
-
-    ---
-
     ## Configuration
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
+
     ```yaml
     sampler:
-      type: BayesianOptimizationSampler
-      budget: 50
-      initial_samples: 20
-      acquisition_batch_size: 10
-      acquisition_function: qEI
-      random_fraction: 0.2
-      bounds: [[0.0, 1.0], [1.0, 5.0]]
-      parameters: ['x', 'y']
-      observations: ['distance']
-      base_run_dir: ./runs
-      fully_bayesian: false
-      async_samp: false
-      failure_prob_filter: false
-      ucb_beta: 2.0
-      parser: Parser
-      parser_config:
+        type: BayesianOptimizationSampler
+        budget: 50
+        initial_samples: 20
+        acquisition_batch_size: 10
+        acquisition_function: qEI
+        random_fraction: 0.2
+        bounds: [[0.0, 1.0], [1.0, 5.0]]
+        parameters: ['x', 'y']
+        observations: ['distance']
+        base_run_dir: ./runs
+        fully_bayesian: false
+        async_samp: false
+        failure_prob_filter: false
+        ucb_beta: 2.0
+        parser: Parser
+        parser_config:
         key: value
     ```
-    
+
     Attributes:
         initial_samples (int): Number of initial samples required.
         verbose (bool): Whether to print verbose output.
