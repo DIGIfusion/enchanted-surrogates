@@ -96,7 +96,9 @@ class Supervisor:
             self.local_storage = os.environ.get(env)
 
             if not self.local_storage:
-                log.warning(f"Local storage environment variable {env} not set, ignoring...")
+                log.warning(
+                    f"Local storage environment variable {env} not set, ignoring..."
+                )
 
         self.data_dir = os.path.join(self.base_run_dir, "data")
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
@@ -179,7 +181,7 @@ class Supervisor:
                     for i in range(len(expanded))
                 ]
 
-                group.executor.execute(list(zip(run_dirs, expanded)), group.sampler)
+                group.executor.execute(list(zip(run_dirs, expanded)))
 
                 # Wait processes of current batch to complete
                 self.wait_batch_dirs(run_dirs)
@@ -188,7 +190,7 @@ class Supervisor:
                 # If nesting, this happens only in the last depth
                 df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
-                if depth == len(self.groups) -1:
+                if depth == len(self.groups) - 1:
                     self.write_summary(df_batch)
                 group.sampler.register_future(batch_dataset)
 
@@ -214,7 +216,7 @@ class Supervisor:
                 self.write_summary(
                     dataset=last_complete_dataset,
                     filename="last_complete_enchanted_dataset",
-                    write_mode="w"
+                    write_mode="w",
                 )
 
             self.fetch_from_local_storage()
@@ -234,7 +236,12 @@ class Supervisor:
         for group in self.groups:
             group.executor.clean()
 
-    def write_summary(self, dataset: pd.DataFrame, filename: str = "enchanted_dataset", write_mode: str = "a"):
+    def write_summary(
+        self,
+        dataset: pd.DataFrame,
+        filename: str = "enchanted_dataset",
+        write_mode: str = "a",
+    ):
         """
         Writes a summary of dataset to base_run_dir/filename
         This functionality is used within the start function to
@@ -251,8 +258,6 @@ class Supervisor:
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = not os.path.exists(csv_path)
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
-
-
 
     def finalize_summary(self, filename: str = "enchanted_dataset"):
         """
@@ -306,12 +311,14 @@ class Supervisor:
         if not os.path.exists(self.base_run_dir):
             self.create_base_run_dir(self.base_run_dir, config_path)
             return
-        
+
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir, exist_ok=True)
 
-        dirs = glob.glob(f"{self.data_dir}/"
-            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*")
+        dirs = glob.glob(
+            f"{self.data_dir}/"
+            + f"d{self.previous_run_data.depth}_b{self.previous_run_data.batch_number + 1}*"
+        )
 
         if not dirs:
             return
@@ -320,6 +327,7 @@ class Supervisor:
             shutil.rmtree(path)
 
         # Create also data and logs folders if they don't exist
+
     def create_base_run_dir(self, base_run_dir, config_path):
         """
         Creates base directory for simulation run results. Checks if base_run_dir

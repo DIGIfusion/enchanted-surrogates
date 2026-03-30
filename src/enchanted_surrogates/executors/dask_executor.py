@@ -19,7 +19,7 @@ Arguments:
 ```
 n_workers: 2,
 threads_per_worker: 1,
-memory_limit: '12GB', 
+memory_limit: '12GB',
 processes: 1
 ```
 
@@ -30,14 +30,14 @@ Example configuration: /configs/example_dask_local.yaml
 Arguments for the SLURM workers.
 
 ```
-account: 'project_xxx', 
-queue: 'medium', 
-cores: 1, 
-memory: '12GB', 
-processes: 1, 
+account: 'project_xxx',
+queue: 'medium',
+cores: 1,
+memory: '12GB',
+processes: 1,
 walltime: '00:20:00',
-config_name: 'slurm', 
-interface: 'ib0', 
+config_name: 'slurm',
+interface: 'ib0',
 ```
 
 Example configuration: /configs/example_dask_slurm.yaml
@@ -47,12 +47,13 @@ Example configuration: /configs/example_dask_slurm.yaml
 Other arguments:
 
 ```
-job_script_prologue: ['module load your-modules-here',], 
+job_script_prologue: ['module load your-modules-here',],
 job_extra_directives: [
-    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out', 
-    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'], 
+    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
+    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
 """
+
 import os
 import subprocess
 import sys
@@ -122,7 +123,6 @@ run_simulation_task = simulation_task.run_simulation_task
 
 
 class DaskExecutor(Executor):
-
     def __init__(self, *args, **kwargs):
         """
         Initializes the DaskExecutor.
@@ -310,7 +310,7 @@ class DaskExecutor(Executor):
         """
         log.info("Creating a cluster...")
         slurm_out_dir = LoggerConfig().log_dir
-        
+
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(
                 self.SLURMcluster_config.get("processes", 1)
@@ -483,7 +483,7 @@ class DaskExecutor(Executor):
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)]):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
 
@@ -494,7 +494,6 @@ class DaskExecutor(Executor):
         Raises:
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
-        assert sampler
 
         if not self.client:
             self.start_cluster()
@@ -502,7 +501,7 @@ class DaskExecutor(Executor):
 
         # keep futures for BayesianOptimizationSampler
         futures = self.submit_batch(input)
-        
+
         dfs = []
         num_success = 0
         total = len(futures)
@@ -515,7 +514,7 @@ class DaskExecutor(Executor):
             except Exception as e:
                 log.error(f"[{i}/{total}] Future failed with exception:", e)
                 continue
-            
+
             if isinstance(result, dict) and result.get("success") is True:
                 num_success += 1
 
@@ -525,7 +524,7 @@ class DaskExecutor(Executor):
             except Exception as e:
                 log.error("Failed to convert result to DataFrame:", e)
                 continue
-            
+
             log.info(
                 f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
                 f"[{num_success}/{i}] Futures Succeeded"
@@ -536,7 +535,6 @@ class DaskExecutor(Executor):
         self,
         run_dir_sample_pairs,
         client=None,
-        include_fut_to_rundir=False,
     ):
         """
         Submits a batch of simulation tasks to the Dask cluster.
@@ -555,17 +553,13 @@ class DaskExecutor(Executor):
         assert client is not None
 
         futures = []
-        fut_to_rundir = {}
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
                 run_simulation_task, self.runner_config, run_dir, sample_params
             )
             futures.append(new_future)
-            fut_to_rundir[new_future.key] = run_dir
 
         log.info(
             f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}"
         )
-        if include_fut_to_rundir:
-            return futures, fut_to_rundir
         return futures

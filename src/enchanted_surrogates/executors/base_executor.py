@@ -10,7 +10,7 @@ class Executor(ABC):
         self.output_dir = output_dir  # TODO rename
 
     @abstractmethod
-    def execute(self, samples, sampler):
+    def execute(self, samples):
         raise NotImplementedError("execute method not implemented.")
 
     @abstractmethod

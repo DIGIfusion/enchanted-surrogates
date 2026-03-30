@@ -10,6 +10,7 @@ Example configuration: /configs/example_local.yaml
 
 ---
 """
+
 import os
 import uuid
 from enchanted_surrogates.utils.logger import get_logger
@@ -37,7 +38,7 @@ class LocalExecutor(Executor):
         - Cleanup is minimal since no external resources are allocated.
     """
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)]):
         for run_dir, sample in input:
             new_future = run_simulation_task(self.runner_config, run_dir, params=sample)
 
