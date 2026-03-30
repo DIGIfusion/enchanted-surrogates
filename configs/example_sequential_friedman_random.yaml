@@ -10,12 +10,13 @@ executors:
 
 # get_next_samples for this sampler should only be called once after all the runners have ran. 
 # the supervisor is currently not capable of this, please make it possible
-sampler:
-  type: active_learning_sampler
-  bounds: [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
-  budget: 30
-  batch_size: 1
-  parameters: ['x1','x2','x3','x4','x5']
+samplers:
+  onlySampler:
+    type: random_sampler
+    bounds: [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
+    budget: 30
+    batch_size: 1
+    parameters: ['x1','x2','x3','x4','x5']
 
 runners:
   fr_int:
@@ -35,12 +36,15 @@ runners:
     noise_std: 0.01
 
 supervisor:
-  base_run_dir: "data_dir/nested_friedman_test"
+  base_run_dir: "data_dir/sequential_friedman_random_test"
   run_mode: "fresh" # "resume" / "extend"
   run_order:
-  - executor: e1
-    runner: fr_int
-  - executor: e2
-    runner: fr_quad
-  - executor: e3
-    runner: fr_lin
+  - sampler: onlySampler
+    executor: 
+      - e1
+      - e2
+      - e3
+    runner:
+      - fr_int
+      - fr_quad
+      - fr_lin
