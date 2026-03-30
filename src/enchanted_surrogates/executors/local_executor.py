@@ -37,9 +37,9 @@ class LocalExecutor(Executor):
         - Cleanup is minimal since no external resources are allocated.
     """
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)], runner_config, sampler):
         for run_dir, sample in input:
-            new_future = run_simulation_task(self.runner_config, run_dir, params=sample)
+            new_future = run_simulation_task(runner_config, run_dir, params=sample)
 
     def clean(self):
         log.warning("Local runner doesn't clean up any resources")

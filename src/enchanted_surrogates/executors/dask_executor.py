@@ -129,8 +129,6 @@ class DaskExecutor(Executor):
 
         Args:
             base_run_dir (str): Base directory for storing run outputs.
-            sampler_config (dict): Arguments for the sampler, including its type.
-            runner_config (dict): Arguments for the runner.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments, including:
                 - type (str): Type of executor.
@@ -484,7 +482,7 @@ class DaskExecutor(Executor):
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)], runner_config, sampler):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
 
@@ -505,7 +503,7 @@ class DaskExecutor(Executor):
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(inputlist)
+        futures = self.submit_batch(inputlist, runner_config)
 
         sampler_type = (
             getattr(sampler, "type", None)
@@ -558,6 +556,7 @@ class DaskExecutor(Executor):
     def submit_batch(
         self,
         run_dir_sample_pairs,
+        runner_config,
         base_run_dir=None,
         client=None,
         include_fut_to_rundir=False,
@@ -582,13 +581,13 @@ class DaskExecutor(Executor):
         fut_to_rundir = {}
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
-                run_simulation_task, self.runner_config, run_dir, sample_params
+                run_simulation_task, runner_config, run_dir, sample_params
             )
             futures.append(new_future)
             fut_to_rundir[new_future.key] = run_dir
 
         log.info(
-            f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}"
+            f"{len(futures)} DASK FUTURES SUBMITTED for runner {runner_config['type']}"
         )
         if include_fut_to_rundir:
             return futures, fut_to_rundir

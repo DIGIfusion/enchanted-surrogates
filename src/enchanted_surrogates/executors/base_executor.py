@@ -5,12 +5,11 @@ log = get_logger(__name__)
 
 
 class Executor(ABC):
-    def __init__(self, runner_config=None, output_dir=None, *args, **kwargs):
-        self.runner_config = runner_config
+    def __init__(self, output_dir=None, *args, **kwargs):
         self.output_dir = output_dir  # TODO rename
 
     @abstractmethod
-    def execute(self, samples, sampler):
+    def execute(self, samples, runner_config, sampler):
         raise NotImplementedError("execute method not implemented.")
 
     @abstractmethod

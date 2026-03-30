@@ -2,7 +2,7 @@
 Full workflow tests for seamless sampling continuation.
 """
 from enchanted_surrogates.supervisor.supervisor import Supervisor
-from workflow_tests.utils.test_utils import get_run_dir_count
+from workflow_tests.utils.test_utils import get_run_dir_count, read_summary_file
 
 def test_simple_resume_after_interruption(tmp_path, run_config):
     supervisor: Supervisor = run_config(
@@ -25,6 +25,7 @@ def test_simple_resume_after_interruption(tmp_path, run_config):
     data_dir = tmp_path / "data"
 
     assert get_run_dir_count(data_dir) == kill_after * batch_size
+    assert len(read_summary_file(tmp_path)) == kill_after * batch_size
 
     supervisor.args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
     supervisor.args.samplers["random_kill"]["kill_after"] = None  # don't kill the poor sampler
@@ -34,6 +35,7 @@ def test_simple_resume_after_interruption(tmp_path, run_config):
     supervisor2.start()
 
     assert get_run_dir_count(data_dir) == budget
+    assert len(read_summary_file(tmp_path)) == budget
 
 def test_nested_resume_after_interruption(tmp_path, run_config):
     supervisor: Supervisor = run_config(
@@ -54,10 +56,12 @@ def test_nested_resume_after_interruption(tmp_path, run_config):
 
     budget_1: int = supervisor.args.samplers["random"]["budget"]
     budget_2: int = sampler["budget"]
+    budget_3: int = supervisor.args.samplers["random_final"]["budget"]
     
     data_dir = tmp_path / "data"
 
     assert get_run_dir_count(data_dir) == budget_1 + budget_1 * kill_after * batch_size
+    assert len(read_summary_file(tmp_path)) == budget_1 * kill_after * batch_size
 
     supervisor.args.supervisor["run_mode"] = "resume"  # continue where the previous one left off
     supervisor.args.samplers["random_kill"]["kill_after"] = None  # don't kill the poor sampler
@@ -66,7 +70,10 @@ def test_nested_resume_after_interruption(tmp_path, run_config):
     supervisor2 = Supervisor(supervisor.args)
     supervisor2.start()
 
-    assert get_run_dir_count(data_dir) == budget_1 + budget_1 * budget_2
+    assert get_run_dir_count(data_dir) == (
+        budget_1 + budget_1 * budget_2 + budget_1 * budget_2 * budget_3
+    )
+    assert len(read_summary_file(tmp_path)) == budget_1 * budget_2 * budget_3
 
 def test_simple_resume_with_increased_budget(tmp_path, run_config):
     supervisor: Supervisor = run_config("test_configs/simple_budget_increase.yaml")
@@ -77,6 +84,7 @@ def test_simple_resume_with_increased_budget(tmp_path, run_config):
     data_dir = tmp_path / "data"
 
     assert get_run_dir_count(data_dir) == old_budget
+    assert len(read_summary_file(tmp_path)) == old_budget
 
     # Increase budget and re-run with resume, (new_budget - old_budget) new samples should be got
     supervisor.args.supervisor["run_mode"] = "resume"
@@ -86,6 +94,7 @@ def test_simple_resume_with_increased_budget(tmp_path, run_config):
     supervisor2.start()
 
     assert get_run_dir_count(data_dir) == new_budget
+    assert len(read_summary_file(tmp_path)) == new_budget
 
 def test_simple_extend(tmp_path, run_config):
     supervisor: Supervisor = run_config("test_configs/simple_budget_increase.yaml")
@@ -96,6 +105,7 @@ def test_simple_extend(tmp_path, run_config):
     data_dir = tmp_path / "data"
 
     assert get_run_dir_count(data_dir) == old_budget
+    assert len(read_summary_file(tmp_path)) == old_budget
 
     # Set budget and re-run with extend, (extend_budget_by) new samples should be got
     supervisor.args.supervisor["run_mode"] = "extend"
@@ -105,6 +115,7 @@ def test_simple_extend(tmp_path, run_config):
     supervisor2.start()
 
     assert get_run_dir_count(data_dir) == old_budget + extend_budget_by
+    assert len(read_summary_file(tmp_path)) == old_budget + extend_budget_by
 
 def test_nested_extend(tmp_path, run_config):
     supervisor: Supervisor = run_config("test_configs/nested_budget_increase.yaml")
@@ -126,4 +137,7 @@ def test_nested_extend(tmp_path, run_config):
 
     assert get_run_dir_count(data_dir) == (
         first_budget + first_budget * (second_budget + extend_budget_by)
+    )
+    assert len(read_summary_file(tmp_path)) == (
+        first_budget * (second_budget + extend_budget_by)
     )
