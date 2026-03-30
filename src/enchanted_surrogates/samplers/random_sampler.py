@@ -69,12 +69,14 @@ class RandomSampler(Sampler):
               The order must correspond to the order of bounds.
           batch_size (int, optional): Number of samples returned per call
               to `get_next_samples`. Defaults to the full sampling budget.
+          distribution (str, optional): The distribution used by the sampler.
+              Options: uniform (default), loguniform, normal, int_uniform. 
         """
         self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
-        self.distribution = "uniform"
+        self.distribution = kwargs.get("distribution", "uniform")
 
     def get_next_samples(self) -> list[dict]:
         """
