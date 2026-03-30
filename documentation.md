@@ -49,17 +49,62 @@ More than one expession
 
 ```
 
-First:
-\( \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi} \)
-
-Second:
-
-\[
-\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}, \quad
-\lim_{x \to 0} \frac{\sin x}{x} = 1
-\]
-
 #### Plugin documentation
-Documentation for plugins can also be imported from docstrings contained within plugin modules and classes. The same three documentation approaches described above can be applied to plugins as well.
-For more detailed information on importing documentation from plugins, please refer to the [Plugins](https://digifusion.github.io/enchanted-surrogates/plugins/#development-steps) section.
 
+Documentation for plugins can also be imported from docstrings contained within plugin modules and classes. The same three documentation approaches described above can be applied to plugins as well: docstring-only documentation, docstring + Markdown file or Markdown only.
+
+In case you want to add only Markdown or Markdown + docstring of your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins. Name file match your plugin name.
+
+You can include docstring-based documentation from your plugin into the main documentation. Before make sure your plugin contain an __init__.py file (it can be empty, but it must exist so Python treats the directory as a package).
+Fill configuration file plugins.yml to enable docstring import and create a Pull Request with your changes. You can add docstring of all module or just chosen one, see examples bellow.
+
+
+🧩 Configuration Fields:
+
+```yml
+- name: <plugin_name>
+  repo: <github_repo>
+  module: <module_path>
+  src_path: <source_directory>
+```
+There:
+  name — plugin name (used for docs file naming)
+  repo — GitHub repository path
+  module — Python module path to import docstrings from
+  src_path — path to source code inside the repository (e.g. src)
+
+Example 1 (All module docstrings):
+```yml
+- name: template_plugin
+  repo: DIGIfusion/enchanted-plugin-template
+  module: enchanted_plugin_template
+  src_path: src
+```
+This will scan the entire module and import docstrings from all .py files inside the package.
+
+Example 2 (Only one file docstring):
+```yml
+- name: template_plugin
+  repo: DIGIfusion/enchanted-plugin-template
+  module: enchanted_plugin_template.template_runner
+  src_path: src
+```
+This will import docstrings only from template_runner.py and ignore all other files.
+
+Example 3 (Two or more file docstring):
+```yml
+- name: template_plugin
+  repo: DIGIfusion/enchanted-plugin-template
+  module:
+    - enchanted_plugin_template.template_runner
+    - enchanted_plugin_template.template_parser
+  src_path: src
+```
+This will import docstrings from chosen two modules and ignore all other modules.
+
+
+##### Personal access token 
+To allow the main repository to access and build documentation from plugin repositories (including private ones), a Personal Access Token (PAT) is used.
+This token provides secure, automated access to plugin source code during the documentation build process.
+
+The token currently stored in the repository's secrets has no expiration date. If for some reason a new token needs to be generated, this can be done in the settings. Navigate to Developer settings, open Personal access tokens, click Tokens (classic), click Generate new token and choose repo scope. Copy new token and add it to GitHub secrets on main repository.
