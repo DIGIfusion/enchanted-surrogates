@@ -13,9 +13,9 @@ def test_execute(mock_run_simulation_task):
     sampler = MagicMock()
     mock_run_simulation_task.return_value = "EXECUTE"
 
-    executor = LocalExecutor(runner_config={"type": "mock"})
+    executor = LocalExecutor()
 
-    executor.execute(executor_input, sampler)
+    executor.execute(executor_input, runner_config={"type": "mock"}, sampler=sampler)
 
     # Executor should not directly call get next samples
     assert sampler.get_next_samples.call_count == 0
