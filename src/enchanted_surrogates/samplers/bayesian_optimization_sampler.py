@@ -16,7 +16,7 @@ from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.precise_imports import import_parser
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping
 import os
 
 # import matplotlib as mpl
@@ -27,6 +27,7 @@ from botorch.optim import optimize_acqf
 from botorch.utils.transforms import standardize, normalize, unnormalize
 
 log = get_logger(__name__)
+torch.set_default_dtype(torch.float64)
 
 
 class BayesianOptimizationSampler(Sampler):
@@ -258,7 +259,7 @@ class BayesianOptimizationSampler(Sampler):
         If a `failure` field is present and evaluates truthy, the record is routed
         to the failure model dataset as well.
         """
-        if not future:
+        if future is None or len(future) == 0:
             return
         self.futures.append(future)
         self.ingest_future(future)
