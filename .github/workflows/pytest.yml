@@ -10,6 +10,8 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    container:
+      image: pytorch/pytorch
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -32,7 +34,7 @@ jobs:
     - name: Install dependencies
       run: |
         if [ ! -d ".venv" ]; then
-          python -m venv .venv
+          python -m venv .venv --system-site-packages
           source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
