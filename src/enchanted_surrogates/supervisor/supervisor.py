@@ -24,6 +24,8 @@ from enchanted_surrogates.supervisor.nested_imports import (
 
 log = get_logger(__name__)
 
+LOG_DIR = "logs"
+
 
 class Supervisor:
     """
@@ -576,11 +578,19 @@ class Supervisor:
         for root, dirs, files in os.walk(base_dir, topdown=False):
             # Remove files
             for file in files:
+                # Do nothing for log files
+                parent = os.path.basename(os.path.dirname(os.path.join(root, file)))
+                if parent == LOG_DIR:
+                    continue
+
                 if file not in allowed_files:
                     file_path = os.path.join(root, file)
                     os.remove(file_path)
             # Remove dirs
             for dir_ in dirs:
+                # Do nothing for log dir
+                if dir_ == LOG_DIR:
+                    continue
                 dir_path = os.path.join(root, dir_)
                 if not os.listdir(dir_path):
                     os.rmdir(dir_path)
