@@ -1,5 +1,5 @@
 """
-Active Learning sampler
+
 """
 import numpy as np
 

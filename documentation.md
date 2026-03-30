@@ -12,15 +12,12 @@ There are three main approaches to documenting modules or classes:
 
 2. Docstring + Markdown file
     - You can combine docstrings with a manually written Markdown file.
-    - Create a .md file in the docs directory with a name similar to the module or class and write additional documentation in the .md file.
-    - You can still use docstrings for part of the documentation.
-    - Important: keep the same rule — include a docstring at the top of the file (before imports).
+    - Important: include a docstring at the top of the file (before imports).
     - Docstrings will be automatically imported and rendered within the corresponding documentation page.
     - Ensure that your .md file and module/class file have same or almost same name.
 
 3. Markdown-only documentation
     - You can rely exclusively on manually written Markdown documentation.
-    - Create a .md file in the docs directory and write all documentation there.
     - If you do not want docstrings to be imported:
         Either do not write a docstring at all, or
         Do not include a docstring at the top of the file (before imports). In this case, the documentation generator will skip importing the module/class.

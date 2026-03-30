@@ -1,7 +1,5 @@
 # samplers/bayesian_optimization_sampler.py
 """
----
-
 ## Overview
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
