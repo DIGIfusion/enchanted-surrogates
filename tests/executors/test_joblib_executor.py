@@ -11,7 +11,6 @@ def test_execute(mock_run_simulation_task, mock_parallel, mock_delayed):
         ("test_run_dir_1", {"c": 2}),
     ]
 
-    sampler = MagicMock()
     mock_run_simulation_task.return_value = "EXECUTE"
 
     # Mocking Parallel and Delayed from joblib so all tasks are actually executed right away
@@ -22,8 +21,7 @@ def test_execute(mock_run_simulation_task, mock_parallel, mock_delayed):
 
     executor = JoblibExecutor(runner_config={"type": "mock_runner"})
 
-    executor.execute(executor_input, sampler)
+    executor.execute(executor_input)
 
     # Executor should not directly call get next samples
-    assert sampler.get_next_samples.call_count == 0
     assert mock_run_simulation_task.call_count == 2
