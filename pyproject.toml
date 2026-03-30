@@ -74,5 +74,7 @@ activelearning = [
 ]
 
 BOS = [
-  "torch", "botorch", "gpytorch"
+  "torch",
+  "botorch",
+  "gpytorch"
 ]

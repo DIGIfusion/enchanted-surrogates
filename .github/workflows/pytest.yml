@@ -10,8 +10,6 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    container:
-      image: pytorch/pytorch
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -34,12 +32,13 @@ jobs:
     - name: Install dependencies
       run: |
         if [ ! -d ".venv" ]; then
-          python -m venv .venv --system-site-packages
+          python -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
           pip install coverage
         fi
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
         git submodule init
         git submodule update
 
@@ -55,11 +54,4 @@ jobs:
         include-hidden-files: true
         path: |
           .coverage.unit
-
-
-    - name: Saved cached virtualenv
-      uses: actions/cache/save@v5
-      with:
-        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
-        path: .venv
 
