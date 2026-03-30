@@ -34,8 +34,8 @@ jobs:
           source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -e . # ← Editable install, required for importlib to do precise imports
-          pip install coverage
         fi 
+        pip install coverage
         git submodule init
         git submodule update
 
@@ -52,8 +52,3 @@ jobs:
         path: |
           .coverage.workflow
 
-    - name: Saved cached virtualenv
-      uses: actions/cache/save@v5
-      with:
-        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-        path: .venv

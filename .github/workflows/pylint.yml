@@ -45,3 +45,10 @@ jobs:
         source .venv/bin/activate
         ruff check $(git ls-files '*.py')
 
+
+
+    - name: Saved cached virtualenv
+      uses: actions/cache/save@v5
+      with:
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
