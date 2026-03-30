@@ -18,9 +18,7 @@ from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
-    import_executors,
-    import_samplers,
-    import_run_groups,
+    parse_all_run_groups,
     import_saved_files_list,
 )
 
@@ -34,19 +32,7 @@ class Supervisor:
 
     Attributes:
         args (argparse.Namespace):  Namespace containing the configuration parameters
-        executor (Executor): Executor for this run
-        sampler (Sampler): Sampler for this run
-        base_run_dir (str): Path where runner saves result files
 
-    Methods:
-        start: Starts the simulation process. Main function of supervisor.
-        create_base_run_dir: Creates base directory for simulation run results.
-        all_processes_done: Returns true when all simulations are done.
-        wait_all_processes: Waits in while loop until all simulations are done.
-        create_dataset: Creates pandas DataFrame that includes all the
-            "enchanted_datapoints.csv" files of running directories.
-        create_hdf5: Creates hdf5 structured file that includes numeric data of
-            enchanted_dataset and metadata
     """
 
     def __init__(self, args, config_path=None):
@@ -59,20 +45,8 @@ class Supervisor:
                 configuration is fetched from.
         """
         self.args = args
-        executors = import_executors(args)
-        samplers = import_samplers(args)
-        group_configs = import_run_groups(args)
 
-        self.groups: list[RunGroup] = []
-        for group in group_configs:
-            run_group = RunGroup(
-                executors[group["executor"]],
-                samplers[group["sampler"]],
-                args.runners[group["runner"]],
-            )
-            run_group.executor.runner_config = run_group.runner
-            self.groups.append(run_group)
-
+        self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
@@ -107,15 +81,15 @@ class Supervisor:
         if self.run_mode in ("resume", "extend"):
             self.previous_run_data = RunData.load(self.previous_run_file)
             if self.previous_run_data:
-                if len(self.groups) > self.previous_run_data.depth:
+                if len(self.nested_groups) > self.previous_run_data.depth:
                     # Extending should generate budget worth of new samples so add
                     # already submitted amount to the current budget
                     if self.run_mode == "extend":
-                        self.groups[
+                        self.nested_groups[
                             self.previous_run_data.depth
                         ].sampler.budget += self.previous_run_data.submitted_samples
 
-                    self.groups[self.previous_run_data.depth].sampler.skip(
+                    self.nested_groups[self.previous_run_data.depth].sampler.skip(
                         self.previous_run_data.batch_number + 1
                     )
             else:
@@ -145,7 +119,7 @@ class Supervisor:
 
         last_complete_dataset = pd.DataFrame()
 
-        for depth, group in enumerate(self.groups):
+        for depth, group in enumerate(self.nested_groups):
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
@@ -175,23 +149,31 @@ class Supervisor:
                 else:
                     expanded = samples
 
-                # Create run directories named by depth, batch and sample numbers
-                run_dirs = [
-                    os.path.join(real_run_dir, "data", f"d{depth}_b{batch_number}_r{i}")
-                    for i in range(len(expanded))
-                ]
+                # Run for each sequential runner/executor combination
+                df_batch = pd.DataFrame()
+                for i, (executor, runner) in enumerate(
+                    zip(group.executors, group.runners)
+                ):
+                    run_dirs = [
+                        os.path.join(
+                            real_run_dir, "data", f"d{depth}_b{batch_number}_s{j}_r{i}"
+                        )
+                        for j in range(len(expanded))
+                    ]
+                    executor.execute(list(zip(run_dirs, expanded)), runner)
 
-                group.executor.execute(list(zip(run_dirs, expanded)))
+                    # Wait processes of current batch to complete
+                    self.wait_batch_dirs(run_dirs)
 
-                # Wait processes of current batch to complete
-                self.wait_batch_dirs(run_dirs)
+                    # Then the files in this batch should be saved into summary files
+                    df_batch = self.load_batch_to_df(run_dirs)
+                    expanded = df_batch.to_dict(orient="records")
 
-                # Then the files in this batch should be saved into summary files
-                # If nesting, this happens only in the last depth
-                df_batch = self.load_batch_to_df(run_dirs)
                 batch_dataset = pd.concat([batch_dataset, df_batch])
-                if depth == len(self.groups) - 1:
-                    self.write_summary(df_batch)
+                if batch_number == 0:
+                    self.write_summary(df_batch, write_mode="w")
+                else:
+                    self.write_summary(df_batch, write_mode="a")
                 group.sampler.register_future(batch_dataset)
 
                 run_data = RunData(
@@ -212,7 +194,7 @@ class Supervisor:
             last_complete_dataset = batch_dataset.copy()
 
             # Create a summary file with last_complete_dataset for nesting
-            if depth < len(self.groups) - 1:
+            if depth < len(self.nested_groups) - 1:
                 self.write_summary(
                     dataset=last_complete_dataset,
                     filename="last_complete_enchanted_dataset",
@@ -233,8 +215,9 @@ class Supervisor:
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
-        for group in self.groups:
-            group.executor.clean()
+        for group in self.nested_groups:
+            for executor in group.executors:
+                executor.clean()
 
     def write_summary(
         self,
@@ -256,7 +239,7 @@ class Supervisor:
         """
 
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
-        write_header = not os.path.exists(csv_path)
+        write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
 
     def finalize_summary(self, filename: str = "enchanted_dataset"):
@@ -480,7 +463,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
 
-    def load_batch_to_df(self, run_dirs: list[str]):
+    def load_batch_to_df(self, run_dirs: list[str]) -> pd.DataFrame:
         """
         Creates pd.DataFrame combining enchanted_datapoint.csv files in given path list folders
 
@@ -553,15 +536,23 @@ class Supervisor:
             # Metadata
             meta_group = f.create_group("metadata")
             run_groups = meta_group.create_group("run_groups")
-            for i, run_group in enumerate(self.groups):
+            for i, run_group in enumerate(self.nested_groups):
                 meta_run_group = run_groups.create_group(str(i))
-                meta_run_group.attrs["executor"] = str(
-                    run_group.executor.__class__.__name__
-                )
+
                 meta_run_group.attrs["sampler"] = str(
                     run_group.sampler.__class__.__name__
                 )
-                meta_run_group.attrs["runner"] = str(run_group.runner.get("type"))
+                meta_run_group.attrs["executors"] = []
+                meta_run_group.attrs["runners"] = []
+                for j in range(len(run_group.executors)):
+                    np.append(
+                        meta_run_group.attrs["executors"],
+                        str(run_group.executors[j].__class__.__name__),
+                    )
+                    np.append(
+                        meta_run_group.attrs["runners"],
+                        str(run_group.runners[j].get("type")),
+                    )
 
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
@@ -579,7 +570,7 @@ class Supervisor:
         else:
             return
 
-        if base_dir is None:
+        if not base_dir:
             base_dir = self.base_run_dir
 
         for root, dirs, files in os.walk(base_dir, topdown=False):

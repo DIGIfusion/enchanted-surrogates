@@ -40,7 +40,7 @@ class JoblibExecutor(Executor):
 
     """
 
-    def execute(self, input: list[(str, dict)]):
+    def execute(self, input: list[(str, dict)], runner_config):
         """
         Execute simulation tasks in parallel using joblib.
 
@@ -49,7 +49,7 @@ class JoblibExecutor(Executor):
         """
         joblib.Parallel(n_jobs=-1, verbose=10)(
             joblib.delayed(run_simulation_task)(
-                self.runner_config, sample_run_dir, params=sample
+                runner_config, sample_run_dir, params=sample
             )
             for sample_run_dir, sample in input
         )

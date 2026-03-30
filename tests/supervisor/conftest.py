@@ -53,7 +53,7 @@ def fake_executor():
         executor = MagicMock()
         executor.__name__ = "MockExecutor"
 
-        def execute(input):
+        def execute(input, runner_config):
             for run_dir, sample in input:
                 create_fake_output_csv(run_dir, sample)
 

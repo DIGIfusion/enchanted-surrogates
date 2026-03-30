@@ -19,9 +19,9 @@ def test_execute(mock_run_simulation_task, mock_parallel, mock_delayed):
     parallel_instance.side_effect = lambda fn: list(fn)
     mock_delayed.side_effect = lambda fn: lambda *args, **kwargs: fn(*args, **kwargs)
 
-    executor = JoblibExecutor(runner_config={"type": "mock_runner"})
+    executor = JoblibExecutor()
 
-    executor.execute(executor_input)
+    executor.execute(executor_input, runner_config={"type": "mock_runner"})
 
     # Executor should not directly call get next samples
     assert mock_run_simulation_task.call_count == 2

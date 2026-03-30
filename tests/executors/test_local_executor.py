@@ -12,9 +12,9 @@ def test_execute(mock_run_simulation_task):
     # Fixed return values for the mocked/patched functions
     mock_run_simulation_task.return_value = "EXECUTE"
 
-    executor = LocalExecutor(runner_config={"type": "mock"})
+    executor = LocalExecutor()
 
-    executor.execute(executor_input)
+    executor.execute(executor_input, runner_config={"type": "mock"})
 
     # Executor should not directly call get next samples
     assert mock_run_simulation_task.call_count == 2

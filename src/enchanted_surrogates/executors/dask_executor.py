@@ -128,8 +128,7 @@ class DaskExecutor(Executor):
         Initializes the DaskExecutor.
 
         Args:
-            sampler_config (dict): Arguments for the sampler, including its type.
-            runner_config (dict): Arguments for the runner.
+            base_run_dir (str): Base directory for storing run outputs.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments, including:
                 - type (str): Type of executor.
@@ -483,7 +482,7 @@ class DaskExecutor(Executor):
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
-    def execute(self, input: list[(str, dict)]):
+    def execute(self, input: list[(str, dict)], runner_config):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
 
@@ -500,7 +499,7 @@ class DaskExecutor(Executor):
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(input)
+        futures = self.submit_batch(input, runner_config)
 
         dfs = []
         num_success = 0
@@ -534,6 +533,8 @@ class DaskExecutor(Executor):
     def submit_batch(
         self,
         run_dir_sample_pairs,
+        runner_config,
+        base_run_dir=None,
         client=None,
     ):
         """
@@ -555,11 +556,11 @@ class DaskExecutor(Executor):
         futures = []
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
-                run_simulation_task, self.runner_config, run_dir, sample_params
+                run_simulation_task, runner_config, run_dir, sample_params
             )
             futures.append(new_future)
 
         log.info(
-            f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}"
+            f"{len(futures)} DASK FUTURES SUBMITTED for runner {runner_config['type']}"
         )
         return futures
