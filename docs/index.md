@@ -50,11 +50,13 @@ install any plugins you want to use, by cloning their repositories and
 installing them with pip as well. See the [Plugins](./plugins/index.md) section
 for more details.
 
+Please note that some samplers require optional dependencies.
+Check the sampler's documentation to see if any optional dependencies are required to run. 
 Optional dependencies can be installed by listing them inside square brackets,
 comma-separated without spaces, e.g.:
 
 ```bash
-pip install -e enchanted-surrogates[bo,GPy]
+pip install -e enchanted-surrogates[bo,GPy,activelearning]
 ```
 
 Note: in some environments, the command python may still point to system-wide
@@ -124,6 +126,21 @@ base_run_dir/
 └── runs.h5
 ```
 
+#### summary files
+
+The summary files are structured as such: 
+
+|   | param1 | param2 | paramN | output | success | run_dir                           |
+|---|--------|--------|--------|--------|---------|-----------------------------------|
+| 0 | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_b0_r0_s0 |
+| 1 | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_b0_r1_s0 |
+| N | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_bn_rn_s0 |
+
+
+All user defined sampled parameters are included for each sample.
+The runner output is defined as output. There is also a success field which is a boolean.
+Run directories are also included for clarity. 
+
 #### data
 
 Contains the enchanted_datapoint.csv files and runner outputs.
@@ -180,11 +197,11 @@ details.
 - `develop/{feature}` or `develop/{user}` for changes.
 - `bug/{descriptive_name}` for bug fixes.
 - Enable linting pre-commit hook (stops the commit if violated linting rules) by
-  running:
+  running (Can be overridden with `git commit --no-verify` if needed):
 
       git config core.hooksPath .githooks
 
-  (Can be overridden with `git commit --no-verify` if needed)
+
 
 - **One feature or fix per pull request**. This ensures that changes are
   isolated and easier to review. Be respectful of your fellow developers and
@@ -196,6 +213,8 @@ details.
 - The configs folder in the source is to be kept for example config files and
   example cases that would be benefical to the wider community. Plugin-specific
   config files should be kept in the plugin repository.
+- If any samplers, executors, or runners that are added require optional dependencies,
+  please mark that clearly in the docstring.
 
 ### Coding Style Standards
 
