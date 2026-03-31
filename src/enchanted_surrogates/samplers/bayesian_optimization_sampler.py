@@ -319,11 +319,11 @@ class BayesianOptimizationSampler(Sampler):
         if changed:
             self.refresh_result_dictionaries()
 
-    def ingest_future(self, future: Any):
+    def ingest_future(self, future: any):
         """
-        Convert one completed result payload into internal arrays.
+        convert one completed result payload into internal arrays.
 
-        This method accepts several lightweight shapes so the orchestration
+        this method accepts several lightweight shapes so the orchestration
         layer can pass whatever it already has available.
         """
         if isinstance(future, (list, tuple)):
@@ -332,10 +332,10 @@ class BayesianOptimizationSampler(Sampler):
             return
 
         if hasattr(future, "to_dict") and not isinstance(future, dict):
-            # Works for pandas Series/DataFrame-like rows.
+            # works for pandas series/dataframe-like rows.
             try:
                 future = future.to_dict()
-            except Exception:
+            except exception:
                 future = future
 
         if isinstance(future, dict):
@@ -353,8 +353,8 @@ class BayesianOptimizationSampler(Sampler):
                 self.append_observation(params, y_val, failure=failure)
                 return
 
-        raise TypeError(
-            "Unsupported future payload. Expected a mapping with params/y, "
+        raise typeerror(
+            "unsupported future payload. expected a mapping with params/y, "
             "parameter columns plus observation fields, or an iterable of those."
         )
 
@@ -400,12 +400,24 @@ class BayesianOptimizationSampler(Sampler):
         self.X_obs = np.vstack([self.X_obs, x_arr.reshape(1, -1)])
         self.y_obs = np.append(self.y_obs, y_scalar)
 
+    def _to_scalar(self, value: Any) -> float:
+        if isinstance(value, Mapping):
+            if "value" in value:
+                return self._to_scalar(value["value"])
+            if len(value) == 1:
+                return self._to_scalar(next(iter(value.values())))
+            raise TypeError(f"Cannot convert nested mapping to scalar: {value!r}")
+        return float(np.asarray(value, dtype=float).squeeze())
+
     def append_observation(self, params: Mapping[str, Any], y: Any, failure: Any = 0):
         """Append a single observation to the in-memory dataset."""
-        x = np.array([float(params[p]) for p in self.parameters], dtype=float).reshape(
-            1, -1
-        )
-        y_scalar = float(np.asarray(y, dtype=float).squeeze())
+        if "params" in params and isinstance(params["params"], Mapping):
+            params = params["params"]
+
+        x = np.array(
+            [self._to_scalar(params[p]) for p in self.parameters], dtype=float
+        ).reshape(1, -1)
+        y_scalar = self._to_scalar(y)
 
         if failure not in (0, 0.0, False, None):
             self.X_failed = np.vstack([self.X_failed, x])
@@ -433,7 +445,35 @@ class BayesianOptimizationSampler(Sampler):
         if values:
             return float(np.sum(values))
         if "output" in payload:
-            return float(np.asarray(payload["output"], dtype=float).squeeze())
+            output = payload["output"]
+
+            # Handle scalar output
+            if not isinstance(output, Mapping):
+                return float(np.asarray(output, dtype=float).squeeze())
+
+            # output is a mapping
+            if len(self.observations) == 1 and self.observations[0] in output:
+                return float(
+                    np.asarray(output[self.observations[0]], dtype=float).squeeze()
+                )
+
+            nested_values = []
+            for key in self.observations:
+                if key in output:
+                    nested_values.append(np.asarray(output[key], dtype=float))
+
+            if nested_values:
+                return float(np.sum(nested_values))
+
+            numeric_leaves = []
+            for value in output.values():
+                try:
+                    numeric_leaves.append(np.asarray(value, dtype=float))
+                except Exception:
+                    continue
+
+            if numeric_leaves:
+                return float(np.sum(numeric_leaves))
         raise KeyError(
             "Could not determine target value from payload. Provide an `y` key "
             "or one or more observation fields named in `observations`."
