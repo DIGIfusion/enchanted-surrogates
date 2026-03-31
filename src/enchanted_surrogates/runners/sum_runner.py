@@ -5,8 +5,16 @@ from enchanted_surrogates.utils.logger import get_logger
 log = get_logger(__name__)
 
 class SumRunner(Runner):
+    """
+    TODO
+    """
+
     def __init__(self, params_to_sum: list[str], **kwargs):
+        """
+        TODO docstring
+        """
         self.params_to_sum = params_to_sum
+        self.fail_if = kwargs.get("fail_if", None)
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         """
@@ -30,11 +38,15 @@ class SumRunner(Runner):
             out_file.write(str(params))
 
         output: float = 0.0
+        success = True
         for key, value in params.items():
             if key in self.params_to_sum:
                 output += value
 
+        if self.fail_if and abs(output - self.fail_if) < 0.25:
+            success = False
+
         return {
             "output": output,
-            "success": True
+            "success": success
         }
