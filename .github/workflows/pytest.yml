@@ -39,7 +39,7 @@ jobs:
         source .venv/bin/activate
         pip install coverage
         pip install torch --index-url https://download.pytorch.org/whl/cpu
-        pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
+        pip install -e ".[activelearning, bo]" # Editable install, required for importlib to do precise imports
         git submodule init
         git submodule update
 
