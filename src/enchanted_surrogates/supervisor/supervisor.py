@@ -160,7 +160,7 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(zip(run_dirs, expanded), runner, group.sampler)
+                    executor.execute(list(zip(run_dirs, expanded)), runner)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)

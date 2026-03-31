@@ -16,16 +16,16 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
-
     - name: Restore cached virtualenv
       uses: actions/cache/restore@v5
       with:
-        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
         path: .venv
 
 
@@ -35,9 +35,11 @@ jobs:
           python -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -e ".[activelearning]" # Editable install, required for importlib to do precise imports
-          pip install coverage
         fi
+        source .venv/bin/activate
+        pip install coverage
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[activelearning, BOS]" # Editable install, required for importlib to do precise imports
         git submodule init
         git submodule update
 
@@ -53,11 +55,4 @@ jobs:
         include-hidden-files: true
         path: |
           .coverage.unit
-
-
-    - name: Saved cached virtualenv
-      uses: actions/cache/save@v5
-      with:
-        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
-        path: .venv
 

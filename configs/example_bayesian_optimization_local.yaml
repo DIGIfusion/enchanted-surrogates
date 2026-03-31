@@ -1,0 +1,34 @@
+logging: DEBUG
+
+samplers:
+  s1:
+    type: BayesianOptimizationSampler
+    budget: 50
+    acquisition_batch_size: 1
+    bounds: [[0.001, 1.0]]
+    parameters: ['x']
+    base_run_dir: data_dir/bayesian/data
+    dry_run: False
+    parser: ExampleBayesianOptimizationParser
+    verbose: True
+    initial_samples: 3
+    acquisition_function: LEI
+    async_samp: True
+    random_fraction: 0.5
+    plot_GPR: True
+    plot_file: True
+
+runners:
+  r1:
+    type: ExampleBayesianOptimizationRunner
+
+executors:
+  e1:
+    type: LocalExecutor
+
+supervisor:
+  base_run_dir: data_dir/bayesian
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1

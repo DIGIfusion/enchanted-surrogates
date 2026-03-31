@@ -72,3 +72,9 @@ GPy = [
 activelearning = [
     "scikit-activeml"
 ]
+
+BOS = [
+  "torch",
+  "botorch",
+  "gpytorch"
+]
