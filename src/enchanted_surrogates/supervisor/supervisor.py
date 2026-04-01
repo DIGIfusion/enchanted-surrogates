@@ -185,6 +185,11 @@ class Supervisor:
                 )
                 run_data.save(self.previous_run_file)
 
+                # Appends hdf5 file with new datapoints
+                # The final dataset is written later
+                if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
+                    self.hdf5_append_datapoints(run_dirs)
+
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
@@ -210,7 +215,7 @@ class Supervisor:
 
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
-            self.create_hdf5(last_complete_dataset)
+            self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
 
         # Clean unwanted files
         self.delete_unwanted_files(self.save_files_arg, real_run_dir)
@@ -480,22 +485,60 @@ class Supervisor:
             file = os.path.join(d, "enchanted_datapoint.csv")
             dfs.append(pd.read_csv(file))
         return pd.concat(dfs)
-
-    def create_hdf5(self, enchanted_dataset: pd.DataFrame):
+    
+    def hdf5_append_datapoints(self, new_dirs: list[str]):
         """
-        Creates hdf5 and saves storage file in base_run_dir with name runs.h5
-        Includes aggregated data from enchanted_dataset and run specific data
-        in structured format. Dataset has only numeric values, column headers
-        are saved separately in in same location. Metadata includes types for
-        sampler, executor and runner.
+        Appends new datapoints to the hdf5 storage file. This allows removing
+        the intermediate files and directories after each batch run.
 
-        Attributes:
-            - enchanted_dataset (pd.DataFrame): Dataframe containing all run results
+        Args:
+            new_dirs (list[str]): List of new datapoint directories created
+                during a single batch
 
         """
         h5_path = os.path.join(self.base_run_dir, "runs.h5")
 
-        with h5py.File(h5_path, "w") as f:
+        with h5py.File(h5_path, "a") as f:
+            runs_group = f.require_group("data/runs")
+
+            for dir in new_dirs:
+                csv_path = os.path.join(dir, "enchanted_datapoint.csv")
+
+                if not os.path.isfile(csv_path):
+                    continue
+
+                df = pd.read_csv(csv_path)
+
+                # Get just the final path component of dir 
+                dir_name = os.path.basename(dir)
+
+                run_group = runs_group.create_group(dir_name)
+
+                # Select only numeric values
+                numeric_df = df.select_dtypes(include=[np.number])
+
+                run_group.create_dataset("values", data=numeric_df.to_numpy())
+
+                run_group.create_dataset(
+                    "columns",
+                    data=np.array(numeric_df.columns, dtype=h5py.string_dtype("utf-8")),
+                )
+
+    def hdf5_write_aggregate_dataset_and_metadata(self, enchanted_dataset: pd.DataFrame):
+        """
+        Writes the completed dataset and run metadata to the hdf5 storage file.
+        Dataset has only numeric values, column headers are saved separately 
+        in the same location. Metadata includes types for sampler, executor and
+        runner.
+
+        Args:
+            enchanted_dataset (pd.DataFrame): Dataframe containing all run
+                results
+
+        """
+        h5_path = os.path.join(self.base_run_dir, "runs.h5")
+
+        with h5py.File(h5_path, "a") as f:
             # Aggregated dataset
             agg_group = f.create_group("data/aggregated")
 
@@ -512,29 +555,6 @@ class Supervisor:
                 ),
             )
 
-            # Run directory datasets
-            runs_group = f.create_group("data/runs")
-
-            for name in os.listdir(self.data_dir):
-                folder_path = os.path.join(self.data_dir, name)
-                csv_path = os.path.join(folder_path, "enchanted_datapoint.csv")
-
-                if not os.path.isfile(csv_path):
-                    continue
-
-                df = pd.read_csv(csv_path)
-                run_group = runs_group.create_group(name)
-
-                # Select only numeric values
-                numeric_df = df.select_dtypes(include=[np.number])
-
-                run_group.create_dataset("values", data=numeric_df.to_numpy())
-
-                run_group.create_dataset(
-                    "columns",
-                    data=np.array(numeric_df.columns, dtype=h5py.string_dtype("utf-8")),
-                )
-
             # Metadata
             meta_group = f.create_group("metadata")
             run_groups = meta_group.create_group("run_groups")
@@ -544,6 +564,7 @@ class Supervisor:
                 meta_run_group.attrs["sampler"] = str(
                     run_group.sampler.__class__.__name__
                 )
+
                 meta_run_group.attrs["executors"] = []
                 meta_run_group.attrs["runners"] = []
                 for j in range(len(run_group.executors)):
@@ -555,6 +576,7 @@ class Supervisor:
                         meta_run_group.attrs["runners"],
                         str(run_group.runners[j].get("type")),
                     )
+
 
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
