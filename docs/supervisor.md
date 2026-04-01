@@ -68,32 +68,34 @@ See [example_nested.yaml](../configs/example_nested.yaml).
 
 ### Multi-runner sequential execution
 
-Alongside nested executing, the supervisor also supports sequential sampling.
-In sequential sampling, the sampler's batches are called once but the samples
-go through multiple runners which pass information to each other. This is 
-useful for active learning use cases. Sequential sampling and nested sampling
-can be used together in the same configuration. 
+Alongside nested executing, the supervisor also supports sequential sampling. In
+sequential sampling, the sampler's batches are called once but the samples go
+through multiple runners which pass information to each other. This is useful
+for active learning use cases. Sequential sampling and nested sampling can be
+used together in the same configuration.
 
 To utilize sequential sampling in configurations, multiple runners need to be
-defined in the config file as a list. The same applies to executors.
-The amount of executors and runners defined in run_order must be equal. If this is not met, an exception
-is thrown. Examples of sequential sampling are provided within the configs directory
-under [example_sequential.yaml](../configs/example.sequential.yaml). 
+defined in the config file as a list. The same applies to executors. The amount
+of executors and runners defined in run_order must be equal. If this is not met,
+an exception is thrown. Examples of sequential sampling are provided within the
+configs directory under
+[example_sequential.yaml](../configs/example.sequential.yaml).
 
 Example of how a run_order can be defined to perform sequential sampling:
+
 ```yaml
 supervisor:
   base_run_dir: "data_dir/sequential_local"
   run_order:
-  - sampler: code1_sampler
-    executor:
-      - code1_executor
-      - code2_executor
-      - code3_executor
-    runner:
-      - code1_runner
-      - code2_runner
-      - code3_runner
+    - sampler: code1_sampler
+      executor:
+        - code1_executor
+        - code2_executor
+        - code3_executor
+      runner:
+        - code1_runner
+        - code2_runner
+        - code3_runner
 ```
 
 ### Resuming/extending previous runs
@@ -191,7 +193,7 @@ It is possible to delete unnecessary files from base_run_dir and keep only
 wanted files. By default all is saved. Option custom saves only described files.
 None does not save any files.
 
-**Note: `enchanted_dataset.csv` and `runs.h5` are saved by default.**
+**Note: `enchanted_dataset.csv`, `runs.h5` and `logs` are always saved.**
 
 ```yaml
 supervisor:
