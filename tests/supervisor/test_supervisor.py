@@ -38,10 +38,12 @@ def test_create_hdf5_storage_format(tmp_path, patch_supervisor_imports):
     supervisor = Supervisor(make_args(tmp_path))
 
     data_path = tmp_path / "data"
-    create_run_folders(data_path, 3)
+    run_folders = create_run_folders(data_path, 3)
 
     df = supervisor.create_dataset()
-    supervisor.create_hdf5(df)
+
+    supervisor.hdf5_append_datapoints(run_folders)
+    supervisor.hdf5_write_aggregate_dataset_and_metadata(df)
 
     # Check if hdf5 exists
     output_file = tmp_path / "runs.h5"
@@ -190,14 +192,19 @@ def make_args(tmp_path, summary="csv", local_storage=None):
     )
 
 
-def create_run_folders(tmp_path, amount):
+def create_run_folders(tmp_path, amount) -> list[str]:
     """
     Helper function to create run folders
     """
+    folders = []
+
     for i in range(amount):
         d = tmp_path / f"d0_b{i}_s0_r0"
+        folders.append(d)
         d.mkdir()
         pd.DataFrame([{"x": i}]).to_csv(d / "enchanted_datapoint.csv", index=False)
+
+    return folders
 
 
 def create_dummy_files(path):
