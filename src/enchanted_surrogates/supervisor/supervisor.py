@@ -512,7 +512,7 @@ class Supervisor:
                 # Get just the final path component of dir 
                 dir_name = os.path.basename(dir)
 
-                run_group = runs_group.create_group(dir_name)
+                run_group = runs_group.require_group(dir_name)
 
                 # Select only numeric values
                 numeric_df = df.select_dtypes(include=[np.number])
@@ -540,7 +540,11 @@ class Supervisor:
 
         with h5py.File(h5_path, "a") as f:
             # Aggregated dataset
-            agg_group = f.create_group("data/aggregated")
+            # Remove old dataset if continuing a previous run
+            if f.get("data/aggregated"):
+                del f["data/aggregated"]
+
+            agg_group = f.require_group("data/aggregated")
 
             agg_group.create_dataset(
                 "values",
@@ -556,6 +560,10 @@ class Supervisor:
             )
 
             # Metadata
+            # Remove old metadata if continuing a previous run
+            if f.get("metadata"):
+                del f["metadata"]
+
             meta_group = f.create_group("metadata")
             run_groups = meta_group.create_group("run_groups")
             for i, run_group in enumerate(self.nested_groups):
