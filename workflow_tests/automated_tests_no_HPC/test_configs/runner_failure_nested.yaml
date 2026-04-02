@@ -1,3 +1,6 @@
+# Nested config that creates 4+12 samples.
+# Runner fails if the sum of samples is 2.
+# So 1+4 failures are expected to be seen.
 logging: DEBUG
 
 executors:
