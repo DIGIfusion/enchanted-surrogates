@@ -141,13 +141,7 @@ class Supervisor:
                 samples = group.sampler.get_next_samples()
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
-                expanded = []
-                if not last_complete_dataset.empty:
-                    for parent in last_complete_dataset.to_dict(orient="records"):
-                        for sample in samples:
-                            expanded.append({**parent, **sample})
-                else:
-                    expanded = samples
+                expanded = self.get_cartesian_product(samples, last_complete_dataset)
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
@@ -165,10 +159,11 @@ class Supervisor:
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
-                    # Then the files in this batch should be saved into summary files
+                    # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
 
+                # Save batch results into summary files
                 batch_dataset = pd.concat([batch_dataset, df_batch])
                 if batch_number == 0:
                     self.write_summary(df_batch, write_mode="w")
@@ -280,6 +275,29 @@ class Supervisor:
             return pd.read_csv(csv_path)
 
         return pd.DataFrame()
+    
+    def get_cartesian_product(self, samples: list[dict], last_dataset: pd.DataFrame) -> list[dict]:
+        """
+        Creates cartesian product of the new samples and the previous dataset.
+        Used for nested sampling.
+
+        Arguments:
+            samples (list[dict]): Sample batch from get_next_samples
+            last_dataset (pd.DataFrame): The complete dataset (summary file) from
+                previous nesting level.
+
+        Returns:
+            out (list[dict]): Cartesian product samples x last_dataset. If last_dataset is empty,
+                only the unaltered samples are returned.
+        """
+        if last_dataset.empty:
+            return samples
+
+        expanded = []
+        for parent in last_dataset.to_dict(orient="records"):
+            for sample in samples:
+                expanded.append({**parent, **sample})
+        return expanded
 
     def continue_with_base_run_dir(self, config_path):
         """
