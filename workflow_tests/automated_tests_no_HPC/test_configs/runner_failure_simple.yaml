@@ -1,6 +1,6 @@
-# Sequential config that creates 4 samples.
+# Simple config that creates 4 samples.
 # Runner fails if the sum of samples is 2.
-# So 1+2 failures are expected to be seen.
+# So 1 failure is expected to be seen.
 logging: DEBUG
 
 executors:
@@ -16,14 +16,10 @@ runners:
     type: SumRunner
     params_to_sum: [c1]
     fail_if: 2
-  r2:
-    type: SumRunner
-    params_to_sum: [c1, output]
-    fail_if: 2
 
 supervisor:
   base_run_dir: tmp_path
   run_order:
-  - executor: [e1, e1]
+  - executor: e1
     sampler: s1
-    runner: [r1, r2]
+    runner: [r1]

@@ -16,7 +16,8 @@ def get_all_runner_names(groups: list[RunGroup]) -> list[str]:
 
 @pytest.mark.parametrize("data", [
     {"config": "test_configs/runner_failure_nested.yaml", "sample_count": 4*3, "failures": [1*3, 4]},
-    {"config": "test_configs/runner_failure_sequential.yaml", "sample_count": 4, "failures": [1, 2]}
+    {"config": "test_configs/runner_failure_sequential.yaml", "sample_count": 4, "failures": [1, 2]},
+    {"config": "test_configs/runner_failure_simple.yaml", "sample_count": 4, "failures": [1]}
 ])
 def test_runner_failures_are_seen_in_summary(tmp_path, run_config, data):
     """
