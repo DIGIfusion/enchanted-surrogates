@@ -51,16 +51,13 @@ def run_simulation_task(
         else:
             log.debug(f"Conflicting key in runner output and input params: {key}")
 
-    # TODO uudelleenjärjestele seuraavia rivejä että run dir vain suoraa asetetaaan viimeiseksi
-    # TODO miten saadaan luotua runner-kohtaiset output-sarakkeet? Paras varmaan käyttää runnerien nimiä
-    #   mutta näitä ei tallennetta. Ainahan sen voisi lisätä runner dictiin vaikka jollain __name avaimella
-    runner_output["run_dir"] = run_dir
+    # Copy runner-specific success status
     runner_output[f"success_{runner_name}"] = runner_output["success"]
-    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
-    
-    # Reorder columns so run_dir is always the last
-    rd_column = df_point.pop("run_dir")
-    df_point["run_dir"] = rd_column
 
+    # Add correct run_dir always as the right-most column in csv
+    runner_output.pop("run_dir", None)
+    runner_output["run_dir"] = run_dir
+
+    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
     df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
     return runner_output
