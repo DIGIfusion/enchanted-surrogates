@@ -19,7 +19,9 @@ def run_simulation_task(
     Raises:
     """
     os.makedirs(run_dir, exist_ok=True)
+
     runner_type = runner_config["type"]
+    runner_name = runner_config["__runner_name"]
     runner = import_runner(runner_type=runner_type, runner_config=runner_config)
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
@@ -49,7 +51,11 @@ def run_simulation_task(
         else:
             log.debug(f"Conflicting key in runner output and input params: {key}")
 
-    runner_output['run_dir'] = run_dir
+    # TODO uudelleenjärjestele seuraavia rivejä että run dir vain suoraa asetetaaan viimeiseksi
+    # TODO miten saadaan luotua runner-kohtaiset output-sarakkeet? Paras varmaan käyttää runnerien nimiä
+    #   mutta näitä ei tallennetta. Ainahan sen voisi lisätä runner dictiin vaikka jollain __name avaimella
+    runner_output["run_dir"] = run_dir
+    runner_output[f"success_{runner_name}"] = runner_output["success"]
     df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
     
     # Reorder columns so run_dir is always the last
