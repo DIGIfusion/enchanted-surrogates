@@ -2,6 +2,7 @@ from pathlib import Path
 import ast
 import mkdocs_gen_files
 import sys
+import importlib
 
 SRC_PATH = Path("src/enchanted_surrogates")
 DOCS_PATH = Path("docs")
@@ -72,6 +73,9 @@ def is_already_documented(md_path, module_name):
     print(f"[DEBUG] Module '{module_name}' already documented in {md_path}: {already}")
     return already
 
+def prettify(name: str) -> str:
+    words = name.replace("_", " ").split()
+    return " ".join(w.upper() if w.isupper() else w.capitalize() for w in words)
 
 for path in SRC_PATH.rglob("*.py"):
     if path.name == "__init__.py":
@@ -95,15 +99,17 @@ for path in SRC_PATH.rglob("*.py"):
             continue
     except Exception as e:
         print(f"[DEBUG] Failed to parse {path}: {e}")
-        continue
+        continue  
 
-    # Attempt to import the module
     try:
-        __import__(module_name)
+        importlib.import_module(module_name)
         print(f"[DEBUG] Import OK: {module_name}")
-    except ImportError as e:
-        print(f"[DEBUG] Import FAILED: {module_name} -> {e}")
-        continue
+    except ModuleNotFoundError as e:
+        if e.name == module_name.split('.')[0]:
+            print(f"[DEBUG] Import FAILED: {module_name} -> {e}")
+            continue
+        else:
+            print(f"[DEBUG] Dependency missing (ignored): {module_name} -> {e}")
 
     # Find existing Markdown file
     existing_md = find_existing_md(module_parts, base_name)
@@ -126,8 +132,11 @@ for path in SRC_PATH.rglob("*.py"):
         full_doc_path.parent.mkdir(parents=True, exist_ok=True)
         print(f"[DEBUG] Creating new MD file: {full_doc_path}")
 
+        file_name = prettify(base_name)
+
         with mkdocs_gen_files.open(full_doc_path.relative_to(DOCS_PATH), "w") as f:
-            f.write(f"# {base_name}\n\n")
+            f.write(f"title: {file_name}\n")
+            f.write(f"---\n\n")
             f.write(f"::: {module_name}\n")
 
 print("\n[DEBUG] Documentation generation finished.")

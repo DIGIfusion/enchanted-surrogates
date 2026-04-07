@@ -1,10 +1,3 @@
----
-layout: default
-title: CASTOR
-nav_order: 6
-parent: Plugins
----
-
 # CASTOR plugin
 
 Mandatory fields in the configuration file for using the CASTOR plugin:

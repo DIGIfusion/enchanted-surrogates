@@ -1,0 +1,25 @@
+# configuration file using for import docstring documentation of plugins
+# if you want import new plugin add your plugin to the list 
+# in following structure
+# see documentation.md section plugin documentation for more information
+
+plugins:
+  - name: mishka_plugin
+    repo: DIGIfusion/enchanted-plugin-mishka
+    module: enchanted_plugin_mishka
+    src_path: src
+
+  - name: helena_plugin
+    repo: DIGIfusion/enchanted-plugin-helena
+    module: enchanted_plugin_helena
+    src_path: src
+
+  - name: castor_plugin
+    repo: DIGIfusion/enchanted-plugin-castor
+    module: enchanted_plugin_castor
+    src_path: src
+
+  - name: gene_plugin
+    repo: DIGIfusion/enchanted-plugin-gene
+    module: enchanted_plugin_gene.gene_parser
+    src_path: src

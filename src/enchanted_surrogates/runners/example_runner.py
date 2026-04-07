@@ -46,7 +46,7 @@ def is_iterable(x, *, treat_strings_as_iterable=True):
 class ExampleRunner(Runner):
     """
     
-    Initialization parameters (via kwargs)
+    ### Initialization parameters (via kwargs)
 
     - sleep_sec (number or two-element iterable, default 0.01): controls the pause
       after executing the example command. See Sleep sec behavior below.
@@ -57,7 +57,7 @@ class ExampleRunner(Runner):
       only after writing and reading the output file and after sleeping for the
       computed sleep duration. When fail_prob == 0 no synthetic failures are triggered.
 
-    Sleep sec behavior
+    ### Sleep sec behavior
 
     - Fixed sleep: pass a number (int, float, numpy scalar). The runner will sleep
       that many seconds after execution.
@@ -73,7 +73,7 @@ class ExampleRunner(Runner):
     - Usage: call sleep(self.get_sleep_sec()) so the numeric duration returned by
       get_sleep_sec is passed to time.sleep.
 
-    single_code_run behavior and return contract
+    ### single_code_run behavior and return contract
 
     - Writes to and reads from "<run_dir>/output.txt"; repeated runs append unless
       the file is cleared by the caller.
@@ -84,7 +84,7 @@ class ExampleRunner(Runner):
     - Returned dictionary values should be non-iterable base types (int, float, str, bool)
       so they integrate cleanly with dataset creation and surrogate tooling.
 
-    Errors and edge cases
+    ### Errors and edge cases
     - Raises ValueError for invalid random sleep bounds (not exactly two values or low > high).
 
     - Raises TypeError if sleep_sec is neither a number nor a two-element iterable.
@@ -102,9 +102,10 @@ class ExampleRunner(Runner):
         """
         Return a numeric sleep duration (seconds) derived from self.sleep_sec.
 
-        Behavior
+        ### Behavior
         - If self.sleep_sec is a numeric value (int, float, numpy scalar), return that
           value cast to float.
+
         - If self.sleep_sec is an iterable of exactly two numeric values, interpret them
           as lower and upper bounds and return a single sample drawn from the uniform
           distribution on [low, high].
@@ -112,21 +113,21 @@ class ExampleRunner(Runner):
         - If self.sleep_sec is neither a number nor a valid two-element iterable, raise
           TypeError.
 
-        Parameters
-        - self.sleep_sec: either a number (fixed sleep seconds) or a two-element iterable
-          [low, high] specifying uniform random bounds.
+        Parameters:
+            self.sleep_sec: either a number (fixed sleep seconds) or a two-element iterable
+            [low, high] specifying uniform random bounds.
 
-        Returns
-        - float: sleep duration in seconds suitable for time.sleep.
+        Returns:
+            float: sleep duration in seconds suitable for time.sleep.
 
-        Raises
-        - ValueError: when a two-element iterable is required but self.sleep_sec has a
-          different length or when low > high.
-        - TypeError: when self.sleep_sec is not a number and not an iterable of two numbers.
+        Raises:
+            ValueError: when a two-element iterable is required but self.sleep_sec has a
+            different length or when low > high.
+            TypeError: when self.sleep_sec is not a number and not an iterable of two numbers.
 
-        Examples
-        - self.sleep_sec = 0.2   -> returns 0.2
-        - self.sleep_sec = (0.1, 0.5) -> returns a float uniformly sampled between 0.1 and 0.5
+        Examples:
+            self.sleep_sec = 0.2   -> returns 0.2
+            self.sleep_sec = (0.1, 0.5) -> returns a float uniformly sampled between 0.1 and 0.5
         """
         if is_number(self.sleep_sec):
             return float(self.sleep_sec)
@@ -154,31 +155,37 @@ class ExampleRunner(Runner):
         return a simple results dictionary suitable for dataset creation and active
         learning workflows.
 
-        Behavior
+        ### Behavior
         - Writes the numeric result of a short Python one-liner to "<run_dir>/output.txt".
+
         - Sleeps for a duration determined by `self.get_sleep_sec()` after execution.
+
         - Reads the numeric output back from the file, converts it to float, and returns
           a dict containing a primary output key, a boolean "success" flag, and
           optional diagnostic strings.
 
-        Parameters
-        - run_dir (str): Directory path where "output.txt" will be created and read.
-        - params (dict, optional): Parameter mapping.
+        Parameters:
+            run_dir (str): Directory path where "output.txt" will be created and read.
+            params (dict, optional): Parameter mapping.
 
-        Returns
-        - dict: At minimum contains:
-          - "output" (float): primary numeric result.
-          - "success" (bool): True if the run produced an output.
+        Returns:
+            dict: At minimum contains:
+              "output" (float): primary numeric result.
+              "success" (bool): True if the run produced an output.
 
-        Notes and constraints
+        ### Notes and constraints
         - The method appends to "output.txt"; repeated runs will append unless the caller
           clears the file beforehand.
+
         - The method converts the full contents of "output.txt" to float; non-numeric or
           multi-line contents will raise an exception during conversion.
+
         - Returned values should be non-iterable base types (int, float, str, bool) so they
           are compatible with dataset and surrogate tooling.
+
         - If fail_prob > 0, a RuntimeError may be raised after successful execution with
           probability equal to fail_prob to simulate stochastic failures for testing.
+          
         """
 
         # Ensure run_dir exists

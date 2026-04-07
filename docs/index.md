@@ -4,12 +4,14 @@
 A framework for creating databases for surrogate models of complex physics codes.
 </span>
 
-[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){
-.md-button .md-button--primary }
+
+[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){.md-button .md-button--primary}
+
 
 ---
 
-!!! note This documentation is under development.
+!!! notes
+    This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data,
 which is often generated using complex and computationally expensive simulation
@@ -17,12 +19,12 @@ codes. The `enchanted-surrogates` package provides a flexible framework for
 creating databases for surrogate models of such complex physics codes. Database
 generation for a simulation consists of:
 
-1. Running the code
-   - Every code has it's own runtime entry points (e.g., I/O, actual execution)
-     and computational resource needs
-2. On a search space
-   - e.g., hypercube, or efficiently searching across a space with active
-     learning
+1. Running the code:
+    - Every code has it's own runtime entry points (e.g., I/O, actual execution)
+      and computational resource needs
+2. On a search space:
+    - e.g., hypercube, or efficiently searching across a space with active
+      learning
 
 i.e., step 1. is repeated many times to fill volume spanned by 2.
 
@@ -225,9 +227,12 @@ The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used.
 #### New samplers
 
 In addition to any sampler-specific features, new samplers should be tested to
-- return values within sampler bounds
-- return correct number of samples specified by the batch size
-- respect sampler budget
+
+ - return values within sampler bounds
+
+ - return correct number of samples specified by the batch size
+ 
+ - respect sampler budget
 
 
 #### Automated Testing at Pull Requests
