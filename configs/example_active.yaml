@@ -1,4 +1,4 @@
-logging: DEBUG
+logging: INFO
 
 executors:
   e1:

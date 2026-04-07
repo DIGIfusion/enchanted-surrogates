@@ -19,7 +19,7 @@ Arguments:
 ```
 n_workers: 2,
 threads_per_worker: 1,
-memory_limit: '12GB', 
+memory_limit: '12GB',
 processes: 1
 ```
 
@@ -30,14 +30,14 @@ Example configuration: /configs/example_dask_local.yaml
 Arguments for the SLURM workers.
 
 ```
-account: 'project_xxx', 
-queue: 'medium', 
-cores: 1, 
-memory: '12GB', 
-processes: 1, 
+account: 'project_xxx',
+queue: 'medium',
+cores: 1,
+memory: '12GB',
+processes: 1,
 walltime: '00:20:00',
-config_name: 'slurm', 
-interface: 'ib0', 
+config_name: 'slurm',
+interface: 'ib0',
 ```
 
 Example configuration: /configs/example_dask_slurm.yaml
@@ -47,12 +47,13 @@ Example configuration: /configs/example_dask_slurm.yaml
 Other arguments:
 
 ```
-job_script_prologue: ['module load your-modules-here',], 
+job_script_prologue: ['module load your-modules-here',],
 job_extra_directives: [
-    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out', 
-    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'], 
+    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
+    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
 """
+
 import os
 import subprocess
 import sys
@@ -122,15 +123,12 @@ run_simulation_task = simulation_task.run_simulation_task
 
 
 class DaskExecutor(Executor):
-
     def __init__(self, *args, **kwargs):
         """
         Initializes the DaskExecutor.
 
         Args:
             base_run_dir (str): Base directory for storing run outputs.
-            sampler_config (dict): Arguments for the sampler, including its type.
-            runner_config (dict): Arguments for the runner.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments, including:
                 - type (str): Type of executor.
@@ -311,7 +309,7 @@ class DaskExecutor(Executor):
         """
         log.info("Creating a cluster...")
         slurm_out_dir = LoggerConfig().log_dir
-        
+
         if self.SLURMcluster_config:
             self.expected_number_of_workers = self.scale_n_jobs * int(
                 self.SLURMcluster_config.get("processes", 1)
@@ -484,7 +482,7 @@ class DaskExecutor(Executor):
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)], runner_config):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
 
@@ -495,72 +493,49 @@ class DaskExecutor(Executor):
         Raises:
             FileExistsError: If the base run directory contains a file indicating a completed run.
         """
-        assert sampler
-
-        inputlist = list(input)
-        self.base_run_dir = os.path.dirname(inputlist[0][0])
 
         if not self.client:
             self.start_cluster()
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(inputlist)
+        futures = self.submit_batch(input, runner_config)
 
-        sampler_type = (
-            getattr(sampler, "type", None)
-            or getattr(sampler, "__class__", None).__name__
-        )
+        dfs = []
+        num_success = 0
+        total = len(futures)
 
-        if sampler_type in {"BayesianOptimizationSampler"}:
+        log.info(f"Collecting results from {total} futures...")
+
+        for i, future in enumerate(as_completed(futures), start=1):
             try:
-                wait(futures, timeout=self.timeout)
-            except Exception:
-                print("Timeout or error while waiting for BO batch; continuing.")
+                result = future.result()
+            except Exception as e:
+                log.error(f"[{i}/{total}] Future failed with exception:", e)
+                continue
 
-            if getattr(sampler, "plot_GPR_flag", False):
-                try:
-                    sampler.build_result_dictionary(self.base_run_dir)
-                    sampler.plot_frequency = 1
-                    sampler.train_surrogate()
-                except Exception as e:
-                    log.error("Error during sampler postprocessing:", e)
-        else:
-            dfs = []
-            num_success = 0
-            total = len(futures)
+            if isinstance(result, dict) and result.get("success") is True:
+                num_success += 1
 
-            log.info(f"Collecting results from {total} futures...")
+            try:
+                df = pd.DataFrame({k: [v] for k, v in result.items()})
+                dfs.append(df)
+            except Exception as e:
+                log.error("Failed to convert result to DataFrame:", e)
+                continue
 
-            for i, future in enumerate(as_completed(futures), start=1):
-                try:
-                    result = future.result()
-                except Exception as e:
-                    print(f"[{i}/{total}] Future failed with exception:", e)
-                    continue
-
-                if isinstance(result, dict) and result.get("success") is True:
-                    num_success += 1
-
-                try:
-                    df = pd.DataFrame({k: [v] for k, v in result.items()})
-                    dfs.append(df)
-                except Exception as e:
-                    log.error("Failed to convert result to DataFrame:", e)
-                    continue
-
-                log.info(
-                    f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
-                    f"[{num_success}/{i}] Futures Succeeded"
-                )
-                log.info("_" * 100)
+            log.info(
+                f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
+                f"[{num_success}/{i}] Futures Succeeded"
+            )
+            log.info("_" * 100)
 
     def submit_batch(
         self,
         run_dir_sample_pairs,
+        runner_config,
         base_run_dir=None,
         client=None,
-        include_fut_to_rundir=False,
     ):
         """
         Submits a batch of simulation tasks to the Dask cluster.
@@ -579,17 +554,13 @@ class DaskExecutor(Executor):
         assert client is not None
 
         futures = []
-        fut_to_rundir = {}
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
-                run_simulation_task, self.runner_config, run_dir, sample_params
+                run_simulation_task, runner_config, run_dir, sample_params
             )
             futures.append(new_future)
-            fut_to_rundir[new_future.key] = run_dir
 
         log.info(
-            f"{len(futures)} DASK FUTURES SUBMITTED for runner {self.runner_config['type']}"
+            f"{len(futures)} DASK FUTURES SUBMITTED for runner {runner_config['type']}"
         )
-        if include_fut_to_rundir:
-            return futures, fut_to_rundir
         return futures

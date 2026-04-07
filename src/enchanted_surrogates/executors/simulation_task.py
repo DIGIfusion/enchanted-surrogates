@@ -40,7 +40,15 @@ def run_simulation_task(
             "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
             + " VALUE PAIR 'success': bool"
         )
-    runner_output.update(params)
+    
+    # Update with conflict checking (in sequential runs 'output' and 'success' causes conflicts)
+    # Runner output has priority
+    for key, value in params.items():
+        if key not in runner_output:
+            runner_output[key] = value
+        else:
+            log.debug(f"Conflicting key in runner output and input params: {key}")
+
     runner_output['run_dir'] = run_dir
     df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
     

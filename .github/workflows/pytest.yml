@@ -12,25 +12,40 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.11"]
     steps:
     - uses: actions/checkout@v6
+
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Restore cached virtualenv
+      uses: actions/cache/restore@v5
+      with:
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+
+
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[activelearning]" # Editable install, required for importlib to do precise imports
+        if [ ! -d ".venv" ]; then
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+        fi
+        source .venv/bin/activate
         pip install coverage
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -e ".[activelearning, bo]" # Editable install, required for importlib to do precise imports
         git submodule init
         git submodule update
 
     - name: Running pytest
       run: |
+        source .venv/bin/activate
         coverage run --source=src --data-file=.coverage.unit -m pytest tests/ -v -s
 
     - name: Upload coverage artifacts
@@ -40,3 +55,4 @@ jobs:
         include-hidden-files: true
         path: |
           .coverage.unit
+

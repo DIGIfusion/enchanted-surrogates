@@ -15,6 +15,12 @@ samplers:
     budget: 9
     batch_size: 3
     kill_after: 2
+  random_final:
+    type: RandomSampler
+    bounds: [[-5, 5], [0, 1]]
+    parameters: ['c5', 'c6']
+    budget: 1
+    batch_size: 1
 runners:
   r1: 
     type: ExampleRunner
@@ -24,7 +30,10 @@ supervisor:
   run_order:
   - executor: local
     sampler: random
-    runner : r1
+    runner: r1
   - executor: local
     sampler: random_kill
-    runner : r1
+    runner: r1
+  - executor: local
+    sampler: random_final
+    runner: r1
