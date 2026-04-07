@@ -10,11 +10,7 @@ A framework for creating databases for surrogate models of complex physics codes
 
 ---
 
-<<<<<<< HEAD
-!!! note
-=======
 !!! notes
->>>>>>> develop
     This documentation is under development.
 
 Machine learning surrogate model development requires large amounts of data,
@@ -174,9 +170,6 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 
 ## Code structure
 
-<<<<<<< HEAD
-The Supervisor is the entry point. The Supervisor reads parameters and has Sampler, Executor and Runner. The Executor is chosen based on the system where the code is running. It sends samples for execution. A Runner is a code-specific module for running the code in question. Commonly paired with a code-specific parser. A Parser is a code-specific module for reading and writing files produced by the code. Code-specific Runners and Parsers are developed as plugins.
-=======
 The Supervisor is the entry point. The Supervisor reads parameters and has
 Sampler, Executor and Runner. The Executor is chosen based on the system where
 the code is running. It sends samples for execution. A Runner is a code-specific
@@ -184,7 +177,6 @@ module for running the code in question. Commonly paired with a code-specific
 parser. A Parser is a code-specific module for reading and writing files
 produced by the code. Code-specific Runners and Parsers are developed as
 plugins.
->>>>>>> develop
 
 The Supervisor initializes a Sampler and fetches samples from it. The Supervisor
 gives samples to the Executor. The Executor initializes some cluster or job
@@ -253,13 +245,9 @@ command:
 and will also be automatically run by Github Actions at certain pushes and pull
 requests. It is recommended to locally run the tests before making a commit.
 
-<<<<<<< HEAD
-If on HPC you must be using an interactive session with roughly 4 cores and at least 500MB of memory. 
-=======
 If on HPC you must be using an interactive session with roughly 4 cores and at
 least 500MB of memory.
 
->>>>>>> develop
 <!-- **NB:** submodules are necessary to run the tests.  -->
 
 #### Workflow tests
@@ -316,10 +304,6 @@ If you use this package in your research, please cite:
 }
 ```
 
-<<<<<<< HEAD
-
-=======
->>>>>>> develop
 ### Contributors
 
 **Feel free to contribute!**
@@ -327,21 +311,12 @@ If you use this package in your research, please cite:
 <a href = "https://github.com/Tanu-N-Prabhu/Python/graphs/contributors">
   <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/></a>
 
-<<<<<<< HEAD
-
-=======
->>>>>>> develop
 ### Acknowledgements
 
 The development of this framework has been support by multiple funding sources:
 
 - Research Council of Finland project numbers: 355460, 358941.
 
-<<<<<<< HEAD
-- EUROfusion Consortium, funded by the European Union via the Euratom Research and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through the Advanced Computing Hub framework of the E-TASC program as well as dedicated machine learning projects, such as the project focused on surrogating pedestal MHD stability models.
-  
-- Multiple CSC IT Center for Science projects have provided the necessary computing resources for the development and application of the framework. 
-=======
 - EUROfusion Consortium, funded by the European Union via the Euratom Research
   and Training Programme (Grant Agreement No 1010522200 - EUROfusion) through
   the Advanced Computing Hub framework of the E-TASC program as well as
@@ -350,4 +325,3 @@ The development of this framework has been support by multiple funding sources:
 
 - Multiple CSC IT Center for Science projects have provided the necessary
   computing resources for the development and application of the framework.
->>>>>>> develop
