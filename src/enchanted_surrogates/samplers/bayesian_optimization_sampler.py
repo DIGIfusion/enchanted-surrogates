@@ -31,9 +31,6 @@ torch.set_default_dtype(torch.float64)
 
 class BayesianOptimizationSampler(Sampler):
     """
-<<<<<<< HEAD
-    ## Configuration
-=======
 
     ## Bayesian optimization sampler using BoTorch.
 
@@ -47,7 +44,6 @@ class BayesianOptimizationSampler(Sampler):
     > This sampler requires the `bo` optional dependency to function.
     > See installation guide for more details.
 
->>>>>>> develop
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
 
