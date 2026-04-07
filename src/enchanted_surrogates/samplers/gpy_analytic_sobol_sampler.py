@@ -129,6 +129,7 @@ class GpyAnalyticSobolSampler(Sampler):
         
         # GPy model (global) and cached hyperparams / solver
         self.gp_model = None
+        self.noise_gp = None
         self.kernel_variance = None
         self.lengthscales = None
         self.noise_variance = None
@@ -540,7 +541,7 @@ class GpyAnalyticSobolSampler(Sampler):
             self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
 
             # scale noise after normalization
-            nv = se_mean.reshape(-1, 1)
+            nv = (se_mean**2).reshape(-1, 1)
             if self.do_normalize_y:
                 nv = (nv/self._y_std)**2
             self.gp_model.likelihood.variance[:] = nv
@@ -831,7 +832,9 @@ class GpyAnalyticSobolSampler(Sampler):
             kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed + self.batch_number)
             
             chosen_indices = []
-            for i, train_idx, _ in enumerate(kf.split(X_all)):
+            i = 0
+            for train_idx, _ in kf.split(X_all):
+                i+=1
                 print(f'CALCULATING ACQUISITON FUNCTION FOR FOLD {i+1}')
                 X_fold = X_all[train_idx]
                 Y_fold = Y_all[train_idx]
@@ -871,8 +874,15 @@ class GpyAnalyticSobolSampler(Sampler):
                 # chosen_indices.append(idx_f)
                 
                 scores = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, model=model_fold, y_pool = self.pool_y)
+                print("scores type:", type(scores))
+                print("scores shape:", np.asarray(scores).shape)
+                print("scores example:", scores[:10] if hasattr(scores, "__len__") else scores)
+                print("pool shape:", self.pool.shape)
+
                 idx_f = list(np.argsort(-scores)[:samples_per_fold[i]])
                 chosen_indices.extend(idx_f)
+                print('debug idx_f', idx_f)
+                print('debug chosen_indices', chosen_indices)
                 # chosen_points = self.pool[idxs]
                 # samples = [{key: float(v) for key, v in zip(self.parameters, row)} for row in chosen_points]
                 # self.pool = np.delete(self.pool, idxs, axis=0)
@@ -1034,6 +1044,74 @@ class GpyAnalyticSobolSampler(Sampler):
             C *= C_d
         C *= (self.kernel_variance ** 2)
         return C
+
+    def get_var_integral(self):
+        """
+        Compute the integral of the GP posterior variance over the domain.
+
+        Returns
+        -------
+        float
+            Integral of Var[f(x)] over the domain.
+        """
+
+        # ---------------------------
+        # Use the GP model's training inputs
+        # ---------------------------
+        X = self.gp_model.X
+        n = X.shape[0]
+
+        # ---------------------------
+        # Build K and its inverse/solver
+        # ---------------------------
+        # For GPRegression: Gaussian_noise.variance
+        # For GPHeteroscedasticRegression: likelihood.variance is per-point
+        noise = np.maximum(self.gp_model.likelihood.variance.flatten(), 1e-12)
+        K = self.gp_model.kern.K(X) + np.diag(noise)
+
+        if self._solve_K is not None:
+            def Kinv(v):
+                return self._solve_K(v)
+        else:
+            K_inv = np.linalg.pinv(K)
+            def Kinv(v):
+                return K_inv.dot(v)
+
+        # ---------------------------
+        # Compute C_ij = ∫ k(X_i, x) k(x, X_j) dx
+        # ---------------------------
+        C = self._integral_kk_over_domain(X)
+
+        # data term: Tr(K^{-1} C)
+        KinvC = np.column_stack([Kinv(C[:, j:j+1]) for j in range(n)])
+        data_term = np.trace(KinvC)
+
+        # ---------------------------
+        # Prior integral: ∫ k(x,x) dx
+        # For RBF: k(x,x) = variance, constant over domain.
+        # In unit space, volume = 1, so:
+        # prior_integral = variance * volume = variance
+        # ---------------------------
+        kern_var = float(self.gp_model.kern.variance.values)
+        prior_integral = kern_var  # domain is [0,1]^d in unit space
+
+        # ---------------------------
+        # Integrated posterior variance
+        # ---------------------------
+        var_integral = prior_integral - data_term
+
+        # Numerical safety
+        var_integral = max(var_integral, 0.0)
+
+        # ---------------------------
+        # Undo normalization if needed
+        # ---------------------------
+        if self.do_normalize_y:
+            var_integral *= (self._y_std ** 2)
+
+        return float(var_integral)
+
+
 
     def uq_analysis(self):
         print("\n\n\n ================================== \n\n\n")
@@ -1273,12 +1351,14 @@ class GpyAnalyticSobolSampler(Sampler):
             return regression_results
         
     def _write_batch_info_inner(self, batch_dir, name=''):
+        # var_integral = self.get_var_integral()
         uq_results = self.uq_analysis()
         regression_results = self.regression_test()
+        batch_info = {} #{'var_integral':var_integral}
         if regression_results:
-            batch_info = {**uq_results, **regression_results}
+            batch_info = {**batch_info, **uq_results, **regression_results}
         else:
-            batch_info = uq_results
+            batch_info = {**batch_info, **uq_results}
         df = pd.DataFrame({k: v for k, v in batch_info.items()})
         df.to_csv(os.path.join(batch_dir, name+'batch_info.csv'), index=False)
         all_batch_info_path = os.path.join(os.path.dirname(batch_dir), name+'batch_info.csv')
@@ -1479,6 +1559,11 @@ class GpyAnalyticSobolSampler(Sampler):
 
             score = self.integral_variance_reduction(X_pool, model=model, X_train=X_train)
 
+        elif mode == 'bald':
+            assert self.gp_model is not None
+            assert self.noise_gp is not None
+            score = self.bald_acquisition(X_pool)
+
         elif mode == "oracle":
             # TODO should use test set to get rmse if available
             print('ACQUISITION MODE: oracle')
@@ -1541,6 +1626,35 @@ class GpyAnalyticSobolSampler(Sampler):
             raise ValueError(f"Unknown acquisition mode: {mode}")
         
         return score
+
+    def bald_acquisition(self, X_pool):
+        '''
+        mutual information between GPR posterior and observation noise distribution. 
+        Before sampling the uncertainty at a pool point is GPR var + observation noise var
+        After sampling the uncertainty at the pool point shrinks to observation noise var
+        The difference is the information gain. This can be measured exactly useing shannon entropy of the gaussians
+        origional paper
+        MacKay, David J. C.. (1992). Information-Based Objective Functions for Active Data Selection. Neural Computation, 4(4), 590–604. doi:10.1162/neco.1992.4.4.590
+
+        '''
+
+        # Latent GP variance
+        _, GPR_var = self.gp_model.predict_noiseless(X_pool)
+        GPR_var = GPR_var.flatten()
+
+        # Raw noise std → noise variance of the mean (SEM^2)
+        raw_noise_std, raw_noise_std_var = self.predict_noise(X_pool)
+        raw_noise_std = raw_noise_std.flatten()
+        observation_noise_var = (raw_noise_std**2) / self.num_repeats
+
+        # Numerical safety
+        observation_noise_var = np.maximum(observation_noise_var, 1e-12)
+
+        # BALD mutual information
+        bald = 0.5 * np.log1p(GPR_var / observation_noise_var)
+
+        return bald
+
 
     def normalize_y(self, Y, reset = False):
         """
@@ -1620,7 +1734,22 @@ class GpyAnalyticSobolSampler(Sampler):
         # Compute numerator and denominator vectorized
         diff = phi_pool - K_cross.T.dot(K_inv).dot(phi_train)   # shape (n_pool,)
         num = diff**2
-        denom = K_self - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
+
+        if self.noise_gp is None:
+            denom = K_self - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
+        else:
+            # Predict raw noise std at pool points (σ)
+            noise_std, noise_std_var = self.predict_noise(X_pool)   # shape (n_pool,)
+
+            # Convert to variance of the mean (SEM²)
+            observation_noise_var = (noise_std**2) / self.num_repeats
+
+            # Final denominator
+            denom = (
+                K_self
+                - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
+                + observation_noise_var
+            )
 
         # Safe division
         results = np.where(denom > 1e-12, num / denom, 0.0)
