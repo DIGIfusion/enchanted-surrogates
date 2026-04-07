@@ -297,7 +297,7 @@ If you use this package in your research, please cite:
 ```bibtex
 @Misc{enchanted-surrogates,
   title =        {Enchanted Surrogates: A flexible framework for surrogate modelling of fusion plasma simulations},
-  author =       {A. Kit, A.M. Bruncrona, D. Jordan, A.E. Järvinen},
+  author =       {Adam Kit and Amanda Bruncrona and Daniel Jordan and Aaro Järvinen and Anna Niemelä},
   howpublished = {Github},
   year =         {2025},
   url =          {https://github.com/DIGIfusion/enchanted-surrogates}
