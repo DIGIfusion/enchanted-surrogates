@@ -540,10 +540,9 @@ class GpyAnalyticSobolSampler(Sampler):
             print('FITTING: NOISE FROM REPEAT SAMPLES')
             self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
 
-            # scale noise after normalization
             nv = (se_mean**2).reshape(-1, 1)
             if self.do_normalize_y:
-                nv = (nv/self._y_std)**2
+                nv = nv/(self._y_std**2)
             self.gp_model.likelihood.variance[:] = nv
             self.gp_model.likelihood.variance.fix()
 
@@ -560,9 +559,9 @@ class GpyAnalyticSobolSampler(Sampler):
             print('FITTING: NOISE FIXED TO JITTER')
             self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
 
-            nv = noise_vars.reshape(-1, 1)
+            nv = (se_mean**2).reshape(-1, 1)
             if self.do_normalize_y:
-                nv = (nv/self._y_std)**2
+                nv = nv/(self._y_std**2)
             self.gp_model.likelihood.variance[:] = nv
             self.gp_model.likelihood.variance.fix()
 
@@ -1755,12 +1754,70 @@ class GpyAnalyticSobolSampler(Sampler):
         results = np.where(denom > 1e-12, num / denom, 0.0)
         return results
 
+    def residuals_plot(self):
+        import matplotlib.pyplot as plt
+
+        out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+                
+        if not self.test_data_csv:
+            return None
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+
+        # Load test data
+        test_df = pd.read_csv(self.test_data_csv)
+        out_col = self.get_output_col(df=test_df)
+
+        X_test = test_df[self.parameters].values
+        y_test = test_df[out_col].values
+        y_pred = self.surrogate_predict(X_test)
+
+        # Compute residuals
+        residuals = y_test - y_pred
+
+        # Create hexbin plot
+        fig, ax = plt.subplots(figsize=(3.5, 3))
+
+        hb = ax.hexbin(
+            y_test,
+            residuals,
+            gridsize=40,
+            cmap="viridis",
+            mincnt=1,          # bins with zero count will be masked
+        )
+
+        # Make empty bins white
+        hb.set_array(hb.get_array())  # ensure array exists
+        hb.set_cmap("viridis")
+        hb.set_clim(vmin=1)           # ensures empty bins are not colored
+
+        # Add colorbar
+        cb = fig.colorbar(hb, ax=ax)
+        cb.set_label("Count")
+
+        # Labels and title
+        ax.set_xlabel("y_test")
+        ax.set_ylabel("Residuals (y_test - y_pred)")
+        ax.set_title("Residuals Hexbin Plot")
+        fig.tight_layout()
+        print('saving residuals plot to:', os.path.join(out_dir, f'residuals_train-{len(self.train)}.png'))        
+        fig.savefig(
+            os.path.join(out_dir, f"residuals_train-{len(self.train)}.png"),
+            dpi=300,
+            bbox_inches="tight"
+        )
+        return fig
+
+
     def post_process(self):
         """
         Collapse repeated input points into unique entries and write
         enchanted_dataset_collapsed.csv with mean, std, mean_error, std_error, and count.
 
-        Output file is written into self.base_run_dir (must be set).
+        Output file idata/ascot_DT-D_PowerDepo_fixed_pool/data/GPR_BALD/batch_63s written into self.base_run_dir (must be set).
+
+        make residuals plot
         """
         if not self.base_run_dir:
             raise RuntimeError("base_run_dir must be set to write collapsed dataset.")
@@ -1790,6 +1847,8 @@ class GpyAnalyticSobolSampler(Sampler):
         print(f"Collapsed dataset written to {out_path}")
         df_avg_noise = pd.DataFrame({'mean_noise': [np.mean(df['std'])]})
         df_avg_noise.to_csv(os.path.join(self.base_run_dir, self.output_col+'_average_noise.csv'))
+
+        self.residuals_plot()
 
 
     def set_output_col(self):
