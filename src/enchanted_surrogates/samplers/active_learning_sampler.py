@@ -19,6 +19,10 @@ class ActiveLearningSampler(Sampler):
     proposes parameter configurations for evaluation using a surrogate
     regressor and a pool-based query strategy.
 
+    > [!Note]
+    > This sampler requires the `activelearning` optional dependency to function.
+    > See installation guide for more details.
+
     ### Purpose
     - Maintain a pool of candidate parameter vectors and an internal
       dataset of observed (parameter, objective) pairs.

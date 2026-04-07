@@ -32,7 +32,19 @@ torch.set_default_dtype(torch.float64)
 
 class BayesianOptimizationSampler(Sampler):
     """
-    ## Configuration
+
+    ## Bayesian optimization sampler using BoTorch.
+
+    The sampler follows the same lifecycle as the active-learning sampler:
+    it owns its observation state and only exposes the three external methods
+    expected by the orchestration layer: `__init__`, `get_next_samples`, and
+    `register_future`.
+
+
+    > [!Note]
+    > This sampler requires the `bo` optional dependency to function.
+    > See installation guide for more details.
+
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
 
@@ -94,12 +106,6 @@ class BayesianOptimizationSampler(Sampler):
         **kwargs,
     ):
         """
-        Bayesian optimization sampler using BoTorch.
-
-        The sampler follows the same lifecycle as the active-learning sampler:
-        it owns its observation state and only exposes the three external methods
-        expected by the orchestration layer: `__init__`, `get_next_samples`, and
-        `register_future`.
 
         Configuration
         -------------
