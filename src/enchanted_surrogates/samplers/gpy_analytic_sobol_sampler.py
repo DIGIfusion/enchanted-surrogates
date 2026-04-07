@@ -1642,9 +1642,14 @@ class GpyAnalyticSobolSampler(Sampler):
         GPR_var = GPR_var.flatten()
 
         # Raw noise std → noise variance of the mean (SEM^2)
-        raw_noise_std, raw_noise_std_var = self.predict_noise(X_pool)
+        # BALD
+        X_pool_real = self.from_unit(X_pool)
+        raw_noise_std, _ = self.predict_noise(X_pool_real)
         raw_noise_std = raw_noise_std.flatten()
         observation_noise_var = (raw_noise_std**2) / self.num_repeats
+
+        if self.do_normalize_y:
+            observation_noise_var = observation_noise_var / (self._y_std**2)
 
         # Numerical safety
         observation_noise_var = np.maximum(observation_noise_var, 1e-12)
@@ -1738,10 +1743,14 @@ class GpyAnalyticSobolSampler(Sampler):
             denom = K_self - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
         else:
             # Predict raw noise std at pool points (σ)
-            noise_std, noise_std_var = self.predict_noise(X_pool)   # shape (n_pool,)
+            X_pool_real = self.from_unit(X_pool)
+            noise_std, _ = self.predict_noise(X_pool_real)
 
             # Convert to variance of the mean (SEM²)
             observation_noise_var = (noise_std**2) / self.num_repeats
+
+            if self.do_normalize_y:
+                observation_noise_var = observation_noise_var / (self._y_std**2)
 
             # Final denominator
             denom = (
