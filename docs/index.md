@@ -31,6 +31,8 @@ i.e., step 1. is repeated many times to fill volume spanned by 2.
 The idea is to abstract away the iterative process, and just uniquely handle 1.
 for each individual code, while being able to use mutliple searches types.
 
+---
+
 ## How to install
 
 Make sure you have a clean virtual environment with Python 3.10 or higher.
@@ -72,6 +74,8 @@ which python3
 
 If neither is referring to created virtual environment, it can be referred with
 `.venv/bin/python` instead of `python` in the example below.
+
+---
 
 ## How to run
 
@@ -170,6 +174,8 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 
 ```
 
+---
+
 ## Code structure
 
 The Supervisor is the entry point. The Supervisor reads parameters and has
@@ -188,6 +194,8 @@ created to specified running directory.
 
 See documentation for [Supervisor](supervisor.md) for a graph about module
 structure.
+
+---
 
 ## About the project
 
