@@ -304,12 +304,6 @@ If you use this package in your research, please cite:
 }
 ```
 
-### Contributors
-
-**Feel free to contribute!**
-
-<a href = "https://github.com/Tanu-N-Prabhu/Python/graphs/contributors">
-  <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/></a>
 
 ### Acknowledgements
 
