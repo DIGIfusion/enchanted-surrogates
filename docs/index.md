@@ -118,21 +118,25 @@ supervisor:
       runner: r1
 ```
 
-### Output
+---
+
+## Output
+
+The framework will create the following folder structure in the `base_run_dir` defined in the config file:
 
 ```
 base_run_dir/
 ├── data/
-│    └── ... 
+│    └── ...  # Contains the enchanted_datapoint.csv files and runner outputs.
 ├── logs/
-│    └── ... 
+│    └── ...  # Contains all log files from the supervisor and workers.
 ├── config/
-│    └── ... 
-├── enchanted_datapoints.csv
-└── runs.h5
+│    └── ...  # Contains a copy of the configuration file.
+│
+├── enchanted_datapoints.csv  # Summary file
+└── runs.h5                   # Summary file
 ```
 
-#### summary files
 
 The summary files are structured as such: 
 
@@ -147,22 +151,13 @@ All user defined sampled parameters are included for each sample.
 The runner output is defined as output. There is also a success field which is a boolean.
 Run directories are also included for clarity. 
 
-#### data
 
-Contains the enchanted_datapoint.csv files and runner outputs.
+*Note: Output files to be saved can be configured, see
+[Configuring output files](supervisor.md#configuring-output-files).*
 
-#### logs
+---
 
-Contains all log files from the supervisor and workers.
-
-#### config
-
-Contains a copy of the configuration file.
-
-**Note: Output files to be saved can be configured, see
-[Configuring output files](supervisor.md#configuring-output-files).**
-
-### Quick start example
+## Quick start example
 
 The following command runs the example local executor with the example
 configuration file. It creates a run directory in the current working directory,
