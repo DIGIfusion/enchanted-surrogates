@@ -33,6 +33,35 @@ for each individual code, while being able to use mutliple searches types.
 
 ---
 
+
+## Code structure
+
+The `Supervisor` is the entry point or "the brain". The `Supervisor` reads the 
+configurated parameters and initializes `Sampler`(s), `Executor`(s) and `Runner`(s)
+according to the user-defined configuration file.
+
+The `Sampler` decides how the search space is traveresed and returns samples to the `Supervisor`.
+
+The user chooses the `Executor` based on the system where
+the code is running. The `Executor` initializes a cluster or a job
+queue or similar. The `Supervisor` sends the samples to the `Executor`. 
+The `Executor` calls `simulation_task.py` which initializes a
+`Runner` for each sample. 
+
+A `Runner` is a code-specific module for running the code in question. Commonly 
+paired with a code-specific `Parser`. A `Parser` is a code-specific module for 
+reading and writing files produced or needed by the code. Code-specific `Runner`s 
+and `Parser`s are developed as plugins. See [Plugins](plugins/index.md) for 
+available `Runner` + `Parser` combos. If a plugin for the code you are using 
+doesn't exist yet, feel free to contribute with a new plugin! 
+See [Contribution](contribution.md). 
+
+The `Supervisor` keeps track of the samples and creates summary data structures to the specified base run directory.
+See documentation for [Supervisor](supervisor.md) for all optionas and a graph about module
+structure.
+
+---
+
 ## How to install
 
 Make sure you have a clean virtual environment with Python 3.10 or higher.
@@ -169,26 +198,6 @@ python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_
 
 ```
 
----
-
-## Code structure
-
-The Supervisor is the entry point. The Supervisor reads parameters and has
-Sampler, Executor and Runner. The Executor is chosen based on the system where
-the code is running. It sends samples for execution. A Runner is a code-specific
-module for running the code in question. Commonly paired with a code-specific
-parser. A Parser is a code-specific module for reading and writing files
-produced by the code. Code-specific Runners and Parsers are developed as
-plugins.
-
-The Supervisor initializes a Sampler and fetches samples from it. The Supervisor
-gives samples to the Executor. The Executor initializes some cluster or job
-queue or similar. The Executor calls `simulation_task.py` which initializes a
-Runner and creates files. The Supervisor creates data structures from the files
-created to specified running directory.
-
-See documentation for [Supervisor](supervisor.md) for a graph about module
-structure.
 
 ---
 
