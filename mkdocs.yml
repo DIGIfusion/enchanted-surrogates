@@ -20,6 +20,8 @@ nav:
     - Bayesian Optimization Sampler: samplers/bayesian_optimization_sampler.md
     - Latin Hypercube Sampler: samplers/latin_hypercube_sampler.md
     - Sobol Sequence Sampler: samplers/sobol_sampler.md
+    - Active Learning Sampler: samplers/active_learning_sampler.md
+    - Nested Sampler: samplers/nested_sampler.md
   - Runners:
     - Example Runner: runners/example_runner.md
     - Example Bayesian Optimization Runner: runners/example_bayesian_optimization_runner.md
@@ -31,6 +33,7 @@ nav:
     - HELENA: plugins/helena_plugin.md
     - CASTOR: plugins/castor_plugin.md
     - GENE: plugins/gene_plugin.md
+    - DREAM: plugins/dream_plugin.md
 
 theme:
   name: material
