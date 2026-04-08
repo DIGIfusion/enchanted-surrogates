@@ -1,4 +1,4 @@
-# Enchanted surrogates
+# Overview
 
 <span class="hero-subtitle">
 A framework for creating databases for surrogate models of complex physics codes.
@@ -165,7 +165,9 @@ configuration file. It creates a run directory in the current working directory,
 where it generates random samples and runs the example code.
 
 ```bash
+
 python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_local.yaml
+
 ```
 
 ## Code structure
