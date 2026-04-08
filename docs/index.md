@@ -11,7 +11,7 @@ A framework for creating databases for surrogate models of complex physics codes
 ---
 
 !!! notes
-    This documentation is under development.
+    Some parts of this documentation is still under development.
 
 Machine learning surrogate model development requires large amounts of data,
 which is often generated using complex and computationally expensive simulation
