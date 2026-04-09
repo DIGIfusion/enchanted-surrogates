@@ -1,17 +1,8 @@
-# Overview
+# Enchanted Surrogates
 
-<span class="hero-subtitle">
-A framework for creating databases for surrogate models of complex physics codes.
-</span>
-
-
-[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){.md-button .md-button--primary}
-
-
----
-
-!!! notes
-    Some parts of this documentation is still under development.
+<big><big>**A framework for creating databases for surrogate models of complex physics codes.**
+</big></big>
+<!-- ![](img/es.jpg) -->
 
 Machine learning surrogate model development requires large amounts of data,
 which is often generated using complex and computationally expensive simulation
@@ -30,6 +21,10 @@ i.e., step 1. is repeated many times to fill volume spanned by 2.
 
 The idea is to abstract away the iterative process, and just uniquely handle 1.
 for each individual code, while being able to use mutliple searches types.
+
+
+!!! notes
+    Some parts of this documentation is still under development.
 
 ---
 

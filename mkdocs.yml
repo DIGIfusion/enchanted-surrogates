@@ -2,6 +2,9 @@ site_name: Enchanted Surrogates
 site_description: Documentation for Enchanted Surrogates
 site_url: https://digifusion.github.io/enchanted-surrogates/
 
+repo_url: https://github.com/DIGIfusion/enchanted-surrogates
+repo_name: DIGIfusion/enchanted-surrogates
+
 nav:
   - Home: 
     - Overview: index.md
@@ -22,11 +25,6 @@ nav:
     - Sobol Sequence Sampler: samplers/sobol_sampler.md
     - Active Learning Sampler: samplers/active_learning_sampler.md
     - Nested Sampler: samplers/nested_sampler.md
-  - Runners:
-    - Example Runner: runners/example_runner.md
-    - Example Bayesian Optimization Runner: runners/example_bayesian_optimization_runner.md
-  - Parsers:
-    - Example Bayesian Optimization Parser: parsers/example_bayesian_optimization_parser.md
   - Plugins:
     - Overview: plugins/index.md
     - MISHKA: plugins/mishka_plugin.md
@@ -34,6 +32,14 @@ nav:
     - CASTOR: plugins/castor_plugin.md
     - GENE: plugins/gene_plugin.md
     - DREAM: plugins/dream_plugin.md
+  - Tutorials:
+    - Sampler Comparison:
+      - Step-by-step: tutorials/example_workflow.md
+      - Example Runner: runners/example_runner.md
+    - Bayesian Optimization:
+      - Step-by-step: tutorials/bayesian_optimization.md
+      - Example Bayesian Optimization Runner: runners/example_bayesian_optimization_runner.md
+      - Example Bayesian Optimization Parser: parsers/example_bayesian_optimization_parser.md
 
 theme:
   name: material
@@ -52,12 +58,14 @@ theme:
       toggle:
         icon: material/brightness-7 
         name: Switch to dark mode
+  icon:
+    repo: fontawesome/brands/git-alt 
   
   # Logo displayed in the header instead of the site name
-  logo: #docs/img/logo.png
+  # logo: img/es.jpg
 
   # Favicon shown in the browser tab
-  favicon: docs/img/favicon.ico
+  favicon: img/es.jpg
 
   # Custom HTML overrides
   # This replaces Jekyll `_includes/head_custom.html`
