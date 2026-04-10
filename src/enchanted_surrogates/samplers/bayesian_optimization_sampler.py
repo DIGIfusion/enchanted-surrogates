@@ -4,7 +4,8 @@
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
 sample through the search space to yield optimial information gain as
-specified by the acquisition strategy.
+specified by the acquisition strategy. The model will try to maximize the
+objective.
 Bayesian Optimization sampler using the BoTorch library.
 
 ---
@@ -515,9 +516,9 @@ class BayesianOptimizationSampler(Sampler):
             log.info("FITTING THE GPR")
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
-        distances = torch.tensor(self.result_dictionary["distances"][:])
-        distances = torch.sum(distances, axis=1)
-        distances = standardize(distances)
+        objective = torch.tensor(self.result_dictionary["distances"][:])
+        objective = torch.sum(objective, axis=1)
+        objective = standardize(objective)
 
         inputs = torch.tensor(self.result_dictionary["inputs"][:])
         bounds = torch.tensor(self.bounds)
@@ -530,9 +531,8 @@ class BayesianOptimizationSampler(Sampler):
         # input_vector = input_vector[idx]
         # distances = distances[idx]
 
-        distances = distances.unsqueeze(distances.ndim)
-        # Multiply by -1 the task to a maximization problem.
-        distances = -distances
+        # The model will try to maximize the objective.
+        objective = objective.unsqueeze(objective.ndim)
 
         # Default covar module
         covar_module = gpytorch.kernels.MaternKernel(nu=1.5)
@@ -550,7 +550,7 @@ class BayesianOptimizationSampler(Sampler):
                 log.info("SaasFullyBayesianSingleTaskGP")
             # Default kernel is Matern-5/2
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
-                input_vector, distances
+                input_vector, objective
             )
             gp.covar_module = covar_module
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
@@ -558,7 +558,7 @@ class BayesianOptimizationSampler(Sampler):
             if self.verbose:
                 log.info("SingleTaskGP")
             gp = botorch.models.SingleTaskGP(
-                input_vector, distances, covar_module=covar_module
+                input_vector, objective, covar_module=covar_module
             )
             mll = gpytorch.mlls.ExactMarginalLogLikelihood(
                 likelihood=gp.likelihood, model=gp
@@ -566,7 +566,7 @@ class BayesianOptimizationSampler(Sampler):
             botorch.fit.fit_gpytorch_mll(mll)
 
         self.model = gp
-        self.best_f, idx = torch.max(distances, 0)
+        self.best_f, idx = torch.max(objective, 0)
         self.best_f_loc = input_vector[idx, :]
         if self.result_dictionary_failed != [None]:
             inp = torch.tensor(self.result_dictionary["inputs"])
