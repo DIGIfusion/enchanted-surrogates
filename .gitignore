@@ -1,6 +1,7 @@
 #other
 personal_configs/
 *ignore*
+data_dir/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -34,6 +35,7 @@ trial_*/
 notebooks/
 tglf_setup.sh
 .venv/
+.venv*/
 *.out
 *.err
 __pycache__/
