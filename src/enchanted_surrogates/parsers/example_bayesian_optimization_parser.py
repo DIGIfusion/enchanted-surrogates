@@ -87,7 +87,7 @@ class ExampleBayesianOptimizationParser(Parser):
         outputdict = {
             "run_dir": run_dir,
             "inputs": inputnd,
-            "distances": distances,
+            "objective": distances,
             "failure": 0,
         }
         return outputdict

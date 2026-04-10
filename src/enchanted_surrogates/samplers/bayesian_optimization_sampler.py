@@ -45,7 +45,8 @@ class BayesianOptimizationSampler(Sampler):
     > See installation guide for more details.
 
 
-    To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
+    To use the `BayesianOptimizationSampler`, specify it in the configuration
+    file as follows:
 
     ```yaml
     sampler:
@@ -199,11 +200,11 @@ class BayesianOptimizationSampler(Sampler):
         """
         Return the next batch of candidate parameter dictionaries.
 
-        The sampler first refreshes its internal state from any completed futures
-        and, if configured, from the legacy run directory parser path. It then
-        either:
-        - returns random warm-up points until `initial_samples` observations are
-          available, or
+        The sampler first refreshes its internal state from any completed
+        futures and, if configured, from the legacy run directory parser
+        path. It then either:
+        - returns random warm-up points until `initial_samples` observations
+          are available, or
         - fits the surrogate and acquires new candidates with BoTorch.
 
         Returns
@@ -231,7 +232,8 @@ class BayesianOptimizationSampler(Sampler):
             qval = 1
         else:
             random_count = int(self.random_fraction * self.acq_batch_size)
-            model_count = max(int((1 - self.random_fraction) * self.acq_batch_size), 1)
+            model_count = max(
+                int((1 - self.random_fraction) * self.acq_batch_size), 1)
             batch_samples.extend(self.get_random_samples(random_count))
             qval = model_count
 
@@ -240,7 +242,8 @@ class BayesianOptimizationSampler(Sampler):
             candidates = self.apply_failure_filter(candidates, acq)
 
         for row in candidates:
-            batch_samples.append({p: float(v) for p, v in zip(self.parameters, row)})
+            batch_samples.append(
+                {p: float(v) for p, v in zip(self.parameters, row)})
 
         self.submitted += len(batch_samples)
         return batch_samples
@@ -261,8 +264,8 @@ class BayesianOptimizationSampler(Sampler):
         -----
         The sampler stores observations internally and also keeps a small
         compatibility layer that mirrors the legacy `result_dictionary` fields.
-        If a `failure` field is present and evaluates truthy, the record is routed
-        to the failure model dataset as well.
+        If a `failure` field is present and evaluates truthy, the record is
+        routed to the failure model dataset as well.
         """
         if future is None or len(future) == 0:
             return
@@ -340,7 +343,7 @@ class BayesianOptimizationSampler(Sampler):
             # works for pandas series/dataframe-like rows.
             try:
                 future = future.to_dict()
-            except exception:
+            except Exception:
                 future = future
 
         if isinstance(future, dict):
@@ -358,7 +361,7 @@ class BayesianOptimizationSampler(Sampler):
                 self.append_observation(params, y_val, failure=failure)
                 return
 
-        raise typeerror(
+        raise TypeError(
             "unsupported future payload. expected a mapping with params/y, "
             "parameter columns plus observation fields, or an iterable of those."
         )
@@ -378,7 +381,7 @@ class BayesianOptimizationSampler(Sampler):
 
         if sample_dict.get("failure", 0) not in (0, 0.0, False, None):
             x = sample_dict.get("inputs", None)
-            y = sample_dict.get("distances", None)
+            y = sample_dict.get("objective", None)
             if x is None or y is None:
                 return
             x_arr = np.asarray(x, dtype=float)
@@ -391,7 +394,7 @@ class BayesianOptimizationSampler(Sampler):
             return
 
         x = sample_dict.get("inputs", None)
-        y = sample_dict.get("distances", None)
+        y = sample_dict.get("objective", None)
         if x is None or y is None:
             return
 
@@ -480,13 +483,14 @@ class BayesianOptimizationSampler(Sampler):
             if numeric_leaves:
                 return float(np.sum(numeric_leaves))
         raise KeyError(
-            "Could not determine target value from payload. Provide an `y` key "
-            "or one or more observation fields named in `observations`."
+            "Could not determine target value from payload. Provide an `y` key"
+            " or one or more observation fields named in `observations`."
         )
 
     def refresh_result_dictionaries(self):
         """
-        Keep legacy result dictionary attributes in sync with the internal arrays.
+        Keep legacy result dictionary attributes in sync with the internal
+        arrays.
 
         This allows any downstream code that still inspects these attributes to
         continue working, even though the public workflow no longer calls the
@@ -495,7 +499,7 @@ class BayesianOptimizationSampler(Sampler):
         if len(self.X_obs) > 0:
             self.result_dictionary = {
                 "inputs": self.X_obs.tolist(),
-                "distances": [[float(v)] for v in self.y_obs.tolist()],
+                "objective": [[float(v)] for v in self.y_obs.tolist()],
                 "failure": [0 for _ in range(len(self.y_obs))],
             }
         else:
@@ -504,7 +508,7 @@ class BayesianOptimizationSampler(Sampler):
         if len(self.X_failed) > 0:
             self.result_dictionary_failed = {
                 "inputs": self.X_failed.tolist(),
-                "distances": [[float(v)] for v in self.y_failed.tolist()],
+                "objective": [[float(v)] for v in self.y_failed.tolist()],
                 "failure": [1 for _ in range(len(self.y_failed))],
             }
         else:
@@ -515,8 +519,8 @@ class BayesianOptimizationSampler(Sampler):
         if self.verbose:
             log.info("FITTING THE GPR")
         # Presently implemented as single objective model. Therefore,
-        # sum over the distances and norm
-        objective = torch.tensor(self.result_dictionary["distances"][:])
+        # sum over the objective and norm
+        objective = torch.tensor(self.result_dictionary["objective"][:])
         objective = torch.sum(objective, axis=1)
         objective = standardize(objective)
 
@@ -529,7 +533,7 @@ class BayesianOptimizationSampler(Sampler):
         # dummy = torch.max(dummy, axis=1).values < 0.5
         # idx = torch.where(dummy)
         # input_vector = input_vector[idx]
-        # distances = distances[idx]
+        # objective = objective[idx]
 
         # The model will try to maximize the objective.
         objective = objective.unsqueeze(objective.ndim)
@@ -571,7 +575,8 @@ class BayesianOptimizationSampler(Sampler):
         if self.result_dictionary_failed != [None]:
             inp = torch.tensor(self.result_dictionary["inputs"])
             inp_f = torch.tensor(self.result_dictionary_failed["inputs"])
-            f_0 = torch.tensor(self.result_dictionary["failure"], dtype=torch.float64)
+            f_0 = torch.tensor(
+                self.result_dictionary["failure"], dtype=torch.float64)
             f_1 = torch.tensor(
                 self.result_dictionary_failed["failure"], dtype=torch.float64
             )
