@@ -39,11 +39,9 @@ class BayesianOptimizationSampler(Sampler):
     expected by the orchestration layer: `__init__`, `get_next_samples`, and
     `register_future`.
 
-
-    > [!Note]
-    > This sampler requires the `bo` optional dependency to function.
-    > See installation guide for more details.
-
+    !!! note
+        This sampler requires the `bo` optional dependency to function.
+        See installation guide for more details.
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration
     file as follows:
