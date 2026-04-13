@@ -26,7 +26,7 @@ def update_md_file(md_path: Path, modules: list[str]):
     blocks = "\n\n".join(
         f"""::: {m}
         options:
-        show_source: false
+          show_source: false
         """
         for m in modules)
 
