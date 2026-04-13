@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from unittest.mock import patch
 
-from yourmodule.example_runner import ExampleRunner
+from enchanted_surrogates.runners.example_runner import ExampleRunner
 
 
 # ----------------------------------------------------------------------
