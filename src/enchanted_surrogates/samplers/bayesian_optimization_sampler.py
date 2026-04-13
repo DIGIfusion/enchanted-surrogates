@@ -1,11 +1,9 @@
 # samplers/bayesian_optimization_sampler.py
 """
----
-
 ## Overview
 
 This sampler Class uses Bayesian Optimization techniques to data efficiently
-sample through the search space to yield optimial information gain as 
+sample through the search space to yield optimial information gain as
 specified by the acquisition strategy.
 Bayesian Optimization sampler using the BoTorch library.
 
@@ -13,27 +11,39 @@ Bayesian Optimization sampler using the BoTorch library.
 """
 
 from enchanted_surrogates.utils.logger import get_logger
-from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import import_parser
-import pickle as pkl
+from enchanted_surrogates.samplers.base_sampler import Sampler
+
+from typing import Any, Mapping
 import os
-import numpy as np
-import matplotlib.pyplot as plt
+
 # import matplotlib as mpl
 # import scienceplots
-import scipy.optimize as optimize
-
-import botorch, gpytorch, torch, pyro  #, lampe
-import lampe.plots as plots
+import numpy as np
+import botorch, gpytorch, torch
 from botorch.optim import optimize_acqf
 from botorch.utils.transforms import standardize, normalize, unnormalize
 
 log = get_logger(__name__)
+torch.set_default_dtype(torch.float64)
+
 
 
 class BayesianOptimizationSampler(Sampler):
     """
-    ## Configuration
+
+    ## Bayesian optimization sampler using BoTorch.
+
+    The sampler follows the same lifecycle as the active-learning sampler:
+    it owns its observation state and only exposes the three external methods
+    expected by the orchestration layer: `__init__`, `get_next_samples`, and
+    `register_future`.
+
+
+    > [!Note]
+    > This sampler requires the `bo` optional dependency to function.
+    > See installation guide for more details.
+
 
     To use the `BayesianOptimizationSampler`, specify it in the configuration file as follows:
 
@@ -75,7 +85,7 @@ class BayesianOptimizationSampler(Sampler):
         parser_config: Parser kwargs
 
     ---
-    
+
     ## Assumptions and notes
 
      - The sampler assumes continuous numeric parameters and bounded search spaces.
@@ -95,231 +105,431 @@ class BayesianOptimizationSampler(Sampler):
         **kwargs,
     ):
         """
-        Initializes the BayesianOptimization sampler 
-        with the given parameters.
 
-        Args:
-            bounds (list[tuple[float, float]]): Search space bounds.
-            parameters (list[str]): Parameter names.
-            initial_samples (int, optional): Number of initial random samples.
-            acquisition_function (str, optional): Acquisition strategy.
-            acquisition_batch_size (int, optional): Number of samples per batch.
-            random_fraction (float, optional): Fraction of random exploration.
-            async_samp (bool, optional): Enable asynchronous sampling.
-        
+        Configuration
+        -------------
+        bounds : list[tuple[float, float]]
+            Per-parameter lower and upper bounds.
+        parameters : list[str]
+            Parameter names in the same order as `bounds`.
+        budget : int, optional
+            Total number of samples allowed. Stored for bookkeeping.
+        initial_samples : int, optional
+            Number of random samples to return before surrogate-driven sampling.
+        acquisition_batch_size : int, optional
+            Number of candidates returned per call once the surrogate is active.
+        acquisition_function : str, optional
+            One of: `qLEI`, `qUCB`, `qEI`, `qPI`, `EI`, `LEI`.
+        random_fraction : float, optional
+            Fraction of each batch reserved for random exploration after warm-up.
+        async_samp : bool, optional
+            If true, a call may return a single random point with probability
+            `random_fraction`, otherwise it behaves like synchronous acquisition.
+        failure_prob_filter : bool, optional
+            If true and failure data are available, proposed candidates are filtered
+            by a secondary failure model.
+        parser : type or str, optional
+            Parser used to reconstruct old run-directory results when `base_run_dir`
+            is supplied.
+        parser_config : dict, optional
+            Keyword arguments forwarded to parser construction.
+        observations : list[str], optional
+            Observation field names. Multiple fields are summed into the scalar
+            target used by the GP, matching the legacy behavior.
+
         """
-        log.info('INITIALISING BAYESIAN OPTIMIZATION SAMPLER')
-        self.base_run_dir      = kwargs.get('base_run_dir', '')
-        self._budget           = kwargs.get('budget', 20)
-        self.bounds            = kwargs.get('bounds', [None])
-        self.parameters        = kwargs.get('parameters', [])  
-   
-        # Observations and parser configs
-        self.observations      = kwargs.get('observations', [None])
-        self.parser_type       = kwargs.get('parser', None)  
-        self.parser_config     = kwargs.get('parser_config',{})
 
-        # Sampling parameters
-        self.initial_samples   = kwargs.get('initial_samples', 50)
-        self.acq_batch_size    = kwargs.get('acquisition_batch_size', 20)
-        self.acq_function      = kwargs.get('acquisition_function', 'qLEI')
-        self.random_fraction   = kwargs.get('random_fraction', 0.2)
-        self.fail_p_filter     = kwargs.get('failure_prob_filter', False)
-        self.ucb_beta          = kwargs.get('ucb_beta', 2.0)  
-        self.async_samp        = kwargs.get('async_samp', False)
+        log.info("INITIALISING BAYESIAN OPTIMIZATION SAMPLER")
 
-        # GPR parameters
-        self.fully_bayesian    = kwargs.get('fully_bayesian', False)
-        self.covar             = kwargs.get('covar_kernel', 'Matern-3/2')
+        self.base_run_dir = kwargs.get("base_run_dir", "")
+        self._budget = kwargs.get("budget", 20)
+        self.bounds = kwargs.get("bounds", [None])
+        self.parameters = kwargs.get("parameters", [])
 
-        # Plotting and printing flags
-        self.verbose           = kwargs.get('verbose', False)
-        self.plot_GPR_flag     = kwargs.get('plot_GPR', False)
-        self.GPR_plot_dim      = kwargs.get('GPR_plot_dim', [0])
-        self.plot_GPR_file     = kwargs.get('plot_file', False)
-        self.plot_frequency    = kwargs.get('plot_frequency', 1)
-        self.plot_debug        = kwargs.get('plot_debug', False)
-        self.plot_labels       = kwargs.get('plot_labels', None)
-        self.plot_progress     = kwargs.get('plot_progress', False)
+        self.observations = kwargs.get("observations", [None])
+        self.parser_type = kwargs.get("parser", None)
+        self.parser_config = kwargs.get("parser_config", {}) or {}
 
-        #if self.parser_config == None:
-        if self.parser_type == None:
-            self.parser = None
-        else:
-        #        self.parser = import_parser(self.parser_type)
-        #else:
-            self.parser = import_parser(self.parser_type, self.parser_config)
+        self.initial_samples = kwargs.get("initial_samples", 50)
+        self.acq_batch_size = kwargs.get("acquisition_batch_size", 20)
+        self.acq_function = kwargs.get("acquisition_function", "qLEI")
+        self.random_fraction = kwargs.get("random_fraction", 0.2)
+        self.fail_p_filter = kwargs.get("failure_prob_filter", False)
+        self.ucb_beta = kwargs.get("ucb_beta", 2.0)
+        self.async_samp = kwargs.get("async_samp", False)
+
+        self.fully_bayesian = kwargs.get("fully_bayesian", False)
+        self.covar = kwargs.get("covar_kernel", "Matern-3/2")
+
+        self.verbose = kwargs.get("verbose", False)
+
+        # Legacy flags are kept as no-ops for compatibility.
+        self.plot_GPR_flag = kwargs.get("plot_GPR", False)
+        self.plot_GPR_file = kwargs.get("plot_file", False)
+        self.plot_frequency = kwargs.get("plot_frequency", 1)
+        self.plot_debug = kwargs.get("plot_debug", False)
+        self.plot_progress = kwargs.get("plot_progress", False)
+        self.plot_labels = kwargs.get("plot_labels", None)
+        self.GPR_plot_dim = kwargs.get("GPR_plot_dim", [0])
+
+        self.submitted = 0
         self.futures = []
 
+        self.parser = None
+        if self.parser_type is not None:
+            self.parser = import_parser(self.parser_type, self.parser_config)
+
+        # Internal state used by the new workflow.
+        self.X_obs = np.zeros((0, len(self.bounds)), dtype=float)
+        self.y_obs = np.zeros((0,), dtype=float)
+        self.X_failed = np.zeros((0, len(self.bounds)), dtype=float)
+        self.y_failed = np.zeros((0,), dtype=float)
+
+        # Backward-compatible state used by the old GP pipeline.
+        self.result_dictionary = [None]
+        self.result_dictionary_failed = [None]
+        self.model = None
+        self.model_failed = None
+        self.best_f = None
+        self.best_f_loc = None
+
+        self.seen_run_dirs: set[str] = set()
 
     def get_next_samples(self):
         """
-        Generates the next parameter samples based on the probabilistic 
-        surrogate model and the acquisition function. 
+        Return the next batch of candidate parameter dictionaries.
 
-        Returns:
-            list: List of dictionaries containing next parameter samples.
+        The sampler first refreshes its internal state from any completed futures
+        and, if configured, from the legacy run directory parser path. It then
+        either:
+        - returns random warm-up points until `initial_samples` observations are
+          available, or
+        - fits the surrogate and acquires new candidates with BoTorch.
 
+        Returns
+        -------
+        list[dict[str, float]]
+            Batch of parameter dictionaries in the order expected by the
+            orchestration layer.
         """
-        # Build the result dictionary
-        self.build_result_dictionary(self.base_run_dir)
-        
-        if self.result_dictionary == [None]:
-            self.collected_samples = 0
+        self.sync_from_run_directory()
+
+        if self._n_observations() < self.initial_samples:
+            return self.get_random_samples(self.acq_batch_size)
+
+        self.train_surrogate()
+        acq = self.build_acquisition()
+
+        batch_samples: list[dict[str, float]] = []
+
+        # Synchronous mode keeps a small random exploration fraction in the batch.
+        if self.async_samp:
+            if torch.rand(1).item() < self.random_fraction:
+                batch_samples = self.get_random_samples(1)
+                self.submitted += len(batch_samples)
+                return batch_samples
+            qval = 1
         else:
-            self.collected_samples = len(self.result_dictionary['inputs'])
+            random_count = int(self.random_fraction * self.acq_batch_size)
+            model_count = max(int((1 - self.random_fraction) * self.acq_batch_size), 1)
+            batch_samples.extend(self.get_random_samples(random_count))
+            qval = model_count
 
-        # Assume random sampling if self.collected_samples is below 
-        # the number of initial samples.
-        batch_samples = []
+        candidates = self.optimize_candidates(acq, qval=qval)
+        if self.fail_p_filter and self.model_failed is not None:
+            candidates = self.apply_failure_filter(candidates, acq)
 
-        if self.collected_samples < self.initial_samples:
-            log.info(str(100*self.collected_samples/self.initial_samples),
-                  ' % OF INITIAL SAMPLES FOR BAYESIAN OPTIMIZATION COLLECTED')            
-            for _ in range(int(self.acq_batch_size)):
-                params = [
-                    torch.distributions.Uniform(lb, ub).sample().item()
-                    for (lb, ub) in self.bounds
-                ]
-                param_dict = dict(zip(self.parameters, params))
-                batch_samples.append(param_dict)
-        else:
-            # Fit the surrogate model
-            self.train_surrogate()
-            # The acquisition stragety is chosen here.  
-            acq = None  # Initialize acq to avoid 
-                        # possibly-used-before-assignment error
-            if self.acq_function == 'qLEI':
-                acq = botorch.acquisition.qLogExpectedImprovement(
-                    model=self.model, 
-                    best_f=self.best_f)
-            elif self.acq_function == 'qUCB':
-                acq = botorch.acquisition.qUpperConfidenceBound(
-                    model=self.model, 
-                    beta=self.ucb_beta)
-            elif self.acq_function == 'qEI':
-                acq = botorch.acquisition.qExpectedImprovement(
-                    model=self.model, 
-                    best_f=self.best_f)
-            elif self.acq_function == 'qPI':
-                acq = botorch.acquisition.qProbabilityOfImprovement(
-                    model=self.model, 
-                    best_f=self.best_f)
-            elif self.acq_function == 'EI':
-                acq = botorch.acquisition.ExpectedImprovement(
-                    model=self.model,
-                    best_f=self.best_f)
-            elif self.acq_function == 'LEI':
-                acq = botorch.acquisition.LogExpectedImprovement(
-                    model=self.model,
-                    best_f=self.best_f)
-            if acq is None:
-                raise ValueError("Unsupported acquisition function:", 
-                                  f"{self.acq_function}")
-
-            if self.async_samp:
-                if torch.rand(1) < self.random_fraction:
-                    params = [
-                        torch.distributions.Uniform(lb, ub).sample().item()
-                        for (lb, ub) in self.bounds
-                    ]
-                    param_dict = dict(zip(self.parameters, params))
-                    batch_samples.append(param_dict)
-                    self.submitted += len(batch_samples)
-                    return batch_samples
-                else:
-                    qval = 1
-            else:
-                acq_f =  (1 - self.random_fraction) 
-                rand_f = self.random_fraction
-                qval = int(acq_f*self.acq_batch_size)
-                for _ in range(int(rand_f*self.acq_batch_size)):
-                    params = [
-                        torch.distributions.Uniform(lb, ub).sample().item()
-                        for (lb, ub) in self.bounds
-                    ]
-                    param_dict = dict(zip(self.parameters, params))
-                    batch_samples.append(param_dict)
-
-            # Acquisition function is optimized in [0, 1]**d domain
-            #boundtensor = torch.DoubleTensor(self.bounds).T
-            lower_bound = torch.zeros(len(self.bounds), dtype=float)
-            upper_bound = torch.ones(len(self.bounds), dtype=float)
-            lower_bound = lower_bound.unsqueeze(0)
-            upper_bound = upper_bound.unsqueeze(0)
-            boundtensor = torch.cat((lower_bound, upper_bound))
-            candidates, acq_values = optimize_acqf(
-                acq, 
-                bounds=boundtensor,
-                sequential=False, 
-                q=qval,
-                num_restarts=10,
-                raw_samples=1024
-                )
-
-            bounds = torch.tensor(self.bounds)
-            candidates = unnormalize(candidates, bounds.T)
-            # This part of the code can be cleaned by implementing 
-            # failure probability in the acquisition function. 
-            if self.fail_p_filter:
-                if self.result_dictionary_failed != [None]:
-                    cand_accept = []
-                    not_enough = True
-                    target_len = len(candidates[:,0])
-                    while not_enough:
-                        norm_inp = normalize(candidates, bounds.T)
-                        pred = self.model_failed(norm_inp)
-                        pred = pred.mean
-                        for i in range(len(pred)):
-                            if torch.rand(1) > pred[i]:
-                                cand_accept.append(candidates[i,:].numpy())
-                        if len(cand_accept) < target_len:
-                            candidates, acq_values = optimize_acqf(
-                                acq, 
-                                bounds=boundtensor,
-                                sequential=False, 
-                                q=target_len - len(cand_accept),
-                                num_restarts=10,
-                                raw_samples=1024
-                                )
-                            candidates = unnormalize(candidates, bounds.T)
-                        else:
-                            not_enough = False
-                            candidates = torch.tensor(cand_accept)
-                
-            for index, _ in enumerate(range(candidates.size(dim=0))):
-                params_dict = dict(zip(self.parameters, 
-                                       candidates[index,:].numpy()))
-                batch_samples.append(params_dict)
-            if self.plot_progress:
-                self.progress_plots()  
+        for row in candidates:
+            batch_samples.append({p: float(v) for p, v in zip(self.parameters, row)})
 
         self.submitted += len(batch_samples)
         return batch_samples
-    
+
     def register_future(self, future):
+        """
+        Register a completed evaluation.
+
+        Accepted inputs
+        ---------------
+        - mapping with keys `params` and `y`
+        - mapping containing parameter columns directly plus one or more
+          observation columns
+        - dataframe-like object with parameter columns and observation columns
+        - a list/tuple of the above, which will be ingested item by item
+
+        Notes
+        -----
+        The sampler stores observations internally and also keeps a small
+        compatibility layer that mirrors the legacy `result_dictionary` fields.
+        If a `failure` field is present and evaluates truthy, the record is routed
+        to the failure model dataset as well.
+        """
+        if future is None or len(future) == 0:
+            return
         self.futures.append(future)
+        self.ingest_future(future)
+        self.refresh_result_dictionaries()
+
+    def sync_from_run_directory(self):
+        """
+        Rebuild the internal dataset from the legacy run directory path.
+
+        This keeps the old parser-based workflow usable without making it a
+        public method. It only runs when both a parser and `base_run_dir` are
+        available.
+        """
+        if self.parser is None or not self.base_run_dir:
+            return
+        if not os.path.isdir(self.base_run_dir):
+            return
+
+        try:
+            dirlist = os.listdir(self.base_run_dir)
+        except OSError:
+            return
+
+        skiplist = [
+            "yaml",
+            "worker_out",
+            "FINISHED",
+            ".pkl",
+            ".csv",
+            "_RUN",
+            "GPR",
+            "Fig",
+        ]
+
+        changed = False
+        for dirname in dirlist:
+            if any(tag in dirname for tag in skiplist):
+                continue
+
+            run_dir = os.path.join(self.base_run_dir, dirname)
+            if run_dir in self.seen_run_dirs:
+                continue
+
+            try:
+                sample_dict = self.parser.collect_sample_information(
+                    run_dir,
+                    self.observations,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.warning("Could not parse run directory %s: %s", run_dir, exc)
+                continue
+
+            self.seen_run_dirs.add(run_dir)
+            self.ingest_sample_dict(sample_dict, run_dir=run_dir)
+            changed = True
+
+        if changed:
+            self.refresh_result_dictionaries()
+
+    def ingest_future(self, future: any):
+        """
+        convert one completed result payload into internal arrays.
+
+        this method accepts several lightweight shapes so the orchestration
+        layer can pass whatever it already has available.
+        """
+        if isinstance(future, (list, tuple)):
+            for item in future:
+                self.ingest_future(item)
+            return
+
+        if hasattr(future, "to_dict") and not isinstance(future, dict):
+            # works for pandas series/dataframe-like rows.
+            try:
+                future = future.to_dict()
+            except exception:
+                future = future
+
+        if isinstance(future, dict):
+            if "params" in future and "y" in future:
+                params = future["params"]
+                y_val = future["y"]
+                failure = future.get("failure", 0)
+                self.append_observation(params, y_val, failure=failure)
+                return
+
+            if all(param in future for param in self.parameters):
+                params = {k: future[k] for k in self.parameters}
+                y_val = self.extract_target_from_mapping(future)
+                failure = future.get("failure", 0)
+                self.append_observation(params, y_val, failure=failure)
+                return
+
+        raise typeerror(
+            "unsupported future payload. expected a mapping with params/y, "
+            "parameter columns plus observation fields, or an iterable of those."
+        )
+
+    def ingest_sample_dict(
+        self, sample_dict: Mapping[str, Any], run_dir: str | None = None
+    ):
+        """
+        Ingest a sample dictionary returned by the legacy parser.
+
+        The parser path usually returns keys like `inputs`, `distances`, `failure`,
+        and `run_dir`. The observation values are reduced to a scalar by summing
+        across the distance vector, which preserves the old sampler behavior.
+        """
+        if sample_dict is None:
+            return
+
+        if sample_dict.get("failure", 0) not in (0, 0.0, False, None):
+            x = sample_dict.get("inputs", None)
+            y = sample_dict.get("distances", None)
+            if x is None or y is None:
+                return
+            x_arr = np.asarray(x, dtype=float)
+            if x_arr.ndim == 1:
+                x_arr = x_arr.reshape(1, -1)
+            y_arr = np.asarray(y, dtype=float)
+            y_scalar = float(np.sum(y_arr))
+            self.X_failed = np.vstack([self.X_failed, x_arr.reshape(1, -1)])
+            self.y_failed = np.append(self.y_failed, y_scalar)
+            return
+
+        x = sample_dict.get("inputs", None)
+        y = sample_dict.get("distances", None)
+        if x is None or y is None:
+            return
+
+        x_arr = np.asarray(x, dtype=float)
+        if x_arr.ndim == 1:
+            x_arr = x_arr.reshape(1, -1)
+
+        y_arr = np.asarray(y, dtype=float)
+        y_scalar = float(np.sum(y_arr))
+
+        self.X_obs = np.vstack([self.X_obs, x_arr.reshape(1, -1)])
+        self.y_obs = np.append(self.y_obs, y_scalar)
+
+    def _to_scalar(self, value: Any) -> float:
+        if isinstance(value, Mapping):
+            if "value" in value:
+                return self._to_scalar(value["value"])
+            if len(value) == 1:
+                return self._to_scalar(next(iter(value.values())))
+            raise TypeError(f"Cannot convert nested mapping to scalar: {value!r}")
+        return float(np.asarray(value, dtype=float).squeeze())
+
+    def append_observation(self, params: Mapping[str, Any], y: Any, failure: Any = 0):
+        """Append a single observation to the in-memory dataset."""
+        if "params" in params and isinstance(params["params"], Mapping):
+            params = params["params"]
+
+        x = np.array(
+            [self._to_scalar(params[p]) for p in self.parameters], dtype=float
+        ).reshape(1, -1)
+        y_scalar = self._to_scalar(y)
+
+        if failure not in (0, 0.0, False, None):
+            self.X_failed = np.vstack([self.X_failed, x])
+            self.y_failed = np.append(self.y_failed, y_scalar)
+        else:
+            self.X_obs = np.vstack([self.X_obs, x])
+            self.y_obs = np.append(self.y_obs, y_scalar)
+
+    def extract_target_from_mapping(self, payload: Mapping[str, Any]) -> float:
+        """
+        Reduce a mapping to a scalar target value.
+
+        The legacy sampler used `distances` and summed over their components.
+        The new workflow keeps that convention.
+        """
+        if len(self.observations) == 1 and self.observations[0] in payload:
+            return float(
+                np.asarray(payload[self.observations[0]], dtype=float).squeeze()
+            )
+
+        values = []
+        for key in self.observations:
+            if key in payload:
+                values.append(np.asarray(payload[key], dtype=float))
+        if values:
+            return float(np.sum(values))
+        if "output" in payload:
+            output = payload["output"]
+
+            # Handle scalar output
+            if not isinstance(output, Mapping):
+                return float(np.asarray(output, dtype=float).squeeze())
+
+            # output is a mapping
+            if len(self.observations) == 1 and self.observations[0] in output:
+                return float(
+                    np.asarray(output[self.observations[0]], dtype=float).squeeze()
+                )
+
+            nested_values = []
+            for key in self.observations:
+                if key in output:
+                    nested_values.append(np.asarray(output[key], dtype=float))
+
+            if nested_values:
+                return float(np.sum(nested_values))
+
+            numeric_leaves = []
+            for value in output.values():
+                try:
+                    numeric_leaves.append(np.asarray(value, dtype=float))
+                except Exception:
+                    continue
+
+            if numeric_leaves:
+                return float(np.sum(numeric_leaves))
+        raise KeyError(
+            "Could not determine target value from payload. Provide an `y` key "
+            "or one or more observation fields named in `observations`."
+        )
+
+    def refresh_result_dictionaries(self):
+        """
+        Keep legacy result dictionary attributes in sync with the internal arrays.
+
+        This allows any downstream code that still inspects these attributes to
+        continue working, even though the public workflow no longer calls the
+        original builder directly.
+        """
+        if len(self.X_obs) > 0:
+            self.result_dictionary = {
+                "inputs": self.X_obs.tolist(),
+                "distances": [[float(v)] for v in self.y_obs.tolist()],
+                "failure": [0 for _ in range(len(self.y_obs))],
+            }
+        else:
+            self.result_dictionary = [None]
+
+        if len(self.X_failed) > 0:
+            self.result_dictionary_failed = {
+                "inputs": self.X_failed.tolist(),
+                "distances": [[float(v)] for v in self.y_failed.tolist()],
+                "failure": [1 for _ in range(len(self.y_failed))],
+            }
+        else:
+            self.result_dictionary_failed = [None]
 
     # Fitting the GPR.
     def train_surrogate(self):
         if self.verbose:
-            log.info('FITTING THE GPR')
+            log.info("FITTING THE GPR")
         # Presently implemented as single objective model. Therefore,
         # sum over the distances and norm
-        distances = torch.tensor(self.result_dictionary['distances'][:])
+        distances = torch.tensor(self.result_dictionary["distances"][:])
         distances = torch.sum(distances, axis=1)
         distances = standardize(distances)
 
-        inputs = torch.tensor(self.result_dictionary['inputs'][:])
+        inputs = torch.tensor(self.result_dictionary["inputs"][:])
         bounds = torch.tensor(self.bounds)
         input_vector = normalize(inputs, bounds.T)
 
         # Check if normzalized inputs are below 0 or larger than 1.
-        #dummy = torch.abs(input_vector - 0.5)
-        #dummy = torch.max(dummy, axis=1).values < 0.5
-        #idx = torch.where(dummy) 
-        #input_vector = input_vector[idx]
-        #distances = distances[idx]
+        # dummy = torch.abs(input_vector - 0.5)
+        # dummy = torch.max(dummy, axis=1).values < 0.5
+        # idx = torch.where(dummy)
+        # input_vector = input_vector[idx]
+        # distances = distances[idx]
 
         distances = distances.unsqueeze(distances.ndim)
         # Multiply by -1 the task to a maximization problem.
@@ -328,534 +538,179 @@ class BayesianOptimizationSampler(Sampler):
         # Default covar module
         covar_module = gpytorch.kernels.MaternKernel(nu=1.5)
 
-        if self.covar == 'Matern-5/2':
+        if self.covar == "Matern-5/2":
             covar_module = gpytorch.kernels.MaternKernel(nu=2.5)
-        if self.covar == 'Matern-3/2':
+        if self.covar == "Matern-3/2":
             covar_module = gpytorch.kernels.MaternKernel(nu=1.5)
-        if self.covar == 'Matern-1/2':
+        if self.covar == "Matern-1/2":
             covar_module = gpytorch.kernels.MaternKernel(nu=0.5)
-        if self.covar == 'RBF':
+        if self.covar == "RBF":
             covar_module = gpytorch.kernels.RBFKernel(ard_num_dims=len(bounds.T))
         if self.fully_bayesian:
             if self.verbose:
-                log.info('SaasFullyBayesianSingleTaskGP')
+                log.info("SaasFullyBayesianSingleTaskGP")
             # Default kernel is Matern-5/2
             gp = botorch.models.fully_bayesian.SaasFullyBayesianSingleTaskGP(
-                     input_vector, 
-                     distances)
+                input_vector, distances
+            )
             gp.covar_module = covar_module
             botorch.fit.fit_fully_bayesian_model_nuts(gp)
         else:
             if self.verbose:
-                log.info('SingleTaskGP')
+                log.info("SingleTaskGP")
             gp = botorch.models.SingleTaskGP(
-                                             input_vector,
-                                             distances, 
-                                             covar_module=covar_module)
+                input_vector, distances, covar_module=covar_module
+            )
             mll = gpytorch.mlls.ExactMarginalLogLikelihood(
-                likelihood=gp.likelihood, 
-                model=gp)
+                likelihood=gp.likelihood, model=gp
+            )
             botorch.fit.fit_gpytorch_mll(mll)
+
         self.model = gp
         self.best_f, idx = torch.max(distances, 0)
-        self.best_f_loc = input_vector[idx,:]
+        self.best_f_loc = input_vector[idx, :]
         if self.result_dictionary_failed != [None]:
-
-            inp = torch.tensor(self.result_dictionary['inputs'])
-            inp_f = torch.tensor(self.result_dictionary_failed['inputs'])
-            f_0 = torch.tensor(self.result_dictionary['failure'],
-                               dtype=torch.float64)
-            f_1 = torch.tensor(self.result_dictionary_failed['failure'],
-                               dtype=torch.float64)
+            inp = torch.tensor(self.result_dictionary["inputs"])
+            inp_f = torch.tensor(self.result_dictionary_failed["inputs"])
+            f_0 = torch.tensor(self.result_dictionary["failure"], dtype=torch.float64)
+            f_1 = torch.tensor(
+                self.result_dictionary_failed["failure"], dtype=torch.float64
+            )
 
             gp_failed = botorch.models.SingleTaskGP(
                 normalize(torch.cat([inp, inp_f]), bounds.T),
-                torch.cat([f_0, f_1]).unsqueeze(0).T)
+                torch.cat([f_0, f_1]).unsqueeze(0).T,
+            )
             mll_gp_failed = gpytorch.mlls.ExactMarginalLogLikelihood(
-                likelihood=gp_failed.likelihood, 
-                model=gp_failed)
+                likelihood=gp_failed.likelihood, model=gp_failed
+            )
 
             botorch.fit.fit_gpytorch_mll(mll_gp_failed)
             self.model_failed = gp_failed
-        if self.plot_GPR_flag:
-            if (len(self.result_dictionary['distances']) % 
-                self.plot_frequency == 0):
-                self.plot_GPR(plot_dims=self.GPR_plot_dim)
 
-        if self.plot_debug:
-            self.plot_distances()
-            self.plot_result_sequence()
-
-    # Result dictionary building features. This function will be moved to the
-    # supervisory module in future developments.
-
-    def build_result_dictionary(self, base_run_directory: str, 
-                                normalize=True): 
+    def build_acquisition(self):
         """
-        This function can be used to build the result_dictionary based on the
-        existing runs in the base_run_directory.
-        
-        Args:
-            base_run_directory (str): Path to the base run directory
-
-        Kwargs:
-            normalize: A Boolean flag to turn of normalization. 
-                       This is True by default.
-
-        Returns:
-            This function does not return anything directly. However, 
-            the function establishes self.result_dictionary as well as
-            self.result_dictionary_norm, if normalize is set to True.         
-
+        Build the configured ByTorch acquisition function from the trained model
         """
-        result_dictionary = None
-        result_dictionary_failed = None
-        if self.verbose:
-            log.info('BUILDING RESULT DICTIONARY')    
-    
-        # Load a stored result_dictionary file, if such a file exists.
-        if os.path.isfile(os.path.join(base_run_directory, 
-                                       'result_dictionary.pkl')):
-            resdict = open(os.path.join(base_run_directory,  
-                                        'result_dictionary.pkl'),'rb')
-            result_dict = pkl.load(resdict)
-            result_dictionary = result_dict['result_dictionary']
-            # To be implemented. Presently just reconstruct the dictionary 
-            # of failed cases everytime. This works but is a bit inefficient. 
-            #result_dictionary_failed = result_dict['result_dictionary_failed']
-            resdict.close()
+        if self.model is None or self.best_f is None:
+            raise RuntimeError("Surroage model has not been trained")
 
-        # Obtain a list of run_directories within the base_run_directory
-        dirlist = os.listdir(base_run_directory)
-        # Loop over the established runs. This can be streamlined if needed.
-        
-        # List of tags to identify entries to skip in dirlist. 
-        # Present implementation loops through the run-directory.
-        # This list gives identifiers to recognize files & directories that
-        # do not represent samples. 
-        skiplist = ['yaml', 'worker_out', 'FINISHED', '.pkl', '.csv', '_RUN',
-                    'GPR', 'Fig']
-
-        for dirname in dirlist:
-            # See if the dirname is on the skiplist
-            skiptags = [tag in dirname for tag in skiplist]
-            if any(skiptags):
-                continue
-            else:
-                if result_dictionary != None:
-                    if (os.path.join(base_run_directory, dirname) in
-                        result_dictionary['run_dir']):
-                        continue
-                    else:
-                        sample_dict = self.parser.collect_sample_information(
-                            os.path.join(base_run_directory, dirname),
-                            self.observations)
-                else:
-                    sample_dict = self.parser.collect_sample_information(
-                        os.path.join(base_run_directory, dirname),
-                        self.observations)
-            if sample_dict['failure'] == 0:
-                if result_dictionary != None:
-                    for key in sample_dict.keys():
-                        # Append values to the lists corresponding to each 
-                        # key.
-                        result_dictionary[key].append(sample_dict[key]) 
-                else:
-                    result_dictionary = sample_dict
-                    for key in result_dictionary.keys():
-                        result_dictionary[key]=[result_dictionary[key]]
-            else:
-                if result_dictionary_failed != None:
-                    for key in sample_dict.keys():
-                        # Append values to the lists corresponding to each 
-                        # key.
-                        result_dictionary_failed[key].append(sample_dict[key]) 
-                else:
-                    result_dictionary_failed = sample_dict
-                    for key in result_dictionary_failed.keys():
-                        result_dictionary_failed[key]=\
-                            [result_dictionary_failed[key]]
-        if result_dictionary != None:
-            self.result_dictionary = result_dictionary
-        else:
-            self.result_dictionary = [None]
-        if result_dictionary_failed != None:
-            self.result_dictionary_failed = result_dictionary_failed
-        else:
-            self.result_dictionary_failed = [None]
-        # Save the result_dictionary into a pickle file.
-        if result_dictionary != None:
-            res_dump = {'result_dictionary':result_dictionary,
-                        'result_dictionary_failed':result_dictionary_failed}
-            resdict = open(
-                os.path.join(base_run_directory, 
-                'result_dictionary.pkl'),'wb')
-            pkl.dump(res_dump, resdict)
-            resdict.close()
-
-    # Plotting ------------------------------------------------------
-
-    def progress_plots(self):
-        # Nice style for plotting
-        plt.style.use(['science','no-latex'])
-
-        # Plot the distances as a function of sample number
-        plt.figure(1)
-        self.plot_result_sequence()
-        plt.savefig(self.base_run_dir+'/Fig_distance_vs_sample.svg')
-        plt.close()
-
-        # Plot distances as a function of variable        
-        plt.figure(1)
-        self.plot_distances()
-        plt.savefig(self.base_run_dir+'/Fig_distances_vs_variable.svg')
-        plt.close()
-
-        # Sample the posterior
-        self.posterior_samples()
-        self.find_MAP()
-        # Corner plot
-        plt.figure(1)
-        self.corner_plot(point=np.array(self.MAP['x']))
-        plt.savefig(self.base_run_dir+'/Fig_corner_plot.svg')
-        plt.close()
-
-        # Plot the best case
-        try:
-            dists = np.array(self.result_dictionary['distances'])
-            ndistances = np.shape(dists)[1]
-            if ndistances > 1:
-                for i in range(ndistances):
-                    idx = np.where(dists[:,i] == 
-                                   np.min(dists[:,i]))
-                    idx = idx[0][0]
-                    run_dir = self.result_dictionary['run_dir'][idx]
-                    self.plot_forward(run_dir, str(i))
-                idx = np.where(np.sum(dists, axis=1) ==
-                               np.min(np.sum(dists, axis=1)))
-                idx = idx[0][0]
-                run_dir = self.result_dictionary['run_dir'][idx]
-                self.plot_forward(run_dir, 'sum')
-            else:
-                idx = np.where(dists == 
-                               np.min(dists))
-                idx = idx[0][0]
-                run_dir = self.result_dictionary['run_dir'][idx]
-                plt.figure(1)
-                self.plot_forward(run_dir, str(i))
-            for i in range(ndistances):
-                if ndistances == 1:
-                    idx = np.where(dists == 
-                                   np.min(dists))
-                else:
-                    idx = np.where(dists[:,i] == 
-                                   np.min(dists[:,i]))             
-                idx = idx[0][0]
-                run_dir = self.result_dictionary['run_dir'][idx]
-                self.plot_forward(run_dir, str(i))
-        except:
-            plt.close()
-            log.error('Result plotting did not work. Have you implemented plotting features in the parser?')
-
-    def plot_forward(self, run_dir, label='_'):
-        plt.figure(1)
-        self.parser.collect_sample_information(
-            run_dir,
-            self.observations, 
-            plot_comparison=True)
-        plt.savefig(self.base_run_dir+'/Fig_result_'+label+'.svg')
-        plt.close()
-
-    def plot_result_sequence(self):
-        dists = np.array(self.result_dictionary['distances'])
-        ndistances = np.shape(dists)[1]
-        colorvec = ['k', 'r', 'b', 'm']
-        for i in range(ndistances):
-            plt.plot(dists[:,i],'.', color=colorvec[i])
-        plt.ylabel('Distance')
-        plt.xlabel('# sample')
-        #plt.show()
-
-    def plot_distances(self):
-        """
-        This is a helper function for plotting the sample distributions.
-        The coding is not particularly elegant and can certainly be improved.
-        """
-        inputs = torch.tensor(self.result_dictionary['inputs'])
-        distances = torch.tensor(self.result_dictionary['distances'])
-
-        numdist = distances[1].shape[0]
-        numinp = inputs[1].shape[0]
-        ncols = int(numinp)
-        nrows = int(numdist)
-        if ncols == 1:
-            if nrows == 1:
-                plt.plot(inputs[:], 
-                         distances[:],'ko')
-                plt.xlabel(self.plot_labels[0])
-            else:
-                fig, axs = plt.subplots(nrows=nrows, 
-                                        ncols=ncols, 
-                                        sharex='col')
-                for i in range(numdist):
-                    axs[int(i)].plot(
-                        inputs[:], 
-                        distances[:,i],'ko')
-                    if i == numdist - 1:
-                        axs[int(i)].set_xlabel(self.plot_labels[0])
-        elif nrows == 1:
-            fig, axs = plt.subplots(nrows=nrows, 
-                                    ncols=ncols, 
-                                    sharey='row',
-                                    figsize=(3.0*ncols, 3.0)
-                                    )
-            for j in range(numinp):
-                axs[int(j)].plot(inputs[:,j], 
-                                 distances[:],'ko')
-                axs[int(j)].set_xlabel(self.plot_labels[j])
-        else:
-            fig, axs = plt.subplots(
-                nrows=nrows, 
-                ncols=ncols, 
-                sharex='col', 
-                sharey='row',
-                figsize=(3.0*ncols, 3.0*nrows)
+        match self.acq_function:
+            case "qLEI":
+                return botorch.acquisition.qLogExpectedImprovement(
+                    model=self.model, best_f=self.best_f
                 )
-            for i in range(numdist):
-                for j in range(numinp):
-                    axs[int(i), int(j)].plot(
-                        inputs[:,j], 
-                        distances[:,i], 'ko')
-                    if i == numdist - 1:
-                        axs[int(i), int(j)].set_xlabel(self.plot_labels[j])
-        plt.tight_layout()
-        #plt.show()
+            case "qUCB":
+                return botorch.acquisition.qUpperConfidenceBound(
+                    model=self.model, beta=self.ucb_beta
+                )
+            case "qEI":
+                return botorch.acquisition.qExpectedImprovement(
+                    model=self.model, best_f=self.best_f
+                )
+            case "qPI":
+                return botorch.acquisition.qProbabilityOfImprovement(
+                    model=self.model, best_f=self.best_f
+                )
+            case "EI":
+                return botorch.acquisition.ExpectedImprovement(
+                    model=self.model, best_f=self.best_f
+                )
+            case "LEI":
+                return botorch.acquisition.LogExpectedImprovement(
+                    model=self.model, best_f=self.best_f
+                )
+            case _:
+                raise ValueError(
+                    "Unsupported acquisition function:", f"{self.acq_function}"
+                )
 
-    def initialize_plot(self, plot_dims=[0, 1], base_point = 0):
-        distances = torch.tensor(self.result_dictionary['distances'])
-        distances = torch.sum(distances, axis=1)
-        distances = standardize(distances)
-        inputs = torch.tensor(self.result_dictionary['inputs'])
-        bounds = torch.tensor(self.bounds)
+    def get_random_samples(self, n: int) -> list[dict[str, float]]:
+        """Generate `n` random samples uniformly within the configured bounds."""
+        if n <= 0:
+            return []
 
-        if base_point == 0:
-            idx = torch.where(distances == torch.min(distances))
-            idx = idx[0]
-            base_point = inputs[idx]
+        samples = []
 
-        # GP is operating in [0,1]^d domain.
-        base_point = base_point
-        inpmin = torch.min(bounds, axis=1).values
-        inpmax = torch.max(bounds, axis=1).values
-        inprang = inpmax - inpmin
-        input_scaled = (base_point - inpmin)/inprang
-        # Establish the plotting axes.
-        xtt_vals = torch.zeros((10000,len(self.bounds)))
-        xt1 = 0
-        xt2 = 0
-        if len(plot_dims) == 2:
-            xt1 = torch.linspace(
-                self.bounds[plot_dims[0]][0], 
-                self.bounds[plot_dims[0]][1], 100)
-            xt2 = torch.linspace(
-                self.bounds[plot_dims[1]][0], 
-                self.bounds[plot_dims[1]][1], 100)
-            xtt1, xtt2 = torch.meshgrid(
-                torch.linspace(0,1,100), 
-                torch.linspace(0,1,100))
-            xtt_vals[:,plot_dims[0]] = xtt1.flatten()
-            xtt_vals[:,plot_dims[1]] = xtt2.flatten()
-        if len(plot_dims) == 1:
-            xt1 = torch.linspace(
-                self.bounds[plot_dims[0]][0], 
-                self.bounds[plot_dims[0]][1], 10000)
-            xt2 = 0
-            xtt_vals[:,plot_dims[0]] = torch.linspace(0,1,10000)
+        for _ in range(n):
+            params = [
+                torch.distributions.Uniform(lb, ub).sample().item()
+                for (lb, ub) in self.bounds
+            ]
+            param_dict = dict(zip(self.parameters, params))
+            samples.append(param_dict)
 
-        for i in range(len(self.bounds)):
-            if i not in plot_dims:
-                xtt_vals[:,i] = torch.ones(10000)*input_scaled[0][i]
+        return samples
 
-        return xt1, xt2, xtt_vals, inputs, distances
-
-    def plot_GPR(self, plot_dims=[0, 1], base_point = 0):
+    def optimize_candidates(self, acq, qval: int) -> torch.Tensor:
         """
-        This is a helper function for plotting the GPR.
+        Optimize the acquisition function over the bounded domain.
+
+        Returns
+        -------
+        torch.Tensor
+            Candidate tensor in the original parameter space.
         """
+        if qval <= 0:
+            return torch.empty((0, len(self.bounds)), dtype=torch.float64)
 
-        xt1, xt2, xtt_vals, inputs, distances = \
-            self.initialize_plot(plot_dims=plot_dims, base_point=base_point)
+        lower_bound = torch.zeros(len(self.bounds), dtype=torch.float64).unsqueeze(0)
+        upper_bound = torch.ones(len(self.bounds), dtype=torch.float64).unsqueeze(0)
+        boundtensor = torch.cat((lower_bound, upper_bound))
 
-        with torch.no_grad():
-            pred = self.model.likelihood(self.model(xtt_vals))
-            if len(plot_dims) == 2:
-                pred = torch.reshape(pred.mean, (100, 100))
-            plt.style.use(['science','no-latex'])
-            if len(plot_dims) == 2:
-                plt.contourf(xt1, xt2, pred, cmap='jet')
-                plt.xlabel(self.parameters[plot_dims[0]])
-                plt.ylabel(self.parameters[plot_dims[1]])
-            if len(plot_dims) == 1:
-                plt.plot(
-                    inputs[:,plot_dims[0]], 
-                    standardize(distances),'k.')
-                plt.plot(xt1, -pred.mean, 'r-')
-                lower, upper = pred.confidence_region()
-                plt.fill_between(xt1, -lower, y2=-upper, alpha=0.5) 
-                plt.xlabel(self.parameters[plot_dims[0]])
-            if self.plot_GPR_file:
-                plt.savefig(os.path.join(self.base_run_dir,
-                            'GPR_'+\
-                            str(len(self.result_dictionary['distances']))+\
-                            '.svg'))
-                plt.close()
-            else:
-                plt.show()
+        candidates, _ = optimize_acqf(
+            acq,
+            bounds=boundtensor,
+            sequential=False,
+            q=qval,
+            num_restarts=10,
+            raw_samples=1024,
+        )
 
-    def plot_posterior(self, plot_dims=[0,1], base_point=0, threshold=-1):
+        bounds = torch.tensor(self.bounds, dtype=torch.float64)
+        return unnormalize(candidates, bounds.T)
+
+    def apply_failure_filter(self, candidates: torch.Tensor, acq) -> torch.Tensor:
         """
-        This is a helper function for plotting the posterior.
+        Filter candidates using the failure-probability model.
+
+        This preserves the legacy idea of rejecting points likely to fail while
+        keeping the logic private to the sampler.
         """
-        xt1, xt2, xtt_vals, inputs, distances = \
-            self.initialize_plot(plot_dims=plot_dims, base_point=base_point)
-        
-        posterior = self.posterior(xtt_vals, threshold=threshold)
+        if self.model_failed is None or len(candidates) == 0:
+            return candidates
 
-        if len(plot_dims) == 2:
-            posterior = torch.reshape(posterior, (100, 100))
-        with torch.no_grad():
-            plt.style.use(['science','no-latex'])
-            if len(plot_dims) == 2:
-                plt.contourf(xt1, xt2, posterior, cmap='jet')
-                plt.xlabel(self.parameters[plot_dims[0]])
-                plt.ylabel(self.parameters[plot_dims[1]])
-            if len(plot_dims) == 1:
-                plt.plot(xt1, posterior, 'k-')
-                plt.xlabel(self.parameters[plot_dims[0]])
-            plt.show()
-    
-    def posterior(self, x, threshold=-1):
-        modelpred = self.model(x)
-        normal = torch.distributions.normal.Normal(0,1)
-        if threshold == -1:
-            threshold = self.best_f
-        internal_value = (-threshold + modelpred.mean)/modelpred.stddev
-        output_value = normal.cdf(internal_value)
-        return output_value
+        bounds = torch.tensor(self.bounds, dtype=torch.float64)
+        accepted = []
+        target_len = candidates.size(dim=0)
 
-    def find_MAP(self, assume_near_the_bestf=True, niter=100):
-        def fun(x):
-            x = torch.tensor(x).unsqueeze(0)
-            y = -float(self.posterior(x).detach())
-            return y
-        if assume_near_the_bestf:
-            h = optimize.minimize(fun, self.best_f_loc.squeeze())
-            minval = h.fun
-            xmin = unnormalize(torch.tensor(h.x), 
-                               torch.tensor(self.bounds).T)
-        else:
-            minval = 0
-            xmin = 0
-            for _ in range(niter):
-                h = optimize.minimize(fun, np.random.rand(len(self.parameters)))
-                if h.fun < minval:
-                    minval = h.fun
-                    xmin = unnormalize(torch.tensor(h.x), 
-                           torch.tensor(self.bounds).T)
-        maxval = -minval
-        MAP = {'x':xmin, 'val':maxval}
-        self.MAP = MAP
+        norm_inp = normalize(candidates, bounds.T)
+        pred = self.model_failed(norm_inp).mean.squeeze(-1)
 
-    # Posterior sampling and plotting ---------------------------------
+        for i in range(len(pred)):
+            if torch.rand(1).item() > float(pred[i]):
+                accepted.append(candidates[i, :].detach().cpu().numpy())
 
-    # This is the used default approach at the moment.
-    # This is a bit of a heuristic method combining random sampling 
-    # and using the collected result_dictionary. Intention is to be
-    # efficient.
-    def posterior_samples(self, add_rand=10000):
-        x_output = torch.tensor(self.result_dictionary['inputs'])
-        x_in = normalize(x_output, torch.tensor(self.bounds).T)
-        x_in = x_in + 1e-4*torch.randn(len(x_in[:,0]), len(self.parameters))
-        y_output = self.posterior(x_in)
-        rand_vector = [0.001, 0.01, 0.1, 0.5]
-        for i in rand_vector:
-            x_o = torch.tensor(self.result_dictionary['inputs'])
-            x_in = normalize(x_o, torch.tensor(self.bounds).T)
-            x_in = x_in + i*torch.randn(len(x_in[:,0]), len(self.parameters))
-            y_o = self.posterior(x_in)
-            x_o = unnormalize(x_in, torch.tensor(self.bounds).T)
-            x_output = torch.cat((x_output, x_o))
-            y_output = torch.cat((y_output, y_o))
-        x_output2 = torch.rand(add_rand, len(self.parameters))
-        y_output2 = self.posterior(x_output2)
-        y_output2 = y_output2        
-        x_output2 = unnormalize(x_output2, torch.tensor(self.bounds).T)
-        x_output = torch.cat((x_output, x_output2))
-        y_output = torch.cat((y_output, y_output2))
-        samples = {'x':x_output.detach().numpy(), 
-                   'y':y_output.detach().numpy()}
-        self.samples = samples
+        if len(accepted) < target_len:
+            refill = self.optimize_candidates(acq, qval=target_len - len(accepted))
+            accepted_tensor = (
+                torch.tensor(accepted, dtype=torch.float64)
+                if accepted
+                else torch.empty((0, len(self.bounds)), dtype=torch.float64)
+            )
+            if len(refill) > 0:
+                return torch.cat([accepted_tensor, refill], dim=0)
+            return accepted_tensor
 
-    # Direct MC sampling of the posterior. This is the preferred option
-    # presently.
-    def posterior_MC(self, nsamples=100000):
-        x_output = torch.rand(nsamples, len(self.parameters))
-        y_output = self.posterior(x_output)
-        y_output = y_output.detach().numpy()         
-        x_output = unnormalize(x_output, torch.tensor(self.bounds).T)
-        samples = {'x':x_output, 'y':y_output}
-        self.samples = samples 
+        return torch.tensor(accepted, dtype=torch.float64)
 
-    # An implemention of NUTS MCMC sampler using Pyro. This does not yet
-    # work very well/efficiently.
-    def posterior_MCMC(self, 
-                       num_samples=1000, 
-                       warmup_steps=300,
-                       num_chains=8,
-                       MC_start=True):
-        def model():
-            xprop = pyro.sample('x', 
-                                pyro.distributions.Uniform(
-                                    torch.zeros(len(self.parameters)),
-                                    torch.ones(len(self.parameters))))
-            y = self.posterior(xprop.unsqueeze(0))
-            return y
-        # Assume No-U-Turn kernel. More options can be added in future.
-        init_params = None
-        nuts_kernel = pyro.infer.mcmc.NUTS(model,
-                                           adapt_step_size=True,
-                                           target_accept_prob=0.95)
-        mcmc = pyro.infer.mcmc.MCMC(nuts_kernel, 
-                                    num_samples=num_samples, 
-                                    warmup_steps=warmup_steps,
-                                    num_chains=num_chains,
-                                    initial_params=init_params)
-        mcmc.run()
-        y = self.posterior(mcmc.get_samples()['x']) 
-        samples = unnormalize(mcmc.get_samples()['x'], 
-                                 torch.tensor(self.bounds).T)
-        outputdict = {'x':samples, 'y':y.detach().numpy()}
-        self.samples = outputdict
-
-    def corner_plot(self, smooth=1.5, point=[]):
-        plt.style.use(['science','no-latex'])
-        lower_array = []
-        upper_array = []
-        for i in range(len(self.parameters)):
-            lower_array.append(self.bounds[i][0])
-            upper_array.append(self.bounds[i][1])
-        domain = [lower_array, upper_array]
-        fig = plots.corner(self.samples['x'], 
-                           self.samples['y'],
-                           domain=domain, 
-                           smooth=smooth, 
-                           labels=self.plot_labels)
-        if len(point) > 0:
-            plots.mark_point(fig, point, color='black')
-        self.cp_figure = fig
-
-    
     def skip(self, index):
-        raise NotImplementedError("skip not implemented for BayesianOptimizationSampler.")
+        return
 
+    def _n_observations(self) -> int:
+        """Return the number of non-failed observations currently available."""
+        return int(len(self.y_obs))
 
+    def _has_failure_data(self) -> bool:
+        """Return True when failure examples are available for filtering."""
+        return len(self.X_failed) > 0

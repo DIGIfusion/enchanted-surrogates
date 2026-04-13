@@ -1,3 +1,6 @@
+"""
+
+"""
 import numpy as np
 
 from sklearn.ensemble import BaggingRegressor
@@ -13,11 +16,15 @@ from enchanted_surrogates.utils.precise_imports import cached_import_external
 class ActiveLearningSampler(Sampler):
     """
 
-    ## ActiveLearningSampler
+    ## Overview
 
     ActiveLearningSampler provides an active-learning driven sampler that
     proposes parameter configurations for evaluation using a surrogate
     regressor and a pool-based query strategy.
+
+    > [!Note]
+    > This sampler requires the `activelearning` optional dependency to function.
+    > See installation guide for more details.
 
     ### Purpose
     - Maintain a pool of candidate parameter vectors and an internal

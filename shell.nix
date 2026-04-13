@@ -10,6 +10,8 @@ pkgs.mkShell {
     python
     python.pkgs.pip
     python.pkgs.virtualenv
+    python.pkgs.numpy
+    python.pkgs.torch
 
     gcc
     gfortran
@@ -27,10 +29,9 @@ pkgs.mkShell {
 
     if [ ! -d "$VENV" ]; then
       echo "📦 Creating virtual environment in $VENV"
-      ${python.interpreter} -m venv $VENV
+      ${python.interpreter} -m venv --system-site-packages $VENV
       source $VENV/bin/activate
       pip install --upgrade pip setuptools wheel
-      pip install --no-binary :all: numpy
       pip install -e .
     else
       source $VENV/bin/activate

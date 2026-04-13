@@ -1,5 +1,4 @@
 """
----
 
 ## Overview
 
@@ -9,6 +8,7 @@ parameter configurations and execute tasks concurrently on the local machine.
 
 ---
 """
+
 import os
 import uuid
 import joblib
@@ -39,17 +39,16 @@ class JoblibExecutor(Executor):
 
     """
 
-    def execute(self, input: list[(str, dict)], sampler):
+    def execute(self, input: list[(str, dict)], runner_config):
         """
         Execute simulation tasks in parallel using joblib.
 
         Params:
             input (list[(str, dict)]): A list of simulation tasks to execute. Each element is a tuple consisting of path to the directory where the simulation run should be executed and dictionary of simulation parameters.
-            sampler (object): Sampler instance responsible for tracking submitted simulation tasks
         """
         joblib.Parallel(n_jobs=-1, verbose=10)(
             joblib.delayed(run_simulation_task)(
-                self.runner_config, sample_run_dir, params=sample
+                runner_config, sample_run_dir, params=sample
             )
             for sample_run_dir, sample in input
         )

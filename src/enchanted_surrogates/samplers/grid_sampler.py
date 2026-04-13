@@ -1,7 +1,5 @@
 # samplers/grid_sampler.py
 """
----
-
 ## Overview
 
 Creates a grid of equidistant points that spans bounds and num samples.

@@ -19,7 +19,9 @@ def run_simulation_task(
     Raises:
     """
     os.makedirs(run_dir, exist_ok=True)
+
     runner_type = runner_config["type"]
+    runner_name = runner_config["__runner_name"]
     runner = import_runner(runner_type=runner_type, runner_config=runner_config)
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
@@ -40,13 +42,22 @@ def run_simulation_task(
             "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
             + " VALUE PAIR 'success': bool"
         )
-    runner_output.update(params)
-    runner_output['run_dir'] = run_dir
-    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
     
-    # Reorder columns so run_dir is always the last
-    rd_column = df_point.pop("run_dir")
-    df_point["run_dir"] = rd_column
+    # Update with conflict checking (in sequential runs 'output' and 'success' causes conflicts)
+    # Runner output has priority
+    for key, value in params.items():
+        if key not in runner_output:
+            runner_output[key] = value
+        else:
+            log.debug(f"Conflicting key in runner output and input params: {key}")
 
+    # Copy runner-specific success status
+    runner_output[f"success_{runner_name}"] = runner_output["success"]
+
+    # Add correct run_dir always as the right-most column in csv
+    runner_output.pop("run_dir", None)
+    runner_output["run_dir"] = run_dir
+
+    df_point = pd.DataFrame({r:[v] for r,v in runner_output.items()})
     df_point.to_csv(os.path.join(run_dir, 'enchanted_datapoint.csv'), header=True, index=False)
     return runner_output

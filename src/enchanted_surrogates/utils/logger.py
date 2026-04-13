@@ -17,7 +17,7 @@ class Singleton(type):
 
 # Stores log level, log_dir etc.
 class LoggerConfig(metaclass=Singleton):
-    def __init__(self, log_level=logging.DEBUG, log_dir=None, format=LOG_FORMAT):
+    def __init__(self, log_level=logging.INFO, log_dir=None, format=LOG_FORMAT):
         self.log_level = log_level
         self.log_dir = log_dir
         self.format = format

@@ -1,7 +1,5 @@
 # sampler/grid.py
 """
----
-
 ## Overview
 `NestedSampler` composes multiple samplers into a single sampler by
 generating the Cartesian product of their initial sample sets.

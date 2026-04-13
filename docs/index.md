@@ -1,15 +1,8 @@
-# Enchanted surrogates
+# Enchanted Surrogates
 
-<span class="hero-subtitle">
-A framework for creating databases for surrogate models of complex physics codes.
-</span>
-
-[View it on GitHub](https://github.com/DIGIfusion/enchanted-surrogates){
-.md-button .md-button--primary }
-
----
-
-!!! note This documentation is under development.
+<big><big>**A framework for creating databases for surrogate models of complex physics codes.**
+</big></big>
+<!-- ![](img/es.jpg) -->
 
 Machine learning surrogate model development requires large amounts of data,
 which is often generated using complex and computationally expensive simulation
@@ -17,17 +10,52 @@ codes. The `enchanted-surrogates` package provides a flexible framework for
 creating databases for surrogate models of such complex physics codes. Database
 generation for a simulation consists of:
 
-1. Running the code
-   - Every code has it's own runtime entry points (e.g., I/O, actual execution)
-     and computational resource needs
-2. On a search space
-   - e.g., hypercube, or efficiently searching across a space with active
-     learning
+1. Running the code:
+    - Every code has it's own runtime entry points (e.g., I/O, actual execution)
+      and computational resource needs
+2. On a search space:
+    - e.g., hypercube, or efficiently searching across a space with active
+      learning
 
 i.e., step 1. is repeated many times to fill volume spanned by 2.
 
 The idea is to abstract away the iterative process, and just uniquely handle 1.
 for each individual code, while being able to use mutliple searches types.
+
+
+!!! notes
+    Some parts of this documentation is still under development.
+
+---
+
+
+## Code structure
+
+The `Supervisor` is the entry point or "the brain". The `Supervisor` reads the 
+configurated parameters and initializes `Sampler`(s), `Executor`(s) and `Runner`(s)
+according to the user-defined configuration file.
+
+The `Sampler` decides how the search space is traveresed and returns samples to the `Supervisor`.
+
+The user chooses the `Executor` based on the system where
+the code is running. The `Executor` initializes a cluster or a job
+queue or similar. The `Supervisor` sends the samples to the `Executor`. 
+The `Executor` calls `simulation_task.py` which initializes a
+`Runner` for each sample. 
+
+A `Runner` is a code-specific module for running the code in question. Commonly 
+paired with a code-specific `Parser`. A `Parser` is a code-specific module for 
+reading and writing files produced or needed by the code. Code-specific `Runner`s 
+and `Parser`s are developed as plugins. See [Plugins](plugins/index.md) for 
+available `Runner` + `Parser` combos. If a plugin for the code you are using 
+doesn't exist yet, feel free to contribute with a new plugin! 
+See [Contribution](contribution.md). 
+
+The `Supervisor` keeps track of the samples and creates summary data structures to the specified base run directory.
+See documentation for [Supervisor](supervisor.md) for all optionas and a graph about module
+structure.
+
+---
 
 ## How to install
 
@@ -50,11 +78,13 @@ install any plugins you want to use, by cloning their repositories and
 installing them with pip as well. See the [Plugins](./plugins/index.md) section
 for more details.
 
+Please note that some samplers require optional dependencies.
+Check the sampler's documentation to see if any optional dependencies are required to run. 
 Optional dependencies can be installed by listing them inside square brackets,
 comma-separated without spaces, e.g.:
 
 ```bash
-pip install -e enchanted-surrogates[bo,GPy]
+pip install -e enchanted-surrogates[bo,GPy,activelearning]
 ```
 
 Note: in some environments, the command python may still point to system-wide
@@ -68,6 +98,8 @@ which python3
 
 If neither is referring to created virtual environment, it can be referred with
 `.venv/bin/python` instead of `python` in the example below.
+
+---
 
 ## How to run
 
@@ -110,155 +142,59 @@ supervisor:
       runner: r1
 ```
 
-### Output
+---
+
+## Output
+
+The framework will create the following folder structure in the `base_run_dir` defined in the config file:
 
 ```
 base_run_dir/
 ├── data/
-│    └── ... 
+│    └── ...  # Contains the enchanted_datapoint.csv files and runner outputs.
 ├── logs/
-│    └── ... 
+│    └── ...  # Contains all log files from the supervisor and workers.
 ├── config/
-│    └── ... 
-├── enchanted_datapoints.csv
-└── runs.h5
+│    └── ...  # Contains a copy of the configuration file.
+│
+├── enchanted_datapoints.csv  # Summary file
+└── runs.h5                   # Summary file
 ```
 
-#### data
 
-Contains the enchanted_datapoint.csv files and runner outputs.
+The summary files are structured as such: 
 
-#### logs
+|   | param1 | param2 | paramN | output | success | run_dir                           |
+|---|--------|--------|--------|--------|---------|-----------------------------------|
+| 0 | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_b0_r0_s0 |
+| 1 | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_b0_r1_s0 |
+| N | 0.1    | 0.2    | 0.3    | 0.6    | true    | data_dir/example/data/d0_bn_rn_s0 |
 
-Contains all log files from the supervisor and workers.
 
-#### config
+All user defined sampled parameters are included for each sample.
+The runner output is defined as output. There is also a success field which is a boolean.
+Run directories are also included for clarity. 
 
-Contains a copy of the configuration file.
 
-**Note: Output files to be saved can be configured, see
-[Configuring output files](supervisor.md#configuring-output-files).**
+*Note: Output files to be saved can be configured, see
+[Configuring output files](supervisor.md#configuring-output-files).*
 
-### Quick start example
+---
+
+## Quick start example
 
 The following command runs the example local executor with the example
 configuration file. It creates a run directory in the current working directory,
 where it generates random samples and runs the example code.
 
 ```bash
+
 python enchanted-surrogates/src/run.py -cf enchanted-surrogates/configs/example_local.yaml
+
 ```
 
-## Code structure
 
-The Supervisor is the entry point. The Supervisor reads parameters and has
-Sampler, Executor and Runner. The Executor is chosen based on the system where
-the code is running. It sends samples for execution. A Runner is a code-specific
-module for running the code in question. Commonly paired with a code-specific
-parser. A Parser is a code-specific module for reading and writing files
-produced by the code. Code-specific Runners and Parsers are developed as
-plugins.
-
-The Supervisor initializes a Sampler and fetches samples from it. The Supervisor
-gives samples to the Executor. The Executor initializes some cluster or job
-queue or similar. The Executor calls `simulation_task.py` which initializes a
-Runner and creates files. The Supervisor creates data structures from the files
-created to specified running directory.
-
-See documentation for [Supervisor](supervisor.md) for a graph about module
-structure.
-
-## Contribution guidlines
-
-We encourage contributions to the enchanted-surrogates package! Here are some
-guidelines to help you get started. If you are interested in adding a new code
-plugin, please refer to the [Plugins](./plugins/index.md) section for more
-details.
-
-- `main` branch is for stable code (releases)
-- `develop` branch is for latest development code (merges from feature branches)
-- `develop/{feature}` or `develop/{user}` for changes.
-- `bug/{descriptive_name}` for bug fixes.
-- Enable linting pre-commit hook (stops the commit if violated linting rules) by
-  running:
-
-      git config core.hooksPath .githooks
-
-  (Can be overridden with `git commit --no-verify` if needed)
-
-- **One feature or fix per pull request**. This ensures that changes are
-  isolated and easier to review. Be respectful of your fellow developers and
-  create small, focused pull requests.
-- Use pull requests to merge branches. Delete branch after merge.
-- Use `Issues` for bug reports, feature requests, etc.
-- For longer term items to be integrated, e.g., Active Learning, suggest to use
-  `Issues` followed by a branch.
-- The configs folder in the source is to be kept for example config files and
-  example cases that would be benefical to the wider community. Plugin-specific
-  config files should be kept in the plugin repository.
-
-### Coding Style Standards
-
-The coding standard [PEP8](https://peps.python.org/pep-0008/) should be used.
-
-### Testing
-
-#### New samplers
-
-In addition to any sampler-specific features, new samplers should be tested to
-- return values within sampler bounds
-- return correct number of samples specified by the batch size
-- respect sampler budget
-
-
-#### Automated Testing at Pull Requests
-
-The `tests` folder contains unit tests. These can be run manually by using the
-command:
-
-    pytest tests -v -s
-
-and will also be automatically run by Github Actions at certain pushes and pull
-requests. It is recommended to locally run the tests before making a commit.
-
-If on HPC you must be using an interactive session with roughly 4 cores and at
-least 500MB of memory.
-
-<!-- **NB:** submodules are necessary to run the tests.  -->
-
-#### Workflow tests
-
-The `workflow_tests` folder contains larger workflow tests. These can be run
-manually by using the command:
-
-    pytest workflow_tests/automated_tests_no_HPC -v -s
-
-#### Linting Tests
-
-A Github Actions workflow is also used for running Ruff tests. These are
-currently only testing for issues categorized as Errors or Fatal. Message
-overview [here](https://docs.astral.sh/ruff/rules/). The list of enabled rules
-can be found in pyproject.toml To check the linting locally and get a full
-overview of all possible issues, run:
-
-For single file check:
-
-    ruff /path/to/file.py
-
-For all python files in $PWD:
-
-    ruff $(find $PWD -name "*.py")
-
-#### Machine Specific Tests
-
-For now, no HPC specific tests are run as part of the automated testsing
-procedure. So if you use enchanted surrogates on a specific machine it is your
-responsibility to test updates on that machine.
-
-Alternatively, one may ceate a tests folder for a specific machine in
-`/enchanted-surrogates/tests/MACHINE_NAME_tests`, which should be executable via
-
-    python -m pytest tests/MACHINE_NAME_tests
+---
 
 ## About the project
 
@@ -273,19 +209,13 @@ If you use this package in your research, please cite:
 ```bibtex
 @Misc{enchanted-surrogates,
   title =        {Enchanted Surrogates: A flexible framework for surrogate modelling of fusion plasma simulations},
-  author =       {A. Kit, A.M. Bruncrona, D. Jordan, A.E. Järvinen},
+  author =       {Adam Kit and Amanda Bruncrona and Daniel Jordan and Aaro Järvinen and Anna Niemelä},
   howpublished = {Github},
   year =         {2025},
   url =          {https://github.com/DIGIfusion/enchanted-surrogates}
 }
 ```
 
-### Contributors
-
-**Feel free to contribute!**
-
-<a href = "https://github.com/Tanu-N-Prabhu/Python/graphs/contributors">
-  <img src = "https://contrib.rocks/image?repo = DIGIfusion/enchanted-surrogates"/></a>
 
 ### Acknowledgements
 

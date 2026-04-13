@@ -12,7 +12,7 @@ def test_start_cluster_uses_LocalCluster(mock_LocalCluster, mock_Client, tmp_pat
     mock_Client.return_value = MagicMock()
 
     executor = DaskExecutor(
-        runner_config={"type": "mock"}, LocalCluster_config={"n_workers": 2}
+        LocalCluster_config={"n_workers": 2}
     )
     executor.base_run_dir = tmp_path
     executor.start_cluster()
@@ -33,7 +33,7 @@ def test_start_cluster_uses_SLURMCluster(mock_SLURM, mock_Client, tmp_path):
 
     slurm_config = {"processes": 2}
     executor = DaskExecutor(
-        runner_config={"type": "mock"}, SLURMcluster_config=slurm_config, scale_n_jobs=3
+        SLURMcluster_config=slurm_config, scale_n_jobs=3
     )
     executor.base_run_dir = tmp_path
     executor.start_cluster()

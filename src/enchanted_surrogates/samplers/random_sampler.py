@@ -1,6 +1,4 @@
 """
----
-
 ## Overview
 
 The random sampler generates samples randomly within the specified bounds
