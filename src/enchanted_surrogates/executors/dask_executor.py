@@ -526,7 +526,7 @@ class DaskExecutor(Executor):
 
             log.info(
                 f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
-                f"[{num_success}/{i}] Futures Succeeded"
+                f"[{num_success}/{total}] Futures Succeeded"
             )
             log.info("_" * 100)
 
