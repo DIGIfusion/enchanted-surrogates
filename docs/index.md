@@ -35,7 +35,7 @@ The `Supervisor` is the entry point or "the brain". The `Supervisor` reads the
 configurated parameters and initializes `Sampler`(s), `Executor`(s) and `Runner`(s)
 according to the user-defined configuration file.
 
-The `Sampler` decides how the search space is traveresed and returns samples to the `Supervisor`.
+The `Sampler` decides how the search space is traversed and returns samples to the `Supervisor`.
 
 The user chooses the `Executor` based on the system where
 the code is running. The `Executor` initializes a cluster or a job
@@ -52,7 +52,7 @@ doesn't exist yet, feel free to contribute with a new plugin!
 See [Contribution](contribution.md). 
 
 The `Supervisor` keeps track of the samples and creates summary data structures to the specified base run directory.
-See documentation for [Supervisor](supervisor.md) for all optionas and a graph about module
+See documentation for [Supervisor](supervisor.md) for all options and a graph about module
 structure.
 
 ---
@@ -87,7 +87,7 @@ comma-separated without spaces, e.g.:
 pip install -e enchanted-surrogates[bo,GPy,activelearning]
 ```
 
-Note: in some environments, the command python may still point to system-wide
+Note: in some environments, the command `python` may still point to system-wide
 Python (e.g. `/usr/bin/python` or `/Library/Frameworks/...`) rather than the
 virtual environment. You can check which python is active with:
 

@@ -9,10 +9,12 @@ details.
 - `develop` branch is for latest development code (merges from feature branches)
 - `develop/{feature}` or `develop/{user}` for changes.
 - `bug/{descriptive_name}` for bug fixes.
-- Enable linting pre-commit hook (stops the commit if violated linting rules) by
+- Enable linting pre-commit hook (stops the commit if linting rules are violated) by
   running (Can be overridden with `git commit --no-verify` if needed):
 
-      git config core.hooksPath .githooks
+  ```bash
+  git config core.hooksPath .githooks
+  ```
 
 
 
@@ -77,7 +79,7 @@ manually by using the command:
 A Github Actions workflow is also used for running Ruff tests. These are
 currently only testing for issues categorized as Errors or Fatal. Message
 overview [here](https://docs.astral.sh/ruff/rules/). The list of enabled rules
-can be found in pyproject.toml To check the linting locally and get a full
+can be found in pyproject.toml. To check the linting locally and get a full
 overview of all possible issues, run:
 
 For single file check:
