@@ -158,6 +158,9 @@ class Supervisor:
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
 
+                    # monitor runs for failures
+                    self.monitor_runs(run_dirs)
+                    
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -487,6 +490,39 @@ class Supervisor:
         """
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
+    
+    def monitor_runs(self, run_dirs: list[str]):
+        """
+        Keeps checking all the run_dirs for failures and logs the failures it finds
+        
+        Attributes:
+            run_dirs (list[str]): List of running directories to monitor
+        """
+        
+        run_dirs = set(run_dirs)   # if it isn't already a set
+
+        while run_dirs:
+            for run_dir in list(run_dirs):   # iterate over a snapshot
+                result = self.load_run_result(run_dir)
+                if result is not None:
+                    # remove so it is not rechecked and we are closer to while loop stopping
+                    run_dirs.remove(run_dir)
+                    if not result['success']:
+                        log_message = [f'THE run_dir {run_dir} HAS FAILED. \n RESULT:']
+                        for key, value in result.items():
+                            log_message.append(f'{key}:{value}')
+                        log.error('\n'.join(log_message))
+
+                
+        
+    def load_run_result(self, run_dir):
+        result_path = os.path.join(run_dir, 'enchanted_datapoint.csv')
+        if os.path.exists(result_path):
+            df = pd.read_csv(result_path)
+            row_dict = df.iloc[0].to_dict()
+            return row_dict
+        else:
+            return None
 
     def load_batch_to_df(self, run_dirs: list[str]) -> pd.DataFrame:
         """
