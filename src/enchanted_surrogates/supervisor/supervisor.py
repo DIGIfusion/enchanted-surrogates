@@ -52,7 +52,7 @@ class Supervisor:
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
-
+        self.log_failures = args.supervisor.get("log_failures", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
@@ -77,6 +77,8 @@ class Supervisor:
                 )
 
         self.data_dir = os.path.join(self.base_run_dir, "data")
+        self.current_progress_info_file = os.path.join(self.base_run_dir, LOG_DIR, 'current_progress.txt')
+        self.all_progress_info_file = os.path.join(self.base_run_dir, LOG_DIR, 'all_progress.txt')
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
@@ -113,7 +115,6 @@ class Supervisor:
         """
 
         log.info("Starting runs...")
-
         if self.local_storage:
             real_run_dir = self.local_storage
         else:
@@ -158,8 +159,9 @@ class Supervisor:
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
 
-                    # monitor runs for failures
-                    self.monitor_runs(run_dirs)
+                    # monitor runs for failures and update progress file
+                    self.write_current_progress_string(depth, batch_number, len(run_dirs), 0, 0)
+                    self.monitor_runs(run_dirs, depth = depth, batch_number = batch_number)
                     
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -491,7 +493,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, run_dirs: list[str]):
+    def monitor_runs(self, run_dirs: list[str], depth, batch_number):
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
         
@@ -500,20 +502,42 @@ class Supervisor:
         """
         
         run_dirs = set(run_dirs)   # if it isn't already a set
-
+        total = len(run_dirs)
+        completed = 0
+        num_successes = 0
         while run_dirs:
             for run_dir in list(run_dirs):   # iterate over a snapshot
                 result = self.load_run_result(run_dir)
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
-                    if not result['success']:
-                        log_message = [f'THE run_dir {run_dir} HAS FAILED. \n RESULT:']
-                        for key, value in result.items():
-                            log_message.append(f'{key}:{value}')
-                        log.error('\n'.join(log_message))
+                    completed += 1
+                    if result['success']:
+                        num_successes += 1
+                    else:
+                        if self.log_failures:
+                            log_message = [f'THE run_dir {run_dir} HAS FAILED. \n RESULT:']
+                            for key, value in result.items():
+                                log_message.append(f'{key}:{value}')
+                            log.debug('\n'.join(log_message))
+                    latest_progress_string = self.write_current_progress_string(depth, batch_number, total, completed, num_successes)
 
-                
+        with open(self.all_progress_info_file, 'a') as file:
+            file.write(latest_progress_string)
+        
+    def write_current_progress_string(self, depth, batch_number, total, completed, num_successes):
+        progress_string=f'''
+DEPTH: {depth} | Batch Number {batch_number}
+Total runs in batch: {total} | Completed: {completed} | Successes: {num_successes}
+Progress: {completed*100/total} %
+Current Success Rate: {num_successes*100/completed if completed > 0 else 0} %
+        '''
+        
+        with open(self.current_progress_info_file, 'w') as file:
+            file.write(progress_string)
+        
+        return progress_string
+        
         
     def load_run_result(self, run_dir):
         result_path = os.path.join(run_dir, 'enchanted_datapoint.csv')
