@@ -12,6 +12,10 @@ from scipy.stats import uniform
 from enchanted_surrogates.samplers.base_sampler import Sampler
 from enchanted_surrogates.utils.precise_imports import cached_import_external
 
+from enchanted_surrogates.utils.logger import get_logger
+
+log = get_logger(__name__)
+
 
 class ActiveLearningSampler(Sampler):
     """
@@ -78,23 +82,31 @@ class ActiveLearningSampler(Sampler):
       required.
     """
 
-    def __init__(self, bounds, budget, parameters, query_strategy, **kwargs):
+    def __init__(self, bounds, budget, parameters, query_strategy, n_candidates, **kwargs):
         """
         Initializes the ActiveLearningSampler.
 
         Args:
-          bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
+          bounds (list[tuple[float, float]]):
+            Lower and upper bounds for each parameter.
           budget (int): Total number of samples that can be generated.
-          parameters (list[str]): Names of the parameters to be sampled. The order must correspond to the order of bounds.
-          batch_size (int, optional): Number of samples returned per call to `get_next_samples`. Defaults to the full sampling budget.
+          parameters (list[str]): Names of the parameters to be sampled.
+            The order must correspond to the order of bounds.
+          query_strategy (str): Import path or name used by
+            `cached_import_external` to load a pool query strategy from
+            `skactiveml.pool`.
+          n_candidates (int): Number of candidate parameter vectors to
+            maintain in the pool.
+          batch_size (int, optional): Number of samples returned per call to
+            `get_next_samples`. Defaults to the full sampling budget.
         """
         self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
+        self.n_candidates = n_candidates
 
         # Parameter values
-        n_candidates = self.batch_size  # or whatever pool size you want
         n_parameters = len(self.bounds)
         lows = np.array([b[0] for b in self.bounds])
         highs = np.array([b[1] for b in self.bounds])
@@ -133,7 +145,6 @@ class ActiveLearningSampler(Sampler):
         list[dict[str, float]]
             A batch of parameter dictionaries.
         """
-
         if self.submitted < self.warmup or len(self.X_obs) == 0:
             return self.get_fallback_samples()
 
@@ -148,10 +159,17 @@ class ActiveLearningSampler(Sampler):
         )
 
         selected = self.candidates[query_indices]
+
+        # remove selected candidates from pool
+        mask = np.ones(len(self.candidates), dtype=bool)
+        mask[query_indices] = False
+        self.candidates = self.candidates[mask]
+
         self.submitted += len(selected)
 
         return [
-            {key: value for key, value in zip(self.parameters, row)} for row in selected
+            {key: value for key, value in zip(self.parameters, row)}
+            for row in selected
         ]
 
     def get_fallback_samples(self) -> list[dict]:
