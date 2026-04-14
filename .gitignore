@@ -2,6 +2,7 @@
 personal_configs/
 *ignore*
 data_dir/
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -44,8 +45,8 @@ data_store/*
 core
 *images*
 *out.txt
-*.png
-*.jpg
+# *.png
+# *.jpg
 tests/example/
 *example_base_run_dir*
 *example_nested_base_run_dir*

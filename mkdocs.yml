@@ -2,6 +2,45 @@ site_name: Enchanted Surrogates
 site_description: Documentation for Enchanted Surrogates
 site_url: https://digifusion.github.io/enchanted-surrogates/
 
+repo_url: https://github.com/DIGIfusion/enchanted-surrogates
+repo_name: DIGIfusion/enchanted-surrogates
+
+nav:
+  - Home: 
+    - Overview: index.md
+    - Releases: releases.md
+    - Contribution: contribution.md
+  - Supervisor:
+    - Overview: supervisor.md
+  - Executors:
+    - Local Executor: executors/local_executor.md
+    - Joblib Executor: executors/joblib_executor.md
+    - Dask Executor: executors/dask_executor.md
+  - Samplers:
+    - Random Sampler: samplers/random_sampler.md
+    - Grid Sampler: samplers/grid_sampler.md
+    - Array Sampler: samplers/array_sampler.md
+    - Bayesian Optimization Sampler: samplers/bayesian_optimization_sampler.md
+    - Latin Hypercube Sampler: samplers/latin_hypercube_sampler.md
+    - Sobol Sequence Sampler: samplers/sobol_sampler.md
+    - Active Learning Sampler: samplers/active_learning_sampler.md
+    - Nested Sampler: samplers/nested_sampler.md
+  - Plugins:
+    - Overview: plugins/index.md
+    - MISHKA: plugins/mishka_plugin.md
+    - HELENA: plugins/helena_plugin.md
+    - CASTOR: plugins/castor_plugin.md
+    - GENE: plugins/gene_plugin.md
+    - DREAM: plugins/dream_plugin.md
+  - Tutorials:
+    - Sampler Comparison:
+      - Step-by-step: tutorials/example_workflow.md
+      - Example Runner: runners/example_runner.md
+    - Bayesian Optimization:
+      - Step-by-step: tutorials/bayesian_optimization.md
+      - Example BO Runner: runners/example_bayesian_optimization_runner.md
+      - Example BO Parser: parsers/example_bayesian_optimization_parser.md
+
 theme:
   name: material
 
@@ -19,12 +58,14 @@ theme:
       toggle:
         icon: material/brightness-7 
         name: Switch to dark mode
+  icon:
+    repo: fontawesome/brands/git-alt 
   
   # Logo displayed in the header instead of the site name
-  logo: #docs/img/logo.png
+  # logo: img/es.jpg
 
   # Favicon shown in the browser tab
-  favicon: docs/img/favicon.ico
+  favicon: img/es.jpg
 
   # Custom HTML overrides
   # This replaces Jekyll `_includes/head_custom.html`
@@ -32,6 +73,7 @@ theme:
   custom_dir: docs/overrides
 
   features:
+    - navigation.tabs
     - navigation.instant       # Instant page loading
     - navigation.tracking      # URL updates based on scroll position
     - navigation.sections      # Group navigation sections
@@ -67,6 +109,8 @@ plugins:
   - gen-files:
       scripts:
         - docs/scripts/gen_ref_pages.py
+
+
 
 markdown_extensions:
   - attr_list

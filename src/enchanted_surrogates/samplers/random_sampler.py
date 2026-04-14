@@ -63,13 +63,18 @@ class RandomSampler(Sampler):
         Args:
           bounds (list[tuple[float, float]]): Lower and upper bounds for each parameter.
           budget (int): Total number of samples that can be generated.
-          parameters (list[str]): Names of the parameters to be sampled. The order must correspond to the order of bounds.
-          batch_size (int, optional): Number of samples returned per call to `get_next_samples`. Defaults to the full sampling budget.
+          parameters (list[str]): Names of the parameters to be sampled.
+              The order must correspond to the order of bounds.
+          batch_size (int, optional): Number of samples returned per call
+              to `get_next_samples`. Defaults to the full sampling budget.
+          distribution (str, optional): The distribution used by the sampler.
+              Options: uniform (default), loguniform, normal, int_uniform. 
         """
         self.budget = budget
         self.bounds = bounds
         self.parameters = parameters
         self.batch_size = kwargs.get("batch_size", self.budget)
+        self.distribution = kwargs.get("distribution", "uniform")
 
     def get_next_samples(self) -> list[dict]:
         """
@@ -83,11 +88,13 @@ class RandomSampler(Sampler):
               A batch of parameter dictionaries, where each dictionary maps
               parameter names to sampled numeric values.
         """
-        # TODO not use uniform?
         # TODO batch samples
         list_param_dicts = []
         for _ in range(self.batch_size):
-            params = [np.random.uniform(low, high) for low, high in self.bounds]
+            params = [
+              self.sample_from_distribution(low, high)
+              for low, high in self.bounds
+            ]
             param_dict = {key: value for key, value in zip(self.parameters, params)}
             list_param_dicts.append(param_dict)
         self.submitted += len(list_param_dicts)
@@ -125,3 +132,35 @@ class RandomSampler(Sampler):
           None
         """
         return None
+
+    def sample_from_distribution(self, low, high):
+        """ Sample from different distributions. 
+        
+        Args:
+          low:
+            A float or integer defining the lower boundary of the distribution.
+          high:
+            A float or integer defining the higher boundary of the distribution.
+
+        Returns:
+          sample:
+            A float or integer.
+        """
+        if self.distribution == "uniform":
+            return np.random.uniform(low, high)
+
+        elif self.distribution == "loguniform":
+            # useful when parameters span orders of magnitude
+            return np.exp(np.random.uniform(np.log(low), np.log(high)))
+
+        elif self.distribution == "normal":
+            # interpret bounds as 3std limits (common convention)
+            mean = (low + high) / 2
+            std = (high - low) / 6
+            return np.random.normal(mean, std)
+
+        elif self.distribution == "int_uniform":
+            return np.random.randint(low, high + 1)
+
+        else:
+            raise ValueError(f"Unknown distribution: {self.distribution}")

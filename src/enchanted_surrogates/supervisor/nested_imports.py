@@ -42,6 +42,7 @@ def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str
 
     Args:
         group_config (dict): Configuration dictionary parsed from yaml
+
     Returns:
         out (tuple[str, list[str], list[str]]): Tuple containg name of sampler, list of names
             of executors and list of names of runners
@@ -67,9 +68,10 @@ def import_executors(args) -> dict[str, Executor]:
     """
     Imports all executors from config, under 'executors' key
 
-    Args
+    Args:
         Dictionary or namespace object, parsed from yaml
-    Returns
+
+    Returns:
         Dictionary mapping executor unique name to class instance
     """
     executors = {}
@@ -83,9 +85,10 @@ def import_samplers(args) -> dict[str, Sampler]:
     """
     Imports all samplers from config, under 'samplers' key
 
-    Args
+    Args:
         Dictionary or namespace object, parsed from yaml
-    Returns
+
+    Returns:
         Dictionary mapping sampler unique name to class instance
     """
     samplers = {}
@@ -99,7 +102,10 @@ def import_run_groups(args) -> list[dict]:
     """
     Imports supervisor/run_order from config.
 
-    Returns
+    Args:
+        args: Dictionary or namespace object, parsed from yaml
+
+    Returns:
         List of dicts with keys 'executor', 'sampler' and 'runner' mapping
         to their unique names.
     """
@@ -112,6 +118,7 @@ def parse_all_run_groups(args) -> list[RunGroup]:
 
     Args:
         args: Namespace/dict parsed from yaml.
+
     Returns:
         out (list[RunGroup]): List of nested run groups.
     """
@@ -145,7 +152,7 @@ def import_saved_files_list(args) -> list[str]:
     """
     Imports supervisor/save_files_list from config.
 
-    Returns
+    Returns:
         List of strings containing names of files to be saved
     """
     return args.supervisor.get("save_files_list", [])

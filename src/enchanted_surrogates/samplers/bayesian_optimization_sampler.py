@@ -29,6 +29,7 @@ log = get_logger(__name__)
 torch.set_default_dtype(torch.float64)
 
 
+
 class BayesianOptimizationSampler(Sampler):
     """
 
