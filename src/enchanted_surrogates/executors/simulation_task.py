@@ -25,15 +25,6 @@ def run_simulation_task(
     runner = import_runner(runner_type=runner_type, runner_config=runner_config)
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
-        # if there was a failure that that did not trigger a raised error this should also be logged 
-        if not runner_output['success']:
-            log_message = [f'THE run_dir {run_dir} HAS FAILED. \n RESULT:']
-            for key, value in runner_output.items():
-                log_message.append(f'{key}:{value}')
-            
-            log_message_string = '\n'.join(log_message)
-            log.error(log_message_string)
-
 
     except Exception as exc:
         log.error("=" * 100)
@@ -51,7 +42,7 @@ def run_simulation_task(
             "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
             + " VALUE PAIR 'success': bool"
         )
-        
+    
     # Update with conflict checking (in sequential runs 'output' and 'success' causes conflicts)
     # Runner output has priority
     for key, value in params.items():
