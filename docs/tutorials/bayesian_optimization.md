@@ -106,6 +106,31 @@ The figure below shows the objective function, the initial random points and the
 ![fig](img/bo_sampling_output.png)
 
 
+## Comparison to Pool-based Active Sampling
+
+The same example can be ran using pool-based active sampling. The main difference is, that the pool-based active sampling will choose the best points (`budget`) from a pool of random candidate points (`n_candidates`) in order to represent the objective function. The Bayesian Optimization sampler is trying to optimize some objective (in the example above: the distance to y=2) while the pool-based active sampler is trying to find the best points to describe the underlying function.
+
+Replace the sampler in the config file:
+
+```yaml
+samplers:
+  s1:
+    type: ActiveLearningSampler
+    bounds: [[0.001, 1.0]]
+    budget: 50
+    batch_size: 3
+    n_candidates: 1000
+    parameters: ['x']
+    query_strategy: GreedySamplingTarget
+```
+
+Use the same plotting code as above.
+
+![fig](img/active_pool_sampling_output.png)
+
+
+
+
 ## Extending the example
 
 You can adapt this example for a real simulation by:
