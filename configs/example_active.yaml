@@ -11,6 +11,7 @@ samplers:
     bounds: [[0.0, 1.0], [0.0, 10.0]]
     budget: 16
     batch_size: 4
+    n_candidates: 1000
     parameters: ['c1', 'c2']
     query_strategy: GreedySamplingTarget
   s2:
@@ -18,6 +19,7 @@ samplers:
     bounds: [[0.0, 1.0], [0.0, 10.0]]
     budget: 16
     batch_size: 4
+    n_candidates: 1000
     parameters: ['c1', 'c2']
     query_strategy: GreedySamplingTarget
 
