@@ -16,7 +16,7 @@ samplers:
 
 runners:
   r1:
-    type: ExampleBayesianOptimizationRunner
+    type: SyntheticDoubleGaussianRunner
     other_params: {}
 
 supervisor:
