@@ -1,6 +1,10 @@
 # Tutorial: Sampler comparison
 
-This tutorial will demonstrate the difference between the `Random sampler` and the `Grid sampler` over a 2D parameter space. Given two input parameters, `c1` and `c2`, the 
+This tutorial will demonstrate the difference between the `Random sampler` and the `Grid sampler` over a 2D parameter space. The runner implements a synthetic test funtion consisting of two Gaussian peaks with a background slope ([Synthetic Double Gaussian Runner](runners/synthetic_double_gaussian_runner.md)).
+The funciton implemented in the runner (with default parameters) look like this:
+
+![double gaussian](img/synthetic_double_gaussian.png)
+
 Note that you need to have enchanted-surrogates installed when running this example.
 
 Setup two new configuration files based on `configs/example_local.yaml`.
@@ -17,9 +21,9 @@ Edit `example_local_random.yaml` to have parameters:
 samplers:
   s1:
     type: RandomSampler
-    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    bounds: [[0.0, 1.0], [0.0, 1.0]]
     budget: 100
-    parameters: ['c1', 'c2']
+    parameters: ['x', 'y']
 
 ...
 
@@ -37,9 +41,9 @@ Edit `example_local_grid.yaml` to have parameters:
 samplers:
   s1:
     type: GridSampler
-    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    bounds: [[0.0, 1.0], [0.0, 1.0]]
     num_samples: [10, 10]
-    parameters: ['c1', 'c2']
+    parameters: ['x', 'y']
 
 ...
 
@@ -90,22 +94,23 @@ vmin = min(df_grid['output'].min(), df_random['output'].min())
 vmax = max(df_grid['output'].max(), df_random['output'].max())
 norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
-sc_grid = axs[0].scatter(df_grid['c1'], df_grid['c2'], c=df_grid['output'], norm=norm, edgecolor='black', s=100)
-sc_random = axs[1].scatter(df_random['c1'], df_random['c2'], c=df_random['output'], norm=norm, edgecolor='black', s=100)
+sc_grid = axs[0].scatter(df_grid['x'], df_grid['y'], c=df_grid['output'], norm=norm, edgecolor='black', s=100)
+sc_random = axs[1].scatter(df_random['x'], df_random['y'], c=df_random['output'], norm=norm, edgecolor='black', s=100)
 
 axs[0].set_title('Grid Sampling')
 axs[1].set_title('Random Sampling')
 
 for ax in axs:
-    ax.set_xlabel('c1')
-    ax.set_ylabel('c2')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
 
-fig.colorbar(sc_random, ax=axs)
+cbar = fig.colorbar(sc_random, ax=axs)
+cbar.set_label("z")
 plt.show()
 
 ```
 
-The above code snippet will create a figure that displays how the distribution of the sample points differ between the two samplers. The colorbar refers to the output value of the example runner (`c1 + c2`).
+The above code snippet will create a figure that displays how the distribution of the sample points differ between the two sampling strategies. The colorbar refers to the output value of the example runner.
 
 ![](img/random_vs_grid.png)
 
