@@ -506,11 +506,9 @@ class Supervisor:
         total = len(run_dirs)
         completed = 0
         num_successes = 0
-        log.info(f' debug log failures: {self.log_failures}')
         while run_dirs:
             for run_dir in list(run_dirs):   # iterate over a snapshot
                 result = self.load_run_result(run_dir)
-                log.info(f' debug result for {run_dir}: {result}')
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
