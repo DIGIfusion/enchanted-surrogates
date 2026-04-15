@@ -60,6 +60,7 @@ import sys
 import time
 import pandas as pd
 import logging
+from dask.distributed import fire_and_forget
 
 
 from dask_jobqueue import SLURMCluster
@@ -499,7 +500,7 @@ class DaskExecutor(Executor):
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(input, runner_config)
+        self.submit_batch(input, runner_config)
 
     def submit_batch(
         self,
@@ -524,14 +525,8 @@ class DaskExecutor(Executor):
             client = self.client
         assert client is not None
 
-        futures = []
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
                 run_simulation_task, runner_config, run_dir, sample_params
-            )
-            futures.append(new_future)
-
-        log.info(
-            f"{len(futures)} DASK FUTURES SUBMITTED for runner {runner_config['type']}"
-        )
-        return futures
+            )            
+            fire_and_forget(new_future)
