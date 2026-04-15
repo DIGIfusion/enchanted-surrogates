@@ -21,6 +21,7 @@ from enchanted_surrogates.supervisor.nested_imports import (
     parse_all_run_groups,
     import_saved_files_list,
 )
+from enchanted_surrogates.utils.ascii_loading_bar import ascii_loading_bar
 
 log = get_logger(__name__)
 
@@ -505,9 +506,11 @@ class Supervisor:
         total = len(run_dirs)
         completed = 0
         num_successes = 0
+        log.info(f' debug log failures: {self.log_failures}')
         while run_dirs:
             for run_dir in list(run_dirs):   # iterate over a snapshot
                 result = self.load_run_result(run_dir)
+                log.info(f' debug result for {run_dir}: {result}')
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
@@ -516,23 +519,46 @@ class Supervisor:
                         num_successes += 1
                     else:
                         if self.log_failures:
-                            log_message = [f'THE run_dir {run_dir} HAS FAILED. \n RESULT:']
-                            for key, value in result.items():
-                                log_message.append(f'{key}:{value}')
-                            log.debug('\n'.join(log_message))
-                    latest_progress_string = self.write_current_progress_string(depth, batch_number, total, completed, num_successes)
+                            details = "\n".join(f"  {k}: {v}" for k, v in result.items())
+                            log_message = f"""\n\n
+                            
+=== FAILURE =========================================
+Run directory: {run_dir}
 
+Result:
+{details}
+======================================================
+
+                            \n""".strip()
+
+                            log.error(log_message)                            
+                    latest_progress_string = self.write_current_progress_string(depth, batch_number, total, completed, num_successes)
+                sleep(0.1)
+        os.makedirs(os.path.dirname(self.all_progress_info_file), exist_ok=True)
         with open(self.all_progress_info_file, 'a') as file:
             file.write(latest_progress_string)
         
     def write_current_progress_string(self, depth, batch_number, total, completed, num_successes):
-        progress_string=f'''
-DEPTH: {depth} | Batch Number {batch_number}
-Total runs in batch: {total} | Completed: {completed} | Successes: {num_successes}
-Progress: {completed*100/total} %
-Current Success Rate: {num_successes*100/completed if completed > 0 else 0} %
-        '''
+        progress_string=f"""
         
+=== PROGRESS REPORT =====================================
+
+Time:            {pd.Timestamp.now()}
+Depth:           {depth}
+Batch:           {batch_number}
+
+Completed:       {completed}/{total}
+Successes:       {num_successes}
+Failures:        {completed-num_successes}
+Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
+
+{ascii_loading_bar(total, completed)}
+
+==========================================================
+
+"""
+        
+        os.makedirs(os.path.dirname(self.all_progress_info_file), exist_ok=True)
         with open(self.current_progress_info_file, 'w') as file:
             file.write(progress_string)
         
