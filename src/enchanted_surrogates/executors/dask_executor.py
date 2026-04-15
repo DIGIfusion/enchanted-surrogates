@@ -524,12 +524,6 @@ class DaskExecutor(Executor):
                 log.error("Failed to convert result to DataFrame:", e)
                 continue
 
-            log.info(
-                f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
-                f"[{num_success}/{i}] Futures Succeeded"
-            )
-            log.info("_" * 100)
-
     def submit_batch(
         self,
         run_dir_sample_pairs,
