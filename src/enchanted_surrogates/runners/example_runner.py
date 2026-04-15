@@ -250,7 +250,6 @@ class ExampleRunner(Runner):
         result = {"output": output, "success": True}
 
         # Synthetic failure injection for testing distributed failure handling
-        result = None
         if self.fail_prob is not None and self.fail_prob > 0:
             if not (is_number(self.fail_prob) and 0.0 <= float(self.fail_prob) <= 1.0):
                 raise ValueError("fail_prob must be a number between 0 and 1")
