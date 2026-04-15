@@ -264,7 +264,6 @@ class ExampleRunner(Runner):
                     log.debug('failed unlucky setting result to nan sucess false')
                     result = {"output": np.nan, "success": False}
                     return result
-        log.debug('debug result', result)
 
         return result
 
