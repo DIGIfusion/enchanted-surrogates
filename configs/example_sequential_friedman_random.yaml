@@ -1,0 +1,50 @@
+logging: DEBUG
+
+executors:
+  e1:
+    type: LocalExecutor
+  e2:
+    type: LocalExecutor
+  e3:
+    type: LocalExecutor
+
+# get_next_samples for this sampler should only be called once after all the runners have ran. 
+# the supervisor is currently not capable of this, please make it possible
+samplers:
+  onlySampler:
+    type: random_sampler
+    bounds: [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
+    budget: 30
+    batch_size: 1
+    parameters: ['x1','x2','x3','x4','x5']
+
+runners:
+  fr_int:
+    type: friedman_interaction
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+  fr_quad:
+    type: friedman_quadratic
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+  fr_lin:
+    type: friedman_linear
+    sleep_sec: 0.01
+    fail_prob: 0
+    noise_std: 0.01
+
+supervisor:
+  base_run_dir: "data_dir/sequential_friedman_random_test"
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - sampler: onlySampler
+    executor: 
+      - e1
+      - e2
+      - e3
+    runner:
+      - fr_int
+      - fr_quad
+      - fr_lin
