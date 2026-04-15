@@ -1,5 +1,5 @@
 """
----
+
 ## Overview
 
 Handles execution of surrogate workflow on Dask.
@@ -500,29 +500,6 @@ class DaskExecutor(Executor):
 
         # keep futures for BayesianOptimizationSampler
         futures = self.submit_batch(input, runner_config)
-
-        dfs = []
-        num_success = 0
-        total = len(futures)
-
-        log.info(f"Collecting results from {total} futures...")
-
-        for i, future in enumerate(as_completed(futures), start=1):
-            try:
-                result = future.result()
-            except Exception as e:
-                log.error(f"[{i}/{total}] Future failed with exception:", e)
-                continue
-
-            if isinstance(result, dict) and result.get("success") is True:
-                num_success += 1
-
-            try:
-                df = pd.DataFrame({k: [v] for k, v in result.items()})
-                dfs.append(df)
-            except Exception as e:
-                log.error("Failed to convert result to DataFrame:", e)
-                continue
 
     def submit_batch(
         self,

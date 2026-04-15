@@ -15,6 +15,7 @@ def make_sampler(n_dims=2, batch_size=5, budget=200, bounds=None):
         budget=budget,
         parameters=parameters,
         batch_size=batch_size,
+        n_candidates=1000,
         query_strategy="GreedySamplingTarget",
     )
     return sampler, bounds, parameters
@@ -80,7 +81,7 @@ class TestInit:
     @pytest.mark.parametrize("n_dims", [1, 2, 5, 10])
     def test_candidates_shape_scales_with_dims(self, n_dims):
         sampler, _, _ = make_sampler(n_dims=n_dims, batch_size=4)
-        assert sampler.candidates.shape == (4, n_dims)
+        assert sampler.candidates.shape == (1000, n_dims)
 
     def test_candidates_within_bounds(self):
         bounds = [(0.2, 0.8), (1.0, 5.0)]

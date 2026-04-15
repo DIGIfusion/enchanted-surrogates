@@ -49,13 +49,13 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
 
 1. **Set Up Your Environment**:
 
-   - Create a virtual environment and activate it:
+    Create a virtual environment and activate it:
      ```bash
      python -m venv .venv
      source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
      ```
 
-   - Clone the `enchanted-surrogates` repository to have access to the core package:
+    Clone the `enchanted-surrogates` repository to have access to the core package:
      ```bash
      git clone https://github.com/DIGIfusion/enchanted-surrogates.git
      pip install -e enchanted-surrogates/
@@ -63,19 +63,19 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
 
 2. **Create the Plugin Repository**:
 
-   - Go to [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template) and click "Use this template" to create a new repository for your plugin. Name it following the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin.
+    Go to [enchanted-plugin-template](https://github.com/DIGIfusion/enchanted-plugin-template) and click "Use this template" to create a new repository for your plugin. Name it following the format `enchanted-plugin-codename`, where `codename` is a unique identifier for your plugin.
 
-   - Clone your new repository and install it in editable mode:
+    Clone your new repository and install it in editable mode:
      ```bash
      git clone https://github.com/DIGIfusion/enchanted-plugin-codename.git
      pip install -e enchanted-plugin-codename/
      ```
 
-   - Inside this directory, create/edit the necessary files.
+    Inside this directory, create/edit the necessary files.
   
 3. **Dependencies and entrypoints**
 
-    - Create a `pyproject.toml` file in the root of your plugin directory to manage dependencies and define entry points. Here is a basic example:
+    Create a `pyproject.toml` file in the root of your plugin directory to manage dependencies and define entry points. Here is a basic example:
       ```toml
       [tool.poetry]
       name = "enchanted-plugin-codename"
@@ -96,7 +96,7 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
       where = ["src"]
       ```
 
-   - Define entry points in `pyproject.toml` to register your parser and runner with the `enchanted-surrogates` framework. For example:
+    Define entry points in `pyproject.toml` to register your parser and runner with the `enchanted-surrogates` framework. For example:
      ```toml
      [tool.poetry.plugins."enchanted_surrogates.parsers"]
      codename_parser = "enchanted_plugin_codename.codename_parser:CodenameParser"
@@ -108,13 +108,13 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
 
 4. **Implement the Plugin**:
 
-   - In `codename_parser.py`, implement the class CodenameParser with logic to read and write input/output files.
+    In `codename_parser.py`, implement the class CodenameParser with logic to read and write input/output files.
 
-   - In `codename_runner.py`, implement the class CodenameRunner with logic to execute simulations.
+    In `codename_runner.py`, implement the class CodenameRunner with logic to execute simulations.
 
-   - Ensure your code adheres to the interfaces defined in the `enchanted-surrogates` package.
+    Ensure your code adheres to the interfaces defined in the `enchanted-surrogates` package.
 
-   - When the entrypoints and the logic is implemented, you can install your plugin in editable mode for development:
+    When the entrypoints and the logic is implemented, you can install your plugin in editable mode for development:
      ```bash
      cd enchanted-plugin-codename
      pip install -e .
@@ -123,26 +123,26 @@ The template contains basic units tests and a GitHub Actions workflow. Change th
 
 5. **Testing**:
 
-   - Write unit tests in the `tests\` folder to validate the functionality of your parser and runner. The folder already contains some test files that should be edited to correctly test your plugin.
+    Write unit tests in the `tests\` folder to validate the functionality of your parser and runner. The folder already contains some test files that should be edited to correctly test your plugin.
 
-   - Use `pytest` to run your tests:
+    Use `pytest` to run your tests:
      ```bash
      pytest tests/ -sv
      ```
 
 6. **Github Actions**:
 
-   - The plugin template contains a GitHub Actions workflow setup to automate testing and deployment. Make sure the tests pass.
+    The plugin template contains a GitHub Actions workflow setup to automate testing and deployment. Make sure the tests pass.
 
 7. **Documentation**:
   
-   - Update the `README.md` file with information about your plugin, including installation instructions, usage examples, and any other relevant details.
+    Update the `README.md` file with information about your plugin, including installation instructions, usage examples, and any other relevant details.
 
-   - In case you want to add your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins.
+    In case you want to add your plugin to the official documentation, create a pull request to the `docs/plugins/` in the `enchanted-surrogates` repository, following the format used for existing plugins.
 
-   - You can also add docstring documentation if you have it on the plugin. Ensure first that you have __init__.py in module you want to import even if it is empty.
+    You can also add docstring documentation if you have it on the plugin. Ensure first that you have __init__.py in module you want to import even if it is empty.
 
-   - For adding docstring documentation fill out the configuration file plugins.yml in main repo as shown below and as done with other plugins, and create a pull request with the updated configuration file. Docstrings will be added automatically.
+    For adding docstring documentation fill out the configuration file plugins.yml in main repo as shown below and as done with other plugins, and create a pull request with the updated configuration file. Docstrings will be added automatically.
 
    Example of filling configuration file for template plugin:
    ``` yml

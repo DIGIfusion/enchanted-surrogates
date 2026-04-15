@@ -76,3 +76,32 @@ def test_skip():
         batches.append(sampler.get_next_samples())
 
     assert len(batches) == (budget / batch_size) - jump
+
+
+def test_random_distributions():
+    sampler = RandomSampler(bounds=[(0, 1)], budget=1, parameters=["x"])
+
+    sampler.distribution = "uniform"
+    uniform_sample = sampler.sample_from_distribution(0.0, 1.0)
+    assert 0.0 <= uniform_sample <= 1.0
+
+    sampler.distribution = "loguniform"
+    loguniform_sample = sampler.sample_from_distribution(1.0, 10.0)
+    assert 1.0 <= loguniform_sample <= 10.0
+
+    sampler.distribution = "normal"
+    np.random.seed(0)
+    normal_samples = [
+        sampler.sample_from_distribution(0.0, 6.0) for _ in range(1000)]
+    assert np.isfinite(normal_samples).all()
+    assert 0.0 <= np.mean(normal_samples) <= 6.0
+    assert np.std(normal_samples) > 0.0
+
+    sampler.distribution = "int_uniform"
+    int_sample = sampler.sample_from_distribution(1, 5)
+    assert isinstance(int_sample, (int, np.integer))
+    assert 1 <= int_sample <= 5
+
+    sampler.distribution = "not_a_distribution"
+    with pytest.raises(ValueError, match="Unknown distribution"):
+        sampler.sample_from_distribution(0.0, 1.0)
