@@ -60,6 +60,7 @@ import sys
 import time
 import pandas as pd
 import logging
+from dask.distributed import fire_and_forget
 
 
 from dask_jobqueue import SLURMCluster
@@ -499,36 +500,7 @@ class DaskExecutor(Executor):
         log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
-        futures = self.submit_batch(input, runner_config)
-
-        dfs = []
-        num_success = 0
-        total = len(futures)
-
-        log.info(f"Collecting results from {total} futures...")
-
-        for i, future in enumerate(as_completed(futures), start=1):
-            try:
-                result = future.result()
-            except Exception as e:
-                log.error(f"[{i}/{total}] Future failed with exception:", e)
-                continue
-
-            if isinstance(result, dict) and result.get("success") is True:
-                num_success += 1
-
-            try:
-                df = pd.DataFrame({k: [v] for k, v in result.items()})
-                dfs.append(df)
-            except Exception as e:
-                log.error("Failed to convert result to DataFrame:", e)
-                continue
-
-            log.info(
-                f"[{i}/{total}] Futures Completed ({(i / total) * 100:.1f}%) | "
-                f"[{num_success}/{i}] Futures Succeeded"
-            )
-            log.info("_" * 100)
+        self.submit_batch(input, runner_config)
 
     def submit_batch(
         self,
@@ -553,14 +525,8 @@ class DaskExecutor(Executor):
             client = self.client
         assert client is not None
 
-        futures = []
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
                 run_simulation_task, runner_config, run_dir, sample_params
-            )
-            futures.append(new_future)
-
-        log.info(
-            f"{len(futures)} DASK FUTURES SUBMITTED for runner {runner_config['type']}"
-        )
-        return futures
+            )            
+            fire_and_forget(new_future)

@@ -142,26 +142,26 @@ supervisor:
       runner: r1
 ```
 
----
+### Output
 
-## Output
-
-The framework will create the following folder structure in the `base_run_dir` defined in the config file:
+The `base_run_dir` holds all the outputs from enchanted surrogates and its location is defined in the config file in the supervisor section.
+The framework will create a file structure as such:
 
 ```
 base_run_dir/
 ├── data/
-│    └── ...  # Contains the enchanted_datapoint.csv files and runner outputs.
+│    └── ...                  [All the run directories used by the physics codes]
 ├── logs/
-│    └── ...  # Contains all log files from the supervisor and workers.
+│    └── main.log             [General log messages and errors] 
+|    └── all_progress.txt     [Recording the sucess rate of each batch]
+|    └── current_progress.txt [Recording the status and success rate for current batch]
 ├── config/
-│    └── ...  # Contains a copy of the configuration file.
-│
-├── enchanted_datapoints.csv  # Summary file
-└── runs.h5                   # Summary file
+│    └── my_config.yaml       [The config file used for this enchanted surrogates run] 
+├── enchanted_dataset.csv     [Summary file]
+└── runs.h5                   [Summary file]
 ```
 
-
+The summary files contain all the parsed outputs of the physics codes in one handy file for downstream AI/ML model training.
 The summary files are structured as such: 
 
 |   | param1 | param2 | paramN | output | success | run_dir                           |
@@ -175,13 +175,10 @@ All user defined sampled parameters are included for each sample.
 The runner output is defined as output. There is also a success field which is a boolean.
 Run directories are also included for clarity. 
 
-
 *Note: Output files to be saved can be configured, see
 [Configuring output files](supervisor.md#configuring-output-files).*
 
----
-
-## Quick start example
+### Quick start example
 
 The following command runs the example local executor with the example
 configuration file. It creates a run directory in the current working directory,
