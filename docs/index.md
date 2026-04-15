@@ -142,25 +142,25 @@ supervisor:
       runner: r1
 ```
 
----
+### Output
+The base_run_dir holds all the outputs from enchanted surrogates and its location is defined in the config file under the supervisor.
 
-## Output
-
-The framework will create the following folder structure in the `base_run_dir` defined in the config file:
-
+The framework will create a file structure as such:
 ```
 base_run_dir/
 ├── data/
-│    └── ...  # Contains the enchanted_datapoint.csv files and runner outputs.
+│    └── ... [All the run directories used by the complex physics codes]
 ├── logs/
-│    └── ...  # Contains all log files from the supervisor and workers.
+│    └── main.log [General log messages and errors] 
+|    └── all_progress.txt [Is appended to for recording the sucess rate of previous batches]
+|    └── current_progress.txt [Is overwritten to show number of competed runs and failures for current batch]
 ├── config/
-│    └── ...  # Contains a copy of the configuration file.
-│
-├── enchanted_datapoints.csv  # Summary file
-└── runs.h5                   # Summary file
+│    └── my_config.yaml [A record for the config file used for the enchanted surrogates workflow] 
+├── enchanted_dataset.csv [Summary File: All the parsed outputs of the physics codes in one handy file for downstream AI/ML model training]
+└── runs.h5 [Summary File: Same information as enchanted_dataset.csv but in the commonly used hdf5 format]
 ```
 
+#### summary files
 
 The summary files are structured as such: 
 
@@ -175,13 +175,10 @@ All user defined sampled parameters are included for each sample.
 The runner output is defined as output. There is also a success field which is a boolean.
 Run directories are also included for clarity. 
 
+**Note: Output files to be saved can be configured, see
+[Configuring output files](supervisor.md#configuring-output-files).**
 
-*Note: Output files to be saved can be configured, see
-[Configuring output files](supervisor.md#configuring-output-files).*
-
----
-
-## Quick start example
+### Quick start example
 
 The following command runs the example local executor with the example
 configuration file. It creates a run directory in the current working directory,
