@@ -125,7 +125,7 @@ def parse_all_run_groups(args) -> list[RunGroup]:
         run_group = RunGroup(
             [executors[e] for e in group_executors],
             samplers[group_sampler],
-            [args.runners[e] for e in group_runners],
+            [{**args.runners[r], "__runner_name": r} for r in group_runners],
         )
 
         try:

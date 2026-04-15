@@ -1,7 +1,5 @@
 # samplers/array_sampler.py
 """
----
-
 ## Overview
 
 The array sampler will generate samples by taking the Cartesian product of the provided discrete values for each parameter.
@@ -47,7 +45,7 @@ class ArraySampler(Sampler):
 
     ## Assumption and notes
 
-        - This throws errors if you are asking for something insane, e.g., 10 parameters  for 10 samples each -> 10 billion so hard limit at 100.000
+     - This throws errors if you are asking for something insane, e.g., 10 parameters  for 10 samples each -> 10 billion so hard limit at 100.000
 
     ---
     """

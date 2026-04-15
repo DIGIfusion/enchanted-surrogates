@@ -2,7 +2,7 @@ import os
 import sys
 import yaml
 import argparse
-from enchanted_surrogates.supervisor.supervisor import Supervisor
+from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
 import logging
@@ -45,7 +45,7 @@ def setup_logger(base_run_dir: str, log_level: str):
         base_run_dir (str): The base run directory from supervisor
         log_level (str): Logging level to use, for example INFO or DEBUG
     """
-    log_dir = os.path.join(base_run_dir, "logs")
+    log_dir = os.path.join(base_run_dir, LOG_DIR)
     log_file = os.path.join(log_dir, "main.log")
 
     # Store to logger config

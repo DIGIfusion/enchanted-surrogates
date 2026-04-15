@@ -1,6 +1,4 @@
 """
----
-
 ## Overview
 
 The latin hypercube sampler creates a hypercube grid of equidistant points that spans

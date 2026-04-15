@@ -36,17 +36,6 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.optional-dependencies]
-bo = [
-    "matplotlib",
-    "scienceplots",
-    "botorch",
-    "gpytorch",
-    "torch",
-    "lampe",
-    "pyro-ppl",
-    "scipy",
-]
-
 sdsg = [
   "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
 ]
@@ -71,4 +60,10 @@ GPy = [
 ]
 activelearning = [
     "scikit-activeml"
+]
+
+bo = [
+  "torch",
+  "botorch",
+  "gpytorch"
 ]

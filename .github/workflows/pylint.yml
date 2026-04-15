@@ -27,7 +27,7 @@ jobs:
     - name: Restore cached virtualenv
       uses: actions/cache/restore@v5
       with:
-        key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
         path: .venv
 
     - name: Install dependencies
@@ -45,3 +45,10 @@ jobs:
         source .venv/bin/activate
         ruff check $(git ls-files '*.py')
 
+
+
+    - name: Saved cached virtualenv
+      uses: actions/cache/save@v5
+      with:
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
