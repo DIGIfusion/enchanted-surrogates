@@ -143,25 +143,25 @@ supervisor:
 ```
 
 ### Output
-The base_run_dir holds all the outputs from enchanted surrogates and its location is defined in the config file under the supervisor.
 
+The `base_run_dir` holds all the outputs from enchanted surrogates and its location is defined in the config file in the supervisor section.
 The framework will create a file structure as such:
+
 ```
 base_run_dir/
 ├── data/
-│    └── ... [All the run directories used by the complex physics codes]
+│    └── ...                  [All the run directories used by the physics codes]
 ├── logs/
-│    └── main.log [General log messages and errors] 
-|    └── all_progress.txt [Is appended to for recording the sucess rate of previous batches]
-|    └── current_progress.txt [Is overwritten to show number of competed runs and failures for current batch]
+│    └── main.log             [General log messages and errors] 
+|    └── all_progress.txt     [Recording the sucess rate of each batch]
+|    └── current_progress.txt [Recording the status and success rate for current batch]
 ├── config/
-│    └── my_config.yaml [A record for the config file used for the enchanted surrogates workflow] 
-├── enchanted_dataset.csv [Summary File: All the parsed outputs of the physics codes in one handy file for downstream AI/ML model training]
-└── runs.h5 [Summary File: Same information as enchanted_dataset.csv but in the commonly used hdf5 format]
+│    └── my_config.yaml       [The config file used for this enchanted surrogates run] 
+├── enchanted_dataset.csv     [Summary file]
+└── runs.h5                   [Summary file]
 ```
 
-#### summary files
-
+The summary files contain all the parsed outputs of the physics codes in one handy file for downstream AI/ML model training.
 The summary files are structured as such: 
 
 |   | param1 | param2 | paramN | output | success | run_dir                           |
@@ -175,8 +175,8 @@ All user defined sampled parameters are included for each sample.
 The runner output is defined as output. There is also a success field which is a boolean.
 Run directories are also included for clarity. 
 
-**Note: Output files to be saved can be configured, see
-[Configuring output files](supervisor.md#configuring-output-files).**
+*Note: Output files to be saved can be configured, see
+[Configuring output files](supervisor.md#configuring-output-files).*
 
 ### Quick start example
 
