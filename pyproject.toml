@@ -54,12 +54,14 @@ hdf5 = [
     "ipykernel",
     "ipywidgets",
 ]
-GPy = [
-    "GPy",
-    "scikit-learn",
-]
+
 activelearning = [
     "scikit-activeml"
+]
+
+gpytorch = [
+    "torch",
+    "gpytorch",
 ]
 
 bo = [
