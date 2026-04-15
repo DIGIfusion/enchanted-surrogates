@@ -24,11 +24,11 @@ def update_md_file(md_path: Path, modules: list[str]):
     content = md_path.read_text() if md_path.exists() else ""
 
     blocks = "\n\n".join(
-    f"""::: {m}
-    options:
-      show_source: false
-    """
-    for m in modules)
+        f"""::: {m}
+        options:
+          show_source: false
+        """
+        for m in modules)
 
     new_content = f"{content.strip()}\n\n{blocks}\n"
 
@@ -42,7 +42,7 @@ def main():
 
     for plugin in config["plugins"]:
         name = plugin["name"]
-        
+
         module_cfg = plugin["module"]
 
         if isinstance(module_cfg, list):
@@ -51,7 +51,9 @@ def main():
             parts = module_cfg.split(".")
             base_module = parts[0]
 
-            src_path = Path("plugins") / name / plugin["src_path"] / base_module
+            src_path = (
+                Path("plugins") / name / plugin["src_path"] / base_module
+            )
 
             if len(parts) == 1:
                 modules = get_modules(src_path, base_module)

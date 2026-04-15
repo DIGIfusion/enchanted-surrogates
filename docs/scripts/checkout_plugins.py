@@ -3,6 +3,7 @@ import os
 
 CONFIG_PATH = "plugins.yml"
 
+
 def main():
     token = os.environ["GH_PAT"]
 
@@ -16,7 +17,6 @@ def main():
         repo = plugin["repo"]
 
         cmd = (f'git clone https://x-access-token:{token}@github.com/{repo}.git plugins/{name}')
-        
 
         print(f"[CLONE] {repo}")
         print(cmd)
