@@ -23,6 +23,7 @@ import subprocess
 import numbers
 from collections.abc import Iterable
 from time import sleep
+import re
 import numpy as np
 
 from .base_runner import Runner
@@ -56,6 +57,12 @@ class ExampleRunner(Runner):
       failure handling in distributed schedulers and pipelines. The failure is raised
       only after writing and reading the output file and after sleeping for the
       computed sleep duration. When fail_prob == 0 no synthetic failures are triggered.
+    
+    - raise_failures (boolean): if True the failures triggered with probability fail_prob
+      will raise an error. If false the errors will not be raised but the sucess flag will
+      still be false. This allows testing of the error logging for the two different ways
+      an error can occure in a runner. 
+
 
     ### Sleep sec behavior
 
@@ -97,6 +104,7 @@ class ExampleRunner(Runner):
     def __init__(self, *args, **kwargs):
         self.sleep_sec = kwargs.get("sleep_sec", 0.01)
         self.fail_prob = kwargs.get("fail_prob", 0)
+        self.raise_failures = kwargs.get('raise_failures', True)
 
     def get_sleep_sec(self):
         """
@@ -200,13 +208,9 @@ class ExampleRunner(Runner):
         if len(params.keys()) == 0:
             c1 = 0.0
             c2 = 0.0
-        elif len(params.keys()) == 1:
-            c1 = params[list(params.keys())[0]]
-            c2 = 0.0
         else:
-            c1 = params[list(params.keys())[0]]
-            c2 = params[list(params.keys())[1]]
-
+            c1, c2 = self.parse_params(params)
+        
         # Coerce numeric types to plain Python numbers for the one-liner to avoid weird print formats
         try:
             c1 = float(c1)
@@ -251,8 +255,37 @@ class ExampleRunner(Runner):
                 raise ValueError("fail_prob must be a number between 0 and 1")
             flip = np.random.uniform()
             if flip < float(self.fail_prob):
-                raise RuntimeError(
-                    f"THE RUN FAILED BECAUSE IT WAS UNLUCKY, fail_prob:{self.fail_prob}"
-                )
+                if self.raise_failures:
+                    raise RuntimeError(
+                        f"THE RUN FAILED BECAUSE IT WAS UNLUCKY, fail_prob:{self.fail_prob}"
+                    )
+                else:
+                    log.debug('failed unlucky setting result to nan sucess false')
+                    result = {"output": np.nan, "success": False}
+                    return result
 
         return result
+
+    import re
+
+    def parse_params(self, params):
+        # Extract keys of the form c<number>
+        indexed = []
+        for k, v in params.items():
+            m = re.fullmatch(r"c(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                indexed.append((idx, v))
+
+        # No valid cN keys
+        if not indexed:
+            return 0.0, 0.0
+
+        # Sort by index (largest first)
+        indexed.sort(key=lambda x: x[0], reverse=True)
+
+        # Take the top two
+        c1 = indexed[0][1]
+        c2 = indexed[1][1] if len(indexed) > 1 else 0.0
+
+        return c1, c2
