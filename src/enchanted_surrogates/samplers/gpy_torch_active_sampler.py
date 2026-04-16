@@ -36,6 +36,9 @@ from gpytorch.kernels import (
 )
 from gpytorch.distributions import MultivariateNormal
 
+from enchanted_surrogates.utils.logger import get_logger
+log = get_logger(__name__)
+
 # --- Analytical 1D Integrals (adapted for PyTorch where possible, maintaining math for non-standard) ---
 # These functions will operate on single scalar inputs for xi (and xj) as they are 1D.
 # When used with batch inputs, we'll map/vectorize.
@@ -363,7 +366,9 @@ class GpyTorchActiveSampler(Sampler):
         self.parameters = kwargs.get('parameters')
         self.bounds = kwargs.get('bounds')
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
-        self.base_run_dir = kwargs.get('base_run_dir', 'runs')
+        self.base_run_dir = kwargs.get('base_run_dir', None)
+        if self.base_run_dir is None:
+            raise ValueError("base_run_dir must be specified in config")
         self.seed = kwargs.get("seed", None)
         self._set_seed(self.seed)
         self.do_uq_analysis = kwargs.get('do_uq_analysis', False) # it seems to be flawed, always getting matrix is not positive definite when making L, current 'fix' causes the code to stall take forever
@@ -390,6 +395,16 @@ class GpyTorchActiveSampler(Sampler):
         self.input_dim = len(self.parameters)
 
         self.initial_pool_size = kwargs.get('initial_pool_size', 5000)
+        # allowed_pool_values: dict mapping parameter name -> list/array of allowed REAL-space values
+        self.allowed_pool_values = kwargs.get('allowed_pool_values', None)
+        if self.allowed_pool_values is not None:
+            # Normalize keys and convert lists to numpy arrays for fast sampling
+            if not isinstance(self.allowed_pool_values, dict):
+                raise ValueError('allowed_pool_values must be a dict mapping parameter->list_of_values')
+            for k in list(self.allowed_pool_values.keys()):
+                if k not in self.parameters:
+                    raise ValueError(f"allowed_pool_values contains unknown parameter '{k}'")
+                self.allowed_pool_values[k] = np.asarray(self.allowed_pool_values[k])
         self.pool = None # Will store normalized pool points
         self.pool_y = None # Keep original `pool_y` for oracle acquisition
 
@@ -407,6 +422,11 @@ class GpyTorchActiveSampler(Sampler):
 
         # Sampler configuration
         self.acquisition_mode = kwargs.get('acquisition_mode', 'variance')
+        # Batch selection strategy when batch_size > 1: 'best_score' picks top-K from
+        # a single scoring of the pool; 'fantasy_labels' greedily selects one-by-one
+        # and fantasizes the GP label (using the GP predictive mean) before
+        # selecting the next point.
+        self.acquisition_batch_mode = kwargs.get('acquisition_batch_mode', 'best_score')
         self.batch_size = kwargs.get('batch_size', 2)
         self.initial_batch_size = kwargs.get('initial_batch_size', self.batch_size)
         self.num_repeats = kwargs.get('num_repeats', 1)
@@ -466,9 +486,32 @@ class GpyTorchActiveSampler(Sampler):
             self.pool = self.to_unit(df[self.parameters].to_numpy())
             self.pool_y = torch.from_numpy(df[self.get_output_col(df=df)].to_numpy()).to(self.dtype).to(self.device).reshape(-1, 1)
         else:
-            # Generate random pool if no CSV is provided
-            self.pool = torch.rand(self.initial_pool_size, self.input_dim,
-                                    dtype=self.dtype, device=self.device)
+            # Generate random pool if no CSV is provided.
+            # If `allowed_pool_values` is provided for some parameters (in REAL space),
+            # we randomly pick from those allowed real values for that parameter.
+            # For other parameters we sample uniformly from their provided real bounds.
+
+            # Build pool in REAL space first
+            pool_real = np.zeros((self.initial_pool_size, self.input_dim), dtype=float)
+            for i, p in enumerate(self.parameters):
+                if self.allowed_pool_values is not None and p in self.allowed_pool_values:
+                    vals = np.asarray(self.allowed_pool_values[p])
+                    if vals.size == 0:
+                        raise ValueError(f"allowed_pool_values for parameter '{p}' is empty")
+                    # Sample with replacement from allowed real-space values
+                    idxs = np.random.randint(0, vals.size, size=(self.initial_pool_size,))
+                    pool_real[:, i] = vals[idxs]
+                else:
+                    # Use provided real-space bounds for uniform sampling
+                    b = self.bounds[i]
+                    low, high = float(b[0]), float(b[1])
+                    pool_real[:, i] = np.random.uniform(low, high, size=(self.initial_pool_size,))
+
+            # Convert real-space pool to unit-space torch tensor
+            pool_unit = (pool_real - np.array([b[0] for b in self.bounds])) / (np.array([b[1] - b[0] for b in self.bounds]))
+            # Clip numerical edge cases to [0,1]
+            pool_unit = np.clip(pool_unit, 0.0, 1.0)
+            self.pool = torch.from_numpy(pool_unit).to(self.dtype).to(self.device)
             self.pool_y = None # No true y values for random pool
 
     def _remove_from_pool(self, samples_unit):
@@ -942,8 +985,8 @@ class GpyTorchActiveSampler(Sampler):
             self._remove_from_pool(chosen_unit) # Remove chosen points from pool
         else:
             self.append_train_data()
-            
             # Need at least two training points to fit a GP
+            print('debug', 'Training data size:', self.train_x.size(0), 'points.')
             if self.train_x.numel() == 0 or self.train_x.size(0) < 2:
                 print("Not enough training data to fit GP for acquisition. Taking random sample.")
                 num_initial = min(self.batch_size, self.pool.shape[0])
@@ -1015,60 +1058,165 @@ class GpyTorchActiveSampler(Sampler):
 
     def _compute_acquisition_candidates(self, X_pool_unit, mode):
         """
-        Wrapper that:
-        - handles chunking
-        - calls _compute_acquisition_unchunked
-        - returns top-K candidates in unit space
+        Fully streaming, memory‑bounded version.
+        Never materializes arrays of size N.
         """
 
-        # Convert to numpy for acquisition logic
-        if isinstance(X_pool_unit, torch.Tensor):
-            X_pool_np = X_pool_unit.detach().cpu().numpy()
-        else:
-            X_pool_np = np.asarray(X_pool_unit)
+        # Convert pool_y only if needed, but never copy or reshape
+        pool_y = None
+        if self.pool_y is not None:
+            pool_y = self.pool_y.detach().cpu().numpy()
 
-        N = len(X_pool_np)
-        K = self.batch_size
-        chunk_size = max(20000, K * 50)   # adaptive chunk size
+        N = X_pool_unit.shape[0]
+        K = int(self.batch_size)
+        chunk_size = max(20000, K * 50)
 
-        # If pool is small, no chunking needed
-        if N <= chunk_size:
-            scores = self._compute_acquisition_unchunked(
-                X_pool_np, mode, model=self.gp_model,
-                pool_y=self.pool_y.cpu().numpy() if self.pool_y is not None else None
-            )
-            top_idx = np.argsort(scores)[-K:]
+        # Boolean mask for fantasy-label mode
+        mask = np.ones(N, dtype=bool)
+
+        # -------------------------
+        # Chunk iterator
+        # -------------------------
+        def iter_chunks():
+            for s in range(0, N, chunk_size):
+                e = min(s + chunk_size, N)
+                X_chunk = X_pool_unit[s:e]
+                if isinstance(X_chunk, torch.Tensor):
+                    X_np = X_chunk.detach().cpu().numpy()
+                else:
+                    X_np = np.asarray(X_chunk)
+                py = None if pool_y is None else pool_y[s:e]
+                yield s, e, X_np, py
+
+        # -------------------------
+        # Streaming scoring
+        # -------------------------
+        def stream_scores(model):
+            for s, e, X_np, py in iter_chunks():
+                scores = self._compute_acquisition_unchunked(
+                    X_np, mode, model=model, pool_y=py
+                )
+                yield s, e, scores
+
+        # -------------------------
+        # Streaming top‑K heap
+        # -------------------------
+        import heapq
+        def top_k_stream(model):
+            heap = []  # (score, idx)
+            for s, e, scores in stream_scores(model):
+                for i, sc in enumerate(scores):
+                    idx = s + i
+                    if len(heap) < K:
+                        heapq.heappush(heap, (sc, idx))
+                    else:
+                        if sc > heap[0][0]:
+                            heapq.heapreplace(heap, (sc, idx))
+            return np.array([idx for (_, idx) in sorted(heap)])
+
+        # -------------------------
+        # Streaming argmax with mask
+        # -------------------------
+        def argmax_stream(model):
+            best_score = -np.inf
+            best_idx = None
+            for s, e, scores in stream_scores(model):
+                for i, sc in enumerate(scores):
+                    idx = s + i
+                    if not mask[idx]:
+                        continue
+                    if sc > best_score:
+                        best_score = sc
+                        best_idx = idx
+            return best_idx
+
+        # ============================================================
+        # CASE 1: K=1 or best_score mode → simple top‑K
+        # ============================================================
+        if K <= 1 or self.acquisition_batch_mode == 'best_score':
+            top_idx = top_k_stream(self.gp_model)
             return X_pool_unit[top_idx]
 
-        # --- Chunked scoring ---
-        best_scores = np.full(K, -np.inf)
-        best_points = np.zeros((K, X_pool_np.shape[1]))
+        # ============================================================
+        # CASE 2: fantasy_labels (sequential greedy)
+        # ============================================================
+        if self.acquisition_batch_mode == 'fantasy_labels':
+            selected = []
+            current_model = self.gp_model
 
-        for start in range(0, N, chunk_size):
-            end = min(start + chunk_size, N)
-            chunk = X_pool_np[start:end]
+            for b in range(K):
+                # 1. Streaming argmax over remaining points
+                best_idx = argmax_stream(current_model)
+                if best_idx is None:
+                    break
+                selected.append(best_idx)
 
-            chunk_scores = self._compute_acquisition_unchunked(
-                chunk, mode, model=self.gp_model,
-                pool_y=None if self.pool_y is None else self.pool_y[start:end].cpu().numpy()
-            )
+                # If last selection, stop
+                if len(selected) >= K:
+                    break
 
-            # Select top-K from this chunk
-            local_top = np.argsort(chunk_scores)[-K:]
-            local_scores = chunk_scores[local_top]
-            local_points = chunk[local_top]
+                # 2. Build fantasy label
+                x_sel_unit = X_pool_unit[best_idx:best_idx+1]
+                x_sel_unit_t = torch.tensor(
+                    x_sel_unit, dtype=self.dtype, device=self.device
+                )
 
-            # Merge with global top-K
-            merged = np.concatenate([best_scores, local_scores])
-            merged_points = np.vstack([best_points, local_points])
+                with torch.no_grad():
+                    posterior = current_model(x_sel_unit_t)
+                    mu_std = posterior.mean
 
-            top_global = np.argsort(merged)[-K:]
-            best_scores = merged[top_global]
-            best_points = merged_points[top_global]
+                x_sel_real = current_model.to_real(x_sel_unit_t).detach()
+                y_fantasy_real = current_model.unstandardize_y(mu_std).reshape(-1, 1).detach()
 
-        # Convert back to torch
-        best_points_torch = torch.tensor(best_points, dtype=self.dtype, device=self.device)
-        return best_points_torch
+                # 3. Augment training data
+                X_aug = torch.cat([
+                    self.train_x.to(self.dtype).to(self.device),
+                    x_sel_real.to(self.dtype).to(self.device)
+                ], dim=0)
+
+                Y_aug = torch.cat([
+                    self.train_y.to(self.dtype).to(self.device),
+                    y_fantasy_real.to(self.dtype).to(self.device)
+                ], dim=0)
+
+                # 4. Build new fantasized model
+                likelihood_tmp = GaussianLikelihood().to(self.dtype).to(self.device)
+                model_tmp = GPyTorchGPR(
+                    X_aug,
+                    Y_aug.squeeze(-1),
+                    likelihood_tmp,
+                    kernel_type=self.kernel_type,
+                    x_min=self._lb,
+                    x_max=self._ub,
+                ).to(self.dtype).to(self.device)
+
+                # Copy hyperparameters
+                try:
+                    model_tmp.load_state_dict(self.gp_model.state_dict(), strict=False)
+                except Exception:
+                    try:
+                        model_tmp.covar_module.load_state_dict(self.gp_model.covar_module.state_dict())
+                    except Exception:
+                        pass
+                try:
+                    likelihood_tmp.load_state_dict(self.likelihood.state_dict())
+                except Exception:
+                    pass
+
+                model_tmp.eval()
+                likelihood_tmp.eval()
+                current_model = model_tmp
+
+                # 5. Mask out selected point
+                mask[best_idx] = False
+
+            return X_pool_unit[np.array(selected)]
+
+        # ============================================================
+        # Fallback: top‑K
+        # ============================================================
+        top_idx = top_k_stream(self.gp_model)
+        return X_pool_unit[top_idx]
 
 
     def _compute_acquisition_unchunked(self, X_pool_unit, mode, model=None, pool_y=None):
