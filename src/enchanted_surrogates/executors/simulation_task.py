@@ -50,10 +50,12 @@ def run_simulation_task(
     # Update with conflict checking (in sequential runs 'output' and 'success' causes conflicts)
     # Runner output has priority
     for key, value in params.items():
-        if key not in runner_output:
-            runner_output[key] = value
-        else:
-            log.debug(f"Conflicting key in runner output and input params: {key}")
+        if key != "success":
+            if key not in runner_output:
+                runner_output[key] = value
+            else:
+                log.debug(f'''Conflict run_simulation_task was provided with {key}: {params[key]} but the runner output has {key}: {runner_output[key]}
+These dicts are merged for enchanted_datapoint.csv and they should have unique keys. Keeping: {key}: {runner_output[key]}''')
 
     # Copy runner-specific success status
     runner_output[f"success_{runner_name}"] = runner_output["success"]
