@@ -41,6 +41,7 @@ from gpytorch.distributions import MultivariateNormal
 from enchanted_surrogates.utils.logger import get_logger
 log = get_logger(__name__)
 
+
 # --- Analytical 1D Integrals (adapted for PyTorch where possible, maintaining math for non-standard) ---
 # These functions will operate on single scalar inputs for xi (and xj) as they are 1D.
 # When used with batch inputs, we'll map/vectorize.
@@ -459,32 +460,34 @@ class GpyTorchActiveSampler(Sampler):
         self.budget = kwargs.get('budget', float('inf')) # Total samples to acquire
 
         self.test_data_csv = kwargs.get('test_data_csv', None)
-        self.pool_source = kwargs.get('pool_source', 
-                                      None)
         
-        if self.pool_csv_path is not None:
-            self.pool_source = "csv"
-            self._init_pool_stream_csv()
-        else:
-            self.pool_source = "random"
+        if self.pool_csv_path is None:
             self._init_pool_stream_random()
+
+        self._init_pool_stream_csv()
             
         self.removed_indices = set()
         self._next_row_index = 0  # increments as we stream
 
+    def to_unit_torch(self, X_real_t):
+        """Real → unit (torch)."""
+        return (X_real_t - self._lb) / self._range
 
+    def from_unit_torch(self, X_unit_t):
+        """Unit → real (torch)."""
+        return self._lb + X_unit_t * self._range
 
-    def to_unit(self, X_real):
-        """Map real-bounds inputs to [0,1]. Converts numpy to tensor if needed."""
-        if isinstance(X_real, np.ndarray):
-            X_real = torch.from_numpy(X_real).to(self.dtype).to(self.device)
-        return (X_real - self._lb) / self._range
+    def to_unit_numpy(self, X_real_np):
+        """Real → unit (numpy)."""
+        lb = self._lb.cpu().numpy()
+        rng = self._range.cpu().numpy()
+        return (X_real_np - lb) / rng
 
-    def from_unit(self, X_unit):
-        """Map unit inputs back to real bounds. Returns numpy array."""
-        if isinstance(X_unit, np.ndarray):
-            X_unit = torch.from_numpy(X_unit).to(self.dtype).to(self.device),
-        return (self._lb + X_unit * self._range).cpu().numpy()
+    def from_unit_numpy(self, X_unit_np):
+        """Unit → real (numpy)."""
+        lb = self._lb.cpu().numpy()
+        rng = self._range.cpu().numpy()
+        return lb + X_unit_np * rng
 
     def get_output_col(self, df=None, csv_path=None):
         if self.output_col:
@@ -519,7 +522,8 @@ class GpyTorchActiveSampler(Sampler):
 
         # If no CSV path was provided, create one
         if self.pool_csv_path is None:
-            self.pool_csv_path = os.path.join(self.base_run_dir, "generated_pool.csv")
+            self.pool_csv_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "generated_pool.csv")
+            os.makedirs(os.path.dirname(self.pool_csv_path), exist_ok=True)
 
         # Create empty CSV with header
         df_header = pd.DataFrame(columns=self.parameters)
@@ -561,7 +565,7 @@ class GpyTorchActiveSampler(Sampler):
             rows_remaining -= chunk_size
         end_time = time.time()
         
-        log.info('Generating the random pool csv took:', time_format(end_time-start_time))
+        log.info(f'Generating the random pool csv took: {time_format(end_time-start_time)}')
         
     def _init_pool_stream_csv(self):
         self._csv_iter = pd.read_csv(
@@ -592,17 +596,16 @@ class GpyTorchActiveSampler(Sampler):
 
         # Convert to unit space
         real_values = df[self.parameters].to_numpy()
-        unit_values = self.to_unit(real_values)
+        unit_values = self.to_unit_numpy(real_values)
 
         # Optional y column
         out_col = self.get_output_col(df=df)
         if out_col in df.columns:
             y_values = df[out_col].to_numpy()
-            y_tensor = torch.from_numpy(y_values).to(self.dtype).to(self.device).reshape(-1, 1)
         else:
-            y_tensor = None
+            y_values = None
 
-        return unit_values, y_tensor, chunk_indices
+        return unit_values, y_values, chunk_indices
 
 
     def _remove_from_pool(self, pool_indices):
@@ -1050,7 +1053,7 @@ class GpyTorchActiveSampler(Sampler):
             required = self.batch_size
 
         # Total rows in CSV (excluding header), stored at initialization
-        total = self.total_pool_rows
+        total = self.total_pool_size
 
         # Number of removed rows
         removed = len(self.removed_indices)
@@ -1097,18 +1100,19 @@ class GpyTorchActiveSampler(Sampler):
                 self.fit_gpr_model()
                 
                 if not self._has_enough_pool_points():
-                    remaining = self.total_pool_rows - len(self.removed_indices)
+                    remaining = self.total_pool_size - len(self.removed_indices)
                     warnings.warn(
                         f"Pool has only {remaining} remaining points, "
                         f"but batch size is {self.batch_size}. Cannot acquire new samples."
                     )
                     return None
                 else:
+                    remaining = self.total_pool_size - len(self.removed_indices)
                     # 3. Compute acquisition function over pool
                     start_time = time.time()
                     chosen_unit_indices = self._compute_acquisition_candidates(self.acquisition_mode)
                     end_time = time.time()
-                    log.info(f'Computing the acquisition function over the {self.total_pool_rows} pool took:', time_format(end_time-start_time))
+                    log.info(f'Computing the acquisition function over the {remaining} pool took: {time_format(end_time-start_time)}')
                     chosen_unit = self._get_unit_points_by_global_indices(chosen_unit_indices)
                     self._remove_from_pool(chosen_unit_indices)
         
@@ -1119,8 +1123,8 @@ class GpyTorchActiveSampler(Sampler):
             return None
 
         samples = []
-        if chosen_unit is not None and chosen_unit.numel() > 0:
-            real_chosen_points = self.from_unit(chosen_unit)
+        if chosen_unit is not None and len(chosen_unit) > 0:
+            real_chosen_points = self.from_unit_numpy(chosen_unit)
             samples = [
                 {key: float(v) for key, v in zip(self.parameters, row)}
                 for row in real_chosen_points
@@ -1179,17 +1183,16 @@ class GpyTorchActiveSampler(Sampler):
             """
             while True:
                 result = self.get_next_pool_chunk()
-                if result is None:
-                    return
-
+                
                 X_unit_chunk, y_chunk, pool_indices = result
 
+                if X_unit_chunk is None:
+                    return
+
                 # Convert to numpy
-                X_np = X_unit_chunk.detach().cpu().numpy()
-                y_np = None if y_chunk is None else y_chunk.detach().cpu().numpy()
 
                 scores = self._compute_acquisition_unchunked(
-                    X_np, mode, model=model, pool_y=y_np
+                    X_unit_chunk, mode, model=model, pool_y=y_chunk
                 )
 
                 yield scores, pool_indices
@@ -1330,10 +1333,11 @@ class GpyTorchActiveSampler(Sampler):
 
         while True:
             result = self.get_next_pool_chunk()
-            if result is None:
-                break
-
+            
             X_unit_chunk, _, pool_indices = result
+
+            if X_unit_chunk is None:
+                break
 
             # pool_indices is a list of global indices for this chunk
             for local_i, global_i in enumerate(pool_indices):
@@ -1638,6 +1642,10 @@ class GpyTorchActiveSampler(Sampler):
         import os
         import pandas as pd
         import numpy as np
+
+        import logging
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
 
         if out_dir is None:
             out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
