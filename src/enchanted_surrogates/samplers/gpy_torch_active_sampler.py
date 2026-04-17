@@ -1083,6 +1083,7 @@ class GpyTorchActiveSampler(Sampler):
             
             chosen_indices = np.concatenate(chosen_indices, axis=0)
             chosen_unit = np.concatenate(chosen_unit, axis=0)
+            chosen_unit = chosen_unit[:self.initial_batch_size] # Trim to initial batch size
             
             self._remove_from_pool(chosen_indices) # Remove chosen points from pool
         else:
@@ -1761,7 +1762,8 @@ class GpyTorchActiveSampler(Sampler):
 
     def light_post_processing(self):
         if self.clean_pool_csv:
-            shutil.rmtree(self.pool_csv_path)
+            os.remove(self.pool_csv_path)
+
         
     def register_future(self, future):
         return None
