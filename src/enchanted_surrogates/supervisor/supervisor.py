@@ -49,6 +49,30 @@ class Supervisor:
         """
         self.args = args
 
+        if self.run_mode in ("resume", "extend"):
+            self.previous_run_data = RunData.load(self.previous_run_file)
+            if self.previous_run_data:
+                if len(self.nested_groups) > self.previous_run_data.depth:
+                    # Extending should generate budget worth of new samples so add
+                    # already submitted amount to the current budget
+                    if self.run_mode == "extend":
+                        self.nested_groups[
+                            self.previous_run_data.depth
+                        ].sampler.budget += self.previous_run_data.submitted_samples
+
+                    self.nested_groups[self.previous_run_data.depth].sampler.skip(
+                        self.previous_run_data.batch_number + 1
+                    )
+            else:
+                raise RuntimeError(
+                    "Tried to continue from previous sampling but no "
+                    " enchanted_run.yaml was found"
+                )
+
+            self.continue_with_base_run_dir(config_path)
+        else:
+            self.create_base_run_dir(self.base_run_dir, config_path)
+
         self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
@@ -83,29 +107,6 @@ class Supervisor:
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
-        if self.run_mode in ("resume", "extend"):
-            self.previous_run_data = RunData.load(self.previous_run_file)
-            if self.previous_run_data:
-                if len(self.nested_groups) > self.previous_run_data.depth:
-                    # Extending should generate budget worth of new samples so add
-                    # already submitted amount to the current budget
-                    if self.run_mode == "extend":
-                        self.nested_groups[
-                            self.previous_run_data.depth
-                        ].sampler.budget += self.previous_run_data.submitted_samples
-
-                    self.nested_groups[self.previous_run_data.depth].sampler.skip(
-                        self.previous_run_data.batch_number + 1
-                    )
-            else:
-                raise RuntimeError(
-                    "Tried to continue from previous sampling but no "
-                    " enchanted_run.yaml was found"
-                )
-
-            self.continue_with_base_run_dir(config_path)
-        else:
-            self.create_base_run_dir(self.base_run_dir, config_path)
 
     def start(self):
         """
