@@ -87,7 +87,6 @@ class Supervisor:
 
         self.data_dir = os.path.join(self.base_run_dir, "data")
         self.current_progress_info_file = os.path.join(self.base_run_dir, LOG_DIR, 'current_progress.txt')
-        self.all_progress_info_file = os.path.join(self.base_run_dir, LOG_DIR, 'all_progress.txt')
         self.previous_run_file = os.path.join(self.base_run_dir, "enchanted_run.yaml")
         self.previous_run_data = None
 
@@ -132,7 +131,6 @@ class Supervisor:
         last_complete_dataset = pd.DataFrame()
 
         for nested_depth, group in enumerate(self.nested_groups):
-            log.info(f"Starting nested depth {nested_depth}")
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
@@ -150,6 +148,13 @@ class Supervisor:
                     )
                     group.sampler.register_future(last_complete_dataset)
 
+            # initalise the current progress file
+            group_start_time = time.time()
+            
+            log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
+            self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
+            log.info(f"For progress report please see: {self.current_progress_info_file}")
+            
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
@@ -161,26 +166,20 @@ class Supervisor:
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
-                group_start_time = time.time()
                 for sequential_depth, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
-                    log.info(f'Starting: nested depth {nested_depth} | sequential depth: {sequential_depth} | batch number: {batch_number}')
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
                         )
                         for j in range(len(expanded))
                     ]
-                    log.info('Submitting runs to executor...')
                     executor.execute(list(zip(run_dirs, expanded)), runner)
-                    log.info('update runner progress')
                     self.update_runner_progress(runner, submitted=len(expanded))
                     
-                    log.info('start monitor runs')                    
                     # monitor runs for failures and update progress file
                     self.monitor_runs(runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
-                    log.info('monitor runs over')
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -551,10 +550,10 @@ Result:
                             \n""".strip()
 
                             log.error(log_message)                            
-                    self.write_current_progress_string(runner_config, nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time)
+                    self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time)
                 sleep(0.1)
         
-    def write_current_progress_string(self, runner_config, nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time):
+    def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time):
         def format_runner_progress(name, stats):
             submitted = stats.get("submitted", 0)
             completed = stats.get("completed", 0)
@@ -567,12 +566,12 @@ Result:
             return (
                 f"Runner:            {name}\n"
                 f"Submitted:         {submitted}\n"
-                f"Completed:         {completed}/{submitted}\n"
+                f"Completed:         {completed}\n"
                 f"Successes:         {successes}\n"
                 f"Failures:          {failures}\n"
                 f"Success Rate:      {success_rate:5.1f}%\n\n"
                 "\n"
-                f"Completed / Group Sampler Budget: {completed} / {group_sampler_budget}\n"
+                f"Progress: {completed} / {group_sampler_budget}\n"
                 f"{bar}\n"
             )
         
@@ -585,7 +584,8 @@ Result:
         runner_progress_string = format_all_runners_progress(self.runner_progress) 
         current_time = time.time()
         time_passed = current_time - group_start_time
-        sequential_runs_complete = list(self.runner_progress)[-1].get('completed', 0)
+        last_runner_key = next(reversed(self.runner_progress))
+        sequential_runs_complete = self.runner_progress[last_runner_key].get('completed', 0)
         sequential_runs_left = group_sampler_budget - sequential_runs_complete if sequential_runs_complete else group_sampler_budget
         time_per_run = time_passed / sequential_runs_complete if sequential_runs_complete else 0
         estimated_time_left = time_per_run * sequential_runs_left
@@ -596,10 +596,10 @@ Result:
 === PROGRESS REPORT =====================================
 
 Group Start Time:   {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
-Current Time:       {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
+Latest Update:      {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
 Estimated End Time: {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time else "N/A"}
 
-Running:            {runner_config["__runner_name"]}
+Running:            {current_runner_name}
 Time:               {pd.Timestamp.now()}
 Nested Depth:       {nested_depth}
 Sequential Depth:   {sequential_depth}
