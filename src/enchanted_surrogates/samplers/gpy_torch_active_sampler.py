@@ -460,9 +460,10 @@ class GpyTorchActiveSampler(Sampler):
         self.budget = kwargs.get('budget', float('inf')) # Total samples to acquire
 
         self.test_data_csv = kwargs.get('test_data_csv', None)
-        
+        self.clean_pool_csv = False
         if self.pool_csv_path is None:
             self._init_pool_stream_random()
+            self.clean_pool_csv = True
 
         self._init_pool_stream_csv()
             
@@ -1105,6 +1106,7 @@ class GpyTorchActiveSampler(Sampler):
                         f"Pool has only {remaining} remaining points, "
                         f"but batch size is {self.batch_size}. Cannot acquire new samples."
                     )
+                    self.light_post_processing()
                     return None
                 else:
                     remaining = self.total_pool_size - len(self.removed_indices)
@@ -1120,6 +1122,7 @@ class GpyTorchActiveSampler(Sampler):
         if self.submitted_samples >= self.budget:
             print("Budget reached. No more samples will be acquired.")
             self.write_batch_info() # Final write at end of sampling
+            self.light_post_processing()
             return None
 
         samples = []
@@ -1154,6 +1157,7 @@ class GpyTorchActiveSampler(Sampler):
             self.submitted_samples = self.budget
         
         if not samples:
+            self.light_post_processing()
             return None # No more samples
 
         return samples
@@ -1755,6 +1759,9 @@ class GpyTorchActiveSampler(Sampler):
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
+    def light_post_processing(self):
+        if self.clean_pool_csv:
+            shutil.rmtree(self.pool_csv_path)
         
     def register_future(self, future):
         return None
