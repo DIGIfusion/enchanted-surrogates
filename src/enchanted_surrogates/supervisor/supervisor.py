@@ -144,7 +144,7 @@ class Supervisor:
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
-                if samples is None or len(samples) + group.sampler.submitted > group.sampler.budget:
+                if samples is None or group.sampler.submitted > group.sampler.budget:
                     break
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
