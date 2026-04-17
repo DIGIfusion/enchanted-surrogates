@@ -610,7 +610,7 @@ Success Rate:       {success_rate:5.1f}%
 
 {enchanted_wizard_version_3}
 
-=== ✨ PROGRESS REPORT ✨ ==================================
+=== ✨ PROGRESS REPORT ✨ ====================================
 
 Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
 Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
@@ -625,7 +625,7 @@ Current Batch:        {batch_number}
 
 {runner_progress_string}
 
-
+==============================================================
 
 """
 
