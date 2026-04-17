@@ -24,6 +24,7 @@ from enchanted_surrogates.supervisor.nested_imports import (
 )
 from enchanted_surrogates.utils.ascii_loading_bar import ascii_loading_bar
 from enchanted_surrogates.utils.time_format import time_format
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_3
 import time
 log = get_logger(__name__)
 
@@ -50,14 +51,13 @@ class Supervisor:
                 configuration is fetched from.
         """
         self.args = args
-
         self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
-        
         self.runner_progress = {}
+
         for group in self.nested_groups:
             for runner in group.runners:
                 self.runner_progress[runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
-        
+
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
@@ -540,7 +540,7 @@ class Supervisor:
                             details = "\n".join(f"  {k}: {v}" for k, v in result.items())
                             log_message = f"""\n\n
                             
-=== FAILURE =========================================
+== 💥 FAILURE 💥 =====================================
 Run directory: {run_dir}
 
 Result:
@@ -562,8 +562,8 @@ Result:
             failures = completed - successes
             success_rate = (successes * 100 / completed) if completed else 0
 
-            bar_completed = ascii_loading_bar(completed, group_sampler_budget)
-            bar_submitted = ascii_loading_bar(completed, submitted if submitted else 1)
+            bar_completed = ascii_loading_bar(group_sampler_budget, completed)
+            bar_submitted = ascii_loading_bar(submitted if submitted else 1, completed)
 
             return f"""
 ==================== 🔮 RUNNER: {name} 🔮 ====================
@@ -586,13 +586,14 @@ Success Rate:       {success_rate:5.1f}%
 {completed} / {group_sampler_budget}
 {bar_completed}
 
-============================================================
+
+
 """.rstrip()
         
         def format_all_runners_progress(runner_progress):
             blocks = []
             for name, stats in runner_progress.items():
-                blocks.append(format_runner_progress(name, stats))
+                blocks.append(format_runner_progress(name, stats, group_sampler_budget))
             return "\n".join(blocks)
 
         runner_progress_string = format_all_runners_progress(self.runner_progress) 
@@ -606,10 +607,13 @@ Success Rate:       {success_rate:5.1f}%
         estimated_end_time = current_time + estimated_time_left if time_per_run else None
         
         progress_string=f"""
+
+{enchanted_wizard_version_3}
+
 === ✨ PROGRESS REPORT ✨ ==================================
 
 Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
-Last Update:    {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
+Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
 Estimated End Time:   {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time else "N/A"}
 
 Active Runner:        {current_runner_name}
@@ -621,7 +625,8 @@ Current Batch:        {batch_number}
 
 {runner_progress_string}
 
-============================================================
+
+
 """
 
         
