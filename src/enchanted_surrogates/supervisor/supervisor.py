@@ -238,7 +238,7 @@ class Supervisor:
         self.delete_unwanted_files(self.save_files_arg, real_run_dir)
         
         end_runs_time = time.time()
-        log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} seconds.")
+        log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
         # Clean run_dirs
         log.info("Shutting down scheduler and workers...")
         for group in self.nested_groups:
@@ -554,26 +554,40 @@ Result:
                 sleep(0.1)
         
     def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time):
-        def format_runner_progress(name, stats):
+
+        def format_runner_progress(name, stats, group_sampler_budget):
             submitted = stats.get("submitted", 0)
             completed = stats.get("completed", 0)
             successes = stats.get("num_successes", 0)
             failures = completed - successes
             success_rate = (successes * 100 / completed) if completed else 0
 
-            bar = ascii_loading_bar(group_sampler_budget, completed)
+            bar_completed = ascii_loading_bar(completed, group_sampler_budget)
+            bar_submitted = ascii_loading_bar(completed, submitted if submitted else 1)
 
-            return (
-                f"Runner:            {name}\n"
-                f"Submitted:         {submitted}\n"
-                f"Completed:         {completed}\n"
-                f"Successes:         {successes}\n"
-                f"Failures:          {failures}\n"
-                f"Success Rate:      {success_rate:5.1f}%\n\n"
-                "\n"
-                f"Progress: {completed} / {group_sampler_budget}\n"
-                f"{bar}\n"
-            )
+            return f"""
+==================== 🔮 RUNNER: {name} 🔮 ====================
+
+✨ STATUS
+--------------------------------------------------------
+Submitted:          {submitted}
+Completed:          {completed}
+Successes:          {successes}
+Failures:           {failures}
+Success Rate:       {success_rate:5.1f}%
+
+🪄 COMPLETED vs SUBMITTED
+--------------------------------------------------------
+{completed} / {submitted if submitted else 0}
+{bar_submitted}
+
+📜 COMPLETED vs BUDGET
+--------------------------------------------------------
+{completed} / {group_sampler_budget}
+{bar_completed}
+
+============================================================
+""".rstrip()
         
         def format_all_runners_progress(runner_progress):
             blocks = []
@@ -592,26 +606,24 @@ Result:
         estimated_end_time = current_time + estimated_time_left if time_per_run else None
         
         progress_string=f"""
-        
-=== PROGRESS REPORT =====================================
+=== ✨ PROGRESS REPORT ✨ ==================================
 
-Group Start Time:   {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
-Latest Update:      {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
-Estimated End Time: {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time else "N/A"}
+Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
+Last Update:    {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
+Estimated End Time:   {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time else "N/A"}
 
-Running:            {current_runner_name}
-Time:               {pd.Timestamp.now()}
-Nested Depth:       {nested_depth}
-Sequential Depth:   {sequential_depth}
-Current Batch:      {batch_number}
+Active Runner:        {current_runner_name}
+Nested Depth:         {nested_depth}
+Sequential Depth:     {sequential_depth}
+Current Batch:        {batch_number}
 
-Group Sampler Budget:    {group_sampler_budget}
+📜 Group Sampler Budget: {group_sampler_budget}
 
 {runner_progress_string}
 
-==========================================================
-
+============================================================
 """
+
         
         os.makedirs(os.path.dirname(self.current_progress_info_file), exist_ok=True)
         with open(self.current_progress_info_file, 'w') as file:

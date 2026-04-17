@@ -9,6 +9,6 @@ def time_format(seconds: int) -> str:
     t = time.gmtime(seconds)
 
     if days > 0:
-        return f"{days}d {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
+        return f"{days}d - {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
     else:
         return f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
