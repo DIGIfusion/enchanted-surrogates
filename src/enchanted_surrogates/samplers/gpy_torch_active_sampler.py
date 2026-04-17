@@ -384,7 +384,11 @@ class GpyTorchActiveSampler(Sampler):
         self.parameters = kwargs.get('parameters')
         self.bounds = kwargs.get('bounds')
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
+        self.pool_chunk_size = kwargs.get('pool_chunk_size', 1000)
+        self.fixed_pool_values = kwargs.get('fixed_pool_values', None)
+        self.allowed_pool_values = kwargs.get('allowed_pool_values', None)
         
+        self.output_col = kwargs.get('output_col', None)
         self.output_column_name = self.get_output_col(csv_path=self.pool_csv_path)
         
         self.base_run_dir = kwargs.get('base_run_dir', None)
@@ -454,7 +458,6 @@ class GpyTorchActiveSampler(Sampler):
         self.prev_submitted_samples = 0
         self.budget = kwargs.get('budget', float('inf')) # Total samples to acquire
 
-        self.output_col = kwargs.get('output_col', None)
         self.test_data_csv = kwargs.get('test_data_csv', None)
         self.pool_source = kwargs.get('pool_source', 
                                       None)
