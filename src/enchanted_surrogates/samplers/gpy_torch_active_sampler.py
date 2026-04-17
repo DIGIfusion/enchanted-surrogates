@@ -517,7 +517,8 @@ class GpyTorchActiveSampler(Sampler):
         torch.backends.cudnn.benchmark = False
     
     def _init_pool_stream_random(self):
-        log.info("Generating random pool CSV...")
+        print("Generating random pool CSV...")
+        log.info(f"Generating random pool CSV at: {self.pool_csv_path}")
         start_time = time.time()
         self._rng = np.random.default_rng(self.seed)
 
@@ -566,6 +567,7 @@ class GpyTorchActiveSampler(Sampler):
             rows_remaining -= chunk_size
         end_time = time.time()
         
+        print(f'Generating the random pool csv took: {time_format(end_time-start_time)}')
         log.info(f'Generating the random pool csv took: {time_format(end_time-start_time)}')
         
     def _init_pool_stream_csv(self):
@@ -1090,7 +1092,6 @@ class GpyTorchActiveSampler(Sampler):
             log.info(f"Acquisition batch {self.batch_number}: Updating training data and fitting GP...")
             self.append_train_data()
             # Need at least two training points to fit a GP
-            print('debug', 'Training data size:', self.train_x.size(0), 'points.')
             if self.train_x.numel() == 0 or self.train_x.size(0) < 2:
                 raise RuntimeError("Not enough training data to fit GP for acquisition.")
             else:
