@@ -110,7 +110,6 @@ class FriedmanRunner(Runner):
 
         # 5. Latency Simulation
         sleep_duration = self.get_sleep_sec()
-        log.info(f"FRIEDMAN RUNNER - SLEEPING FOR: {sleep_duration}")
         sleep(sleep_duration)
 
         # 6. Read-back and Result Packaging
