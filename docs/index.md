@@ -228,3 +228,5 @@ The development of this framework has been support by multiple funding sources:
 
 - Multiple CSC IT Center for Science projects have provided the necessary
   computing resources for the development and application of the framework.
+
+- Aalto University students Luka Jääskeläinen, Touko Seppä, Juha Vanhala, Samuel Hughes, Eetu Lindström, Anna Shcherbakova and Lauri Saksi contributed to the architectual restructuring, the addition of the supervisor module, and many other features introduced in v2.0.0 as part of the course `CS-C2130 - Software Project 1`.
