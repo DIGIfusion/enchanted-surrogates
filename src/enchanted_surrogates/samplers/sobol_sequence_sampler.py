@@ -1,4 +1,14 @@
-""" TODO: Documentation. """
+"""
+## Overview
+
+The `SobolSequenceSampler` generates **quasi‑random**, low‑discrepancy samples
+using a Sobol sequence. Unlike purely random sampling, Sobol sequences
+systematically fill the parameter space, providing improved coverage and
+reduced clustering — especially valuable for high‑dimensional or
+sample‑efficient surrogate modelling.
+
+---
+"""
 
 import numpy as np
 from scipy.stats.qmc import Sobol
@@ -8,25 +18,83 @@ from enchanted_surrogates.samplers.base_sampler import Sampler
 
 class SobolSequenceSampler(Sampler):
     """
-    TODO: Description.
+    ## Configuration
 
+    To use the `SobolSequenceSampler`, specify it in the configuration file:
+
+    ```yaml
+      sampler:
+        type: SobolSequenceSampler
+        parameters: ['x', 'y']
+        bounds: [[1, 10], [0, 1]]
+        num_samples: 64
+        scramble: true
+        seed: 42
+    ```
+
+    Attributes:
+        self.budget (int):
+            Total number of Sobol samples. Automatically rounded **down** to the
+            nearest power of two (required by `scipy.stats.qmc.Sobol`).
+
+        self.power (int):
+            The exponent such that `budget = 2**power`.
+
+        self.bounds (list[tuple[float, float]]):
+            Lower and upper bounds for each parameter.
+
+        self.parameters (list[str]):
+            Names of the parameters to be sampled.
+
+        self.batch_size (int):
+            Number of samples returned per batch. Defaults to the full budget.
+
+        self.scramble (bool):
+            Whether to apply Owen scrambling to the Sobol sequence, improving
+            uniformity and reducing structural artifacts.
+
+        self.seed (int):
+            Seed for reproducibility when scrambling is enabled.
+
+        self.batch_number (int):
+            Internal counter tracking which batch is returned next.
+
+        self.samples (list[list[float]]):
+            Pre‑generated Sobol samples scaled to the specified bounds.
+
+    ---
+
+    ## Assumptions and Notes
+
+    - Sobol sequences require sample counts of the form `2^m`.  
+      If the user provides a non‑power‑of‑two budget, it is automatically
+      adjusted downward with a warning.
+
+    - Samples are generated **once** at initialization and served in batches.
+
+    - Sobol sequences provide deterministic, quasi‑random coverage of the
+      parameter space; scrambling introduces controlled randomness while
+      preserving low‑discrepancy properties.
+
+    - Parameter dimensions are assumed to be continuous.
+
+    - The sampler does not adapt based on evaluation results.
+
+    ---
+
+    ## Why Sobol?
+
+    Sobol sequences are particularly effective when:
+    - exploring high‑dimensional spaces,
+    - requiring uniform coverage with minimal clustering,
+    - performing global sensitivity analysis,
+    - training surrogate models with limited budgets.
+
+    Their structured exploration often outperforms purely random sampling in
+    convergence and stability.
+
+    ---
     """
-    def __init__(self, bounds, budget, parameters, **kwargs):
-        """Initialize the Sobol sequence sampler.
-
-        Args:
-            bounds (list[tuple]): A list of (min, max) tuples defining the
-                bounds for each parameter.
-            budget (int): The total number of samples to generate. Will be
-                adjusted to the nearest power of 2.
-            parameters (list[str]): The names of the parameters to sample.
-            batch_size (int, optional): Number of samples to return per
-                batch. Defaults to budget.
-            scramble (bool, optional): Whether to apply scrambling to the
-                Sobol sequence. Defaults to True.
-            seed (int, optional): Random seed for reproducibility.
-                Defaults to 42.
-        """
         self.budget = budget
         self.power = int(np.log2(self.budget))
         if self.budget != 2**self.power:
@@ -98,10 +166,36 @@ class SobolSequenceSampler(Sampler):
         return scaled_points.tolist()
 
     def register_future(self, future):
-        """ Doesn't matter for random sampler TODO: Probably? """
+        """
+        Registers a completed or scheduled evaluation.
+
+        This method is part of the sampler interface but is not used by
+        the RandomSampler, as sampling does not depend on evaluation results.
+
+        Args:
+          future:
+              A future or handle representing an asynchronous evaluation.
+
+        Returns:
+          None
+        """
         return None
 
     def register_futures(self, futures):
+        """
+        Registers multiple completed or scheduled evaluations.
+
+        This method is part of the sampler interface but is not used by
+        the RandomSampler. It is implemented as a no-op.
+
+        Args:
+          futures:
+            An iterable of futures or handles representing asynchronous
+            evaluations.
+
+        Returns:
+          None
+        """
         return None
 
     def skip(self, index):
