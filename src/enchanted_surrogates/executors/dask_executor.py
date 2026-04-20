@@ -381,6 +381,7 @@ class DaskExecutor(Executor):
                 self.slurm_job_ids.update(self.cluster.workers.keys())
             except Exception:
                 pass
+        log.info("CLUSTER STARTED")
 
     def wait_for_all_dask_jobs_running(self, poll_interval=1):
         """
@@ -497,7 +498,6 @@ class DaskExecutor(Executor):
 
         if not self.client:
             self.start_cluster()
-        log.info("CLUSTER STARTED")
 
         # keep futures for BayesianOptimizationSampler
         self.submit_batch(input, runner_config)
