@@ -167,14 +167,14 @@ class SobolSequenceSampler(Sampler):
 
     def register_future(self, future):
         """
-        Registers a completed or scheduled evaluation.
+        Registers a completed result for the sampler to use it to train a model.
 
         This method is part of the sampler interface but is not used by
-        the RandomSampler, as sampling does not depend on evaluation results.
+        the Sobol Sequence Sampler, as sampling does not depend on previous evaluation results.
 
         Args:
           future:
-              A future or handle representing an asynchronous evaluation.
+              A completed result from a simulation
 
         Returns:
           None
@@ -183,15 +183,14 @@ class SobolSequenceSampler(Sampler):
 
     def register_futures(self, futures):
         """
-        Registers multiple completed or scheduled evaluations.
+        Registers multiple completed results.
 
         This method is part of the sampler interface but is not used by
-        the RandomSampler. It is implemented as a no-op.
+        the Sobol Sequence Sampler.
 
         Args:
           futures:
-            An iterable of futures or handles representing asynchronous
-            evaluations.
+            An iterable of completed results
 
         Returns:
           None
