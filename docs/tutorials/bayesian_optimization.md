@@ -1,6 +1,6 @@
 ﻿# Tutorial: Bayesian Optimization
 
-This tutorial explains the example Bayesian optimization workflow in Enchanted Surrogates. The Bayesian optimization example is a synthetic test case that uses the [Example BO Runner](runners/example_bayesian_optimization_runner.md), the [Example BO Parser](parsers/example_bayesian_optimization_parser.md), and an example configuration file  (`configs/example_bayesian_optimization_local.yaml`).
+This tutorial explains the example Bayesian optimization workflow in Enchanted Surrogates. The Bayesian optimization example is a synthetic test case that uses the [Synthetic Double Gaussian Runner](runners/synthetic_double_gaussion_runner.md), the [Synthetic Double Gaussian Parser](parsers/synthetic_double_gaussion_parser.md), and an example configuration file  (`configs/example_bayesian_optimization_local.yaml`).
 Make sure that when you installed `enchanted-surrogates`, you included the optional dependencies needed for the [Bayesian Optimization Sampler](samplers/bayesian_optimization_sampler.md). 
 
 ## Explanation
@@ -128,14 +128,14 @@ Use the same plotting code as above.
 
 ![fig](img/active_pool_sampling_output.png)
 
-
+The same number of samples were taken in both examples.
 
 
 ## Extending the example
 
 You can adapt this example for a real simulation by:
 
-- replacing `ExampleBayesianOptimizationRunner` with a runner that invokes your code
+- replacing `SyntheticDoubleGaussianRunner` with a runner that invokes your code
 - implementing a parser that reads the real output files and defining your objective in `collect_sample_information`
 - updating `bounds` and `parameters` to match your input space
 

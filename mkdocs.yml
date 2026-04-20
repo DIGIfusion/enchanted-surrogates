@@ -38,8 +38,8 @@ nav:
       - Example Runner: runners/example_runner.md
     - Bayesian Optimization:
       - Step-by-step: tutorials/bayesian_optimization.md
-      - Example BO Runner: runners/example_bayesian_optimization_runner.md
-      - Example BO Parser: parsers/example_bayesian_optimization_parser.md
+      - Example BO Runner: runners/synthetic_double_gaussian_runner.md
+      - Example BO Parser: parsers/synthetic_double_gaussian_parser.md
 
 theme:
   name: material
