@@ -509,3 +509,195 @@ def test_acquisition_eigf(tmp_path):
     assert np.std(scores) > 0.0      # Should not be constant
 
 
+# ============================================================
+# 17. Test: approx_dpp basic shape + no duplicates
+# ============================================================
+def test_approx_dpp_basic_shape(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0","x1"],
+        bounds=[[0,1],[0,1]],
+        pool_csv_path=None,
+        total_pool_size=5000,
+        pool_chunk_size=500,
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=7,
+        acquisition_batch_mode="approx_dpp",
+        remove_pool_file=True,
+    )
+
+    sampler.train_x = torch.tensor([[0.0,0.0],[1.0,1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    X_real, X_unit, idx = sampler.compute_acquisition_candidates()
+
+    assert X_real.shape == (7, 2)
+    assert X_unit.shape == (7, 2)
+    assert len(idx) == 7
+    assert len(set(idx)) == 7
+
+    sampler.remove_pool()
+
+
+
+# ============================================================
+# 18. Test: approx_dpp diversity (repulsion working)
+# ============================================================
+def test_approx_dpp_diversity(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0","x1"],
+        bounds=[[0,1],[0,1]],
+        pool_csv_path=None,
+        total_pool_size=8000,
+        pool_chunk_size=500,
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=5,
+        acquisition_batch_mode="approx_dpp",
+        remove_pool_file=True,
+    )
+
+    sampler.train_x = torch.tensor([[0.0,0.0],[1.0,1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    X_real, X_unit, idx = sampler.compute_acquisition_candidates()
+
+    dists = np.sqrt(((X_unit[:,None,:] - X_unit[None,:,:])**2).sum(axis=2))
+    min_dist = np.min(dists + np.eye(len(idx))*999)
+    assert min_dist > 0.05
+
+    sampler.remove_pool()
+
+
+
+# ============================================================
+# 19. Test: approx_dpp streams Pass 2 when M > pool_chunk_size
+# ============================================================
+def test_approx_dpp_streaming_pass2(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0","x1","x2"],
+        bounds=[[0,1]]*3,
+        pool_csv_path=None,
+        total_pool_size=20000,
+        pool_chunk_size=500,   # forces streaming
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=10,
+        acquisition_batch_mode="approx_dpp",
+        remove_pool_file=True,
+    )
+
+    sampler.train_x = torch.tensor([[0.0,0.0,0.0],[1.0,1.0,1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    X_real, X_unit, idx = sampler.compute_acquisition_candidates()
+
+    assert len(idx) == 10
+    assert len(set(idx)) == 10
+
+    sampler.remove_pool()
+
+
+
+# ============================================================
+# 20. Test: approx_dpp spill-to-disk path works
+# ============================================================
+def test_approx_dpp_spill_to_disk(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0"],
+        bounds=[[0,1]],
+        pool_csv_path=None,
+        total_pool_size=150000,   # large → large M
+        pool_chunk_size=2000,
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=5,
+        acquisition_batch_mode="approx_dpp",
+        remove_pool_file=True,
+    )
+
+    sampler.train_x = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    X_real, X_unit, idx = sampler.compute_acquisition_candidates()
+
+    assert len(idx) == 5
+    assert len(set(idx)) == 5
+
+    sampler.remove_pool()
+
+
+
+# ============================================================
+# 21. Test: approx_dpp respects removed indices
+# ============================================================
+def test_approx_dpp_respects_removed_indices(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0","x1"],
+        bounds=[[0,1],[0,1]],
+        pool_csv_path=None,
+        total_pool_size=10000,
+        pool_chunk_size=1000,
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=5,
+        acquisition_batch_mode="approx_dpp",
+        remove_pool_file=True,
+    )
+
+    sampler._remove_from_pool({100, 101, 102, 5000})
+
+    sampler.train_x = torch.tensor([[0.0,0.0],[1.0,1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    _, _, idx = sampler.compute_acquisition_candidates()
+
+    assert 100 not in idx
+    assert 101 not in idx
+    assert 102 not in idx
+    assert 5000 not in idx
+
+    sampler.remove_pool()
+
+
+
+# ============================================================
+# 22. Test: approx_dpp differs from top-K (diversity check)
+# ============================================================
+def test_approx_dpp_differs_from_topk(tmp_path):
+    sampler = GpyTorchActiveSampler(
+        parameters=["x0","x1"],
+        bounds=[[0,1],[0,1]],
+        pool_csv_path=None,
+        total_pool_size=8000,
+        pool_chunk_size=500,
+        base_run_dir=os.path.join(tmp_path, "tmp"),
+        output_col="output",
+        batch_size=5,
+        remove_pool_file=True,
+    )
+
+    sampler.train_x = torch.tensor([[0.0,0.0],[1.0,1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.train_y = torch.tensor([[0.0],[1.0]], dtype=sampler.dtype, device=sampler.device)
+    sampler.fit_gpr_model(num_restarts=1)
+    sampler.acquisition_mode = "variance"
+
+    sampler.acquisition_batch_mode = "best_score"
+    _, _, idx_topk = sampler.compute_acquisition_candidates()
+
+    sampler.acquisition_batch_mode = "approx_dpp"
+    _, _, idx_dpp = sampler.compute_acquisition_candidates()
+
+    assert set(idx_topk) != set(idx_dpp)
+
+    sampler.remove_pool()

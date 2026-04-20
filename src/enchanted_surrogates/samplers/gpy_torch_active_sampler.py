@@ -21,12 +21,15 @@ from gpytorch.constraints import Interval
 from linear_operator.utils.errors import NotPSDError
 
 import numpy as np
+from numpy.lib.format import open_memmap
+
 import pandas as pd
 from scipy.special import erf
 from sklearn.model_selection import KFold # Still useful for ensemble logic if desired
 import torch
 from torch import nanmean # Using torch.nanmean for robust mean
 from torch.nn import ModuleList
+
 
 import gpytorch
 from gpytorch.models import ExactGP
@@ -387,8 +390,11 @@ class GpyTorchActiveSampler(Sampler):
         
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
         
-        self.pool_chunk_size = kwargs.get('pool_chunk_size', 1000)
-        self.fixed_pool_values = kwargs.get('fixed_pool_values', None)
+        self.pool_chunk_size = int(float(kwargs.get('pool_chunk_size', 1000)))
+        self.total_pool_size = int(float(kwargs.get('total_pool_size', 10000)))
+
+        self.verbose_acq = True   # or False to disable prints
+
         self.allowed_pool_values = kwargs.get('allowed_pool_values', None)
         
         self.output_col = kwargs.get('output_col', None)
@@ -421,7 +427,6 @@ class GpyTorchActiveSampler(Sampler):
         self._range = self._ub - self._lb
         self.input_dim = len(self.parameters)
 
-        self.total_pool_size = kwargs.get('total_pool_size', 10000)
         # allowed_pool_values: dict mapping parameter name -> list/array of allowed REAL-space values
         self.allowed_pool_values = kwargs.get('allowed_pool_values', None)
         if self.allowed_pool_values is not None:
@@ -583,7 +588,12 @@ class GpyTorchActiveSampler(Sampler):
 
         # Load the generated NPY files
         self.X_pool = np.load(self.pool_npy_path, mmap_mode="r")
-        self.y_pool = np.load(self.pool_y_npy_path, mmap_mode="r")
+        
+        # Load y pool only if it exists
+        if self.pool_y_npy_path is not None and os.path.exists(self.pool_y_npy_path):
+            self.y_pool = np.load(self.pool_y_npy_path, mmap_mode="r")
+        else:
+            self.y_pool = None
 
         self.total_pool_size = self.X_pool.shape[0]
         self._next_row_index = 0
@@ -721,33 +731,74 @@ class GpyTorchActiveSampler(Sampler):
 
     
     def _init_pool_stream_random(self):
-        pool_X_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "random_pool_X.npy")
-        pool_y_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "random_pool_y.npy")
+        print("Initialising Random Pool")
+        start_time = time.time()
 
+        pool_directory = os.path.join(os.path.dirname(self.base_run_dir), "tmp")
+        os.makedirs(pool_directory, exist_ok=True)
+
+        pool_X_path = os.path.join(pool_directory, "random_pool_X.npy")
         self.pool_npy_path = pool_X_path
-        self.pool_y_npy_path = pool_y_path
 
-        rng = np.random.default_rng(self.seed)
-        N = self.total_pool_size
-        D = self.input_dim
+        random_generator = np.random.default_rng(self.seed)
 
-        X_real = np.zeros((N, D), dtype=np.float32)
+        total_pool_size = int(self.total_pool_size)
+        input_dim = int(self.input_dim)
+        chunk_size = int(self.pool_chunk_size)
 
-        for j, p in enumerate(self.parameters):
-            if self.allowed_pool_values and p in self.allowed_pool_values:
-                X_real[:, j] = rng.choice(self.allowed_pool_values[p], size=N)
-            elif self.fixed_pool_values and p in self.fixed_pool_values:
-                X_real[:, j] = rng.choice(self.fixed_pool_values[p], size=N)
-            else:
-                low, high = self.bounds[j]
-                X_real[:, j] = rng.uniform(low, high, size=N)
+        # Create a .npy file with a proper header
+        pool_memmap = open_memmap(
+            pool_X_path,
+            mode="w+",
+            dtype=np.float32,
+            shape=(total_pool_size, input_dim),
+        )
 
-        os.makedirs(os.path.dirname(pool_X_path), exist_ok=True)
+        num_chunks = math.ceil(total_pool_size / chunk_size)
 
-        np.save(pool_X_path, X_real)
+        for chunk_index, chunk_start in enumerate(range(0, total_pool_size, chunk_size)):
+            chunk_end = min(chunk_start + chunk_size, total_pool_size)
+            current_chunk_size = chunk_end - chunk_start
 
-        # Optional: initialize y as None or zeros
-        np.save(pool_y_path, np.full((N,), np.nan, dtype=np.float32))
+            chunk_real_values = np.zeros((current_chunk_size, input_dim), dtype=np.float32)
+
+            for dim_index, parameter_name in enumerate(self.parameters):
+                if self.allowed_pool_values and parameter_name in self.allowed_pool_values:
+                    chunk_real_values[:, dim_index] = random_generator.choice(
+                        self.allowed_pool_values[parameter_name],
+                        size=current_chunk_size,
+                    )
+                # elif self.fixed_pool_values and parameter_name in self.fixed_pool_values:
+                #     chunk_real_values[:, dim_index] = random_generator.choice(
+                #         self.fixed_pool_values[parameter_name],
+                #         size=current_chunk_size,
+                #     )
+                else:
+                    lower_bound, upper_bound = self.bounds[dim_index]
+                    chunk_real_values[:, dim_index] = random_generator.uniform(
+                        lower_bound,
+                        upper_bound,
+                        size=current_chunk_size,
+                    )
+
+            pool_memmap[chunk_start:chunk_end] = chunk_real_values
+
+            # ---- Progress reporting ----
+            if chunk_index % 10 == 0 or chunk_index == num_chunks - 1:
+                elapsed = time.time() - start_time
+                progress = (chunk_index + 1) / num_chunks
+                eta = elapsed / progress - elapsed
+                print(
+                    f"[{chunk_index+1}/{num_chunks}] "
+                    f"{progress*100:5.1f}% complete | "
+                    f"elapsed: {elapsed:6.1f}s | "
+                    f"ETA: {eta:6.1f}s"
+                )
+
+        pool_memmap.flush()
+
+        end_time = time.time()
+        print(f"Initialized random pool in {end_time - start_time:.2f} seconds.")
         
     def _init_pool_stream_csv(self):
         self._csv_iter = pd.read_csv(
@@ -1320,20 +1371,19 @@ class GpyTorchActiveSampler(Sampler):
     def _compute_acquisition_candidates(self, mode):
         """
         Fully streaming acquisition over the entire pool.
-        Uses get_next_pool_chunk() to iterate through the CSV-backed pool.
-        Returns global pool indices of selected candidates.
+
+        Modes:
+        - best_score: simple top-K
+        - approx_dpp: 2-pass approximate DPP (streaming, greedy)
+        - fantasy_labels: sequential greedy with fantasy retraining
         """
-        
-        # Reset pool streaming before scoring
-        self._reset_iterator()
 
-        batch_size = int(self.batch_size)
-
-        # For fantasy-label mode: global mask
-        masked_global = set()
+        import heapq
+        import math
+        import numpy as np
 
         # -------------------------
-        # Streaming scoring
+        # Helper: stream scores over full pool
         # -------------------------
         def stream_scores(model):
             """
@@ -1342,74 +1392,257 @@ class GpyTorchActiveSampler(Sampler):
                 pool_indices: list of global indices for this chunk
             """
             while True:
-                result = self.get_next_pool_chunk()
-                
-                X_unit_chunk, y_chunk, pool_indices = result
-
+                X_unit_chunk, y_chunk, pool_indices = self.get_next_pool_chunk()
                 if X_unit_chunk is None:
                     return
-
-                # Convert to numpy
-
                 scores = self._compute_acquisition_unchunked(
                     X_unit_chunk, mode, model=model, pool_y=y_chunk
                 )
-
                 yield scores, pool_indices
 
         # -------------------------
-        # Streaming top‑K heap
+        # Helper: simple streaming top-K over full pool
         # -------------------------
-        import heapq
         def top_k_stream(model):
-            heap = []  # (score, global_idx)
-
+            heap = []  # (score, global_index)
             for scores, pool_indices in stream_scores(model):
-                for score, global_idx in zip(scores, pool_indices):
-                    if global_idx in self.removed_indices:
+                for score, global_index in zip(scores, pool_indices):
+                    if global_index in self.removed_indices:
                         continue
                     if len(heap) < batch_size:
-                        heapq.heappush(heap, (score, global_idx))
+                        heapq.heappush(heap, (score, global_index))
                     else:
                         if score > heap[0][0]:
-                            heapq.heapreplace(heap, (score, global_idx))
-
+                            heapq.heapreplace(heap, (score, global_index))
             return np.array([idx for (_, idx) in sorted(heap)])
 
         # -------------------------
-        # Streaming argmax (fantasy mode)
+        # Common setup
         # -------------------------
-        def argmax_stream(model):
-            best_score = -np.inf
-            best_global_idx = None
+        self._reset_iterator()
+        batch_size = int(self.batch_size)
+        dimensionality = int(self.train_x.shape[1])
+        pool_size = int(self.total_pool_size)
+        pool_chunk_size = int(self.pool_chunk_size)
 
-            for scores, pool_indices in stream_scores(model):
-                for score, global_idx in zip(scores, pool_indices):
-                    if global_idx in self.removed_indices:
-                        continue
-                    if global_idx in masked_global:
-                        continue
-                    if score > best_score:
-                        best_score = score
-                        best_global_idx = global_idx
-
-            return best_global_idx
+        masked_global = set()  # used only for fantasy_labels
 
         # ============================================================
-        # CASE 1: K=1 or best_score mode → simple top‑K
+        # CASE 1: trivial top-K
         # ============================================================
         if batch_size <= 1 or self.acquisition_batch_mode == "best_score":
             return top_k_stream(self.gp_model)
 
         # ============================================================
-        # CASE 2: fantasy_labels (sequential greedy)
+        # CASE 2: approx_dpp (2-pass, fully streaming)
         # ============================================================
+        if self.acquisition_batch_mode == "approx_dpp":
+
+            # -------------------------
+            # Choose M: scale with K, D, log(N)
+            # -------------------------
+            alpha = 3.0
+            M_target = int(alpha * batch_size * dimensionality * math.log(max(pool_size, 2)))
+            M_target = max(M_target, batch_size)
+            M_target = min(M_target, 150_000)  # hard safety cap
+
+            # -------------------------
+            # PASS 1: streaming top-M over full pool
+            # -------------------------
+            self._reset_iterator()
+            candidate_heap = []  # (score, global_index)
+
+            # PASS 1 progress tracking
+            if self.verbose_acq:
+                print(f"[Pass 1] Streaming full pool of {pool_size:,} rows...")
+                import time
+                t0 = time.time()
+                chunks_seen = 0
+                est_total_chunks = math.ceil(pool_size / pool_chunk_size)
+
+            for scores, pool_indices in stream_scores(self.gp_model):
+
+                if self.verbose_acq:
+                    chunks_seen += 1
+                    elapsed = time.time() - t0
+                    pct = 100 * chunks_seen / est_total_chunks
+                    avg_chunk = elapsed / chunks_seen
+                    eta = avg_chunk * (est_total_chunks - chunks_seen)
+                    print(f"[Pass 1] {pct:5.1f}% | chunk {chunks_seen}/{est_total_chunks} | ETA {eta:6.1f}s", end="\r")
+                for score, global_index in zip(scores, pool_indices):
+                    if global_index in self.removed_indices:
+                        continue
+                    if len(candidate_heap) < M_target:
+                        heapq.heappush(candidate_heap, (score, global_index))
+                    else:
+                        if score > candidate_heap[0][0]:
+                            heapq.heapreplace(candidate_heap, (score, global_index))
+
+            # Materialize M candidates (scores + global indices)
+            candidate_heap_sorted = sorted(candidate_heap, reverse=True)
+            candidate_scores = np.array([s for (s, _) in candidate_heap_sorted], float)
+            candidate_indices = np.array([idx for (_, idx) in candidate_heap_sorted], int)
+            num_candidates = len(candidate_indices)
+
+            if num_candidates == 0:
+                return np.array([], dtype=int)
+
+            if self.verbose_acq:
+                print(f"\n[Pass 1] Completed in {elapsed:6.1f}s. Selected M={num_candidates}.")
+
+            # -------------------------
+            # Optional spill-to-disk if M is very large
+            # -------------------------
+            memory_threshold = pool_chunk_size  # adjust if needed
+            if num_candidates > memory_threshold:
+                import tempfile, os
+                temp_dir = tempfile.mkdtemp(prefix="approx_dpp_candidates_")
+                scores_path = os.path.join(temp_dir, "scores.npy")
+                indices_path = os.path.join(temp_dir, "indices.npy")
+                np.save(scores_path, candidate_scores)
+                np.save(indices_path, candidate_indices)
+                candidate_scores = None
+                candidate_indices = None
+                spill_mode = True
+            else:
+                spill_mode = False
+
+            if spill_mode:
+                base_scores = np.load(scores_path, mmap_mode="r")
+                base_indices = np.load(indices_path, mmap_mode="r")
+            else:
+                base_scores = candidate_scores
+                base_indices = candidate_indices
+
+            # -------------------------
+            # Helper: stream over M candidates in chunks
+            # -------------------------
+            def candidate_chunk_iterator():
+                total = len(base_indices)
+                chunk_size = min(pool_chunk_size, total)
+                for start in range(0, total, chunk_size):
+                    end = min(start + chunk_size, total)
+                    yield base_scores[start:end], base_indices[start:end], start, end
+
+            # -------------------------
+            # PASS 2: fully streaming greedy DPP (K passes over M)
+            # -------------------------
+            sigma = 0.1
+            lambda_scale = float(base_scores.max())
+
+            selected_local_indices = []   # indices into [0..num_candidates)
+            selected_local_set = set()    # to avoid duplicates
+            selected_unit_points = []     # list of (D,) arrays in unit space
+
+            def compute_repulsion(candidate_unit_point, selected_unit_points_array):
+                """
+                Repulsion = exp(-0.5 * min_dist^2 / sigma^2)
+                computed against the current selected set only.
+                """
+                if selected_unit_points_array.size == 0:
+                    return 0.0
+                diffs = selected_unit_points_array - candidate_unit_point
+                squared_distances = np.sum(diffs * diffs, axis=1)
+                min_sq = squared_distances.min()
+                return math.exp(-0.5 * min_sq / (sigma ** 2))
+
+            # PASS 2 progress tracking
+            if self.verbose_acq:
+                print(f"[Pass 2] Greedy DPP selection over M={num_candidates:,} candidates...")
+                import time
+                t0_pass2 = time.time()
+
+            for k_iter in range(batch_size):
+
+                if self.verbose_acq:
+                    print(f"[Pass 2] Selecting point {k_iter+1}/{batch_size}...", end="\r")
+
+                best_adjusted_score = -math.inf
+                best_local_index = None
+
+                best_adjusted_score = -math.inf
+                best_local_index = None
+
+                if selected_unit_points:
+                    selected_unit_points_array = np.vstack(selected_unit_points)
+                else:
+                    selected_unit_points_array = np.empty((0, dimensionality), dtype=float)
+
+                # Stream over the M-candidate set in chunks
+                for chunk_i, (scores_chunk, indices_chunk, start, end) in enumerate(candidate_chunk_iterator()):
+
+                    if self.verbose_acq:
+                        pct = 100 * (chunk_i+1) / math.ceil(num_candidates / pool_chunk_size)
+                        print(f"[Pass 2]   pass {k_iter+1}/{batch_size} | {pct:5.1f}% of M streamed", end="\r")
+                    X_chunk_unit = self._get_unit_points_by_global_indices(indices_chunk)
+
+                    for i in range(len(indices_chunk)):
+                        local_index = start + i
+                        if local_index in selected_local_set:
+                            continue  # already selected
+
+                        base_score = scores_chunk[i]
+                        candidate_unit = X_chunk_unit[i]
+
+                        repulsion = compute_repulsion(candidate_unit, selected_unit_points_array)
+                        adjusted_score = base_score - lambda_scale * repulsion
+
+                        # Heap-of-size-1 / argmax pattern
+                        if adjusted_score > best_adjusted_score:
+                            best_adjusted_score = adjusted_score
+                            best_local_index = local_index
+
+                if best_local_index is None:
+                    break  # no more useful candidates
+
+                selected_local_indices.append(best_local_index)
+                selected_local_set.add(best_local_index)
+
+                # Store unit coords of the newly selected point
+                selected_global_index = int(base_indices[best_local_index])
+                selected_unit_point = self._get_unit_points_by_global_indices(
+                    [selected_global_index]
+                )[0]
+                selected_unit_points.append(selected_unit_point)
+
+            if not selected_local_indices:
+                # Fallback: just take top-K by acquisition among M
+                top_local = np.argsort(-base_scores)[:batch_size]
+                return base_indices[top_local]
+
+            selected_local_indices = np.array(selected_local_indices, dtype=int)
+            final_global_indices = base_indices[selected_local_indices]
+            
+            if self.verbose_acq:
+                print(f"\n[Pass 2] Completed in {time.time() - t0_pass2:6.1f}s.")
+            
+            return final_global_indices
+
+        # ============================================================
+        # CASE 3: fantasy_labels (sequential greedy with retraining)
+        # ============================================================
+        def argmax_stream(model):
+            best_score = -np.inf
+            best_global_idx = None
+            for scores, pool_indices in stream_scores(model):
+                for score, global_index in zip(scores, pool_indices):
+                    if global_index in self.removed_indices:
+                        continue
+                    if global_index in masked_global:
+                        continue
+                    if score > best_score:
+                        best_score = score
+                        best_global_idx = global_index
+            return best_global_idx
+
         if self.acquisition_batch_mode == "fantasy_labels":
+
             selected_global = []
             current_model = self.gp_model
 
             for _ in range(batch_size):
-                self._reset_iterator() # Reset stream for each selection to find the current best
+                # For each fantasy step, re-scan the pool
+                self._reset_iterator()
                 best_global_idx = argmax_stream(current_model)
                 if best_global_idx is None:
                     break
@@ -1417,8 +1650,8 @@ class GpyTorchActiveSampler(Sampler):
                 selected_global.append(best_global_idx)
                 masked_global.add(best_global_idx)
 
-                # Build fantasy label
-                x_sel_unit = self._get_unit_points_by_global_indices([best_global_idx])[0] # shape (D,)
+                # Build fantasy label at the selected point
+                x_sel_unit = self._get_unit_points_by_global_indices([best_global_idx])[0]
                 x_sel_unit_t = torch.tensor(
                     x_sel_unit, dtype=self.dtype, device=self.device
                 )
@@ -1428,10 +1661,9 @@ class GpyTorchActiveSampler(Sampler):
                     mu_std = posterior.mean
 
                 x_sel_real = current_model.to_real(x_sel_unit_t.unsqueeze(0)).detach()
-
                 y_fantasy_real = current_model.unstandardize_y(mu_std).reshape(-1, 1).detach()
 
-                # Augment training data
+                # Augment training data with fantasy point
                 X_aug = torch.cat([
                     self.train_x.to(self.dtype).to(self.device),
                     x_sel_real.to(self.dtype).to(self.device)
@@ -1453,7 +1685,7 @@ class GpyTorchActiveSampler(Sampler):
                     x_max=self._ub,
                 ).to(self.dtype).to(self.device)
 
-                # Copy hyperparameters
+                # Copy hyperparameters from base model
                 try:
                     model_tmp.load_state_dict(self.gp_model.state_dict(), strict=False)
                 except Exception:
@@ -1467,10 +1699,10 @@ class GpyTorchActiveSampler(Sampler):
                 likelihood_tmp.eval()
                 current_model = model_tmp
 
-            return np.array(selected_global)
+            return np.array(selected_global, dtype=int)
 
         # ============================================================
-        # Fallback: top‑K
+        # Fallback: simple streaming top-K
         # ============================================================
         return top_k_stream(self.gp_model)
 
