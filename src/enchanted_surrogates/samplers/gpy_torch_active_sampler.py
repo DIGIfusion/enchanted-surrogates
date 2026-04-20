@@ -384,14 +384,15 @@ class GpyTorchActiveSampler(Sampler):
         self.plot_residuals_every = kwargs.get('plot_residuals_every', 20)
         self.parameters = kwargs.get('parameters')
         self.bounds = kwargs.get('bounds')
+        
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
+        
         self.pool_chunk_size = kwargs.get('pool_chunk_size', 1000)
         self.fixed_pool_values = kwargs.get('fixed_pool_values', None)
         self.allowed_pool_values = kwargs.get('allowed_pool_values', None)
         
         self.output_col = kwargs.get('output_col', None)
-        self.output_column_name = self.get_output_col(csv_path=self.pool_csv_path)
-        
+         
         self.base_run_dir = kwargs.get('base_run_dir', None)
         if self.base_run_dir is None:
             raise ValueError("base_run_dir must be specified in config")
@@ -460,12 +461,13 @@ class GpyTorchActiveSampler(Sampler):
         self.budget = kwargs.get('budget', float('inf')) # Total samples to acquire
 
         self.test_data_csv = kwargs.get('test_data_csv', None)
-        self.clean_pool_csv = False
-        if self.pool_csv_path is None:
-            self._init_pool_stream_random()
-            self.clean_pool_csv = True
+        self.remove_pool_file = kwargs.get('remove_pool_file', False)
+        
+        self.pool_npy_path = kwargs.get("pool_npy_path", None)
+        self.pool_y_npy_path = kwargs.get("pool_y_npy_path", None)
+        self.pool_arrays = kwargs.get("pool_arrays", None)
 
-        self._init_pool_stream_csv()
+        self._init_pool_stream()
             
         self.removed_indices = set()
         self._next_row_index = 0  # increments as we stream
@@ -509,107 +511,249 @@ class GpyTorchActiveSampler(Sampler):
 
         random.seed(seed)
         np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        
+        if seed is not None:
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
 
-        # Make CUDA deterministic (optional but recommended)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+            # Make CUDA deterministic (optional but recommended)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    
+    def _init_pool_stream(self):
+        """
+        Initialize pool streaming from one of:
+        1. user-provided numpy arrays
+        2. NPY files (X only or X + y)
+        3. CSV file
+        4. auto-generate random NPY pool if nothing provided
+        """
+
+        # ---------------------------------------------------------
+        # 1. User-provided numpy arrays
+        # ---------------------------------------------------------
+        if self.pool_arrays is not None:
+            X = self.pool_arrays.get("X", None)
+            y = self.pool_arrays.get("y", None)
+
+            if X is None:
+                raise RuntimeError("pool_arrays provided but missing 'X'")
+
+            self.X_pool = np.asarray(X, dtype=np.float32)
+            self.y_pool = None if y is None else np.asarray(y, dtype=np.float32)
+
+            self.total_pool_size = self.X_pool.shape[0]
+            self._next_row_index = 0
+            return
+
+        # ---------------------------------------------------------
+        # 2. NPY files (X only or X + y)
+        # ---------------------------------------------------------
+        if self.pool_npy_path is not None:
+            if not os.path.exists(self.pool_npy_path):
+                raise RuntimeError(f"pool_npy_path does not exist: {self.pool_npy_path}")
+
+            self.X_pool = np.load(self.pool_npy_path, mmap_mode="r")
+
+            if self.pool_y_npy_path is not None:
+                if not os.path.exists(self.pool_y_npy_path):
+                    raise RuntimeError(f"pool_y_npy_path does not exist: {self.pool_y_npy_path}")
+                self.y_pool = np.load(self.pool_y_npy_path, mmap_mode="r")
+            else:
+                self.y_pool = None
+
+            self.total_pool_size = self.X_pool.shape[0]
+            self._next_row_index = 0
+            return
+
+        # ---------------------------------------------------------
+        # 3. CSV fallback
+        # ---------------------------------------------------------
+        if self.pool_csv_path is not None:
+            if not os.path.exists(self.pool_csv_path):
+                raise RuntimeError(f"pool_csv_path does not exist: {self.pool_csv_path}")
+
+            self._init_pool_stream_csv()
+            return
+
+        # ---------------------------------------------------------
+        # 4. Nothing provided → auto-generate random NPY pool
+        # ---------------------------------------------------------
+        self._init_pool_stream_random()
+
+        # Load the generated NPY files
+        self.X_pool = np.load(self.pool_npy_path, mmap_mode="r")
+        self.y_pool = np.load(self.pool_y_npy_path, mmap_mode="r")
+
+        self.total_pool_size = self.X_pool.shape[0]
+        self._next_row_index = 0
+
+    def _get_next_pool_chunk_npy(self):
+        start = self._next_row_index
+        if start >= self.total_pool_size:
+            return None, None, None
+
+        end = min(start + self.pool_chunk_size, self.total_pool_size)
+
+        real_values = self.X_pool[start:end]
+        y_values = None if self.y_pool is None else self.y_pool[start:end]
+
+        chunk_indices = list(range(start, end))
+        self._next_row_index = end
+
+        # Remove rows already selected
+        mask = [idx not in self.removed_indices for idx in chunk_indices]
+        if not any(mask):
+            return self._get_next_pool_chunk_npy()
+
+        real_values = real_values[mask]
+        y_values = None if y_values is None else y_values[mask]
+        chunk_indices = [idx for idx, keep in zip(chunk_indices, mask) if keep]
+
+        # Convert to unit space
+        unit_values = self.to_unit_numpy(real_values)
+
+        # Validate shape
+        if unit_values.ndim != 2 or unit_values.shape[1] != len(self.parameters):
+            raise RuntimeError(
+                f"Invalid pool chunk shape {unit_values.shape}, expected (N, {len(self.parameters)})"
+            )
+
+        return unit_values.astype(np.float32), y_values, chunk_indices
+
+    def get_next_pool_chunk(self):
+        if hasattr(self, "X_pool"):  # NPY or numpy arrays
+            return self._get_next_pool_chunk_npy()
+
+        # Otherwise CSV
+        return self._get_next_pool_chunk_csv()
+    
+    def _get_next_pool_chunk_csv(self):
+        """
+        Robust chunk reader:
+        - Handles malformed CSV rows
+        - Detects truncated or partial reads
+        - Ensures global index continuity
+        - Recovers from empty/malformed chunks
+        - Validates required columns
+        """
+
+        # --- 1. Try reading the next chunk safely ---
+        try:
+            df = next(self._csv_iter)
+        except StopIteration:
+            return None, None, None
+        except Exception as e:
+            raise RuntimeError(f"CSV read failed mid-stream: {e}")
+
+        # --- 2. Validate chunk shape ---
+        if df is None or len(df) == 0:
+            # Rare: pandas returns empty chunk due to malformed line
+            return self._get_next_pool_chunk_csv()
+
+        # --- 3. Validate required columns exist ---
+        missing_cols = [p for p in self.parameters if p not in df.columns]
+        if missing_cols:
+            raise RuntimeError(
+                f"Pool chunk missing required parameter columns: {missing_cols}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        # --- 4. Assign global indices ---
+        start_index = self._next_row_index
+        end_index = start_index + len(df)
+        chunk_indices = list(range(start_index, end_index))
+        self._next_row_index = end_index
+
+        # --- 5. Filter removed rows ---
+        mask = [idx not in self.removed_indices for idx in chunk_indices]
+        df = df[mask]
+        chunk_indices = [idx for idx, keep in zip(chunk_indices, mask) if keep]
+
+        # If everything was removed, skip to next chunk
+        if df.empty:
+            return self._get_next_pool_chunk_csv()
+
+        # --- 6. Convert to unit space ---
+        try:
+            real_values = df[self.parameters].to_numpy()
+            unit_values = self.to_unit_numpy(real_values)
+        except Exception as e:
+            raise RuntimeError(f"Failed converting chunk to unit space: {e}")
+
+        # --- Normalize and validate shape ---
+        unit_values = np.asarray(unit_values, dtype=np.float32)
+        unit_values = np.squeeze(unit_values)
+
+        if unit_values.ndim == 1:
+            unit_values = unit_values.reshape(1, -1)
+
+        if unit_values.ndim != 2:
+            raise RuntimeError(
+                f"unit_values has invalid dimensionality: {unit_values.shape}. "
+                f"Expected (N, D) with D={len(self.parameters)}"
+            )
+
+        if unit_values.shape[1] != len(self.parameters):
+            raise RuntimeError(
+                f"unit_values has wrong feature dimension: {unit_values.shape}. "
+                f"Expected D={len(self.parameters)}"
+            )
+
+        # --- 7. Optional output column ---
+        out_col = self.get_output_col(df=df)
+        if out_col and out_col in df.columns:
+            try:
+                y_values = df[out_col].to_numpy()
+            except Exception as e:
+                raise RuntimeError(f"Failed reading output column '{out_col}': {e}")
+        else:
+            y_values = None
+
+        # --- 8. Final sanity checks ---
+        if len(chunk_indices) != len(unit_values):
+            raise RuntimeError(
+                f"Index/value mismatch: {len(chunk_indices)} indices but "
+                f"{len(unit_values)} rows in unit_values"
+            )
+
+        return unit_values, y_values, chunk_indices
+
     
     def _init_pool_stream_random(self):
-        print("Generating random pool CSV...")
-        log.info(f"Generating random pool CSV at: {self.pool_csv_path}")
-        start_time = time.time()
-        self._rng = np.random.default_rng(self.seed)
+        pool_X_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "random_pool_X.npy")
+        pool_y_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "random_pool_y.npy")
 
-        # If no CSV path was provided, create one
-        if self.pool_csv_path is None:
-            self.pool_csv_path = os.path.join(os.path.dirname(self.base_run_dir), 'tmp', "generated_pool.csv")
-            os.makedirs(os.path.dirname(self.pool_csv_path), exist_ok=True)
+        self.pool_npy_path = pool_X_path
+        self.pool_y_npy_path = pool_y_path
 
-        # Create empty CSV with header
-        df_header = pd.DataFrame(columns=self.parameters)
-        df_header.to_csv(self.pool_csv_path, index=False)
+        rng = np.random.default_rng(self.seed)
+        N = self.total_pool_size
+        D = self.input_dim
 
-        rows_remaining = self.total_pool_size
+        X_real = np.zeros((N, D), dtype=np.float32)
 
-        while rows_remaining > 0:
-            chunk_size = min(self.pool_chunk_size, rows_remaining)
+        for j, p in enumerate(self.parameters):
+            if self.allowed_pool_values and p in self.allowed_pool_values:
+                X_real[:, j] = rng.choice(self.allowed_pool_values[p], size=N)
+            elif self.fixed_pool_values and p in self.fixed_pool_values:
+                X_real[:, j] = rng.choice(self.fixed_pool_values[p], size=N)
+            else:
+                low, high = self.bounds[j]
+                X_real[:, j] = rng.uniform(low, high, size=N)
 
-            # Build chunk in REAL space
-            chunk_real = np.zeros((chunk_size, self.input_dim), dtype=float)
+        os.makedirs(os.path.dirname(pool_X_path), exist_ok=True)
 
-            for param_index, param_name in enumerate(self.parameters):
+        np.save(pool_X_path, X_real)
 
-                # allowed_pool_values
-                if self.allowed_pool_values and param_name in self.allowed_pool_values:
-                    allowed_values = np.asarray(self.allowed_pool_values[param_name])
-                    chosen = self._rng.choice(allowed_values, size=chunk_size)
-                    chunk_real[:, param_index] = chosen
-
-                # fixed_pool_values
-                elif self.fixed_pool_values and param_name in self.fixed_pool_values:
-                    fixed_values = np.asarray(self.fixed_pool_values[param_name])
-                    chosen = self._rng.choice(fixed_values, size=chunk_size)
-                    chunk_real[:, param_index] = chosen
-
-                # uniform sampling
-                else:
-                    low, high = self.bounds[param_index]
-                    chunk_real[:, param_index] = self._rng.uniform(
-                        float(low), float(high), size=chunk_size
-                    )
-
-            # Append chunk to CSV
-            df_chunk = pd.DataFrame(chunk_real, columns=self.parameters)
-            df_chunk.to_csv(self.pool_csv_path, mode="a", header=False, index=False)
-
-            rows_remaining -= chunk_size
-        end_time = time.time()
-        
-        print(f'Generating the random pool csv took: {time_format(end_time-start_time)}')
-        log.info(f'Generating the random pool csv took: {time_format(end_time-start_time)}')
+        # Optional: initialize y as None or zeros
+        np.save(pool_y_path, np.full((N,), np.nan, dtype=np.float32))
         
     def _init_pool_stream_csv(self):
         self._csv_iter = pd.read_csv(
             self.pool_csv_path,
             chunksize=self.pool_chunk_size
         )
-        
-    def get_next_pool_chunk(self):
-        try:
-            df = next(self._csv_iter)
-        except StopIteration:
-            return None, None, None
-
-        # Assign global row indices for this chunk
-        start_index = self._next_row_index
-        end_index = start_index + len(df)
-        chunk_indices = list(range(start_index, end_index))
-        self._next_row_index = end_index
-
-        # Filter out removed rows
-        mask = [idx not in self.removed_indices for idx in chunk_indices]
-        df = df[mask]
-        chunk_indices = [idx for idx, keep in zip(chunk_indices, mask) if keep]
-
-        # If everything was removed, fetch next chunk
-        if df.empty:
-            return self.get_next_pool_chunk()
-
-        # Convert to unit space
-        real_values = df[self.parameters].to_numpy()
-        unit_values = self.to_unit_numpy(real_values)
-
-        # Optional y column
-        out_col = self.get_output_col(df=df)
-        if out_col in df.columns:
-            y_values = df[out_col].to_numpy()
-        else:
-            y_values = None
-
-        return unit_values, y_values, chunk_indices
-
 
     def _remove_from_pool(self, pool_indices):
         self.removed_indices.update(pool_indices)
@@ -749,8 +893,10 @@ class GpyTorchActiveSampler(Sampler):
         print(f"  Best MLL: {best_mll_value:.6f}")
         print(f"  Noise: {self.likelihood.noise.item():.4e}")
         print(f"  Outputscale: {self.gp_model.covar_module.outputscale.item():.4f}")
+        
+        ls = self.gp_model.covar_module.base_kernel.lengthscale.reshape(-1)
         for i, p in enumerate(self.parameters):
-            print(f"  Lengthscale ({p}): {self.gp_model.covar_module.base_kernel.lengthscale.squeeze()[i].item():.4f}")
+            print(f"  Lengthscale ({p}): {ls[i].item():.4f}")        
 
     def surrogate_predict(self, X_real):
         X_real_t = torch.tensor(X_real, device=self.device, dtype=self.dtype)
@@ -1113,6 +1259,7 @@ class GpyTorchActiveSampler(Sampler):
                 else:
                     remaining = self.total_pool_size - len(self.removed_indices)
                     # 3. Compute acquisition function over pool
+                    log.info(f'Computing acquisition function over the {remaining} pool...')
                     start_time = time.time()
                     chosen_unit_indices = self._compute_acquisition_candidates(self.acquisition_mode)
                     end_time = time.time()
@@ -1164,14 +1311,21 @@ class GpyTorchActiveSampler(Sampler):
 
         return samples
 
+    def compute_acquisition_candidates(self):
+        selected_global = self._compute_acquisition_candidates(self.acquisition_mode)
+        X_unit = self._get_unit_points_by_global_indices(selected_global)
+        X_real = self.from_unit_numpy(X_unit)
+        return X_real, X_unit, list(selected_global)
+    
     def _compute_acquisition_candidates(self, mode):
         """
         Fully streaming acquisition over the entire pool.
         Uses get_next_pool_chunk() to iterate through the CSV-backed pool.
         Returns global pool indices of selected candidates.
         """
+        
         # Reset pool streaming before scoring
-        self._reset_csv_iterator()
+        self._reset_iterator()
 
         batch_size = int(self.batch_size)
 
@@ -1255,6 +1409,7 @@ class GpyTorchActiveSampler(Sampler):
             current_model = self.gp_model
 
             for _ in range(batch_size):
+                self._reset_iterator() # Reset stream for each selection to find the current best
                 best_global_idx = argmax_stream(current_model)
                 if best_global_idx is None:
                     break
@@ -1272,7 +1427,8 @@ class GpyTorchActiveSampler(Sampler):
                     posterior = current_model(x_sel_unit_t)
                     mu_std = posterior.mean
 
-                x_sel_real = current_model.to_real(x_sel_unit_t).detach()
+                x_sel_real = current_model.to_real(x_sel_unit_t.unsqueeze(0)).detach()
+
                 y_fantasy_real = current_model.unstandardize_y(mu_std).reshape(-1, 1).detach()
 
                 # Augment training data
@@ -1318,45 +1474,35 @@ class GpyTorchActiveSampler(Sampler):
         # ============================================================
         return top_k_stream(self.gp_model)
 
-    def _reset_csv_iterator(self):
-        self._csv_iter = pd.read_csv(self.pool_csv_path, chunksize=self.pool_chunk_size)
+    def _reset_iterator(self):
+        if self.pool_csv_path:
+            self._csv_iter = pd.read_csv(self.pool_csv_path, chunksize=self.pool_chunk_size)
         self._next_row_index = 0
 
     def _get_unit_points_by_global_indices(self, indices):
         """
-        Given a list/array of global pool indices, return the corresponding
-        unit-space points as a NumPy array of shape (N, D).
-
-        Fully streaming: reads the CSV in chunks and extracts only the needed rows.
+        Fetch unit-space points directly from the NPY pool using global indices.
+        Works for arbitrarily large pools via mmap.
         """
+        indices = np.asarray(indices, dtype=int)
 
-        target = set(indices)
-        collected = []
-        found = 0
+        # Slice real-space values directly from memory-mapped NPY
+        real_values = self.X_pool[indices]
 
-        # Reset CSV iterator
-        self._reset_csv_iterator()
+        # Convert to unit space
+        unit_values = self.to_unit_numpy(real_values)
 
-        while True:
-            result = self.get_next_pool_chunk()
-            
-            X_unit_chunk, _, pool_indices = result
+        return unit_values.astype(np.float32)
 
-            if X_unit_chunk is None:
-                break
-
-            # pool_indices is a list of global indices for this chunk
-            for local_i, global_i in enumerate(pool_indices):
-                if global_i in target:
-                    collected.append(X_unit_chunk[local_i])
-                    found += 1
-                    if found == len(target):
-                        # Found all requested points
-                        return np.stack(collected, axis=0)
-
-        # If we get here, something is wrong
-        raise RuntimeError(
-            f"Requested indices {indices} not fully found in pool."
+    def compute_acquisition_scores(self, X_unit_np):
+        """
+        Public wrapper for computing acquisition scores on a batch of unit-space points.
+        """
+        return self._compute_acquisition_unchunked(
+            X_unit_np,
+            mode=self.acquisition_mode,
+            model=self.gp_model,
+            pool_y=None,
         )
 
     def _compute_acquisition_unchunked(self, X_pool_unit, mode, model=None, pool_y=None):
@@ -1398,7 +1544,7 @@ class GpyTorchActiveSampler(Sampler):
         if mode == "random":
             return np.random.rand(N)
 
-        if mode == "var":
+        if mode == "var" or mode == "variance":
             # standardized variance
             return var_std_np
 
@@ -1761,9 +1907,18 @@ class GpyTorchActiveSampler(Sampler):
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    def light_post_processing(self):
-        if self.clean_pool_csv:
+    def remove_pool(self):
+        if self.pool_csv_path and os.path.exists(self.pool_csv_path):
             os.remove(self.pool_csv_path)
+        if self.pool_npy_path and os.path.exists(self.pool_npy_path):
+            os.remove(self.pool_npy_path)
+        if self.pool_y_npy_path and os.path.exists(self.pool_y_npy_path):
+            os.remove(self.pool_y_npy_path)
+            
+    
+    def light_post_processing(self):
+        if self.remove_pool_file:
+            self.remove_pool()
 
         
     def register_future(self, future):
