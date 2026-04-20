@@ -1,12 +1,13 @@
 # Tutorial: Sampler comparison
 
-This tutorial will demonstrate the difference between the `Random sampler` and the `Grid sampler` over a 2D parameter space. The runner implements a synthetic test funtion consisting of two Gaussian peaks with a background slope ([Synthetic Double Gaussian Runner](runners/synthetic_double_gaussian_runner.md)).
-The funciton implemented in the runner (with default parameters) look like this:
+This tutorial demonstrates the difference between the `Random sampler` and the `Grid sampler` over a 2D parameter space. The runner implements a synthetic test funtion consisting of two Gaussian peaks with a background slope ([Synthetic Double Gaussian Runner](runners/synthetic_double_gaussian_runner.md)).
+The function implemented in the runner (with default parameters) looks like this:
 
 ![double gaussian](img/synthetic_double_gaussian.png)
 
-Note that you need to have enchanted-surrogates installed when running this example.
+The function symbolizes an unknown sample space that we want to try to represent by drawing samples using different strategies.
 
+## Run the example
 Setup two new configuration files based on `configs/example_local.yaml`.
 
 ```bash
@@ -70,6 +71,8 @@ python src/run.py -cf configs/example_local_grid.yaml
 
 This will create two separate directories, both containing 100 samples over the same parameter space but distributed differently.
 
+## Results
+
 Now we can take a look at the generated samples by reading the summary files `enchanted_dataset.csv`.
 
 ```python
@@ -114,4 +117,4 @@ The above code snippet will create a figure that displays how the distribution o
 
 ![](img/random_vs_grid.png)
 
-This example demonstrates only two of the available samplers. Which sampler to use depends on your application. 
+Sampling gives us an approximative representation of the actual underlying function (in this case the double gaussian). This example demonstrates only two of the available samplers. Which sampler to use depends on your application. 
