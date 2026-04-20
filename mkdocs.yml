@@ -22,7 +22,7 @@ nav:
     - Array Sampler: samplers/array_sampler.md
     - Bayesian Optimization Sampler: samplers/bayesian_optimization_sampler.md
     - Latin Hypercube Sampler: samplers/latin_hypercube_sampler.md
-    - Sobol Sequence Sampler: samplers/sobol_sampler.md
+    - Sobol Sequence Sampler: samplers/sobol_sequence_sampler.md
     - Active Learning Sampler: samplers/active_learning_sampler.md
     - Nested Sampler: samplers/nested_sampler.md
   - Plugins:
@@ -33,13 +33,12 @@ nav:
     - GENE: plugins/gene_plugin.md
     - DREAM: plugins/dream_plugin.md
   - Tutorials:
-    - Sampler Comparison:
-      - Step-by-step: tutorials/example_workflow.md
+    - Sampler Comparison: tutorials/example_workflow.md
+    - Bayesian Optimization: tutorials/bayesian_optimization.md
+    - Documentation:
       - Example Runner: runners/example_runner.md
-    - Bayesian Optimization:
-      - Step-by-step: tutorials/bayesian_optimization.md
-      - Example BO Runner: runners/synthetic_double_gaussian_runner.md
-      - Example BO Parser: parsers/synthetic_double_gaussian_parser.md
+      - Double Gaussian Runner: runners/synthetic_double_gaussian_runner.md
+      - Double Gaussian Parser: parsers/synthetic_double_gaussian_parser.md
 
 theme:
   name: material
