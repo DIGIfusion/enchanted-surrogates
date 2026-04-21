@@ -12,10 +12,8 @@ def ascii_loading_bar(total, progress, bar_size=40):
         progress = 0
     
     if total <= 0:
-        warnings.warn(f"Total should be positive | Progress: {progress} | Total: {total}")
         return f"loading bar failed: Total should be positive | Progress: {progress} | Total: {total}" 
     if progress > total:
-        warnings.warn(f"Progress must be less than or equal to total | Progress: {progress} | Total: {total}")
         return f"loading bar failed: Progress must be less than or equal to total | Progress: {progress} | Total: {total}"
     ratio = max(0.0, min(1.0, progress / total))
     filled = int(ratio * bar_size)
