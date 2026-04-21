@@ -1,3 +1,5 @@
+""" TODO: Documentation """
+
 import numpy as np
 from enchanted_surrogates.samplers.base_sampler import Sampler
 import numpy as np

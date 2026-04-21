@@ -639,11 +639,21 @@ Current Batch:        {batch_number}
         
     def load_run_result(self, run_dir):
         result_path = os.path.join(run_dir, 'enchanted_datapoint.csv')
-        if os.path.exists(result_path):
+
+        if not os.path.exists(result_path):
+            return None
+
+        # Protect against empty CSV
+        if os.path.getsize(result_path) == 0:
+            return None
+
+        try:
             df = pd.read_csv(result_path)
-            row_dict = df.iloc[0].to_dict()
-            return row_dict
-        else:
+            if df.empty:
+                return None
+            return df.iloc[0].to_dict()
+
+        except pd.errors.EmptyDataError:
             return None
 
     def load_batch_to_df(self, run_dirs: list[str]) -> pd.DataFrame:
