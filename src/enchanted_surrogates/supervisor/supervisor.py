@@ -41,6 +41,7 @@ class Supervisor:
 
     """
 
+
     def __init__(self, args, config_path=None):
         """
         Initializes supervisor and sets class attributes.
@@ -54,10 +55,9 @@ class Supervisor:
         self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
         self.runner_progress = {}
 
-        for group in self.nested_groups:
-            for runner in group.runners:
-                self.runner_progress[runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
-
+        # set the progress counter to 0
+        self.reset_progress()
+        
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
@@ -114,6 +114,11 @@ class Supervisor:
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
+    def reset_progress(self):
+        for group in self.nested_groups:
+            for runner in group.runners:
+                self.runner_progress[runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
+
     def start(self):
         """
         Main function of the supervisor. Starts the simulation process. Currently
@@ -131,6 +136,7 @@ class Supervisor:
         last_complete_dataset = pd.DataFrame()
 
         for nested_depth, group in enumerate(self.nested_groups):
+            self.reset_progress()
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
