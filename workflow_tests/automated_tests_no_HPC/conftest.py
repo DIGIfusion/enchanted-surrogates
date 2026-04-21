@@ -1,8 +1,9 @@
 import pytest
 from pathlib import Path
-from enchanted_surrogates.supervisor.supervisor import Supervisor
+from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.logger import LoggerConfig
-from run import load_configuration, setup_logger
+from enchanted_surrogates.utils.config_helpers import load_configuration
+from enchanted_surrogates.utils.logger import setup_logger
 
 @pytest.fixture
 def run_config(tmp_path, request):
@@ -17,7 +18,7 @@ def run_config(tmp_path, request):
         args.supervisor["base_run_dir"] = tmp_path
 
         supervisor = Supervisor(args, config_path=config_path)
-        setup_logger(supervisor.base_run_dir, "INFO")
+        setup_logger(supervisor.base_run_dir, "INFO", log_dir=LOG_DIR)
         
         if (call_start):
             supervisor.start()

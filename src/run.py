@@ -4,8 +4,9 @@ import yaml
 import argparse
 from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
-from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+from enchanted_surrogates.utils.logger import get_logger, setup_logger
 import logging
+from enchanted_surrogates.utils.config_helpers import load_configuration
 
 log = get_logger(__name__)
 
@@ -16,49 +17,6 @@ This module loads a YAML configuration file, constructs the corresponding
 execution namespace, and initializes the Supervisor responsible for
 managing sampling, execution, and result handling.
 """
-
-
-def load_configuration(config_path: str) -> argparse.Namespace:
-    """
-    Loads configuration from a YAML file.
-
-    Args:
-        config_path (str): Path to the configuration YAML file.
-
-    Returns:
-        argparse.Namespace: Namespace containing the configuration parameters.
-    """
-    with open(config_path, "r", encoding="utf-8") as file:
-        config = yaml.safe_load(file)
-    config = argparse.Namespace(**config)
-    config.supervisor["config_filepath"] = config_path
-
-    log.debug(config)
-    return config
-
-
-def setup_logger(base_run_dir: str, log_level: str):
-    """
-    Prepares the logging module and creates log directory
-
-    Args:
-        base_run_dir (str): The base run directory from supervisor
-        log_level (str): Logging level to use, for example INFO or DEBUG
-    """
-    log_dir = os.path.join(base_run_dir, LOG_DIR)
-    log_file = os.path.join(log_dir, "main.log")
-
-    # Store to logger config
-    config = LoggerConfig(log_level=log_level, log_dir=log_dir)
-
-    if not os.path.exists(config.log_dir):
-        os.makedirs(config.log_dir)
-
-    setup_logging(
-        config,
-        logging.StreamHandler(stream=sys.stdout),
-        logging.FileHandler(filename=log_file),
-    )
 
 
 def main(arguments: argparse.Namespace, config_path=None):
@@ -72,7 +30,7 @@ def main(arguments: argparse.Namespace, config_path=None):
     """
     supervisor = Supervisor(arguments, config_path=config_path)
 
-    setup_logger(supervisor.base_run_dir, getattr(arguments, "logging", "INFO"))
+    setup_logger(supervisor.base_run_dir, getattr(arguments, "logging", "INFO"), log_dir=LOG_DIR)
     log.info("\n" + enchanted_wizard_version_7)
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
