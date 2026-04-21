@@ -72,7 +72,7 @@ class SampleWiseJoinSampler(Sampler):
      - Fixed parameters are injected into every sample.
      - The sampler supports **multiple batches**, continuing until any
        sub‑sampler reports no remaining budget.
-     - Before generating a batch, the sampler checks `sampler.has_budget()`.
+     - Before generating a batch, the sampler checks `sampler.has_budget`.
        If any sampler is exhausted, a debug message is logged and `None` is returned.
      - The sampler does not adapt based on evaluation results.
 
@@ -100,7 +100,7 @@ class SampleWiseJoinSampler(Sampler):
         sampler_configs = [samplers[k] for k in sampler_keys]
 
         self.all_samplers = [
-            import_sampler(type=stype, sampler_config=config)
+            import_sampler(sampler_type=stype, sampler_config=config)
             for stype, config in zip(sampler_types, sampler_configs)
         ]
 
@@ -128,7 +128,7 @@ class SampleWiseJoinSampler(Sampler):
         """
         # Check budget of all sub‑samplers
         for sampler in self.all_samplers:
-            if not sampler.has_budget():
+            if not sampler.has_budget:
                 log.debug(
                     f"Sub‑sampler {sampler.__class__.__name__} has no remaining budget. "
                     "Stopping SampleWiseJoinSampler."
