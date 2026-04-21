@@ -5,9 +5,16 @@ def ascii_loading_bar(total, progress, bar_size=40):
     progress: completed amount
     bar_size: width of the bar in characters
     """
+    if total == 0 and progress == 0:
+        total = 1
+        progress = 0
+    
     if total <= 0:
         raise ValueError("total must be positive")
 
+    if progress > total:
+        raise ValueError("progress must be less than or equal to total")
+    
     ratio = max(0.0, min(1.0, progress / total))
     filled = int(ratio * bar_size)
     empty = bar_size - filled
