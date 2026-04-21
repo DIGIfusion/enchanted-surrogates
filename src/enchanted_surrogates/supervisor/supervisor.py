@@ -132,7 +132,7 @@ class Supervisor:
             real_run_dir = self.local_storage
         else:
             real_run_dir = self.base_run_dir
-
+        
         last_complete_dataset = pd.DataFrame()
 
         for nested_depth, group in enumerate(self.nested_groups):
@@ -216,7 +216,7 @@ class Supervisor:
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -241,7 +241,7 @@ class Supervisor:
             self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
 
         # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
         
         end_runs_time = time.time()
         log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
