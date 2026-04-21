@@ -10,10 +10,10 @@ def ascii_loading_bar(total, progress, bar_size=40):
         progress = 0
     
     if total <= 0:
-        raise ValueError("total must be positive")
+        raise ValueError(f"Total must be positive | Progress: {progress} | Total: {total}")
 
     if progress > total:
-        raise ValueError("progress must be less than or equal to total")
+        raise ValueError(f"Progress must be less than or equal to total | Progress: {progress} | Total: {total}")
     
     ratio = max(0.0, min(1.0, progress / total))
     filled = int(ratio * bar_size)
