@@ -132,7 +132,7 @@ class Supervisor:
             real_run_dir = self.local_storage
         else:
             real_run_dir = self.base_run_dir
-
+        
         last_complete_dataset = pd.DataFrame()
 
         for nested_depth, group in enumerate(self.nested_groups):
@@ -159,7 +159,7 @@ class Supervisor:
             
             log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
             self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
-            log.info(f"For progress report please see: {self.current_progress_info_file}")
+            log.info(f"\n\nFor progress report please see: {self.current_progress_info_file}\n\n")
             
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
@@ -183,7 +183,7 @@ class Supervisor:
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
                     self.update_runner_progress(runner, submitted=len(expanded))
-                    
+                    self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group.sampler.budget, group_start_time)
                     # monitor runs for failures and update progress file
                     self.monitor_runs(runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
                     # Wait processes of current batch to complete
@@ -216,7 +216,7 @@ class Supervisor:
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -241,7 +241,7 @@ class Supervisor:
             self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
 
         # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
         
         end_runs_time = time.time()
         log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
@@ -610,7 +610,8 @@ Success Rate:       {success_rate:5.1f}%
         sequential_runs_left = group_sampler_budget - sequential_runs_complete if sequential_runs_complete else group_sampler_budget
         time_per_run = time_passed / sequential_runs_complete if sequential_runs_complete else 0
         estimated_time_left = time_per_run * sequential_runs_left
-        estimated_end_time = current_time + estimated_time_left if time_per_run else None
+        
+        estimated_end_time = current_time + estimated_time_left if (time_per_run and np.isfinite(estimated_time_left)) else None
         
         progress_string=f"""
 
@@ -620,7 +621,7 @@ Success Rate:       {success_rate:5.1f}%
 
 Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
 Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
-Estimated End Time:   {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time else "N/A"}
+Estimated End Time:   {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time is not None else "N/A"}
 
 Active Runner:        {current_runner_name}
 Nested Depth:         {nested_depth}
