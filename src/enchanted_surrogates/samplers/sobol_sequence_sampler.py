@@ -95,6 +95,7 @@ class SobolSequenceSampler(Sampler):
 
     ---
     """
+    def __init__(self, bounds, budget, parameters, **kwargs):
         self.budget = budget
         self.power = int(np.log2(self.budget))
         if self.budget != 2**self.power:
