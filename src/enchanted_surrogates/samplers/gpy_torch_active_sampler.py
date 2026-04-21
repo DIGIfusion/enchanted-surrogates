@@ -22,14 +22,43 @@ from linear_operator.utils.errors import NotPSDError
 
 import numpy as np
 from numpy.lib.format import open_memmap
-
+import time
 import pandas as pd
 from scipy.special import erf
 from sklearn.model_selection import KFold # Still useful for ensemble logic if desired
-import torch
 from torch import nanmean # Using torch.nanmean for robust mean
 from torch.nn import ModuleList
 
+import torch
+
+import os
+
+vars_of_interest = [
+    "OMP_NUM_THREADS", "OMP_THREAD_LIMIT", "OMP_WAIT_POLICY",
+    "MKL_NUM_THREADS", "MKL_DYNAMIC",
+    "OPENBLAS_NUM_THREADS", "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+    "TORCH_NUM_THREADS", "TORCH_INTRAOP_THREADS", "TORCH_INTEROP_THREADS"
+]
+
+for v in vars_of_interest:
+    if v in os.environ:
+        print(f"{v} = {os.environ[v]}")
+
+# Set the number of threads for intra-op parallelism (math operations)
+
+# NUmber of threads available for linear algrbra on one run / inference for a lot of points
+# torch.set_num_threads(1)
+
+# Number of paralell runs pytorch will do, eg infer 5 points in paralell if set to 5
+torch.set_num_interop_threads(1)
+
+print("PyTorch intra-op threads:", torch.get_num_threads())
+print("PyTorch inter-op threads:", torch.get_num_interop_threads())
+
+
+
+# Verification
+print(f"Threads set to: {torch.get_num_threads()}")
 
 import gpytorch
 from gpytorch.models import ExactGP
@@ -389,6 +418,9 @@ class GpyTorchActiveSampler(Sampler):
         self.bounds = kwargs.get('bounds')
         
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
+        self.dpp_sigma = kwargs.get('dpp_sigma', 0.1)
+        self.dpp_lambda = kwargs.get('dpp_lambda', 1.0)
+        self.dpp_M_alpha = kwargs.get('dpp_M_alpha', 5)
         
         self.pool_chunk_size = int(float(kwargs.get('pool_chunk_size', 1000)))
         self.total_pool_size = int(float(kwargs.get('total_pool_size', 10000)))
@@ -784,7 +816,9 @@ class GpyTorchActiveSampler(Sampler):
             pool_memmap[chunk_start:chunk_end] = chunk_real_values
 
             # ---- Progress reporting ----
-            if chunk_index % 10 == 0 or chunk_index == num_chunks - 1:
+            progress = 0
+            next_report = 0.05
+            if progress>next_report or chunk_index == num_chunks - 1 or chunk_index == 0:
                 elapsed = time.time() - start_time
                 progress = (chunk_index + 1) / num_chunks
                 eta = elapsed / progress - elapsed
@@ -794,6 +828,7 @@ class GpyTorchActiveSampler(Sampler):
                     f"elapsed: {elapsed:6.1f}s | "
                     f"ETA: {eta:6.1f}s"
                 )
+                next_report += 0.05
 
         pool_memmap.flush()
 
@@ -1391,15 +1426,45 @@ class GpyTorchActiveSampler(Sampler):
                 scores: np.array of shape (chunk_size,)
                 pool_indices: list of global indices for this chunk
             """
+            # 1. Setup progress tracking
+            total_to_process = self.total_pool_size - len(self.removed_indices)
+            processed_count = 0
+            last_printed_pct = -1  # Track last 5% milestone
+            start_time = time.time()
+
+            if self.verbose_acq:
+                print(f"[Acquisition] Starting stream for {total_to_process} points...")
+
             while True:
                 X_unit_chunk, y_chunk, pool_indices = self.get_next_pool_chunk()
                 if X_unit_chunk is None:
+                    if self.verbose_acq:
+                        print(f"\n[Acquisition] Stream complete in {time.time() - start_time:.1f}s")
                     return
+
+                # 2. Compute scores for this chunk
                 scores = self._compute_acquisition_unchunked(
                     X_unit_chunk, mode, model=model, pool_y=y_chunk
                 )
-                yield scores, pool_indices
 
+                # 3. Handle progress calculation
+                processed_count += len(pool_indices)
+                current_pct = (processed_count / total_to_process) * 100
+                
+                # Calculate the current 5% milestone (e.g., 0, 5, 10, 15...)
+                milestone = int(current_pct // 5) * 5
+                
+                # Only print if we've crossed into a new 5% bucket
+                if milestone > last_printed_pct:
+                    elapsed = time.time() - start_time
+                    if current_pct > 0:
+                        total_est = elapsed / (current_pct / 100)
+                        eta = total_est - elapsed
+                        print(f"[Progress] {milestone:3d}% | Points: {processed_count}/{total_to_process} | "
+                            f"Elapsed: {elapsed:5.1f}s | ETA: {eta:5.1f}s")
+                    last_printed_pct = milestone
+
+                yield scores, pool_indices
         # -------------------------
         # Helper: simple streaming top-K over full pool
         # -------------------------
@@ -1441,11 +1506,11 @@ class GpyTorchActiveSampler(Sampler):
             # -------------------------
             # Choose M: scale with K, D, log(N)
             # -------------------------
-            alpha = 3.0
-            M_target = int(alpha * batch_size * dimensionality * math.log(max(pool_size, 2)))
+            M_target = int(self.dpp_M_alpha * batch_size * dimensionality * math.log(max(pool_size, 2)))
             M_target = max(M_target, batch_size)
             M_target = min(M_target, 150_000)  # hard safety cap
 
+            print('debug M target', M_target)
             # -------------------------
             # PASS 1: streaming top-M over full pool
             # -------------------------
@@ -1527,8 +1592,9 @@ class GpyTorchActiveSampler(Sampler):
             # -------------------------
             # PASS 2: fully streaming greedy DPP (K passes over M)
             # -------------------------
-            sigma = 0.1
+            sigma = self.dpp_sigma
             lambda_scale = float(base_scores.max())
+            lambda_user = self.dpp_lambda
 
             selected_local_indices = []   # indices into [0..num_candidates)
             selected_local_set = set()    # to avoid duplicates
@@ -1576,21 +1642,40 @@ class GpyTorchActiveSampler(Sampler):
                         print(f"[Pass 2]   pass {k_iter+1}/{batch_size} | {pct:5.1f}% of M streamed", end="\r")
                     X_chunk_unit = self._get_unit_points_by_global_indices(indices_chunk)
 
-                    for i in range(len(indices_chunk)):
-                        local_index = start + i
-                        if local_index in selected_local_set:
-                            continue  # already selected
+                    # Mask out already-selected local indices
+                    mask = np.ones(len(indices_chunk), dtype=bool)
+                    for sel in selected_local_set:
+                        if start <= sel < end:
+                            mask[sel - start] = False
 
-                        base_score = scores_chunk[i]
-                        candidate_unit = X_chunk_unit[i]
+                    # Extract only unselected candidates
+                    scores_u = scores_chunk[mask]
+                    X_u = X_chunk_unit[mask]
 
-                        repulsion = compute_repulsion(candidate_unit, selected_unit_points_array)
-                        adjusted_score = base_score - lambda_scale * repulsion
+                    # Compute squared distances to selected points
+                    if selected_unit_points_array.size == 0:
+                        repulsion_u = np.zeros(len(scores_u))
+                    else:
+                        diffs = X_u[:, None, :] - selected_unit_points_array[None, :, :]
+                        sq_dists = np.sum(diffs * diffs, axis=2)
+                        min_sq = np.min(sq_dists, axis=1)
+                        repulsion_u = np.exp(-0.5 * min_sq / (sigma ** 2))
 
-                        # Heap-of-size-1 / argmax pattern
-                        if adjusted_score > best_adjusted_score:
-                            best_adjusted_score = adjusted_score
-                            best_local_index = local_index
+                    # Compute adjusted scores (vectorised)
+                    print('debug lambda scale', lambda_scale, 'max repuslion', max(repulsion_u))
+                    adjusted = scores_u - lambda_user * lambda_scale * repulsion_u
+
+                    # Find best candidate in this chunk
+                    chunk_best_idx = np.argmax(adjusted)
+                    chunk_best_score = adjusted[chunk_best_idx]
+
+                    # Convert back to local index
+                    global_best_local = np.where(mask)[0][chunk_best_idx] + start
+
+                    # Compare with global best
+                    if chunk_best_score > best_adjusted_score:
+                        best_adjusted_score = chunk_best_score
+                        best_local_index = global_best_local
 
                 if best_local_index is None:
                     break  # no more useful candidates
@@ -1621,6 +1706,7 @@ class GpyTorchActiveSampler(Sampler):
         # ============================================================
         # CASE 3: fantasy_labels (sequential greedy with retraining)
         # ============================================================
+
         def argmax_stream(model):
             best_score = -np.inf
             best_global_idx = None
@@ -1635,14 +1721,35 @@ class GpyTorchActiveSampler(Sampler):
                         best_global_idx = global_index
             return best_global_idx
 
+
         if self.acquisition_batch_mode == "fantasy_labels":
+            import time
+
+            start_time = time.time()
+            next_report = 0.10  # report every 10%
 
             selected_global = []
             current_model = self.gp_model
 
-            for _ in range(batch_size):
-                # For each fantasy step, re-scan the pool
+            for step in range(batch_size):
+
+                # ---- Progress reporting only ----
+                progress = (step + 1) / batch_size
+                if progress >= next_report or step == 0:
+                    elapsed = time.time() - start_time
+                    est_total = elapsed / progress
+                    est_remaining = est_total - elapsed
+
+                    print(f"[fantasy_labels] {progress*100:5.1f}% "
+                        f"| elapsed: {elapsed:6.1f}s "
+                        f"| remaining: {est_remaining:6.1f}s")
+
+                    next_report += 0.10
+                # ---------------------------------
+
+                # ---- SELECTION MUST RUN EVERY STEP ----
                 self._reset_iterator()
+
                 best_global_idx = argmax_stream(current_model)
                 if best_global_idx is None:
                     break
@@ -1650,20 +1757,28 @@ class GpyTorchActiveSampler(Sampler):
                 selected_global.append(best_global_idx)
                 masked_global.add(best_global_idx)
 
-                # Build fantasy label at the selected point
+                # Retrieve selected point (unit space)
                 x_sel_unit = self._get_unit_points_by_global_indices([best_global_idx])[0]
                 x_sel_unit_t = torch.tensor(
                     x_sel_unit, dtype=self.dtype, device=self.device
-                )
+                ).unsqueeze(0)
 
+                # Fantasy label from posterior mean
                 with torch.no_grad():
                     posterior = current_model(x_sel_unit_t)
-                    mu_std = posterior.mean
+                    mu_std = posterior.mean  # standardized mean
 
-                x_sel_real = current_model.to_real(x_sel_unit_t.unsqueeze(0)).detach()
-                y_fantasy_real = current_model.unstandardize_y(mu_std).reshape(-1, 1).detach()
+                # Convert to real space
+                x_sel_real = current_model.to_real(x_sel_unit_t).detach()
 
-                # Augment training data with fantasy point
+                # Unstandardize fantasy label
+                y_fantasy_real = (
+                    current_model.unstandardize_y(mu_std)
+                    .reshape(1, 1)
+                    .detach()
+                )
+
+                # Augment training data
                 X_aug = torch.cat([
                     self.train_x.to(self.dtype).to(self.device),
                     x_sel_real.to(self.dtype).to(self.device)
@@ -1685,7 +1800,7 @@ class GpyTorchActiveSampler(Sampler):
                     x_max=self._ub,
                 ).to(self.dtype).to(self.device)
 
-                # Copy hyperparameters from base model
+                # Warm-start hyperparameters
                 try:
                     model_tmp.load_state_dict(self.gp_model.state_dict(), strict=False)
                 except Exception:
@@ -1695,11 +1810,346 @@ class GpyTorchActiveSampler(Sampler):
                 except Exception:
                     pass
 
+                # OPTIONAL: lightweight retraining (recommended)
+                # optimize_model(model_tmp, likelihood_tmp)
+
                 model_tmp.eval()
                 likelihood_tmp.eval()
                 current_model = model_tmp
 
             return np.array(selected_global, dtype=int)
+
+        # ============================================================
+        # CASE: approx_dpp_stream_greedy
+        # ============================================================
+        if self.acquisition_batch_mode == "approx_dpp_stream_greedy":
+
+            import heapq
+            import math
+            import time
+
+            sigma = self.dpp_sigma
+            lambda_user = self.dpp_lambda
+
+            def compute_repulsion(x_unit, selected_unit_points_array):
+                if selected_unit_points_array.size == 0:
+                    return 0.0
+                diffs = selected_unit_points_array - x_unit
+                sq = np.sum(diffs * diffs, axis=1)
+                min_sq = sq.min()
+                return math.exp(-0.5 * min_sq / (sigma ** 2))
+
+            selected_global = []
+            selected_unit_points = []
+
+            start_time = time.time()
+            if self.verbose_acq:
+                print(f"[approx_dpp_stream_greedy] Streaming greedy DPP over full pool "
+                    f"for batch_size={batch_size}")
+
+            # Greedy: one full-pool pass per selected point
+            for k in range(batch_size):
+
+                if self.verbose_acq:
+                    print(f"[approx_dpp_stream_greedy] Selecting point {k+1}/{batch_size}")
+
+                if selected_unit_points:
+                    selected_unit_points_array = np.vstack(selected_unit_points)
+                else:
+                    selected_unit_points_array = np.empty((0, dimensionality), float)
+
+                best_heap = []  # (adjusted_score, global_index, x_unit)
+                lambda_scale = 0.0
+
+                self._reset_iterator()
+
+                for scores, pool_indices in stream_scores(self.gp_model):
+
+                    X_chunk_unit = self._get_unit_points_by_global_indices(pool_indices)
+
+                    for s, idx, x_unit in zip(scores, pool_indices, X_chunk_unit):
+
+                        if idx in self.removed_indices:
+                            continue
+                        if idx in selected_global:
+                            continue
+
+                        s_val = float(s)
+                        if s_val > lambda_scale:
+                            lambda_scale = s_val
+
+                        repulsion = compute_repulsion(x_unit, selected_unit_points_array)
+                        adjusted = s_val - lambda_user * lambda_scale * repulsion
+
+                        if len(best_heap) < 1:
+                            heapq.heappush(best_heap, (adjusted, int(idx), x_unit))
+                        else:
+                            if adjusted > best_heap[0][0]:
+                                heapq.heapreplace(best_heap, (adjusted, int(idx), x_unit))
+
+                if not best_heap:
+                    if self.verbose_acq:
+                        print("[approx_dpp_stream_greedy] No more candidates; breaking early.")
+                    break
+
+                _, best_idx, best_x = best_heap[0]
+                selected_global.append(best_idx)
+                selected_unit_points.append(best_x)
+
+            if self.verbose_acq:
+                elapsed = time.time() - start_time
+                print(f"[approx_dpp_stream_greedy] Completed. Selected {len(selected_global)} "
+                    f"points in {elapsed:6.1f}s.")
+
+            return np.array(selected_global, dtype=int)
+
+        # ============================================================
+        # CASE: approx_dpp_kmeans_max_score
+        # ============================================================
+        if self.acquisition_batch_mode == "approx_dpp_kmeans_max_score":
+            from sklearn.cluster import KMeans
+            import heapq
+
+            K = self.batch_size  # The user's requested maximum
+            N = self.total_pool_size
+            D = int(self.train_x.shape[1])
+
+            
+            # Calculate M dynamically based on your previous logic
+            M = int(self.dpp_M_alpha * K * math.log10(max(1, N)) * D)
+            M = np.min([M, N, self.pool_chunk_size])
+
+            # Stage 1: Get Top M Candidates (Fast Streaming)
+            candidate_heap = []
+            self._reset_iterator()
+            for scores, pool_indices in stream_scores(self.gp_model):
+                X_chunk_unit = self._get_unit_points_by_global_indices(pool_indices)
+                for s, idx, x_unit in zip(scores, pool_indices, X_chunk_unit):
+                    if idx in self.removed_indices: 
+                        continue
+                    
+                    # We store the score, index, and coordinates
+                    if len(candidate_heap) < M:
+                        heapq.heappush(candidate_heap, (float(s), int(idx), x_unit))
+                    elif s > candidate_heap[0][0]:
+                        heapq.heapreplace(candidate_heap, (float(s), int(idx), x_unit))
+
+            # Prep data for clustering
+            # Note: candidates[0] is (score, index, x_unit)
+            cand_scores = np.array([x[0] for x in candidate_heap])
+            cand_indices = np.array([x[1] for x in candidate_heap])
+            cand_x = np.vstack([x[2] for x in candidate_heap])
+
+            # Stage 2: K-Means Clustering on coordinates
+            # We use k=batch_size to segment the high-scoring regions
+            kmeans = KMeans(n_clusters=K, n_init="auto", random_state=42)
+            cluster_assignments = kmeans.fit_predict(cand_x)
+
+            # Stage 3: Pick the highest scorer in each cluster
+            selected_global = []
+            
+            for cluster_id in range(K):
+                # Mask to find all candidates belonging to this specific cluster
+                in_cluster_mask = (cluster_assignments == cluster_id)
+                
+                if not np.any(in_cluster_mask):
+                    continue
+                    
+                # Get scores and global indices of points in this cluster
+                cluster_scores = cand_scores[in_cluster_mask]
+                cluster_global_indices = cand_indices[in_cluster_mask]
+                
+                # Find the index of the maximum score within this cluster
+                best_local_idx = np.argmax(cluster_scores)
+                selected_global.append(cluster_global_indices[best_local_idx])
+
+            return np.array(selected_global, dtype=int)
+        # ============================================================
+        # CASE: approx_dpp_dynamic_clusters
+        # ============================================================
+
+        if self.acquisition_batch_mode == "approx_dpp_dynamic_clusters":
+            print('doing dynamic clusters')
+
+            from sklearn.cluster import AgglomerativeClustering
+            import heapq
+            import time
+
+            K_max = self.batch_size  # The user's requested maximum
+            N = self.total_pool_size
+            D = int(self.train_x.shape[1])
+            
+            # 1. Get Top M Candidates
+            M = int(self.dpp_M_alpha * K_max * (1 + math.log10(max(1, N/K_max))) * math.sqrt(D))
+            M = np.min([M, N, self.pool_chunk_size])
+
+            # Initialize arrays for top M candidates
+            cand_scores = np.array([], dtype=float)
+            cand_indices = np.array([], dtype=int)
+            cand_x = np.empty((0, dimensionality), dtype=float)
+
+            self._reset_iterator()
+            for scores, pool_indices in stream_scores(self.gp_model):
+                X_chunk_unit = self._get_unit_points_by_global_indices(pool_indices)
+                
+                # 1. Concatenate current candidates with the new chunk
+                # No masking needed since stream_scores handled it
+                combined_scores = np.concatenate([cand_scores, scores])
+                combined_indices = np.concatenate([cand_indices, pool_indices])
+                combined_x = np.vstack([cand_x, X_chunk_unit])
+
+                # 2. Keep only the top M (O(N) Vectorized)
+                if len(combined_scores) > M:
+                    # Puts indices of M largest elements at the end
+                    top_m_idx_map = np.argpartition(combined_scores, -M)[-M:]
+                    
+                    cand_scores = combined_scores[top_m_idx_map]
+                    cand_indices = combined_indices[top_m_idx_map]
+                    cand_x = combined_x[top_m_idx_map]
+                else:
+                    cand_scores = combined_scores
+                    cand_indices = combined_indices
+                    cand_x = combined_x
+
+            print(f"\n[Clustering] Top {len(cand_indices)} candidates selected. Starting Agglomerative Clustering...")
+            # 2. Agglomerative Clustering with distance threshold
+            # Threshold determines how close points must be to merge.
+            # A good heuristic is to use your dpp_sigma.
+            clusterer = AgglomerativeClustering(
+                n_clusters=None, 
+                distance_threshold=self.dpp_sigma, 
+                linkage='complete' # 'complete' ensures ALL points in cluster are within threshold
+            )
+            print('fitting clusters')
+            cluster_labels = clusterer.fit_predict(cand_x)
+            num_clusters_found = clusterer.n_clusters_
+            print('num clusters found', num_clusters_found)
+
+            print('picking highest score in each cluster')
+            # 3. Pick highest scorer in each cluster
+            selected_global = []
+            for cluster_id in range(num_clusters_found):
+                mask = (cluster_labels == cluster_id)
+                cluster_scores = cand_scores[mask]
+                cluster_indices = cand_indices[mask]
+                
+                # Select the winner of this cluster
+                best_local_idx = np.argmax(cluster_scores)
+                selected_global.append(cluster_indices[best_local_idx])
+
+            # 4. Final safety check: ensure we don't exceed batch_size
+            # (Though threshold clustering usually reduces count)
+            if len(selected_global) > K_max:
+                # If we found too many clusters, take the ones whose winners have the highest scores
+                final_scores = [cand_scores[cand_indices == g][0] for g in selected_global]
+                top_clusters = np.argsort(final_scores)[-K_max:]
+                selected_global = [selected_global[i] for i in top_clusters]
+
+            if self.verbose_acq:
+                print(f"[dynamic_clusters] Reduced batch from {K_max} to {len(selected_global)}")
+
+            return np.array(selected_global, dtype=int)
+
+        # ============================================================
+        # CASE: approx_dpp_iterative_heap
+        # ============================================================
+        if self.acquisition_batch_mode == "approx_dpp_iterative_heap":
+
+            import heapq
+            import math
+            import time
+
+            num_passes = getattr(self, "dpp_num_passes", 1)  # user sets this
+            sigma = self.dpp_sigma
+            lambda_user = self.dpp_lambda
+
+            # --------------------------------------------------------
+            # Helper: compute repulsion vs current selected set
+            # --------------------------------------------------------
+            def compute_repulsion(x_unit, selected_unit_points_array):
+                if selected_unit_points_array.size == 0:
+                    return 0.0
+                diffs = selected_unit_points_array - x_unit
+                sq = np.sum(diffs * diffs, axis=1)
+                min_sq = sq.min()
+                return math.exp(-0.5 * min_sq / (sigma ** 2))
+
+            # --------------------------------------------------------
+            # Start with empty selection
+            # --------------------------------------------------------
+            selected_global = []
+            selected_unit_points = []
+
+            # --------------------------------------------------------
+            # Iterative refinement passes
+            # --------------------------------------------------------
+            for p in range(num_passes):
+
+                if self.verbose_acq:
+                    print(f"[approx_dpp_iterative_heap] Pass {p+1}/{num_passes}")
+
+                # Convert selected to array for fast distance ops
+                if selected_unit_points:
+                    selected_unit_points_array = np.vstack(selected_unit_points)
+                else:
+                    selected_unit_points_array = np.empty((0, dimensionality), float)
+
+                # Heap of size = batch_size
+                heap = []  # (adjusted_score, global_index, x_unit)
+
+                # Track global max score for lambda scaling
+                lambda_scale = 0.0
+
+                # --------------------------------------------------------
+                # Stream entire pool
+                # --------------------------------------------------------
+                self._reset_iterator()
+
+                for scores, pool_indices in stream_scores(self.gp_model):
+
+                    X_chunk_unit = self._get_unit_points_by_global_indices(pool_indices)
+
+                    for s, idx, x_unit in zip(scores, pool_indices, X_chunk_unit):
+
+                        if idx in self.removed_indices:
+                            continue
+
+                        # Update global scale
+                        s_val = float(s)
+                        if s_val > lambda_scale:
+                            lambda_scale = s_val
+
+                        # Distance penalty
+                        repulsion = compute_repulsion(x_unit, selected_unit_points_array)
+
+                        adjusted = s_val - lambda_user * lambda_scale * repulsion
+                        
+                        # Maintain heap of size batch_size
+                        if len(heap) < batch_size:
+                            heapq.heappush(heap, (adjusted, int(idx), x_unit))
+                        else:
+                            if adjusted > heap[0][0]:
+                                heapq.heapreplace(heap, (adjusted, int(idx), x_unit))
+                                heap_sorted = sorted(heap, reverse=True)
+                                selected_unit_points = [x for (_, _, x) in heap_sorted]
+                                selected_unit_points_array = np.vstack(selected_unit_points)
+
+                # --------------------------------------------------------
+                # After pass: extract top-K as new "best guess"
+                # --------------------------------------------------------
+                heap_sorted = sorted(heap, reverse=True)
+                selected_global = [g for (_, g, _) in heap_sorted]
+                selected_unit_points = [x for (_, _, x) in heap_sorted]
+
+                if self.verbose_acq:
+                    print(f"[approx_dpp_iterative_heap] Pass {p+1} complete. "
+                        f"Best batch refined.")
+
+            # --------------------------------------------------------
+            # Final result after all passes
+            # --------------------------------------------------------
+            return np.array(selected_global, dtype=int)
+
 
         # ============================================================
         # Fallback: simple streaming top-K
@@ -1759,12 +2209,37 @@ class GpyTorchActiveSampler(Sampler):
         X_train_unit = model.train_inputs[0]                    # (N_train, D)
         Y_train_std = model.train_targets.reshape(-1, 1)        # (N_train, 1)
 
-        # Posterior in standardized space
-        model.eval()
-        with torch.no_grad():
-            posterior = model(X_pool_unit)
-            mu_std = posterior.mean          # (N_pool,)
-            var_std = posterior.variance     # (N_pool,)
+        use_job_lib = False
+        
+        def infer_chunk(model, likelihood, X_chunk, dtype, device):
+            model.eval()
+            likelihood.eval()
+
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                pred = model(X_chunk.to(dtype).to(device))
+                return pred.mean.cpu(), pred.variance.cpu()
+
+        if use_job_lib:
+            import multiprocessing
+            num_cores = int(multiprocessing.cpu_count() / 2)
+            sub_chunks = torch.chunk(X_pool_unit, num_cores, dim=0)
+            from joblib import Parallel, delayed
+
+            results = Parallel(n_jobs=num_cores)(
+                delayed(infer_chunk)(
+                    self.gp_model,
+                    self.likelihood,
+                    Xc,
+                    self.dtype,
+                    self.device
+                )
+                for Xc in sub_chunks
+            )
+
+            mu_std  = torch.cat([r[0] for r in results], dim=0)
+            var_std = torch.cat([r[1] for r in results], dim=0)
+        else:
+            mu_std, var_std = infer_chunk(model, self.likelihood, X_pool_unit, self.dtype, self.device)
 
         mu_std_np = mu_std.cpu().numpy().flatten()
         var_std_np = var_std.cpu().numpy().flatten()
