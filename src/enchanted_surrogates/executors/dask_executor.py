@@ -52,6 +52,33 @@ job_extra_directives: [
     '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
     '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
+
+## Scaling options
+
+This executor exposes a few related options to control how many Dask workers are
+created when using a `SLURMCluster`:
+
+- `scale_n_jobs` (int): request a fixed number of Dask worker jobs. The code will
+    call `SLURMCluster.scale()` with this value (and the executor computes
+    `expected_number_of_workers = scale_n_jobs * processes` where `processes` comes
+    from the SLURM cluster config). Use this when you want a deterministic, fixed
+    worker count for the whole run.
+
+- `scale_n_jobs_min` / `scale_n_jobs_max` (ints): when provided together the
+    executor will call `SLURMCluster.adapt(minimum=..., maximum=...)`, enabling
+    adaptive scaling within the provided bounds. The executor sets
+    `expected_number_of_workers = scale_n_jobs_min * processes` (the lower bound
+    multiplied by `processes`). Adaptive scaling is useful to save cluster
+    resources and reduce queue time/cost when workload fluctuates: Dask will add
+    workers when there is back-pressure and remove them when idle.
+
+Notes:
+- `processes` in the SLURM cluster config multiplies the number of workers
+    because a single job may start multiple worker processes; the executor takes
+    that into account when calculating the expected worker count.
+- `scale_n_jobs` and the `scale_n_jobs_min`/`scale_n_jobs_max` pair are
+    mutually exclusive — set either a fixed target or an adaptive range, not both.
+
 """
 
 import os
@@ -140,7 +167,16 @@ class DaskExecutor(Executor):
         """
         super().__init__(*args, **kwargs)
         log.info("INITIALISING DASK EXECUTOR")
-        self.scale_n_jobs = kwargs.get("scale_n_jobs", 1)
+        
+        self.scale_n_jobs = kwargs.get('scale_n_jobs', None)
+        self.scale_n_jobs_min = kwargs.get('scale_n_jobs_min', None)
+        self.scale_n_jobs_max = kwargs.get('scale_n_jobs_max', None)
+        assert not (self.scale_n_jobs is not None and (self.scale_n_jobs_min is not None or self.scale_n_jobs_max is not None)), 'EITHER scale_n_jobs OR scale_n_jobs_min/scale_n_jobs_max CAN BE SET, NOT BOTH'        
+        # if one range boundary is set, ensure the other is set too.
+        if self.scale_n_jobs_min or self.scale_n_jobs_max:
+            assert self.scale_n_jobs_max is not None
+            assert self.scale_n_jobs_min is not None
+            
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
         self.LocalCluster_config = kwargs.get("LocalCluster_config")
@@ -152,6 +188,8 @@ class DaskExecutor(Executor):
         self.expected_number_of_workers = None
         self.slurm_job_ids = set()
         self.is_closed = False
+        
+        
 
     def find_line_in_seff_output(self, lines, entry):
         """
@@ -312,13 +350,21 @@ class DaskExecutor(Executor):
         slurm_out_dir = LoggerConfig().log_dir
 
         if self.SLURMcluster_config:
-            self.expected_number_of_workers = self.scale_n_jobs * int(
-                self.SLURMcluster_config.get("processes", 1)
-            )
+            
+            if self.scale_n_jobs is not None:
+                self.expected_number_of_workers = self.scale_n_jobs * int(self.SLURMcluster_config.get('processes',1))
+            elif self.scale_n_jobs_min is not None:
+                self.expected_number_of_workers = self.scale_n_jobs_min * int(self.SLURMcluster_config.get('processes',1))
 
             log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
             self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
+            
+            if self.scale_n_jobs:
+                self.cluster.scale(self.scale_n_jobs)
+            elif self.scale_n_jobs_min and self.scale_n_jobs_max:
+                self.cluster.adapt(minimum=self.scale_n_jobs_min, maximum=self.scale_n_jobs_max)
+            
             log.debug(f"The job script for a worker is:\n{self.cluster.job_script()}")
 
             self.client = Client(self.cluster, timeout=180)
