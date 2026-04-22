@@ -52,6 +52,33 @@ job_extra_directives: [
     '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
     '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
+
+## Scaling options
+
+This executor exposes a few related options to control how many Dask workers are
+created when using a `SLURMCluster`:
+
+- `scale_n_jobs` (int): request a fixed number of Dask worker jobs. The code will
+    call `SLURMCluster.scale()` with this value (and the executor computes
+    `expected_number_of_workers = scale_n_jobs * processes` where `processes` comes
+    from the SLURM cluster config). Use this when you want a deterministic, fixed
+    worker count for the whole run.
+
+- `scale_n_jobs_min` / `scale_n_jobs_max` (ints): when provided together the
+    executor will call `SLURMCluster.adapt(minimum=..., maximum=...)`, enabling
+    adaptive scaling within the provided bounds. The executor sets
+    `expected_number_of_workers = scale_n_jobs_min * processes` (the lower bound
+    multiplied by `processes`). Adaptive scaling is useful to save cluster
+    resources and reduce queue time/cost when workload fluctuates: Dask will add
+    workers when there is back-pressure and remove them when idle.
+
+Notes:
+- `processes` in the SLURM cluster config multiplies the number of workers
+    because a single job may start multiple worker processes; the executor takes
+    that into account when calculating the expected worker count.
+- `scale_n_jobs` and the `scale_n_jobs_min`/`scale_n_jobs_max` pair are
+    mutually exclusive — set either a fixed target or an adaptive range, not both.
+
 """
 
 import os
