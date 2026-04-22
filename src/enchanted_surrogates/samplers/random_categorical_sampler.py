@@ -109,12 +109,11 @@ class RandomCategoricalSampler(Sampler):
         """
         self.parameters = parameters
         self.categories = categories
-        self.num_samples_requested = num_samples
 
         self.num_repeats = kwargs.get("num_repeats", 1)
         self.include_index = kwargs.get("include_index", False)
         self.batch_size = kwargs.get("batch_size", num_samples)
-
+        self.budget = num_samples * self.num_repeats
         self.batch_number = 0
         self.submitted = 0
 
