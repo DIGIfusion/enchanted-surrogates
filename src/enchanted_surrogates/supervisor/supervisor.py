@@ -546,7 +546,7 @@ class Supervisor:
                             details = "\n".join(f"  {k}: {v}" for k, v in result.items())
                             log_message = f"""\n\n
                             
-== 💥 FAILURE 💥 =====================================
+==   FAILURE  ========================================
 Run directory: {run_dir}
 
 Result:
@@ -572,9 +572,9 @@ Result:
             bar_submitted = ascii_loading_bar(submitted if submitted else 1, completed)
 
             return f"""
-==================== 🔮 RUNNER: {name} 🔮 ====================
+====================   RUNNER: {name}   ====================
 
-✨ STATUS
+  STATUS
 --------------------------------------------------------
 Submitted:          {submitted}
 Completed:          {completed}
@@ -582,12 +582,12 @@ Successes:          {successes}
 Failures:           {failures}
 Success Rate:       {success_rate:5.1f}%
 
-🪄 COMPLETED vs SUBMITTED
+  COMPLETED vs SUBMITTED
 --------------------------------------------------------
 {completed} / {submitted if submitted else 0}
 {bar_submitted}
 
-📜 COMPLETED vs BUDGET
+  COMPLETED vs BUDGET
 --------------------------------------------------------
 {completed} / {group_sampler_budget}
 {bar_completed}
@@ -617,7 +617,7 @@ Success Rate:       {success_rate:5.1f}%
 
 {enchanted_wizard_version_3}
 
-=== ✨ PROGRESS REPORT ✨ ====================================
+===   PROGRESS REPORT   ====================================
 
 Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
 Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
@@ -628,7 +628,7 @@ Nested Depth:         {nested_depth}
 Sequential Depth:     {sequential_depth}
 Current Batch:        {batch_number}
 
-📜 Group Sampler Budget: {group_sampler_budget}
+  Group Sampler Budget: {group_sampler_budget}
 
 {runner_progress_string}
 
