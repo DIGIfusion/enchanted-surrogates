@@ -120,7 +120,6 @@ class SLURMStreamHandler(logging.Handler):
     def emit(self, record) -> None:
         dask_print(self.formatter.format(record))
 
-
 class SLURMLogPlugin(WorkerPlugin):
     def __init__(self, config: LoggerConfig):
         self.config = config
@@ -128,7 +127,12 @@ class SLURMLogPlugin(WorkerPlugin):
     def setup(self, worker):
         log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
         dask_handler = SLURMStreamHandler()
-        setup_logging(self.config, dask_handler, logging.FileHandler(filename=log_file))
+        setup_logging(self.config, dask_handler, file_handler=logging.FileHandler(filename=log_file))
+
+        # Emit a startup message so files are non-empty and easier to debug.
+        logging.getLogger().info(
+            f"Worker logging initialised. worker.id={worker.id}, log_file={log_file}"
+        )
 
 
 class DaskLocalLogPlugin(WorkerPlugin):
@@ -141,6 +145,11 @@ class DaskLocalLogPlugin(WorkerPlugin):
             self.config,
             logging.StreamHandler(stream=sys.stdout),
             logging.FileHandler(filename=log_file),
+        )
+
+        # Emit a startup message so files are non-empty and easier to debug.
+        logging.getLogger().info(
+            f"Worker logging initialised. worker.id={worker.id}, log_file={log_file}"
         )
 
 
@@ -363,7 +372,9 @@ class DaskExecutor(Executor):
             if self.scale_n_jobs:
                 self.cluster.scale(self.scale_n_jobs)
             elif self.scale_n_jobs_min and self.scale_n_jobs_max:
-                self.cluster.adapt(minimum=self.scale_n_jobs_min, maximum=self.scale_n_jobs_max)
+                n_workers_min = self.scale_n_jobs_min * self.SLURMcluster_config.get('processes',1)
+                n_workers_max = self.scale_n_jobs_max * self.SLURMcluster_config.get('processes',1)
+                self.cluster.adapt(minimum=n_workers_min, maximum=n_workers_max)
             
             log.debug(f"The job script for a worker is:\n{self.cluster.job_script()}")
 
