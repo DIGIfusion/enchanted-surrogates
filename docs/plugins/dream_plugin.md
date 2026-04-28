@@ -1,10 +1,4 @@
 # DREAM + SOFT plugin
 
-Mandatory fields in the configuration file for using the DREAM + SOFT plugin:
-
-```yaml
-runner:
-  type: ...
-```
-
-
+TODO: Short description of DREAM/SOFT software as introduction. Parser/runner are descibed within their own docstrings.
+ 

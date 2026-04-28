@@ -9,7 +9,7 @@ samplers:
     parameters: ['x']
     base_run_dir: /path/to/dir
     dry_run: False
-    parser: ExampleBayesianOptimizationParser
+    parser: SyntheticDoubleGaussianParser
     verbose: True
     initial_samples: 3
     acquisition_function: LEI
@@ -20,7 +20,7 @@ samplers:
 
 runners:
   r1:
-    type: ExampleBayesianOptimizationRunner
+    type: SyntheticDoubleGaussianRunner
 
 executors:
   e1:
