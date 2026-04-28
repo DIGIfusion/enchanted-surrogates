@@ -29,12 +29,15 @@ def run_simulation_task(
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 
     except Exception as exc:
-        log.error("=" * 100)
-        log.error("There was a Python ERROR on when running a simulation task:")
-        log.error(exc)
-        log.error(f"params: {params}")
-        log.error(f"run_dir: {run_dir}")
-        log.error(traceback.format_exc())
+        message = f'''
+        {"=" * 100}
+        "There was a Python ERROR when running a simulation task:"
+        {exc}
+        params: {params}
+        run_dir: {run_dir}
+        {traceback.format_exc()}
+        '''
+        log.error(message)
         # print the whole traceback and not just the last error
         runner_output = {"success": False}
     end = time()
