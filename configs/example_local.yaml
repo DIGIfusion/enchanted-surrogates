@@ -7,11 +7,12 @@ samplers:
   s1:
     type: RandomSampler
     bounds: [[0.0, 1.0], [0.0, 10.0]]
-    budget: 4
-    parameters: ['c1', 'c2']
+    budget: 10
+    parameters: ['x', 'y']
 runners:
   r1:
-    type: ExampleRunner
+    type: SyntheticDoubleGaussianRunner  
+    dimensions: 2
     other_params: {}
 
 supervisor:

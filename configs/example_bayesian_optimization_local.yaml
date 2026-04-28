@@ -8,7 +8,7 @@ samplers:
     bounds: [[0.001, 1.0]]
     parameters: ['x']
     dry_run: False
-    parser: ExampleBayesianOptimizationParser
+    parser: SyntheticDoubleGaussianParser
     verbose: True
     initial_samples: 3
     acquisition_function: LEI
@@ -19,7 +19,7 @@ samplers:
 
 runners:
   r1:
-    type: ExampleBayesianOptimizationRunner
+    type: SyntheticDoubleGaussianRunner
 
 executors:
   e1:

@@ -3,6 +3,7 @@ from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.utils.precise_imports import import_runner
 import os
 import pandas as pd
+from time import time
 
 log = get_logger(__name__)
 
@@ -23,6 +24,7 @@ def run_simulation_task(
     runner_type = runner_config["type"]
     runner_name = runner_config["__runner_name"]
     runner = import_runner(runner_type=runner_type, runner_config=runner_config)
+    start = time()
     try:
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 
@@ -35,6 +37,8 @@ def run_simulation_task(
         log.error(traceback.format_exc())
         # print the whole traceback and not just the last error
         runner_output = {"success": False}
+    end = time()
+    
     if "success" not in runner_output or not isinstance(
         runner_output.get("success"), bool
     ):
@@ -55,6 +59,9 @@ These dicts are merged for enchanted_datapoint.csv and they should have unique k
 
     # Copy runner-specific success status
     runner_output[f"success_{runner_name}"] = runner_output["success"]
+
+    # add the run_time for the runner to the output
+    runner_output[f"runtime_sec_{runner_name}"] = end - start
 
     # Add correct run_dir always as the right-most column in csv
     runner_output.pop("run_dir", None)

@@ -8,7 +8,7 @@ import pandas as pd
 from enchanted_surrogates.parsers.base_parser import Parser
 
 
-class ExampleBayesianOptimizationParser(Parser):
+class SyntheticDoubleGaussianParser(Parser):
     """
     An example I/O parser for testing the Bayesian Optimization sampler.
 
@@ -30,7 +30,7 @@ class ExampleBayesianOptimizationParser(Parser):
 
     def __init__(self):
         """
-        Initializes the ExampleBayesianOptimizationParser object.
+        Initializes the SyntheticDoubleGaussianParser object.
 
         """
         pass
