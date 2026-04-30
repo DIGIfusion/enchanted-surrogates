@@ -17,6 +17,9 @@ from enchanted_surrogates.utils.timeout import run_with_timeout, FunctionTimeout
 from enchanted_surrogates.utils.print_stats_table import print_stats_table
 from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
 
+import GPy
+import copy
+
 
 # ---------------------------
 # Helper functions: RBF 1D integrals
@@ -62,6 +65,7 @@ class GpyAnalyticSobolSampler(Sampler):
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters must match.')
 
+        self.do_residuals_plot = kwargs.get('do_residuals_plot', False)
         # store scaling factors
         self._lb = np.array([b[0] for b in self.bounds], dtype=float)
         self._ub = np.array([b[1] for b in self.bounds], dtype=float)
@@ -79,7 +83,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.batch_size = kwargs.get('batch_size', None) or 2
         self.initial_batch_size = kwargs.get('initial_batch_size', self.batch_size)
         self.initial_pool_samples_strategy = kwargs.get('initial_pool_samples_strategy', 'random')
-        self.seed = kwargs.get('seed', 42)
+        self.seed = kwargs.get('seed', None)
         self.rng = np.random.RandomState(self.seed)
             
         self.base_run_dir = kwargs.get('base_run_dir')
@@ -124,6 +128,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.initial_pool_size = kwargs.get('initial_pool_size', 5000)
         self.pool = None
         self.pool_y = None
+        self.pool_mean_stder = None
         self.pool_csv_path = kwargs.get('pool_csv_path', None)
         self._init_pool()
         
@@ -225,16 +230,33 @@ class GpyAnalyticSobolSampler(Sampler):
             # We only want to aggregate numeric columns that are NOT parameters
             agg_cols = [col for col in numeric_cols if col not in self.parameters]
 
-            # Group by parameters and average numeric columns only
-            grouped = (
-                df.groupby(self.parameters, as_index=False)
-                .agg({col: 'mean' for col in agg_cols})
+            # Build named aggregations for all numeric columns
+            agg_dict = {}
+
+            # Mean for all numeric non-parameter columns
+            for col in agg_cols:
+                agg_dict[col] = (col, 'mean')
+
+            # Output mean + std
+            agg_dict["output_mean"] = (output_col, "mean")
+            agg_dict["output_std"]  = (output_col, "std")
+
+            # Perform grouping
+            grouped_stats = (
+                df.groupby(self.parameters)
+                .agg(**agg_dict)
+                .reset_index()
             )
 
-            # Build pool and pool_y
-            self.pool = self.to_unit(grouped[self.parameters].to_numpy())
-            self.pool_y = grouped[output_col].to_numpy()
+            # Compute SEM
+            grouped_stats["output_sem"] = grouped_stats["output_std"] / np.sqrt(5)
 
+            # Build pool and pool_y
+            self.pool = self.to_unit(grouped_stats[self.parameters].to_numpy())
+            self.pool_y = grouped_stats["output_mean"].to_numpy()
+
+            # Store SEM
+            self.pool_mean_stder = grouped_stats["output_sem"].to_numpy()
         else:
             self.pool = self.rng.uniform(low=0,
                                     high=1,
@@ -290,6 +312,9 @@ class GpyAnalyticSobolSampler(Sampler):
             self.pool = np.delete(self.pool, idxs, axis=0)
             if self.pool_y is not None:
                 self.pool_y = np.delete(self.pool_y, idxs, axis=0)
+            if self.pool_mean_stder is not None:
+                self.pool_mean_stder = np.delete(self.pool_mean_stder, idxs, axis=0)
+
             samples = [{key: float(val) for key, val in zip(self.parameters, row)} for row in real_chosen]
         elif self.initial_pool_samples_strategy == 'first':
             n = min(self.initial_batch_size, len(self.pool))
@@ -326,6 +351,9 @@ class GpyAnalyticSobolSampler(Sampler):
             self.pool = np.delete(self.pool, to_delete, axis=0)
             if self.pool_y is not None:
                 self.pool_y = np.delete(self.pool_y, to_delete, axis=0)
+            if self.pool_mean_stder is not None:
+                self.pool_mean_stder = np.delete(self.pool_mean_stder, to_delete, axis=0)
+
 
     # ---------------------------
     # Main sampling loop
@@ -513,11 +541,88 @@ class GpyAnalyticSobolSampler(Sampler):
         new_model = GPy.models.GPRegression(X_new, Y_new, new_kern)
 
         # 5. Fix noise variance as well
-        noise = float(self.gp_model.Gaussian_noise.variance.values)
-        new_model.Gaussian_noise.variance = noise
-        new_model.Gaussian_noise.variance.fix()
+        new_model.likelihood.variance = self.gp_model.likelihood.variance
+        new_model.likelihood.variance.fix()
 
         return new_model
+    
+
+    def clone_gp_model(self, model, X_new, Y_new, sem_new):
+        """
+        Clone GPRegression or GPHeteroscedasticRegression.
+        For heteroscedastic models, append sem_new^2 to the variance vector.
+        """
+
+        # --- 1. Copy kernel ---
+        new_kern = model.kern.copy()
+        for p in new_kern.parameters:
+            p.fix()
+
+        # --- 2. Copy likelihood (if present) ---
+        if hasattr(model, "likelihood") and model.likelihood is not None:
+            new_likelihood = model.likelihood.copy()
+            for p in new_likelihood.parameters:
+                p.fix()
+        else:
+            new_likelihood = None
+
+        # ============================================================
+        # CASE 1: GPRegression  (sem_new is irrelevant)
+        # ============================================================
+        if isinstance(model, GPy.models.GPRegression):
+
+            new_model = GPy.models.GPRegression(
+                X_new, Y_new, kernel=new_kern, likelihood=new_likelihood
+            )
+
+            # Copy noise variance exactly
+            new_model.likelihood.variance[:] = model.likelihood.variance.values.copy()
+            new_model.likelihood.variance.fix()
+
+            return new_model
+
+        # ============================================================
+        # CASE 2: GPHeteroscedasticRegression  (sem_new is appended)
+        # ============================================================
+        elif isinstance(model, GPy.models.GPHeteroscedasticRegression):
+
+            Ny = Y_new.shape[0]
+
+            # Required metadata
+            Y_metadata = {
+                "variance": np.zeros((Ny, 1)),
+                "output_index": np.zeros((Ny, 1), dtype=int),
+            }
+
+            new_model = GPy.models.GPHeteroscedasticRegression(
+                X_new, Y_new, kernel=new_kern, Y_metadata=Y_metadata
+            )
+
+            # Old per-point variances
+            old_var = model.het_Gauss.variance.values  # shape (N_old, 1)
+            N_old = old_var.shape[0]
+            N_new = Ny
+
+            # sem_new must fill the extra rows
+            sem_new = np.asarray(sem_new).reshape(-1, 1)
+            assert sem_new.shape[0] == (N_new - N_old), \
+                f"sem_new length mismatch: expected {N_new - N_old}, got {sem_new.shape[0]}"
+
+            # Convert SEM → variance
+            sem_var = sem_new**2
+
+            # Build new variance vector
+            new_var = np.vstack([old_var, sem_var])
+
+            # Assign and fix
+            new_model.het_Gauss.variance[:] = new_var
+            new_model.het_Gauss.variance.fix()
+
+            return new_model
+
+        else:
+            raise TypeError(f"Unsupported model type: {type(model)}")
+
 
     def fit(self):
         """
@@ -552,7 +657,7 @@ class GpyAnalyticSobolSampler(Sampler):
             self.gp_model = GPy.models.GPRegression(X, Y_norm, kernel)
 
             # allow global noise to be optimized
-            self.gp_model.Gaussian_noise.variance.constrain_positive()
+            self.gp_model.likelihood.variance.constrain_positive()
 
         # --- Case 3: No repeats, fallback heteroscedastic with jitter/noise_vars ---
         else:
@@ -808,7 +913,7 @@ class GpyAnalyticSobolSampler(Sampler):
         if self.n_ensembles == 1:
             print(f'GETTING GLOBAL SCORE MODE:{self.acquisition_mode}')
             # Predictive variance on pool using global model (not used for fold selection but useful fallback)
-            score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, y_pool = self.pool_y)
+            score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, y_pool = self.pool_y, pool_mean_stder=self.pool_mean_stder)
             score_pool_global = score_pool_global.flatten()
             
             print(f'BATCH SIZE:{self.batch_size} USING GLOBAL SCORE.')
@@ -820,6 +925,9 @@ class GpyAnalyticSobolSampler(Sampler):
             self.pool = np.delete(self.pool, idx, axis=0)
             if self.pool_y is not None:
                 self.pool_y = np.delete(self.pool_y, idx, axis=0)
+            if self.pool_mean_stder is not None:
+                self.pool_mean_stder = np.delete(self.pool_mean_stder, idx, axis=0)
+
             
         else:
             print(f'SPLITTING DATA INTO FOLDS')
@@ -872,7 +980,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 # idx_f = int(np.argmax(var_f))
                 # chosen_indices.append(idx_f)
                 
-                scores = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, model=model_fold, y_pool = self.pool_y)
+                scores = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, model=model_fold, y_pool = self.pool_y, pool_mean_stder = self.pool_mean_stder)
                 print("scores type:", type(scores))
                 print("scores shape:", np.asarray(scores).shape)
                 print("scores example:", scores[:10] if hasattr(scores, "__len__") else scores)
@@ -899,7 +1007,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 print('THE GPR ENSEMBLE SELECTED SOME OF THE SAME POINTS. USING GLOBAL SCORE TO GET MORE POINTS')
                 print(f'GETTING GLOBAL SCORE MODE:{self.acquisition_mode}')
                 # Predictive variance on pool using global model (not used for fold selection but useful fallback)
-                score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, y_pool = self.pool_y)
+                score_pool_global = self._compute_acquisition(self.pool, mode=self.acquisition_mode, blend_string=self.blend_string, y_pool = self.pool_y, pool_mean_stder=self.pool_mean_stder)
                 score_pool_global = score_pool_global.flatten()
                 sorted_idx = list(np.argsort(-score_pool_global))
                 for idx in sorted_idx:
@@ -916,7 +1024,8 @@ class GpyAnalyticSobolSampler(Sampler):
             self.pool = np.delete(self.pool, chosen_indices_final, axis=0)
             if self.pool_y is not None:
                 self.pool_y = np.delete(self.pool_y, chosen_indices_final, axis=0)
-            
+            if self.pool_mean_stder is not None:
+                self.pool_mean_stder = np.delete(self.pool_mean_stder, chosen_indices_final, axis=0)
 
         samples = samples * self.num_repeats
         if self.include_index:
@@ -1230,10 +1339,31 @@ class GpyAnalyticSobolSampler(Sampler):
         # filter to remove where noise_vars==0
         X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = X_unique[noise_vars!=0], Y_unique[noise_vars!=0], noise_vars[noise_vars!=0], se_vars[noise_vars!=0], mean_sems[noise_vars!=0], counts[noise_vars!=0]
 
-        if np.sum(counts > 3) > len(counts) / 2:
-
+        if np.sum(counts > 3) > len(counts) / 2:            
             # Predictions for mean
             y_pred_unique, _ = self.surrogate_predict(X_unique)
+            print(f'debug do residuals plots {self.do_residuals_plot}')
+            if self.do_residuals_plot:
+                residuals = Y_unique - y_pred_unique
+                fig = plt.figure()
+                plt.hexbin(Y_unique, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                print(f'debug plotting residuals here: {residuals_save_dir}')
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+                plt.close(fig)
+
+                fig = plt.figure()
+                plt.hexbin(Y_unique, y_pred_unique, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                print(f'debug plotting predictions here: {residuals_save_dir}')
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+                plt.close(fig)
+
+            
             rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
             nnrmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2 / noise_vars))
             # Empirical stds
@@ -1320,21 +1450,22 @@ class GpyAnalyticSobolSampler(Sampler):
             print('debug, ytest n nans', np.isnan(y_test).sum())
             print('debug, ypred n nans', np.isnan(y_pred).sum())
             residuals = y_test - y_pred
-            fig = plt.figure()
-            plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-            residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-            if not os.path.exists(residuals_save_dir):
-                os.mkdir(residuals_save_dir)
-            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
-            plt.close(fig)
+            if self.do_residuals_plot:
+                fig = plt.figure()
+                plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+                plt.close(fig)
 
-            fig = plt.figure()
-            plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-            residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
-            if not os.path.exists(residuals_save_dir):
-                os.mkdir(residuals_save_dir)
-            fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
-            plt.close(fig)
+                fig = plt.figure()
+                plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+                if not os.path.exists(residuals_save_dir):
+                    os.mkdir(residuals_save_dir)
+                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+                plt.close(fig)
 
             print('debug n nans', np.isnan(residuals).sum())
             rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
@@ -1366,7 +1497,7 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             df.to_csv(all_batch_info_path, mode='w', header=True, index=False)
 
-    def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None, X_train=None, Y_train=None, y_pool=None):
+    def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None, X_train=None, Y_train=None, y_pool=None, pool_mean_stder=None):
         print('debug compute acquisition')
         start = time.time()        
         if mode == "blend":
@@ -1380,10 +1511,10 @@ class GpyAnalyticSobolSampler(Sampler):
             total = np.zeros(len(X_pool))
             for coeff, m in blend:
                 if len(X_pool) > self.chunk_size:
-                    scores = self._compute_acquisition_chunked(X_pool, mode=m, chunk_size=self.chunk_size, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool)
+                    scores = self._compute_acquisition_chunked(X_pool, mode=m, chunk_size=self.chunk_size, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder)
                     
                 else:
-                    scores = self._compute_acquisition_unchunked(X_pool, mode=m, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool)
+                    scores = self._compute_acquisition_unchunked(X_pool, mode=m, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder)
                 scores = (scores - scores.mean()) / (scores.std() + 1e-12)
                 total += coeff * scores
 
@@ -1394,19 +1525,19 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             print('debug mode:', mode)
             if len(X_pool) > self.chunk_size:
-                all_scores = self._compute_acquisition_chunked(X_pool, mode=mode, chunk_size=self.chunk_size, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool)
+                all_scores = self._compute_acquisition_chunked(X_pool, mode=mode, chunk_size=self.chunk_size, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder)
                 
             else:
                 print('debug, computing acquisition unchunked, mode', mode)
-                all_scores = self._compute_acquisition_unchunked(X_pool, mode=mode, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool)
+                all_scores = self._compute_acquisition_unchunked(X_pool, mode=mode, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder)
             end = time.time()
             print('COMPUTING ACQUISITION TOOK:',(end-start)/60, 'min', f'MODE:{mode}')
         
         all_scores_norm = (all_scores - all_scores.mean()) / (all_scores.std() + 1e-12)
-
+        print('debug, max score', np.max(all_scores))
         return all_scores_norm
 
-    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None, Y_train=None, y_pool=None):
+    def _compute_acquisition_unchunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None, Y_train=None, y_pool=None, pool_mean_stder=None):
         if model is None:
             model = self.gp_model
         
@@ -1579,13 +1710,14 @@ class GpyAnalyticSobolSampler(Sampler):
             y_model, _ = self.gp_model.predict_noiseless(X_pool)
             
             if self.do_normalize_y:
-                y_pool_norm = self.do_normalize_y(y_pool)
+                y_pool_norm = self.normalize_y(y_pool)
+                pool_mean_stder_norm = pool_mean_stder / self._y_std
                 orig_rmse = np.sqrt(np.mean((y_model.flatten() - y_pool_norm.flatten())**2))
 
             else:
                 orig_rmse = np.sqrt(np.mean((y_model.flatten() - y_pool.flatten())**2)) 
 
-            def new_point_rmse_decrease(x_new, y_new):
+            def new_point_rmse_decrease(x_new, y_new, sem_new=None):
                 # Ensure shapes
                 x_new = np.asarray(x_new).reshape(1, -1)
                 y_new = np.asarray(y_new).reshape(1, 1)
@@ -1595,7 +1727,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 y = np.vstack([Y_train, y_new])
 
                 # Build model with fixed hyperparameters
-                new_model = self.make_fixed_hyperparam_copy(X, y)
+                new_model = self.clone_gp_model(self.gp_model, X, y, sem_new) #self.make_fixed_hyperparam_copy(X, y)
 
                 # Predict on pool
                 y_model, _ = new_model.predict_noiseless(X_pool)
@@ -1610,13 +1742,21 @@ class GpyAnalyticSobolSampler(Sampler):
                 decrease = orig_rmse - rmse
                 return decrease
 
+            if self.do_normalize_y:
+                rmse_decrease = []
+                for xi, yi, semi in zip(X_pool, y_pool_norm, pool_mean_stder_norm):
+                    rmse_decrease.append(new_point_rmse_decrease(xi,yi,semi))
+            else:
+                rmse_decrease = []
+                for xi, yi, semi in zip(X_pool, y_pool, pool_mean_stder):
+                    rmse_decrease.append(new_point_rmse_decrease(xi,yi,semi))
+            
+            # from joblib import Parallel, delayed
 
-            from joblib import Parallel, delayed
-
-            rmse_decrease = Parallel(n_jobs=-1)(
-                delayed(new_point_rmse_decrease)(xi, yi)
-                for xi, yi in zip(X_pool, y_pool_norm)
-            )
+            # rmse_decrease = Parallel(n_jobs=-1)(
+            #     delayed(new_point_rmse_decrease)(xi, yi)
+            #     for xi, yi in zip(X_pool, y_pool_norm)
+            # )
 
             score = np.array(rmse_decrease)
             
@@ -1635,6 +1775,26 @@ class GpyAnalyticSobolSampler(Sampler):
         origional paper
         MacKay, David J. C.. (1992). Information-Based Objective Functions for Active Data Selection. Neural Computation, 4(4), 590–604. doi:10.1162/neco.1992.4.4.590
 
+        good explainer 
+        https://www.emergentmind.com/topics/bayesian-active-learning-by-disagreement-bald
+        
+        Derives mutual information between two Gaussians:
+        Cover & Thomas — Elements of Information Theory
+        
+        Other Papers:
+        https://arxiv.org/pdf/1703.02910v1
+        https://arxiv.org/pdf/2501.01248
+        https://arxiv.org/pdf/2402.11973
+        https://arxiv.org/pdf/1112.5745
+        
+        batch bald:
+        https://arxiv.org/pdf/1906.08158
+        
+        M. Seeger (2008)
+        Gaussian Processes for Machine Learning (Technical Report)
+        Gives the general formula for posterior variance reduction.
+        Shows that the expected posterior variance after sampling is the underlying noise
+        this is why we assume the posterior variance reduces to the noise after sampling in the BALD calculation,        
         '''
 
         # Latent GP variance
@@ -1688,11 +1848,11 @@ class GpyAnalyticSobolSampler(Sampler):
         return Y_norm
 
 
-    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None, Y_train=None, y_pool=None):
+    def _compute_acquisition_chunked(self, X_pool, mode, chunk_size=5000, model=None, X_train=None, Y_train=None, y_pool=None, pool_mean_stder=None):
         results = []
         for i in range(0, len(X_pool), chunk_size):
             block = X_pool[i:i+chunk_size]
-            results.append(self._compute_acquisition_unchunked(block, mode=mode, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool))
+            results.append(self._compute_acquisition_unchunked(block, mode=mode, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder))
         return np.concatenate(results)
 
     def _parse_blend_string(self, blend_string):
@@ -1709,6 +1869,21 @@ class GpyAnalyticSobolSampler(Sampler):
 
 
     def integral_variance_reduction(self, X_pool, model=None, X_train=None):
+        '''
+        M. Seeger (2008)
+        Gaussian Processes for Machine Learning (Technical Report)
+        Gives the general formula for posterior variance reduction.
+        Shows that the expected posterior variance after sampling is the underlying noise,:
+        which is why your denominator includes + observation_noise_var.
+
+
+        Docstring for integral_variance_reduction
+        
+        :param self: Description
+        :param X_pool: Description
+        :param model: Description
+        :param X_train: Description
+        '''
         if X_train is None:
             X_train, _ = self._get_unitXY()
         
@@ -1740,7 +1915,8 @@ class GpyAnalyticSobolSampler(Sampler):
         num = diff**2
 
         if self.noise_gp is None:
-            denom = K_self - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
+            _, sigma_post_2 = model.predict_noiseless(X_pool)
+            denom = sigma_post_2.flatten()
         else:
             # Predict raw noise std at pool points (σ)
             X_pool_real = self.from_unit(X_pool)
@@ -1752,12 +1928,8 @@ class GpyAnalyticSobolSampler(Sampler):
             if self.do_normalize_y:
                 observation_noise_var = observation_noise_var / (self._y_std**2)
 
-            # Final denominator
-            denom = (
-                K_self
-                - np.sum(K_cross.T.dot(K_inv) * K_cross.T, axis=1)
-                + observation_noise_var
-            )
+            _, sigma_post_2 = model.predict_noiseless(X_pool)
+            denom = sigma_post_2.flatten() + observation_noise_var
 
         # Safe division
         results = np.where(denom > 1e-12, num / denom, 0.0)
@@ -1818,6 +1990,11 @@ class GpyAnalyticSobolSampler(Sampler):
         )
         return fig
 
+    def save_model(self):
+        with open(os.path.join(self.base_run_dir, 'gpy_model.pkl'), 'wb') as f:
+            pickle.dump(self.gp_model, f)
+        with open(os.path.join(self.base_run_dir, 'gpy_noise_model.pkl'), 'wb') as f:
+            pickle.dump(self.noise_gp, f)
 
     def post_process(self):
         """
@@ -1828,6 +2005,8 @@ class GpyAnalyticSobolSampler(Sampler):
 
         make residuals plot
         """
+        self.save_model()
+        
         if not self.base_run_dir:
             raise RuntimeError("base_run_dir must be set to write collapsed dataset.")
 
