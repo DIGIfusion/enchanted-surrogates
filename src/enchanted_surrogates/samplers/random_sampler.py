@@ -9,10 +9,10 @@ class RandomSampler(Sampler):
         self.num_samples = num_samples
         self.bounds = bounds
         self.parameters = parameters
-        self.budget = kwargs.get('budget', num_samples)
         self.batch_size = kwargs.get("batch_size", self.num_samples)
         self.include_index = kwargs.get('include_index', False)
         self.num_repeats = kwargs.get('num_repeats', 1)
+        self.budget = kwargs.get('budget', self.num_samples*self.num_repeats)
         self.seed = kwargs.get('seed', 42)
         # Create a generator with a fixed seed
         self.rng = np.random.default_rng(seed=self.seed)

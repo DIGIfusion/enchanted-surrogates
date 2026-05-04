@@ -1942,6 +1942,11 @@ class GpyAnalyticSobolSampler(Sampler):
         :param model: Description
         :param X_train: Description
         '''
+        '''
+        This us useful for quadrature, UQ and sobol indicies
+        It will select the points that are expected to reduce the variance of the GPR global integral the most.
+        '''
+
         if X_train is None:
             X_train, _ = self._get_unitXY()
         
