@@ -156,6 +156,8 @@ class GpyAnalyticSobolSampler(Sampler):
         # Normalisation for noise GP targets
         self._noise_mean = None
         self._noise_std  = None
+        
+        self.virtual_prescription = kwargs.get('virtual_prescription', None)
 
 
     def split_integer(self, total, n):
@@ -640,12 +642,47 @@ class GpyAnalyticSobolSampler(Sampler):
         input_dim = X.shape[1]
         kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
 
+        if self.virtual_prescription is not None:
+            y_min = self.virtual_prescription['out_min']
+            y_max = self.virtual_prescription['out_max']
+            y_virt = self.virtual_prescription['out_virtual']
+
+            y_min_norm, y_max_norm, y_virt_norm = self.normalize_y([y_min, y_max, y_virt])
+            noise_virt_norm = self.virtual_prescription['noise_virtual'] / self._y_std
+
+            # Elementwise mask (must use & instead of and)
+            is_virtual = (Y_norm < y_max_norm) & (Y_norm > y_min_norm)
+
+            # Invert mask using ~
+            mask_real = ~is_virtual
+
+            # Split real vs virtual
+            X_train = X[mask_real]
+            Y_norm_train = Y_norm[mask_real]
+            noise_vars_train = noise_vars[mask_real]
+            se_vars_train = se_vars[mask_real]
+            se_mean_train = se_mean[mask_real]
+
+            X_virt = X[is_virtual]
+            Y_virt = np.repeat(y_virt_norm, X_virt.shape[0])
+            Y_virt_std = np.repeat(noise_virt_norm, X_virt.shape[0])
+        else:
+            X_train = X
+            Y_norm_train = Y_norm
+            noise_vars_train = noise_vars
+            se_vars_train = se_vars
+            se_mean_train = se_mean
+            X_virt = None
+            Y_virt = None
+            Y_virt_std = None
+            
+        
         # --- Case 1: Repeats exist → heteroscedastic GP with per‑point noise ---
         if np.any(counts > 1):
             print('FITTING: NOISE FROM REPEAT SAMPLES')
-            self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
+            self.gp_model = GPy.models.GPHeteroscedasticRegression(X_train, Y_norm_train, kernel)
 
-            nv = (se_mean**2).reshape(-1, 1)
+            nv = (se_mean_train**2).reshape(-1, 1)
             if self.do_normalize_y:
                 nv = nv/(self._y_std**2)
             self.gp_model.likelihood.variance[:] = nv
@@ -654,7 +691,7 @@ class GpyAnalyticSobolSampler(Sampler):
         # --- Case 2: No repeats, use global noise ---
         elif self.optimise_global_noise_if_no_repeats:
             print('FITTING: OPTIMISE NOISE')
-            self.gp_model = GPy.models.GPRegression(X, Y_norm, kernel)
+            self.gp_model = GPy.models.GPRegression(X_train, Y_norm_train, kernel)
 
             # allow global noise to be optimized
             self.gp_model.likelihood.variance.constrain_positive()
@@ -662,7 +699,7 @@ class GpyAnalyticSobolSampler(Sampler):
         # --- Case 3: No repeats, fallback heteroscedastic with jitter/noise_vars ---
         else:
             print('FITTING: NOISE FIXED TO JITTER')
-            self.gp_model = GPy.models.GPHeteroscedasticRegression(X, Y_norm, kernel)
+            self.gp_model = GPy.models.GPHeteroscedasticRegression(X_train, Y_norm_train, kernel)
 
             nv = (se_mean**2).reshape(-1, 1)
             if self.do_normalize_y:
@@ -680,8 +717,29 @@ class GpyAnalyticSobolSampler(Sampler):
         # Fit noise GP if repeats exist
         print('debug, before fit noise, counts, self.num_repeats', counts, self.num_repeats)
         if np.any(counts > 1) and self.num_repeats > 1:
-            self.fit_noise(X, noise_vars, se_vars)
+            self.fit_noise(X_train, noise_vars_train, se_vars_train)
 
+        if (X_virt is not None) and (y_virt is not None):
+            print(f'ADDING {X_virt.shape[0]} VIRTUAL POINTS')
+
+            # --- Build augmented X and Y ---
+            X_aug = np.vstack([self.gp_model.X, X_virt])
+            Y_aug = np.vstack([self.gp_model.Y, Y_virt.reshape(-1, 1)])
+
+            # --- Build sem vector for virtual points ---
+            if Y_virt_std is None:
+                # fallback: tiny jitter
+                sem_new = np.full((X_virt.shape[0], 1), 1e-6)
+            else:
+                sem_new = Y_virt_std.reshape(-1, 1)
+
+            # --- Clone model with augmented data ---
+            self.gp_model = self.clone_gp_model(
+                model=self.gp_model,
+                X_new=X_aug,
+                Y_new=Y_aug,
+                sem_new=sem_new
+            )
 
         self.cache_hypers()
         self.cache_K()
