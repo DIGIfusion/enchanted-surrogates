@@ -96,7 +96,9 @@ class GpyAnalyticSobolSampler(Sampler):
         self.output_col = kwargs.get('output_col', None)
         self.global_noise = kwargs.get('global_noise', 0)
         self.optimise_global_noise_if_no_repeats = kwargs.get('optimise_global_noise_if_no_repeats', True)
-        
+        self.num_optimise_restarts = kwargs.get('num_optimise_restarts', 10)
+        self.do_uq_analysis = kwargs.get('do_uq_analysis', False)
+
         self.rand1 = True
         self.slices_res = kwargs.get('slices_res', 10)
 
@@ -370,7 +372,7 @@ class GpyAnalyticSobolSampler(Sampler):
             print('debug len _bd', len(_batch_dirs))
             for _i in range(min(self.batch_number,len(_batch_dirs))):
                 bd = _batch_dirs[_i]
-                # print('debug get_data bd', bd)
+                print('debug get_data bd', bd)
                 dd = os.path.join(bd, 'enchanted_dataset.csv')
                 while not os.path.exists(dd):
                     time.sleep(0.1)
@@ -381,7 +383,7 @@ class GpyAnalyticSobolSampler(Sampler):
                 # print('debug get_data len(dfi)', len(dfi))
                 dfs.append(dfi)
             if len(dfs) == 0:
-                raise RuntimeError('NO DATA FOUND IN ANY BATCH DIRECTORIES')
+                raise RuntimeError(f'NO DATA FOUND IN ANY BATCH DIRECTORIES | base_run_dir: {self.base_run_dir}')
             data_df = pd.concat(dfs, axis=0)
         else:
             data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn')
@@ -498,29 +500,36 @@ class GpyAnalyticSobolSampler(Sampler):
 
         return X_unit, Y, noise_vars, se_vars, mean_sems, counts
 
-    def var_to_std(self, var, var_err):
+    def var_to_std(self, var, counts=None):
         """
-        Convert variance ± error into std ± error using first‑order error propagation.
+        Convert variance ± error into std ± error using the correct
+        chi-square-based formula for the standard error of the standard deviation.
 
         Parameters
         ----------
-        var : float or array
-            Estimated variance.
-        var_err : float or array
-            Standard error (or std) of the variance estimate.
+        var : array
+            Sample variance for each unique point.
+        counts : array
+            Number of repeated samples for each point.
 
         Returns
         -------
-        std : float or array
+        std : array
             Standard deviation = sqrt(var)
-        std_err : float or array
-            Error on the standard deviation
+        std_err : array
+            Standard error of the standard deviation = s / sqrt(2(n-1))
         """
-        var = np.asarray(var)
-        var_err = np.asarray(var_err)
 
+        var = np.asarray(var)
         std = np.sqrt(var)
-        std_err = var_err / (2 * std)
+
+        if counts is None:
+            raise ValueError("counts must be provided to compute SE of std")
+
+        counts = np.asarray(counts)
+
+        # Classical SE of the standard deviation
+        std_err = std / np.sqrt(2 * (counts - 1))
 
         return std, std_err
 
@@ -638,7 +647,7 @@ class GpyAnalyticSobolSampler(Sampler):
         """
 
         X, Y_norm, noise_vars, se_vars, se_mean, counts = self._get_unitXY_with_noise(do_normalize_y = self.do_normalize_y)
-        print('debug y norm', Y_norm.shape)
+        # print(f'debug counts: {counts}')
         input_dim = X.shape[1]
         kernel = GPy.kern.RBF(input_dim=input_dim, ARD=True)
 
@@ -662,6 +671,7 @@ class GpyAnalyticSobolSampler(Sampler):
             noise_vars_train = noise_vars[mask_real]
             se_vars_train = se_vars[mask_real]
             se_mean_train = se_mean[mask_real]
+            counts_train = counts[mask_real]
 
             X_virt = X[is_virtual]
             Y_virt = np.repeat(y_virt_norm, X_virt.shape[0])
@@ -672,6 +682,7 @@ class GpyAnalyticSobolSampler(Sampler):
             noise_vars_train = noise_vars
             se_vars_train = se_vars
             se_mean_train = se_mean
+            counts_train = counts
             X_virt = None
             Y_virt = None
             Y_virt_std = None
@@ -710,14 +721,14 @@ class GpyAnalyticSobolSampler(Sampler):
 
         if self.optimize_global:
             try:
-                self.gp_model.optimize(messages=False)
+                self.gp_model.optimize_restarts(num_restarts=self.num_optimise_restarts, verbose=False)
             except Exception as exc:
                 print(f'GLOBAL OPTIMIZE FAILED. ERROR: {exc}')
 
         # Fit noise GP if repeats exist
         print('debug, before fit noise, counts, self.num_repeats', counts, self.num_repeats)
         if np.any(counts > 1) and self.num_repeats > 1:
-            self.fit_noise(X_train, noise_vars_train, se_vars_train)
+            self.fit_noise(X_train, noise_vars_train, counts_train)
 
         if (X_virt is not None) and (y_virt is not None):
             print(f'ADDING {X_virt.shape[0]} VIRTUAL POINTS')
@@ -744,13 +755,12 @@ class GpyAnalyticSobolSampler(Sampler):
         self.cache_hypers()
         self.cache_K()
 
-    def fit_noise(self, X=None, noise_vars=None, se_vars=None):
-        if X is None or noise_vars is None or se_vars is None:
-            X, _, noise_vars, se_vars, _, _ = self._get_unitXY_with_noise()
+    def fit_noise(self, X=None, noise_vars=None, counts=None):
+        if X is None or noise_vars is None or counts is None:
+            X, _, noise_vars, _, _, counts = self._get_unitXY_with_noise()
 
         # Convert variance ± error to std ± error
-        std, std_err = self.var_to_std(noise_vars, se_vars)
-
+        std, std_err = self.var_to_std(noise_vars, counts)
         # New: mask out points where std/std_err is 0 as this will kill the model
         mask = np.isfinite(std) & np.isfinite(std_err) & (std > 0)
         print("debug noise mask kept/total:", mask.sum(), len(mask))
@@ -758,15 +768,16 @@ class GpyAnalyticSobolSampler(Sampler):
         std = std[mask]
         std_err = std_err[mask]
         
-        print('debug fit noise')
-        print("debug var min/max:", np.nanmin(noise_vars), np.nanmax(noise_vars))
-        print("debug se_vars min/max:", np.nanmin(se_vars), np.nanmax(se_vars))
-
-        print("debug std min/max:", np.nanmin(std), np.nanmax(std))
-        print("debug std_err min/max:", np.nanmin(std_err), np.nanmax(std_err))
-
-        print("debug std == 0 count:", np.sum(std == 0))
-        print("debug std_err nonfinite count:", np.sum(~np.isfinite(std_err)))
+        # print('debug fit noise')
+        # print(f'debug std: {std}')
+        # print(f'debug se_std {std_err}')
+        # print("debug var min/max:", np.nanmin(noise_vars), np.nanmax(noise_vars))
+       
+        # print("debug std min/max:", np.nanmin(std), np.nanmax(std))
+        # print("debug std_err min/max:", np.nanmin(std_err), np.nanmax(std_err))
+unchunked
+        # print("debug std == 0 count:", np.sum(std == 0))
+        # print("debug std_err nonfinite count:", np.sum(~np.isfinite(std_err)))
 
 
         # --- Independent normalization for noise GP ---
@@ -797,7 +808,9 @@ class GpyAnalyticSobolSampler(Sampler):
             np.nanmin(std_err_norm), np.nanmax(std_err_norm), np.nanmean(std_err_norm))
 
         try:
-            self.noise_gp.optimize(messages=False)
+            # self.noise_gp.optimize(messages=False)
+            self.noise_gp.optimize_restarts(num_restarts=self.num_optimise_restarts, verbose=True)
+
         except Exception as exc:
             print(f'GLOBAL NOISE OPTIMIZE FAILED. ERROR: {exc}')
 
@@ -813,32 +826,6 @@ class GpyAnalyticSobolSampler(Sampler):
             np.nanmin(self.noise_gp.likelihood.variance.values),
             np.nanmax(self.noise_gp.likelihood.variance.values))
 
-
-    def var_to_std(self, var, var_err):
-        """
-        Convert variance ± error into std ± error using first‑order error propagation.
-
-        Parameters
-        ----------
-        var : float or array
-            Estimated variance.
-        var_err : float or array
-            Standard error (or std) of the variance estimate.
-
-        Returns
-        -------
-        std : float or array
-            Standard deviation = sqrt(var)
-        std_err : float or array
-            Error on the standard deviation
-        """
-        var = np.asarray(var)
-        var_err = np.asarray(var_err)
-
-        std = np.sqrt(var)
-        std_err = var_err / (2 * std)
-
-        return std, std_err
 
     def predict_noise(self, X_test):
         if not hasattr(self, 'noise_gp') or self.noise_gp is None:
@@ -945,7 +932,7 @@ class GpyAnalyticSobolSampler(Sampler):
         if self.do_write_batch_info:
             start_wbi = time.time()
             previous_batch_dir = os.path.join(self.base_run_dir, f'batch_{self.batch_number-1}')
-            print(f'debug is it writing every sample? custom_submitted: {self.custom_submitted}, num_samples_at_last_write: {self.num_samples_at_last_write}, self.write_batch_info_every_x_samples: {self.write_batch_info_every_x_samples}, self.batch_number {self.batch_number}')
+            # print(f'debug is it writing every sample? custom_submitted: {self.custom_submitted}, num_samples_at_last_write: {self.num_samples_at_last_write}, self.write_batch_info_every_x_samples: {self.write_batch_info_every_x_samples}, self.batch_number {self.batch_number}')
             if self.custom_submitted - self.num_samples_at_last_write >= self.write_batch_info_every_x_samples or self.batch_number in [0,1,2,3]:
                 # Now the surrogate is trained we can write batch info
                 self.write_batch_info(previous_batch_dir)
@@ -1046,8 +1033,8 @@ class GpyAnalyticSobolSampler(Sampler):
 
                 idx_f = list(np.argsort(-scores)[:samples_per_fold[i]])
                 chosen_indices.extend(idx_f)
-                print('debug idx_f', idx_f)
-                print('debug chosen_indices', chosen_indices)
+                # print('debug idx_f', idx_f)
+                # print('debug chosen_indices', chosen_indices)
                 # chosen_points = self.pool[idxs]
                 # samples = [{key: float(v) for key, v in zip(self.parameters, row)} for row in chosen_points]
                 # self.pool = np.delete(self.pool, idxs, axis=0)
@@ -1362,9 +1349,8 @@ class GpyAnalyticSobolSampler(Sampler):
             var_pred = var_pred * (self._y_std ** 2)
 
         batch_info = {
-            'num_samples': [n],
-            'mean': [mu],
-            'std': [math.sqrt(var_pred)]
+            'mean': mu,
+            'std': math.sqrt(var_pred)
         }
         batch_info.update({k: [v] for k, v in sobol_first.items()})
         return batch_info
@@ -1382,172 +1368,187 @@ class GpyAnalyticSobolSampler(Sampler):
         except FunctionExecutionError as exc:
             warnings.warn(f"write_batch_info raised an exception: {exc}; skipping batch info write for batch {self.batch_number-1}", UserWarning)
 
-    def regression_test(self):
-        if not self.test_data_csv:
-            return None
-        else:
-            test_df = pd.read_csv(self.test_data_csv)
-            out_col = [col for col in test_df.columns if 'output' in col]
-            if len(out_col) > 2:
-                raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
-        X_test = test_df[self.parameters].values
-        y_test = test_df[out_col[0]].values
+    # def regression_test(self):
+    #     if not self.test_data_csv:
+    #         return None
+    #     else:
+    #         test_df = pd.read_csv(self.test_data_csv)
+    #         out_col = [col for col in test_df.columns if 'output' in col]
+    #         if len(out_col) > 2:
+    #             raise ValueError(f'MORE THAN ONE OUTPUT COL DETETED WHEN DOING REGRESSION TEST. CHECK {self.test_data_csv} FILE AND ENSURE ONLY ONE COLUMN HAS output IN THE NAME.')
+    #     X_test = test_df[self.parameters].values
+    #     y_test = test_df[out_col[0]].values
 
-        X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
-        # filter to remove where noise_vars==0
-        X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = X_unique[noise_vars!=0], Y_unique[noise_vars!=0], noise_vars[noise_vars!=0], se_vars[noise_vars!=0], mean_sems[noise_vars!=0], counts[noise_vars!=0]
+    #     X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = self._collapse_data(X_test, y_test)
+    #     # filter to remove where noise_vars==0
+    #     print('debug num filtered as there are no repeats and noise vars is:',np.sum(noise_vars==0), 'shape noise vars', noise_vars.shape)
+    #     X_unique, Y_unique, noise_vars, se_vars, mean_sems, counts = X_unique[noise_vars!=0], Y_unique[noise_vars!=0], noise_vars[noise_vars!=0], se_vars[noise_vars!=0], mean_sems[noise_vars!=0], counts[noise_vars!=0]
 
-        if np.sum(counts > 3) > len(counts) / 2:            
-            # Predictions for mean
-            y_pred_unique, _ = self.surrogate_predict(X_unique)
-            print(f'debug do residuals plots {self.do_residuals_plot}')
-            if self.do_residuals_plot:
-                residuals = Y_unique - y_pred_unique
-                fig = plt.figure()
-                plt.hexbin(Y_unique, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                print(f'debug plotting residuals here: {residuals_save_dir}')
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
-                plt.close(fig)
-
-                fig = plt.figure()
-                plt.hexbin(Y_unique, y_pred_unique, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                print(f'debug plotting predictions here: {residuals_save_dir}')
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
-                plt.close(fig)
-
+    #     if np.sum(counts > 3) > len(counts) / 2:            
+    #         # Predictions for mean
+    #         y_pred_unique, _ = self.surrogate_predict(X_unique)
+    #         # print(f'debug do residuals plots {self.do_residuals_plot}')
             
-            rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
-            nnrmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2 / noise_vars))
-            # Empirical stds
-            empirical_stds = np.sqrt(noise_vars)
+    #         rmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2))
+    #         nnrmse_mean = np.sqrt(np.nanmean((Y_unique - y_pred_unique)**2 / noise_vars))
+    #         # Empirical stds
+    #         empirical_stds = np.sqrt(noise_vars)
 
-            # Predicted stds
-            noise_pred_unique, _ = self.predict_noise(X_unique)
-            rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
-            print('debug rmse_noise', type(rmse_noise), rmse_noise)
-            print('debug empirical_stds, min, max, mean', np.min(empirical_stds), np.max(empirical_stds), np.mean(empirical_stds))
-            print('debug noise_pred_unique, min, max, mean', np.min(noise_pred_unique), np.max(noise_pred_unique), np.mean(noise_pred_unique))
+    #         # Predicted stds
+    #         noise_pred_unique, _ = self.predict_noise(X_unique)
+    #         rmse_noise = np.sqrt(np.nanmean((empirical_stds - noise_pred_unique)**2))
+    #         # print('debug rmse_noise', type(rmse_noise), rmse_noise)
+    #         # print('debug empirical_stds, min, max, mean', np.min(empirical_stds), np.max(empirical_stds), np.mean(empirical_stds))
+    #         # print('debug noise_pred_unique, min, max, mean', np.min(noise_pred_unique), np.max(noise_pred_unique), np.mean(noise_pred_unique))
 
-            print("dtype:", noise_pred_unique.dtype)
-            print("shape:", noise_pred_unique.shape)
-            print("nan count:", np.isnan(noise_pred_unique).sum())
-            print("inf count:", np.isinf(noise_pred_unique).sum())
-            print("finite count:", np.isfinite(noise_pred_unique).sum())
+    #         # print("dtype:", noise_pred_unique.dtype)
+    #         # print("shape:", noise_pred_unique.shape)
+    #         # print("nan count:", np.isnan(noise_pred_unique).sum())
+    #         # print("inf count:", np.isinf(noise_pred_unique).sum())
+    #         # print("finite count:", np.isfinite(noise_pred_unique).sum())
 
-            # ---------------------------------------------------------
-            # RMSE for quantiles of Y_unique (already added earlier)
-            # ---------------------------------------------------------
-            quantiles_y = np.quantile(Y_unique, [0.25, 0.5, 0.75])
-            q25_y, q50_y, q75_y = quantiles_y
+    #         # ---------------------------------------------------------
+    #         # RMSE for quantiles of Y_unique (already added earlier)
+    #         # ---------------------------------------------------------
+    #         quantiles_y = np.quantile(Y_unique, [0.25, 0.5, 0.75])
+    #         q25_y, q50_y, q75_y = quantiles_y
 
-            def rmse_masked(mask, true_vals, pred_vals):
-                if np.sum(mask) == 0:
-                    return np.nan
-                return np.sqrt(np.nanmean((true_vals[mask] - pred_vals[mask])**2))
+    #         def rmse_masked(mask, true_vals, pred_vals):
+    #             if np.sum(mask) == 0:
+    #                 return np.nan
+    #             return np.sqrt(np.nanmean((true_vals[mask] - pred_vals[mask])**2))
 
-            # Mean prediction quantile RMSEs
-            rmse_q_0_25   = rmse_masked(Y_unique <= q25_y, Y_unique, y_pred_unique)
-            rmse_q_0_50   = rmse_masked(Y_unique <= q50_y, Y_unique, y_pred_unique)
-            rmse_q_25_50  = rmse_masked((Y_unique > q25_y) & (Y_unique <= q50_y), Y_unique, y_pred_unique)
-            rmse_q_50_75  = rmse_masked((Y_unique > q50_y) & (Y_unique <= q75_y), Y_unique, y_pred_unique)
-            rmse_q_50_100 = rmse_masked(Y_unique > q50_y, Y_unique, y_pred_unique)
-            rmse_q_75_100 = rmse_masked(Y_unique > q75_y, Y_unique, y_pred_unique)
+    #         # Mean prediction quantile RMSEs
+    #         rmse_q_0_25   = rmse_masked(Y_unique <= q25_y, Y_unique, y_pred_unique)
+    #         rmse_q_0_50   = rmse_masked(Y_unique <= q50_y, Y_unique, y_pred_unique)
+    #         rmse_q_25_50  = rmse_masked((Y_unique > q25_y) & (Y_unique <= q50_y), Y_unique, y_pred_unique)
+    #         rmse_q_50_75  = rmse_masked((Y_unique > q50_y) & (Y_unique <= q75_y), Y_unique, y_pred_unique)
+    #         rmse_q_50_100 = rmse_masked(Y_unique > q50_y, Y_unique, y_pred_unique)
+    #         rmse_q_75_100 = rmse_masked(Y_unique > q75_y, Y_unique, y_pred_unique)
 
-            # ---------------------------------------------------------
-            # NEW: RMSE for quantiles of empirical_stds (noise)
-            # ---------------------------------------------------------
-            quantiles_std = np.quantile(empirical_stds, [0.25, 0.5, 0.75])
-            q25_s, q50_s, q75_s = quantiles_std
+    #         # ---------------------------------------------------------
+    #         # NEW: RMSE for quantiles of empirical_stds (noise)
+    #         # ---------------------------------------------------------
+    #         quantiles_std = np.quantile(empirical_stds, [0.25, 0.5, 0.75])
+    #         q25_s, q50_s, q75_s = quantiles_std
 
-            rmse_std_0_25   = rmse_masked(empirical_stds <= q25_s, empirical_stds, noise_pred_unique)
-            rmse_std_0_50   = rmse_masked(empirical_stds <= q50_s, empirical_stds, noise_pred_unique)
-            rmse_std_25_50  = rmse_masked((empirical_stds > q25_s) & (empirical_stds <= q50_s), empirical_stds, noise_pred_unique)
-            rmse_std_50_75  = rmse_masked((empirical_stds > q50_s) & (empirical_stds <= q75_s), empirical_stds, noise_pred_unique)
-            rmse_std_50_100 = rmse_masked(empirical_stds > q50_s, empirical_stds, noise_pred_unique)
-            rmse_std_75_100 = rmse_masked(empirical_stds > q75_s, empirical_stds, noise_pred_unique)
+    #         rmse_std_0_25   = rmse_masked(empirical_stds <= q25_s, empirical_stds, noise_pred_unique)
+    #         rmse_std_0_50   = rmse_masked(empirical_stds <= q50_s, empirical_stds, noise_pred_unique)
+    #         rmse_std_25_50  = rmse_masked((empirical_stds > q25_s) & (empirical_stds <= q50_s), empirical_stds, noise_pred_unique)
+    #         rmse_std_50_75  = rmse_masked((empirical_stds > q50_s) & (empirical_stds <= q75_s), empirical_stds, noise_pred_unique)
+    #         rmse_std_50_100 = rmse_masked(empirical_stds > q50_s, empirical_stds, noise_pred_unique)
+    #         rmse_std_75_100 = rmse_masked(empirical_stds > q75_s, empirical_stds, noise_pred_unique)
 
-            regression_results = {
-                f'rmse-mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
-                f'nnrmse-mean_{len(Y_unique)}-{self.test_data_name}': [nnrmse_mean], # less than 1 means it is better than running a single simulation with the MC noise.
-                f'rmse-noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
-                f'n_repeats_used-{self.test_data_name}': [np.mean(counts)],
+    #         # ---------------------------------------------------------
+    #         # NEW: MAPE and R² for mean predictions
+    #         # ---------------------------------------------------------
 
-                # Mean quantile RMSEs
-                f'rmse-mean-quantile_0_25-{self.test_data_name}': [rmse_q_0_25],
-                f'rmse-mean-quantile_0_50-{self.test_data_name}': [rmse_q_0_50],
-                f'rmse-mean-quantile_25_50-{self.test_data_name}': [rmse_q_25_50],
-                f'rmse-mean-quantile_50_75-{self.test_data_name}': [rmse_q_50_75],
-                f'rmse-mean-quantile_50_100-{self.test_data_name}': [rmse_q_50_100],
-                f'rmse-mean-quantile_75_100-{self.test_data_name}': [rmse_q_75_100],
+    #         # MAPE (avoid division by zero)
+    #         mask_nonzero = Y_unique != 0
+    #         if np.sum(mask_nonzero) > 0:
+    #             mape_mean = np.mean(
+    #                 np.abs((Y_unique[mask_nonzero] - y_pred_unique[mask_nonzero]) 
+    #                     / Y_unique[mask_nonzero])
+    #             ) * 100.0
+    #         else:
+    #             mape_mean = np.nan
 
-                # Noise quantile RMSEs
-                f'rmse-std-quantile_0_25-{self.test_data_name}': [rmse_std_0_25],
-                f'rmse-std-quantile_0_50-{self.test_data_name}': [rmse_std_0_50],
-                f'rmse-std-quantile_25_50-{self.test_data_name}': [rmse_std_25_50],
-                f'rmse-std-quantile_50_75-{self.test_data_name}': [rmse_std_50_75],
-                f'rmse-std-quantile_50_100-{self.test_data_name}': [rmse_std_50_100],
-                f'rmse-std-quantile_75_100-{self.test_data_name}': [rmse_std_75_100],
-            }
+    #         # R² score
+    #         ss_res = np.sum((Y_unique - y_pred_unique)**2)
+    #         ss_tot = np.sum((Y_unique - np.mean(Y_unique))**2)
+    #         r2_mean = 1 - ss_res / ss_tot if ss_tot != 0 else np.nan
 
-            return regression_results
 
-        else:
-            # not enough test set repeats, falling back to more primitive measures of performance
-            y_pred, _ = self.surrogate_predict(X_test)
-            if self.max_y:
-                mask = y_pred <= self.max_y
-                X_test = X_test[mask]
-                y_test = y_test[mask]
-                y_pred = y_pred[mask]
-            print('debug, ytest n nans', np.isnan(y_test).sum())
-            print('debug, ypred n nans', np.isnan(y_pred).sum())
-            residuals = y_test - y_pred
-            if self.do_residuals_plot:
-                fig = plt.figure()
-                plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
-                plt.close(fig)
+    #         regression_results = {
+    #             f'rmse-mean_{len(Y_unique)}-{self.test_data_name}': [rmse_mean],
+    #             f'nnrmse-mean_{len(Y_unique)}-{self.test_data_name}': [nnrmse_mean], # less than 1 means it is better than running a single simulation with the MC noise.
+    #             f'rmse-noise_{len(Y_unique)}-{self.test_data_name}': [rmse_noise],
+    #             f'n_repeats_used-{self.test_data_name}': [np.mean(counts)],
+    #             f'mape-mean_{len(Y_unique)}-{self.test_data_name}': [mape_mean],
+    #             f'r2-mean_{len(Y_unique)}-{self.test_data_name}': [r2_mean],
 
-                fig = plt.figure()
-                plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
-                residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
-                if not os.path.exists(residuals_save_dir):
-                    os.mkdir(residuals_save_dir)
-                fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
-                plt.close(fig)
+    #             # Mean quantile RMSEs
+    #             f'rmse-mean-quantile_0_25-{self.test_data_name}': [rmse_q_0_25],
+    #             f'rmse-mean-quantile_0_50-{self.test_data_name}': [rmse_q_0_50],
+    #             f'rmse-mean-quantile_25_50-{self.test_data_name}': [rmse_q_25_50],
+    #             f'rmse-mean-quantile_50_75-{self.test_data_name}': [rmse_q_50_75],
+    #             f'rmse-mean-quantile_50_100-{self.test_data_name}': [rmse_q_50_100],
+    #             f'rmse-mean-quantile_75_100-{self.test_data_name}': [rmse_q_75_100],
 
-            print('debug n nans', np.isnan(residuals).sum())
-            rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
-            if self.num_repeats > 1:
-                # Ensure the training set at least has some repeats to make this valid
-                noise_pred, _ = self.predict_noise(X_test)
-                msse = np.nanmean((residuals/noise_pred) ** 2)
-                nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
-                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
-            else:
-                # crude for noisy underlying functions but best we have
-                regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
-            return regression_results
+    #             # Noise quantile RMSEs
+    #             f'rmse-std-quantile_0_25-{self.test_data_name}': [rmse_std_0_25],
+    #             f'rmse-std-quantile_0_50-{self.test_data_name}': [rmse_std_0_50],
+    #             f'rmse-std-quantile_25_50-{self.test_data_name}': [rmse_std_25_50],
+    #             f'rmse-std-quantile_50_75-{self.test_data_name}': [rmse_std_50_75],
+    #             f'rmse-std-quantile_50_100-{self.test_data_name}': [rmse_std_50_100],
+    #             f'rmse-std-quantile_75_100-{self.test_data_name}': [rmse_std_75_100],
+    #         }
+
+    #         return regression_results
+
+    #     else:
+    #         # not enough test set repeats, falling back to more primitive measures of performance
+    #         y_pred, _ = self.surrogate_predict(X_test)
+    #         if self.max_y:
+    #             mask = y_pred <= self.max_y
+    #             X_test = X_test[mask]
+    #             y_test = y_test[mask]
+    #             y_pred = y_pred[mask]
+    #         # print('debug, ytest n nans', np.isnan(y_test).sum())
+    #         # print('debug, ypred n nans', np.isnan(y_pred).sum())
+    #         residuals = y_test - y_pred
+    #         if self.do_residuals_plot:
+    #             fig = plt.figure()
+    #             plt.hexbin(y_test, residuals, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+    #             residuals_save_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+    #             if not os.path.exists(residuals_save_dir):
+    #                 os.mkdir(residuals_save_dir)
+    #             fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_residuals.png"))
+    #             plt.close(fig)
+
+    #             fig = plt.figure()
+    #             plt.hexbin(y_test, y_pred, gridsize=50, cmap='plasma', bins=None, mincnt=1)
+    #             residuals_save_dir = os.path.join(self.base_run_dir, 'prediction_plots')
+    #             if not os.path.exists(residuals_save_dir):
+    #                 os.mkdir(residuals_save_dir)
+    #             fig.savefig(os.path.join(residuals_save_dir, f"N-{self.gp_model.X.shape[0]}_prediction.png"))
+    #             plt.close(fig)
+
+    #         # print('debug n nans', np.isnan(residuals).sum())
+    #         rmse = np.sqrt(np.nanmean((y_test - y_pred) ** 2))
+    #         if self.num_repeats > 1:
+    #             # Ensure the training set at least has some repeats to make this valid
+    #             noise_pred, _ = self.predict_noise(X_test)
+    #             msse = np.nanmean((residuals/noise_pred) ** 2)
+    #             nnrmse = np.sqrt(np.nanmean(residuals ** 2 / noise_pred ** 2))
+    #             regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse], f'msse_{len(y_test)}-{self.test_data_name}':[msse],f'nnrmse_{len(y_test)}-{self.test_data_name}':[nnrmse]}
+    #         else:
+    #             # crude for noisy underlying functions but best we have
+    #             regression_results = {f'rmse_{len(y_test)}-{self.test_data_name}':[rmse]}
+    #         return regression_results
         
     def _write_batch_info_inner(self, batch_dir, name=''):
         # var_integral = self.get_var_integral()
-        uq_results = self.uq_analysis()
-        regression_results = self.regression_test()
-        batch_info = {} #{'var_integral':var_integral}
+        print('GETTING UQ ANALYSIS')
+        uq_results = {}
+        if self.do_uq_analysis:
+            uq_results = self.uq_analysis()
+        print('getting regression test results')
+        regression_results = self.get_test_metrics() #self.regression_test()
+        
+        X, y = self._get_unitXY(do_normalize_y=self.do_normalize_y)
+        n, D = X.shape
+        batch_info = {'num_samples':n} #{'var_integral':var_integral}
         if regression_results:
             batch_info = {**batch_info, **uq_results, **regression_results}
         else:
             batch_info = {**batch_info, **uq_results}
-        df = pd.DataFrame({k: v for k, v in batch_info.items()})
+        
+        if self.do_residuals_plot:
+            print('making residual plot')
+            self.residuals_plot()
+
+        df = pd.DataFrame({k: [v] for k, v in batch_info.items()})
         df.to_csv(os.path.join(batch_dir, name+'batch_info.csv'), index=False)
         all_batch_info_path = os.path.join(os.path.dirname(batch_dir), name+'batch_info.csv')
         if os.path.exists(all_batch_info_path):
@@ -1556,15 +1557,12 @@ class GpyAnalyticSobolSampler(Sampler):
             df.to_csv(all_batch_info_path, mode='w', header=True, index=False)
 
     def _compute_acquisition(self, X_pool, mode="var", blend_string=None, model=None, X_train=None, Y_train=None, y_pool=None, pool_mean_stder=None):
-        print('debug compute acquisition')
         start = time.time()        
         if mode == "blend":
-            print('debug mode blend')
             if blend_string is None:
                 raise ValueError("blend_string must be provided for blend mode")
             
             blend = self._parse_blend_string(blend_string)
-            print('debug blend, coeff, mode:', blend)
             
             total = np.zeros(len(X_pool))
             for coeff, m in blend:
@@ -1581,7 +1579,6 @@ class GpyAnalyticSobolSampler(Sampler):
             all_scores = total
 
         else:
-            print('debug mode:', mode)
             if len(X_pool) > self.chunk_size:
                 all_scores = self._compute_acquisition_chunked(X_pool, mode=mode, chunk_size=self.chunk_size, model=model, X_train=X_train, Y_train=Y_train, y_pool=y_pool, pool_mean_stder=pool_mean_stder)
                 
@@ -1822,6 +1819,8 @@ class GpyAnalyticSobolSampler(Sampler):
         else:
             raise ValueError(f"Unknown acquisition mode: {mode}")
         
+        
+
         return score
 
     def bald_acquisition(self, X_pool):
@@ -1998,16 +1997,9 @@ class GpyAnalyticSobolSampler(Sampler):
         results = np.where(denom > 1e-12, num / denom, 0.0)
         return results
 
-    def residuals_plot(self):
-        import matplotlib.pyplot as plt
-
-        out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
-                
+    def get_test_metrics(self):
         if not self.test_data_csv:
             return None
-
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir, exist_ok=True)
 
         # Load test data
         test_df = pd.read_csv(self.test_data_csv)
@@ -2015,43 +2007,199 @@ class GpyAnalyticSobolSampler(Sampler):
 
         X_test = test_df[self.parameters].values
         y_test = test_df[out_col].values
-        y_pred = self.surrogate_predict(X_test)
+        
+        X_test_unique, y_test_unique, noise_vars ,_ ,_ ,_ = self._collapse_data(X_test, y_test)
+        X_test_unique, y_test_unique, noise_vars = X_test_unique[noise_vars!=0], y_test_unique[noise_vars!=0], noise_vars[noise_vars!=0]
+
+        y_pred, _ = self.surrogate_predict(X_test_unique)
+        # print(f'debug len(X_test) {len(X_test)} | len(X_test_unique) {len(X_test_unique)}')
+
+        # --- Metrics for TEST data ---
+        rmse_test = np.sqrt(np.mean((y_test_unique - y_pred)**2))
+        nnrmse_test = np.sqrt(np.nanmean((y_test_unique - y_pred)**2 / noise_vars))
+
+        ss_res_test = np.sum((y_test_unique - y_pred)**2)
+        ss_tot_test = np.sum((y_test_unique - np.mean(y_test_unique))**2)
+        r2_test = 1 - ss_res_test / ss_tot_test if ss_tot_test != 0 else np.nan
+
+        mask_nonzero_test = y_test_unique != 0
+        if np.sum(mask_nonzero_test) > 0:
+            mape_test = np.mean(np.abs((y_test_unique[mask_nonzero_test] - y_pred[mask_nonzero_test]) /
+                                    y_test_unique[mask_nonzero_test])) * 100
+        else:
+            mape_test = np.nan
+
+        result = {
+            'rmse': rmse_test,
+            'nnrmse': nnrmse_test,
+            'r2': r2_test,
+            'mape': mape_test,
+        }
+
+        return result
+
+    def residuals_plot(self):
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import os
+        import pandas as pd
+
+        out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+        os.makedirs(out_dir, exist_ok=True)
+
+        result = self.get_test_metrics()
+        rmse_test, r2_test, mape_test = result['rmse'], result['r2'], result['mape'] 
+
+        # Load test data
+        test_df = pd.read_csv(self.test_data_csv)
+        out_col = self.get_output_col(df=test_df)
+
+        X_test = test_df[self.parameters].values
+        y_test = test_df[out_col].values
+        
+        X_test_unique, y_test_unique, noise_vars ,_ ,_ ,_ = self._collapse_data(X_test, y_test)
+        X_test_unique, y_test_unique = X_test_unique[noise_vars!=0], y_test_unique[noise_vars!=0]
+
+        y_pred, _ = self.surrogate_predict(X_test_unique)
 
         # Compute residuals
-        residuals = y_test - y_pred
+        residuals = y_test_unique - y_pred
 
-        # Create hexbin plot
-        fig, ax = plt.subplots(figsize=(3.5, 3))
 
-        hb = ax.hexbin(
-            y_test,
-            residuals,
-            gridsize=40,
-            cmap="viridis",
-            mincnt=1,          # bins with zero count will be masked
-        )
+        # Extract GPy lengthscales
+        try:
+            kern = self.gp_model.kern
+            if hasattr(kern, "lengthscale"):
+                ls = np.atleast_1d(kern.lengthscale)
+            elif hasattr(kern, "lengthscales"):
+                ls = np.atleast_1d(kern.lengthscales)
+            else:
+                ls = None
+        except Exception:
+            ls = None
 
-        # Make empty bins white
-        hb.set_array(hb.get_array())  # ensure array exists
-        hb.set_cmap("viridis")
-        hb.set_clim(vmin=1)           # ensures empty bins are not colored
+        # Build lengthscale string
+        if ls is not None:
+            ls_str = ", ".join(
+                f"{name}: {float(val):.3g}"
+                for name, val in zip(self.parameters, ls)
+            )
+        else:
+            ls_str = "Lengthscales unavailable"
 
-        # Add colorbar
+        # ============================================================
+        # PLOT 1 — TEST DATA (existing behavior)
+        # ============================================================
+        fig, axes = plt.subplots(1, 2, figsize=(7.5, 3))
+
+        # Residuals
+        ax = axes[0]
+        hb = ax.hexbin(y_test_unique, residuals, gridsize=40, cmap="viridis", mincnt=1)
         cb = fig.colorbar(hb, ax=ax)
         cb.set_label("Count")
-
-        # Labels and title
         ax.set_xlabel("y_test")
         ax.set_ylabel("Residuals (y_test - y_pred)")
-        ax.set_title("Residuals Hexbin Plot")
-        fig.tight_layout()
-        print('saving residuals plot to:', os.path.join(out_dir, f'residuals_train-{len(self.train)}.png'))        
-        fig.savefig(
-            os.path.join(out_dir, f"residuals_train-{len(self.train)}.png"),
-            dpi=300,
-            bbox_inches="tight"
+        ax.set_title("Residuals")
+
+        # True vs Predicted
+        ax2 = axes[1]
+        hb2 = ax2.hexbin(y_test_unique, y_pred, gridsize=40, cmap="viridis", mincnt=1)
+        # y = x reference line
+        min_val = min(np.min(y_test_unique), np.min(y_pred))
+        max_val = max(np.max(y_test_unique), np.max(y_pred))
+        ax2.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)
+
+        cb2 = fig.colorbar(hb2, ax=ax2)
+        cb2.set_label("Count")
+        ax2.set_xlabel("y_test")
+        ax2.set_ylabel("y_pred")
+        ax2.set_title("True vs Predicted")
+
+        fig.suptitle(
+            f"Residuals & True-vs-Predicted (TEST)\n"
+            f"Lengthscales: {ls_str}\n"
+            f"RMSE={rmse_test:.4g}, R²={r2_test:.4g}, MAPE={mape_test:.3g}%",
+            fontsize=10
         )
-        return fig
+        fig.tight_layout(rect=[0, 0, 1, 0.92])
+
+        # Save test-data plot
+        X_train_real, y_train_real = self.get_data()
+        n, D = X_train_real.shape
+        out_path = os.path.join(out_dir, f"residuals_train-{n}.png")
+        print("saving residuals plot to:", out_path)
+        fig.savefig(out_path, dpi=300, bbox_inches="tight")
+
+        # ============================================================
+        # PLOT 2 — TRAINING DATA (new behavior)
+        # ============================================================
+
+        # Use the same training data you already load for n, D
+        y_pred_train, _ = self.surrogate_predict(X_train_real)
+        residuals_train = y_train_real - y_pred_train
+
+        # Ensure both arrays are 1‑D for metric calculations
+        y_train_flat = np.asarray(y_train_real).reshape(-1)
+        y_pred_train_flat = np.asarray(y_pred_train).reshape(-1)
+
+
+        # --- Metrics for TRAIN data ---
+        mask_nonzero_train = y_train_flat != 0
+
+        rmse_train = np.sqrt(np.mean((y_train_flat - y_pred_train_flat)**2))
+
+        ss_res_train = np.sum((y_train_flat - y_pred_train_flat)**2)
+        ss_tot_train = np.sum((y_train_flat - np.mean(y_train_flat))**2)
+        r2_train = 1 - ss_res_train / ss_tot_train if ss_tot_train != 0 else np.nan
+
+        if np.sum(mask_nonzero_train) > 0:
+            mape_train = np.mean(
+                np.abs((y_train_flat[mask_nonzero_train] - y_pred_train_flat[mask_nonzero_train]) /
+                    y_train_flat[mask_nonzero_train])
+            ) * 100
+        else:
+            mape_train = np.nan
+
+
+        fig2, axes2 = plt.subplots(1, 2, figsize=(7.5, 3))
+
+        # Residuals
+        ax3 = axes2[0]
+        hb3 = ax3.hexbin(y_train_flat, residuals_train, gridsize=40, cmap="viridis", mincnt=1)
+        cb3 = fig2.colorbar(hb3, ax=ax3)
+        cb3.set_label("Count")
+        ax3.set_xlabel("y_train")
+        ax3.set_ylabel("Residuals (y_train - y_pred)")
+        ax3.set_title("Residuals (TRAIN)")
+
+        # True vs Predicted
+        ax4 = axes2[1]
+        hb4 = ax4.hexbin(y_train_flat, y_pred_train, gridsize=40, cmap="viridis", mincnt=1)
+        # y = x reference line
+        min_val = min(np.min(y_train_flat), np.min(y_pred_train_flat))
+        max_val = max(np.max(y_train_flat), np.max(y_pred_train_flat))
+        ax4.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)
+
+        cb4 = fig2.colorbar(hb4, ax=ax4)
+        cb4.set_label("Count")
+        ax4.set_xlabel("y_train")
+        ax4.set_ylabel("y_pred")
+        ax4.set_title("True vs Predicted (TRAIN)")
+
+        fig2.suptitle(
+            f"Residuals & True-vs-Predicted (TRAIN)\n"
+            f"Lengthscales: {ls_str}\n"
+            f"RMSE={rmse_train:.4g}, R²={r2_train:.4g}, MAPE={mape_train:.3g}%",
+            fontsize=10
+        )
+        fig2.tight_layout(rect=[0, 0, 1, 0.92])
+
+        # Save training-data plot
+        out_path2 = os.path.join(out_dir, f"residuals_trainset-{n}.png")
+        print("saving training residuals plot to:", out_path2)
+        fig2.savefig(out_path2, dpi=300, bbox_inches="tight")
+
+        return fig, fig2
 
     def save_model(self):
         with open(os.path.join(self.base_run_dir, 'gpy_model.pkl'), 'wb') as f:
@@ -2081,7 +2229,7 @@ class GpyAnalyticSobolSampler(Sampler):
         # Compute statistics
         mean = Y_unique.flatten()
         se_mean = se_Y
-        std, se_std = self.var_to_std(noise_vars, se_vars)
+        std, se_std = self.var_to_std(noise_vars, counts)
 
         print('Post Proc: writing to file')
         # Build dataframe
@@ -2123,9 +2271,7 @@ class GpyAnalyticSobolSampler(Sampler):
         df = pd.DataFrame(samples)
         X_slice = df[self.parameters].to_numpy()
         Y_slice, Y_error = self.surrogate_predict(X_slice)
-        print('debug Y_slice', Y_slice, Y_error)
         Y_slice_noise, Y_slice_noise_error = self.predict_noise(X_slice)
-        print('debug len y len df', len(Y_slice), len(df))
         df_plot = pd.DataFrame(samples)
         if self.output_col is None:
             self.set_output_col()
@@ -2149,12 +2295,9 @@ class GpyAnalyticSobolSampler(Sampler):
         samples = gs.get_next_samples()
         df = pd.DataFrame(samples)
         X = df[self.parameters].to_numpy()
-        print('debug len df len X', len(df), len(X))
         Y, _ = self.surrogate_predict(X)
-        print('debug len df len Y', len(df), len(Y))
         if self.output_col is None:
             self.set_output_col()
-        print('debug len df len Y', len(df), len(Y))
         df[self.output_col] = Y
         self.plot_threshold_histograms(df, threshold, bins=bins)
         
@@ -2254,7 +2397,6 @@ class GpyAnalyticSobolSampler(Sampler):
         if train_df is None and test_df is None:
             raise ValueError("Provide either train_df/test_df or train_csv/test_csv")
 
-        print('debug test_df is None', test_df is None)
         # If only one dataset provided → split 50/50
         if test_df is None:
             df = train_df.copy()
@@ -2290,7 +2432,9 @@ class GpyAnalyticSobolSampler(Sampler):
         model_full = GPy.models.GPRegression(X_unit_full, y_train_full, kernel)
 
         try:
-            model_full.optimize(messages=False)
+            # model_full.optimize(messages=False)
+            model_full.optimize_restarts(num_restarts=self.num_optimise_restarts, verbose=False)
+
         except Exception:
             pass
 
@@ -2314,7 +2458,9 @@ class GpyAnalyticSobolSampler(Sampler):
             # Optional optimization
             if do_optimize:
                 try:
-                    model.optimize(messages=False)
+                    # model.optimize(messages=False)
+                    model.optimize_restarts(num_restarts=self.num_optimise_restarts, verbose=False)
+
                 except Exception as e:
                     print("Warning: GP optimization failed:", e)
 
@@ -2322,8 +2468,6 @@ class GpyAnalyticSobolSampler(Sampler):
             X_test_unit = self.to_unit(X_test)
             mu, _ = model.predict(X_test_unit)
             
-            print('debug len(X_test)', len(X_test))
-
             # Compute RMSE
             rmse = np.sqrt(mean_squared_error(y_test, mu))
             return rmse, model
@@ -2417,11 +2561,8 @@ class GpyAnalyticSobolSampler(Sampler):
                     rmse, model = fit_and_rmse(X_random, y_random, do_optimize=True)
                 else:
                     rmse, model = fit_and_rmse(X_active[i], y_active[i], do_optimize=True)
-                # print('debug model', model)
                 scores = self._compute_acquisition(Xpool_active[i], mode=act, blend_string=blend_string[i], model=model, X_train=X_active[i], Y_train=y_active[i])
-                print('debug, mode, scores 10', act, scores[:10])
                 best_idx = np.argmax(scores)
-                print('debug, mode, best idx', best_idx)
                 
                 # Update active set
                 X_active[i] = np.vstack([X_active[i], Xpool_active[i][best_idx:best_idx+1]])
