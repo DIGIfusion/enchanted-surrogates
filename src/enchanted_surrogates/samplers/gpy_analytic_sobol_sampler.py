@@ -1165,6 +1165,7 @@ class GpyAnalyticSobolSampler(Sampler):
         output_col = self.get_output_col()
         batch_0 = data_df[data_df['batch_num']==0]
         Y = batch_0[output_col].to_numpy()
+        # Y = data_df[output_col].to_numpy()
         y_norm = self.normalize_y(Y)
 
     def load_model(self, directory=None):
@@ -1184,7 +1185,7 @@ class GpyAnalyticSobolSampler(Sampler):
             with open(y_mean_path, 'rb') as file:
                 self._y_mean = pickle.load(file)
             with open(y_std_path, 'rb') as file:
-                self._y_std = pickle.load(y_std)
+                self._y_std = pickle.load(file)
 
     def load_noise_model(self, model_path=None, directory=None):
         if model_path == None:
@@ -1623,9 +1624,7 @@ class GpyAnalyticSobolSampler(Sampler):
         print('getting regression test results')
         regression_results = self.get_test_metrics() #self.regression_test()
         
-        X, y = self._get_unitXY(do_normalize_y=self.do_normalize_y)
-        n, D = X.shape
-        batch_info = {'num_samples':n} #{'var_integral':var_integral}
+        batch_info = {'num_samples': self.gp_model.X.shape[0]} #{'var_integral':var_integral}
         if regression_results:
             batch_info = {**batch_info, **uq_results, **regression_results}
         else:
@@ -2368,9 +2367,12 @@ class GpyAnalyticSobolSampler(Sampler):
             self.output_col = output_col[0]
         return self.output_col
 
-    def plot_slices(self):
+    def plot_slices(self, out_dir=None):
         from enchanted_surrogates.samplers.slices_sampler_2d import SlicesSampler2D
-        save_dir = os.path.join(self.base_run_dir, 'slice_plots')
+        if out_dir is None:
+            save_dir = os.path.join(self.base_run_dir, 'slice_plots')
+        else:
+            save_dir = out_dir
         os.makedirs(save_dir, exist_ok=True)
         dim = len(self.parameters)
         budget = (dim*(dim-1) / 2) * self.slices_res**2
