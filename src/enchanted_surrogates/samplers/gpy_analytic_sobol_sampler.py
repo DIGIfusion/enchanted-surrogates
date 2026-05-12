@@ -20,6 +20,43 @@ from enchanted_surrogates.utils.get_batch_dirs import get_batch_dirs
 import GPy
 import copy
 
+# Color‑blind‑safe Okabe–Ito palette
+okabe_ito = [
+    "#000000",  # black
+    "#E69F00",  # orange
+    "#56B4E9",  # sky blue
+    "#009E73",  # bluish green
+    "#F0E442",  # yellow
+    "#0072B2",  # blue
+    "#D55E00",  # vermillion
+    "#CC79A7",  # reddish purple
+]
+
+
+plt.rcParams.update({
+    # Grid defaults
+    "axes.grid": True,            # Always show grid
+    "grid.linestyle": "--",       # Dashed lines
+    "grid.linewidth": 0.5,        # Thin lines
+    "grid.alpha": 0.7,            # Transparency
+    "grid.color": "gray",         # Neutral color
+
+    # Optional: enable minor grid lines too
+    "axes.grid.which": "both"     # Apply to both major and minor ticks
+})
+
+# Defaults optimized for scientific papers
+plt.rcParams.update({
+    "font.size": 10,        # Base font size (body text)
+    "axes.titlesize": 12,   # Axis title (slightly larger for emphasis)
+    "axes.labelsize": 11,   # Axis labels (x/y)
+    "xtick.labelsize": 10,  # Tick labels
+    "ytick.labelsize": 10,  # Tick labels
+    "legend.fontsize": 9,   # Legend text (slightly smaller, but still readable)
+    "legend.title_fontsize": 9,  # Legend title text
+    "figure.titlesize": 13  # Overall figure title
+})
+
 
 # ---------------------------
 # Helper functions: RBF 1D integrals
@@ -56,7 +93,7 @@ class GpyAnalyticSobolSampler(Sampler):
         # configuration
         self.parameters = kwargs.get('parameters')
         self.bounds = kwargs.get('bounds')
-        if not self.parameters and 'sub_sampler_config' in kwargs:
+        if self.parameters and 'sub_sampler_config' in kwargs:
             self.parameters = kwargs['sub_sampler_config'].get('parameters')
         if not self.bounds and 'sub_sampler_config' in kwargs:
             self.bounds = kwargs['sub_sampler_config'].get('bounds')
@@ -85,6 +122,9 @@ class GpyAnalyticSobolSampler(Sampler):
         self.initial_pool_samples_strategy = kwargs.get('initial_pool_samples_strategy', 'random')
         self.seed = kwargs.get('seed', None)
         self.rng = np.random.RandomState(self.seed)
+
+        self.output_name = kwargs.get('output_name', 'Output')
+        self.output_scale = kwargs.get('output_scale', 1)
             
         self.base_run_dir = kwargs.get('base_run_dir')
         self.num_repeats = kwargs.get('num_repeats', 1)
@@ -142,6 +182,8 @@ class GpyAnalyticSobolSampler(Sampler):
         self.noise_variance = None
         self._K_cholesky = None
         self._solve_K = None
+
+        self.fixed_lengthscales = kwargs.get('fixed_lengthscales', None)
 
         # timeouts and misc
         self.write_batch_info_timeout = kwargs.get('write_batch_info_timeout', 5*60)
@@ -383,10 +425,15 @@ class GpyAnalyticSobolSampler(Sampler):
                 # print('debug get_data len(dfi)', len(dfi))
                 dfs.append(dfi)
             if len(dfs) == 0:
-                raise RuntimeError(f'NO DATA FOUND IN ANY BATCH DIRECTORIES | base_run_dir: {self.base_run_dir}')
-            data_df = pd.concat(dfs, axis=0)
-        else:
-            data_df = pd.read_csv(os.path.join(self.base_run_dir, 'enchanted_dataset.csv'), on_bad_lines='warn')
+                warnings.warn(f'NO DATA FOUND IN ANY BATCH DIRECTORIES | base_run_dir: {self.base_run_dir}')
+                dataset_path = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
+                if os.path.exists(dataset_path):
+                    data_df = pd.read_csv(dataset_path, on_bad_lines='warn')
+                else:
+                    raise RuntimeError('No data found')
+            else:
+                data_df = pd.concat(dfs, axis=0)
+            
         if self.output_col is None:
             output_col = [col for col in data_df.columns if 'output' in col]
             self.output_col = output_col[0]
@@ -752,6 +799,22 @@ class GpyAnalyticSobolSampler(Sampler):
                 sem_new=sem_new
             )
 
+        # --- NEW: fix lengthscales if provided ---
+        if self.fixed_lengthscales is not None:
+            # Build an array of lengthscales in the correct input order
+            ls = np.ones(input_dim)
+
+            # Here I assume you have something like self.param_names
+            # that maps input dimension index -> parameter name
+            for i in range(input_dim):
+                pname = self.parameters[i]  # adapt to your actual attribute
+                if pname in self.fixed_lengthscales:
+                    ls[i] = self.fixed_lengthscales[pname]
+
+            # Set and fix the ARD lengthscales
+            kernel.lengthscale[:] = ls
+            kernel.lengthscale.fix()
+
         self.cache_hypers()
         self.cache_K()
 
@@ -775,7 +838,6 @@ class GpyAnalyticSobolSampler(Sampler):
        
         # print("debug std min/max:", np.nanmin(std), np.nanmax(std))
         # print("debug std_err min/max:", np.nanmin(std_err), np.nanmax(std_err))
-unchunked
         # print("debug std == 0 count:", np.sum(std == 0))
         # print("debug std_err nonfinite count:", np.sum(~np.isfinite(std_err)))
 
@@ -1097,16 +1159,41 @@ unchunked
         self.batch_number += 1
         return samples
 
-    def load_model(self, model_path=None, directory=None):
-        if model_path == None:
-            if os.path.exists(os.path.join(directory, 'gpy_model.csv')):
-                model_path = os.path.join(directory, 'gpy_model.csv')
-        
+    def set_standardisation_params(self):
+        dataset_path = os.path.join(self.base_run_dir, 'enchanted_dataset.csv')
+        data_df = pd.read_csv(dataset_path, on_bad_lines='warn')
+        output_col = self.get_output_col()
+        batch_0 = data_df[data_df['batch_num']==0]
+        Y = batch_0[output_col].to_numpy()
+        y_norm = self.normalize_y(Y)
+
+    def load_model(self, directory=None):
+        if directory is None:
+            directory = self.base_run_dir
+        if os.path.exists(os.path.join(directory, 'gpy_model.pkl')):
+            model_path = os.path.join(directory, 'gpy_model.pkl')
+            y_mean_path = os.path.join(directory, 'y_mean.pkl')
+            y_std_path = os.path.join(directory, 'y_std.pkl')
+
         with open(model_path, 'rb') as file:
             self.gp_model = pickle.load(file)
             self.cache_hypers()
             self.cache_K()
-    
+
+        if os.path.exists(y_mean_path):
+            with open(y_mean_path, 'rb') as file:
+                self._y_mean = pickle.load(file)
+            with open(y_std_path, 'rb') as file:
+                self._y_std = pickle.load(y_std)
+
+    def load_noise_model(self, model_path=None, directory=None):
+        if model_path == None:
+            if os.path.exists(os.path.join(directory, 'gpy_noise_model.pkl')):
+                model_path = os.path.join(directory, 'gpy_noise_model.pkl')
+        
+        with open(model_path, 'rb') as file:
+            self.noise_gp = pickle.load(file)
+            
     def cache_hypers(self):
         try:
             self.kernel_variance = float(self.gp_model.kern.variance.values[0])
@@ -2038,13 +2125,14 @@ unchunked
 
         return result
 
-    def residuals_plot(self):
+    def residuals_plot(self, out_dir=None):
         import matplotlib.pyplot as plt
         import numpy as np
         import os
         import pandas as pd
 
-        out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
+        if out_dir is None:
+            out_dir = os.path.join(self.base_run_dir, 'residuals_plots')
         os.makedirs(out_dir, exist_ok=True)
 
         result = self.get_test_metrics()
@@ -2063,7 +2151,7 @@ unchunked
         y_pred, _ = self.surrogate_predict(X_test_unique)
 
         # Compute residuals
-        residuals = y_test_unique - y_pred
+        residuals = y_pred - y_test_unique
 
 
         # Extract GPy lengthscales
@@ -2094,41 +2182,58 @@ unchunked
 
         # Residuals
         ax = axes[0]
-        hb = ax.hexbin(y_test_unique, residuals, gridsize=40, cmap="viridis", mincnt=1)
+        hb = ax.hexbin(y_test_unique*self.output_scale, residuals*self.output_scale, gridsize=100, cmap="viridis", mincnt=1)
         cb = fig.colorbar(hb, ax=ax)
         cb.set_label("Count")
-        ax.set_xlabel("y_test")
-        ax.set_ylabel("Residuals (y_test - y_pred)")
-        ax.set_title("Residuals")
+        ax.set_xlabel(f"{self.output_name}, Test")
+        ax.set_ylabel(f"{self.output_name}, (Pred - Test)")
+        # ax.set_title("Residuals")
+
+        ax.minorticks_on()
+        # Minor grid override (must be per-axis)
+        ax.grid(which="minor", linestyle=":", linewidth=0.3, alpha=0.4)
+
 
         # True vs Predicted
         ax2 = axes[1]
-        hb2 = ax2.hexbin(y_test_unique, y_pred, gridsize=40, cmap="viridis", mincnt=1)
+        hb2 = ax2.hexbin(y_test_unique*self.output_scale, y_pred*self.output_scale, gridsize=100, cmap="viridis", mincnt=1)
         # y = x reference line
-        min_val = min(np.min(y_test_unique), np.min(y_pred))
-        max_val = max(np.max(y_test_unique), np.max(y_pred))
-        ax2.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)
+        min_val = min(np.min(y_test_unique*self.output_scale), np.min(y_pred*self.output_scale))
+        max_val = max(np.max(y_test_unique*self.output_scale), np.max(y_pred*self.output_scale))
+        ax2.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1, color=okabe_ito[0])
+
+        ax2.minorticks_on()
+        # Minor grid override (must be per-axis)
+        ax2.grid(which="minor", linestyle=":", linewidth=0.3, alpha=0.4)
 
         cb2 = fig.colorbar(hb2, ax=ax2)
         cb2.set_label("Count")
-        ax2.set_xlabel("y_test")
-        ax2.set_ylabel("y_pred")
-        ax2.set_title("True vs Predicted")
+        ax2.set_xlabel(f"{self.output_name}, Test")
+        ax2.set_ylabel(f"{self.output_name}, Pred")
+        # ax2.set_title("True vs Predicted")
 
-        fig.suptitle(
-            f"Residuals & True-vs-Predicted (TEST)\n"
-            f"Lengthscales: {ls_str}\n"
-            f"RMSE={rmse_test:.4g}, R²={r2_test:.4g}, MAPE={mape_test:.3g}%",
-            fontsize=10
-        )
+        title_dict = {
+            "header": "Residuals & True-vs-Predicted (TEST)",
+            "lengthscales": ls_str,
+            "RMSE": float(f"{rmse_test:.4g}"),
+            "R2": float(f"{r2_test:.4g}"),
+            "MAPE_percent": float(f"{mape_test:.3g}")
+        }
+
         fig.tight_layout(rect=[0, 0, 1, 0.92])
-
         # Save test-data plot
         X_train_real, y_train_real = self.get_data()
         n, D = X_train_real.shape
         out_path = os.path.join(out_dir, f"residuals_train-{n}.png")
         print("saving residuals plot to:", out_path)
         fig.savefig(out_path, dpi=300, bbox_inches="tight")
+
+        out_path = os.path.join(out_dir, f"residuals_train-{n}.txt")
+
+        with open(out_path, "w") as f:
+            for key, value in title_dict.items():
+                f.write(f"{key}: {value}\n")
+
 
         # ============================================================
         # PLOT 2 — TRAINING DATA (new behavior)
@@ -2204,6 +2309,10 @@ unchunked
     def save_model(self):
         with open(os.path.join(self.base_run_dir, 'gpy_model.pkl'), 'wb') as f:
             pickle.dump(self.gp_model, f)
+        with open(os.path.join(self.base_run_dir, 'y_std.pkl'), 'wb') as file:
+            pickle.dump(self._y_std, file)
+        with open(os.path.join(self.base_run_dir, 'y_mean.pkl'), 'wb') as file:
+            pickle.dump(self._y_mean, file)    
         with open(os.path.join(self.base_run_dir, 'gpy_noise_model.pkl'), 'wb') as f:
             pickle.dump(self.noise_gp, f)
 
