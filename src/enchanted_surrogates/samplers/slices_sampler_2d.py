@@ -3,8 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+        
+plt.rcParams['axes.labelsize'] = 13
+plt.rcParams['xtick.labelsize'] = 13
+plt.rcParams['ytick.labelsize'] = 13
+plt.rcParams['font.size'] = 18
 
-plt.rcParams.update({'font.size': 15})
 
 from enchanted_surrogates.samplers.base_sampler import Sampler
 
@@ -47,8 +53,11 @@ class SlicesSampler2D(Sampler):
 
         return dots_dict, pred_dict
 
-    def __init__(self, parameters, bounds, base_run_dir=None, res=50, fixed=None, budget=100000, type='SlicesSampler2D', dot_alpha=0.7, elev_3d=70, azim_3d=200):
+    def __init__(self, parameters, bounds, base_run_dir=None, res=50, fixed=None, budget=100000, type='SlicesSampler2D', dot_alpha=0.7, elev_3d=60, azim_3d=-95, parameters_labels=None):
         self.parameters = parameters
+        self.parameters_labels = parameters_labels
+        if self.parameters_labels is None:
+            self.parameters_labels = {p:p for p in self.parameters}
         self.bounds = bounds
         self.base_run_dir = base_run_dir
         self.res = res
@@ -244,8 +253,6 @@ class SlicesSampler2D(Sampler):
                 cs = ax1.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
                 ax1.set_aspect('equal')
                 ax1.set_box_aspect(1)
-                ax1.set_xlabel(self.parameters[i])
-                ax1.set_ylabel(self.parameters[j])
 
                 # MULTI-DOTS SUPPORT (2D)
                 legend_handles = []
@@ -309,7 +316,7 @@ class SlicesSampler2D(Sampler):
     # -------------------------------------------------------------------------
     def plot_full_grid(self, cmap='viridis', surface_alpha=0.9,
                        dataset_path=None, df=None, name='',
-                       dots_x=None, predictor=None, save_dir=None):
+                       dots_x=None, predictor=None, error_predictor=None, save_dir=None, output_name=None, do_3d=True):
 
         dots_dict, pred_dict = self._normalize_dict_inputs(dots_x, predictor)
 
@@ -322,11 +329,13 @@ class SlicesSampler2D(Sampler):
 
         output_col = [c for c in df.columns if 'output' in c]
         ycol = output_col[0]
+        if output_name is None:
+            output_name = y_col
         ymin, ymax = df[ycol].min(), df[ycol].max()
 
         d = len(self.parameters)
-        base_size = 4
-        fig, axes = plt.subplots(d, d, figsize=(base_size*d, base_size*d))
+        # base_size = 4
+        fig, axes = plt.subplots(d, d, figsize=(6.5, 6.5))
 
         for i in range(d):
             xi_lin = np.linspace(self.bounds[i][0], self.bounds[i][1], self.res)
@@ -361,7 +370,7 @@ class SlicesSampler2D(Sampler):
                     yvals = np.array(yvals)
                     yvals[yvals == 0.0] = np.nan
 
-                    ax.plot(xi_lin, yvals, '-', color='tab:blue', linewidth=1.5, label="dataset")
+                    # ax.plot(xi_lin, yvals, '-', color='tab:blue', linewidth=1.5)
 
                     # MULTI-PREDICTOR SUPPORT
                     for idx, (label, pred_fn) in enumerate(pred_dict.items()):
@@ -370,13 +379,15 @@ class SlicesSampler2D(Sampler):
                             for xi in xi_lin
                         ])
                         y_pred = pred_fn(to_predict)
+                        if label in error_predictor:
+                            y_error = error_predictor[label](to_predict)
+                            ax.fill_between(xi_lin, y_pred-y_error, y_pred+y_error)
 
                         ax.plot(
                             xi_lin, y_pred,
                             linestyle=self.LINESTYLES[idx % len(self.LINESTYLES)],
                             color=self.COLORS[idx % len(self.COLORS)],
                             linewidth=2,
-                            label=label
                         )
 
                     # # MULTI-DOTS SUPPORT
@@ -387,11 +398,11 @@ class SlicesSampler2D(Sampler):
                     #                color=self.COLORS[idx % len(self.COLORS)],
                     #                label=label)
 
-                    ax.set_xlabel(p)
+                    ax.set_xlabel(self.parameters_labels[p])
                     if i == 0:
-                        ax.set_ylabel(ycol)
+                        ax.set_ylabel(output_name)
                     ax.grid(True, alpha=0.3)
-                    ax.legend()
+                    # ax.legend()
 
                 # ------------------------------------------------------------------
                 # UPPER TRIANGLE: 2D CONTOUR
@@ -411,71 +422,323 @@ class SlicesSampler2D(Sampler):
                     Z=self._zero_to_nan(Z)
                     cs = ax.contourf(Xi, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
                     ax.set_box_aspect(1)
-                    ax.set_xlabel(self.parameters[i])
-                    ax.set_ylabel(self.parameters[j])
+                    ax.set_xlabel(self.parameters_labels[self.parameters[i]])
+                    ax.set_ylabel(self.parameters_labels[self.parameters[j]])
 
                     # MULTI-DOTS SUPPORT
                     for idx, (label, arr) in enumerate(dots_dict.items()):
                         arr = np.asarray(arr)
-                        ax.scatter(arr.T[i], arr.T[j],
-                                   marker=self.MARKERS[idx % len(self.MARKERS)],
-                                   color=self.COLORS[idx % len(self.COLORS)],
-                                   label=label, 
-                                   alpha=self.dot_alpha)
+                        ax.scatter(
+                            arr.T[i], arr.T[j],
+                            marker='o',
+                            facecolors='none',          # no fill
+                            edgecolors=self.COLORS[idx % len(self.COLORS)],  # thin outline color
+                            linewidths=0.7,             # thin circle edge
+                            label=label,
+                            alpha=self.dot_alpha
+                        )
 
                 # ------------------------------------------------------------------
                 # LOWER TRIANGLE: 3D SURFACE
                 # ------------------------------------------------------------------
                 else:
                     ax.remove()
-                    ax3d = fig.add_subplot(d, d, i*d+j+1, projection='3d')
+                    if do_3d:
+                        ax3d = fig.add_subplot(d, d, i*d+j+1, projection='3d')
 
-                    Xi, Yi = np.meshgrid(xi_lin, yi_lin)
-                    Z = np.zeros_like(Xi)
-                    for u in range(self.res):
-                        for v in range(self.res):
-                            mask = (
-                                (np.isclose(df[self.parameters[i]], Xi[u,v], atol=1e-6)) &
-                                (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
+                        Xi, Yi = np.meshgrid(xi_lin, yi_lin)
+                        Z = np.zeros_like(Xi)
+                        for u in range(self.res):
+                            for v in range(self.res):
+                                mask = (
+                                    (np.isclose(df[self.parameters[i]], Xi[u,v], atol=1e-6)) &
+                                    (np.isclose(df[self.parameters[j]], Yi[u,v], atol=1e-6))
+                                )
+                                vals = df.loc[mask, ycol].values
+                                Z[u,v] = vals[0] if len(vals) else np.nan
+
+                        Z=self._zero_to_nan(Z)
+                        ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha,
+                                        vmin=ymin, vmax=ymax)
+                        
+                        # Set rotation angle here 
+                        ax3d.view_init(elev=self.elev_3d, azim=self.azim_3d) # <-- change these numbers
+
+
+                        z_floor = float(np.nanmin(Z))
+
+                        # MULTI-DOTS SUPPORT
+                        for idx, (label, arr) in enumerate(dots_dict.items()):
+                            arr = np.asarray(arr)
+                            ax3d.scatter(
+                                arr.T[i], arr.T[j],
+                                marker='o',
+                                facecolors='none',          # no fill
+                                edgecolors=self.COLORS[idx % len(self.COLORS)],  # thin outline color
+                                linewidths=0.7,             # thin circle edge
+                                label=label,
+                                alpha=self.dot_alpha
                             )
-                            vals = df.loc[mask, ycol].values
-                            Z[u,v] = vals[0] if len(vals) else np.nan
 
-                    Z=self._zero_to_nan(Z)
-                    ax3d.plot_surface(Xi, Yi, Z, cmap=cmap, alpha=surface_alpha,
-                                      vmin=ymin, vmax=ymax)
-                    
-                    # Set rotation angle here 
-                    ax3d.view_init(elev=self.elev_3d, azim=self.azim_3d) # <-- change these numbers
-
-
-                    z_floor = float(np.nanmin(Z))
-
-                    # MULTI-DOTS SUPPORT
-                    for idx, (label, arr) in enumerate(dots_dict.items()):
-                        arr = np.asarray(arr)
-                        ax3d.scatter(arr.T[i], arr.T[j], zs=z_floor, zdir='z',
-                                     s=20,
-                                     marker=self.MARKERS[idx % len(self.MARKERS)],
-                                     color=self.COLORS[idx % len(self.COLORS)],
-                                     label=label, alpha=self.dot_alpha)
-
-                    ax3d.set_xlabel(self.parameters[i])
-                    ax3d.set_ylabel(self.parameters[j])
+                        ax3d.set_xlabel(self.parameters_labels[self.parameters[i]])
+                        ax3d.set_ylabel(self.parameters_labels[self.parameters[j]])
 
         # COLORBAR
-        cbar_ax = fig.add_axes([0.01, 0.02, 0.02, 0.7])
+        fig.subplots_adjust(right=0.83)   # shrink subplots to leave space on the right
+        cbar_ax = fig.add_axes([0.86, 0.02, 0.03, 0.90])
         import matplotlib.cm as cm
         import matplotlib.colors as mcolors
         norm = mcolors.Normalize(vmin=ymin, vmax=ymax)
         sm = cm.ScalarMappable(norm=norm, cmap=cmap)
         sm.set_array([])
         cbar = fig.colorbar(sm, cax=cbar_ax)
-        cbar.set_label(ycol)
+        cbar.set_label(output_name)
 
-        fig.subplots_adjust(wspace=0.7, hspace=0.7)
+        fig.subplots_adjust(wspace=0.9, hspace=0.9)
         fig.savefig(os.path.join(save_dir, name + f"slices_full_grid_{ycol}.png"), dpi=300)
         plt.close(fig)
+
+    def plot_full_grid2(
+        self, cmap='viridis', surface_alpha=0.9,
+        dataset_path=None, df=None, name='',
+        dots_x=None, predictor=None, error_predictor=None,
+        save_dir=None, output_name=None, do_3d=True
+    ):
+        """
+        Cleaner, more readable version of your full-grid slice plotter.
+        - No axis numbers
+        - Parameter labels shown only once per row/column
+        """
+
+        # ------------------------------------------------------------
+        # INPUT NORMALIZATION
+        # ------------------------------------------------------------
+        dots_dict, pred_dict = self._normalize_dict_inputs(dots_x, predictor)
+
+        if save_dir is None:
+            save_dir = self.base_run_dir
+
+        if df is None:
+            dataset_path = os.path.join(self.base_run_dir, "enchanted_dataset.csv")
+            df = pd.read_csv(dataset_path)
+
+        # Output column
+        ycol = [c for c in df.columns if 'output' in c][0]
+        if output_name is None:
+            output_name = ycol
+
+        ymin, ymax = df[ycol].min(), df[ycol].max()
+
+        # ------------------------------------------------------------
+        # FIGURE SETUP
+        # ------------------------------------------------------------
+        d = len(self.parameters)
+        fig, axes = plt.subplots(d, d, figsize=(7, 7))
+
+        # Precompute linspaces
+        linspaces = [
+            np.linspace(self.bounds[i][0], self.bounds[i][1], self.res)
+            for i in range(d)
+        ]
+
+        # ------------------------------------------------------------
+        # MAIN GRID LOOP
+        # ------------------------------------------------------------
+        for i in range(d):
+            yi = linspaces[i]
+
+            for j in range(d):
+                ax = axes[i, j]
+                xj = linspaces[j]
+
+                # Remove tick labels everywhere
+                ax.set_xticklabels([])
+                ax.set_yticklabels([])
+                ax.tick_params(left=False, bottom=False)
+
+                # --------------------------------------------------------
+                # DIAGONAL → 1D SLICES
+                # --------------------------------------------------------
+                if i == j:
+                    p = self.parameters[i]
+
+                    # Fix all other parameters at midpoints
+                    fixed_vals = {}
+                    for k, q in enumerate(self.parameters):
+                        if k == i:
+                            continue
+                        mid = 0.5 * (self.bounds[k][0] + self.bounds[k][1])
+                        vals = df[q].unique()
+                        fixed_vals[q] = float(vals[np.argmin(np.abs(vals - mid))]) if vals.size else mid
+                    ax.set_ylim(ymin, ymax)
+                    # # Extract closest dataset values
+                    # yvals = []
+                    # for yv in yi:
+                    #     vals_p = df[p].unique()
+                    #     xv_closest = float(vals_p[np.argmin(np.abs(vals_p - xv))]) if vals_p.size else xv
+
+                    #     diffs = np.abs(df[p] - xv_closest)
+                    #     for q, val in fixed_vals.items():
+                    #         diffs += np.abs(df[q] - val)
+
+                    #     idx = np.argmin(diffs.values)
+                    #     yvals.append(float(df.iloc[idx][ycol]))
+
+                    # yvals = np.array(yvals)
+                    # yvals[yvals == 0.0] = np.nan
+
+                    # Predictor curves
+                    for idx, (label, pred_fn) in enumerate(pred_dict.items()):
+                        X = np.array([
+                            [fixed_vals[q] if q in fixed_vals else x for q in self.parameters]
+                            for x in yi
+                        ])
+                        y_pred = pred_fn(X)
+
+                        if label in error_predictor:
+                            y_err = error_predictor[label](X)
+                            ax.fill_between(yi, y_pred - y_err, y_pred + y_err, alpha=0.2)
+
+                        ax.plot(
+                            yi, y_pred,
+                            linestyle=self.LINESTYLES[idx % len(self.LINESTYLES)],
+                            color=self.COLORS[idx % len(self.COLORS)],
+                            linewidth=2,
+                        )
+
+                # --------------------------------------------------------
+                # Lower TRIANGLE → 2D CONTOUR
+                # --------------------------------------------------------
+                elif i > j:
+                    Xj, Yi = np.meshgrid(xj, yi)
+                    Z = np.full_like(Xj, np.nan)
+
+                    for u in range(self.res):
+                        for v in range(self.res):
+                            mask = (
+                                np.isclose(df[self.parameters[j]], Xj[u, v], atol=1e-6) &
+                                np.isclose(df[self.parameters[i]], Yi[u, v], atol=1e-6)
+                            )
+                            vals = df.loc[mask, ycol].values
+                            if len(vals):
+                                Z[u, v] = vals[0]
+
+                    Z = self._zero_to_nan(Z)
+                    ax.contourf(Xj, Yi, Z, cmap=cmap, vmin=ymin, vmax=ymax)
+                    ax.set_box_aspect(1)
+
+                    # dots
+                    for idx, (label, arr) in enumerate(dots_dict.items()):
+                        arr = np.asarray(arr)
+                        ax.scatter(
+                            arr.T[j], arr.T[i],
+                            marker='o',
+                            facecolors='none',
+                            edgecolors=self.COLORS[idx % len(self.COLORS)],
+                            linewidths=0.7,
+                            alpha=self.dot_alpha,
+                        )
+                    # ax.set_xlabel(self.parameters[j])
+                    # ax.set_ylabel(self.parameters[i])
+                # --------------------------------------------------------
+                # Upper TRIANGLE → 3D SURFACE
+                # --------------------------------------------------------
+                else:
+                    ax.remove()
+                    if not do_3d:
+                        continue
+
+                    ax3d = fig.add_subplot(d, d, i * d + j + 1, projection='3d')
+                    ax3d.set_xticks([]); ax3d.set_yticks([]); ax3d.set_zticks([])
+                    ax3d.set_xlabel(''); ax3d.set_ylabel(''); ax3d.set_zlabel('')
+                    ax3d.xaxis.set_ticks([]); ax3d.yaxis.set_ticks([]); ax3d.zaxis.set_ticks([])
+
+                    Xj, Yi = np.meshgrid(xj, yi)
+                    Z = np.full_like(Xj, np.nan)
+
+                    for u in range(self.res):
+                        for v in range(self.res):
+                            mask = (
+                                np.isclose(df[self.parameters[j]], Xj[u, v], atol=1e-6) &
+                                np.isclose(df[self.parameters[i]], Yi[u, v], atol=1e-6)
+                            )
+                            vals = df.loc[mask, ycol].values
+                            if len(vals):
+                                Z[u, v] = vals[0]
+
+                    Z = self._zero_to_nan(Z)
+
+                    ax3d.plot_surface(Xj, Yi, Z, cmap=cmap, alpha=surface_alpha,
+                                    vmin=ymin, vmax=ymax, zorder=100)
+                    ax3d.view_init(elev=self.elev_3d, azim=self.azim_3d)
+                    # ax3d.set_xlabel(self.parameters[j])
+                    # ax3d.set_ylabel(self.parameters[i])
+
+                    # # Dots
+                    # for idx, (label, arr) in enumerate(dots_dict.items()):
+                    #     arr = np.asarray(arr)
+                    #     ax3d.scatter(
+                    #         arr.T[i], arr.T[j],
+                    #         marker='o',
+                    #         facecolors='none',
+                    #         edgecolors=self.COLORS[idx % len(self.COLORS)],
+                    #         linewidths=0.7,
+                    #         alpha=self.dot_alpha,
+                    #     )
+
+                    ax = axes[i, j]
+
+                    # Remove tick labels everywhere
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.tick_params(left=False, bottom=False)
+        # ------------------------------------------------------------
+        # MANUAL ROW/COLUMN LABELS
+        # ------------------------------------------------------------
+        # ------------------------------------------------------------
+        # MANUAL ROW/COLUMN LABELS (adjusted for colorbar)
+        # ------------------------------------------------------------
+
+        plot_left   = 0.10      # left margin of grid
+        plot_bottom = 0.10      # bottom margin of grid
+        plot_width  = 0.83 - plot_left   # width before colorbar
+        plot_height = 0.90 - plot_bottom # height of grid
+
+        # Column labels (bottom)
+        for j in range(d):
+            fig.text(
+                plot_left + (j + 0.5) * (plot_width / d),
+                0.06,   # bottom margin stays the same
+                self.parameters_labels[self.parameters[j]],
+                ha='center', va='center'
+            )
+
+        # Row labels (left)
+        for i in range(d):
+            fig.text(
+                0.04,   # left margin stays the same
+                plot_bottom + (d - i - 0.5) * (plot_height / d),
+                self.parameters_labels[self.parameters[i]],
+                ha='center', va='center', rotation=90
+            )
+
+        # ------------------------------------------------------------
+        # COLORBAR
+        # ------------------------------------------------------------
+        fig.subplots_adjust(right=0.83)
+        cbar_ax = fig.add_axes([0.86, 0.02, 0.03, 0.90])
+
+        norm = mcolors.Normalize(vmin=ymin, vmax=ymax)
+        sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+
+        cbar = fig.colorbar(sm, cax=cbar_ax)
+        cbar.set_label(output_name)
+
+        fig.subplots_adjust(wspace=0.1, hspace=0.1)
+        fig.savefig(os.path.join(save_dir, name + f"slices_full_grid_{ycol}.png"), dpi=300)
+        plt.close(fig)
+
 
     def _zero_to_nan(self, arr):
         arr = np.asarray(arr, dtype=float)

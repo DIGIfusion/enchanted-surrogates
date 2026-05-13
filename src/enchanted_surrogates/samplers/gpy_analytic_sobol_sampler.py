@@ -102,6 +102,8 @@ class GpyAnalyticSobolSampler(Sampler):
         if len(self.parameters) != len(self.bounds):
             raise ValueError('The number of bounds and parameters must match.')
 
+        self.parameters_labels = kwargs.get('parameters_labels', {p:p for p in self.parameters})
+
         self.do_residuals_plot = kwargs.get('do_residuals_plot', False)
         # store scaling factors
         self._lb = np.array([b[0] for b in self.bounds], dtype=float)
@@ -124,6 +126,7 @@ class GpyAnalyticSobolSampler(Sampler):
         self.rng = np.random.RandomState(self.seed)
 
         self.output_name = kwargs.get('output_name', 'Output')
+        self.long_output_name = kwargs.get('long_output_name', self.output_name)
         self.output_scale = kwargs.get('output_scale', 1)
             
         self.base_run_dir = kwargs.get('base_run_dir')
@@ -2377,7 +2380,7 @@ class GpyAnalyticSobolSampler(Sampler):
         dim = len(self.parameters)
         budget = (dim*(dim-1) / 2) * self.slices_res**2
         # res = int(budget / (dim*(dim-1) / 2))
-        slice_samp = SlicesSampler2D(parameters=self.parameters, bounds=self.bounds, base_run_dir=save_dir, res=self.slices_res, budget=budget)
+        slice_samp = SlicesSampler2D(parameters=self.parameters, bounds=self.bounds, base_run_dir=save_dir, res=self.slices_res, budget=budget, parameters_labels=self.parameters_labels)
         samples = slice_samp.get_samples()
         df = pd.DataFrame(samples)
         X_slice = df[self.parameters].to_numpy()
@@ -2387,18 +2390,40 @@ class GpyAnalyticSobolSampler(Sampler):
         if self.output_col is None:
             self.set_output_col()
         
-        df_plot[self.output_col+'_noise_output'] = Y_slice_noise
-        df_plot[self.output_col.replace('output','')+'_noise_outerror'] = Y_slice_noise_error
-        slice_samp.plot_full_grid(df=df_plot, name=f'{self.output_col}_gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.noise_gp.X))
+        df_plot[self.output_col+'_noise_output'] = Y_slice_noise*self.output_scale
+        df_plot[self.output_col.replace('output','')+'_noise_outerror'] = Y_slice_noise_error * self.output_scale
+        
+        def predictor(X):
+            y, y_er = self.predict_noise(X)
+            return y*self.output_scale
+        def er_pred(X):
+            y, y_er = self.predict_noise(X)
+            return y_er*self.output_scale
+
+        predictor = {'pred':predictor}
+        error_predictor = {'pred':er_pred}
+
+        slice_samp.plot_full_grid2(df=df_plot, name=f'{self.output_col}_gpy_noise_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.noise_gp.X), predictor=predictor, error_predictor=error_predictor, output_name = 'Noise '+self.long_output_name, do_3d=True)
 
         df_plot = pd.DataFrame(samples)
         if not 'output' in self.output_col:
             out_label = self.output_col+'_output'
         else:
             out_label = self.output_col
-        df_plot[out_label] = Y_slice
+        df_plot[out_label] = Y_slice*self.output_scale
         df_plot[out_label.replace('output', '')+'_outerror'] = Y_error
-        slice_samp.plot_full_grid(df=df_plot, name=f'{self.output_col}_gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.gp_model.X))
+
+        def predictor(X):
+            y, y_er = self.surrogate_predict(X)
+            return y*self.output_scale
+        def er_pred(X):
+            y, y_er = self.surrogate_predict(X)
+            return y_er*self.output_scale
+
+        predictor = {'pred':predictor}
+        error_predictor = {'pred':er_pred}
+
+        slice_samp.plot_full_grid2(df=df_plot, name=f'{self.output_col}_gpy_N{self.gp_model.X.shape[0]*self.num_repeats}_', dots_x=self.from_unit(self.gp_model.X), predictor=predictor, error_predictor=error_predictor, output_name = self.long_output_name, do_3d=True)
 
     def plot_threshold_histograms_grid(self, threshold, res=20, bins=20):
         from enchanted_surrogates.samplers.grid_sampler import GridSampler
