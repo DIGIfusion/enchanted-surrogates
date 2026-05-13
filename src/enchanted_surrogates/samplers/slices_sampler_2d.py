@@ -725,8 +725,8 @@ class SlicesSampler2D(Sampler):
         # ------------------------------------------------------------
         # COLORBAR
         # ------------------------------------------------------------
-        fig.subplots_adjust(right=0.83)
-        cbar_ax = fig.add_axes([0.86, 0.02, 0.03, 0.90])
+        fig.subplots_adjust(right=0.80)
+        cbar_ax = fig.add_axes([0.83, 0.02, 0.03, 0.90])
 
         norm = mcolors.Normalize(vmin=ymin, vmax=ymax)
         sm = cm.ScalarMappable(norm=norm, cmap=cmap)
