@@ -697,7 +697,6 @@ Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
                         str(run_group.runners[j].get("type")),
                     )
 
-
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
         Deletes files according to command given.
