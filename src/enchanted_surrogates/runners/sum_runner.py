@@ -5,10 +5,6 @@ from enchanted_surrogates.utils.logger import get_logger
 log = get_logger(__name__)
 
 class SumRunner(Runner):
-<<<<<<< HEAD
-    def __init__(self, params_to_sum: list[str], **kwargs):
-        self.params_to_sum = params_to_sum
-=======
     """
     Example runner for sequential (or nested) workflows. Sums parameters together.
     
@@ -33,15 +29,11 @@ class SumRunner(Runner):
         """
         self.params_to_sum = params_to_sum
         self.fail_if = kwargs.get("fail_if", None)
->>>>>>> develop
 
     def single_code_run(self, run_dir: str, params: dict = None) -> dict:
         """
         Sums all params together (if they are in the list given to init function).
-<<<<<<< HEAD
-=======
         Also writes all the parameters received as input into a text file.
->>>>>>> develop
 
         Args:
             run_dir (str): Run directory of this instance
@@ -61,19 +53,11 @@ class SumRunner(Runner):
             out_file.write(str(params))
 
         output: float = 0.0
-<<<<<<< HEAD
-=======
         success = True
->>>>>>> develop
         for key, value in params.items():
             if key in self.params_to_sum:
                 output += value
 
-<<<<<<< HEAD
-        return {
-            "output": output,
-            "success": True
-=======
         epsilon = 0.25
         if self.fail_if and abs(output - self.fail_if) < epsilon:
             success = False
@@ -81,5 +65,4 @@ class SumRunner(Runner):
         return {
             "output": output,
             "success": success
->>>>>>> develop
         }

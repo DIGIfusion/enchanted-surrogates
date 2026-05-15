@@ -8,6 +8,8 @@ import traceback
 
 import math
 
+import dask
+
 from joblib import Parallel, delayed
 from sklearn.neighbors import KDTree
 from scipy.stats import norm
@@ -42,7 +44,7 @@ vars_of_interest = [
 
 for v in vars_of_interest:
     if v in os.environ:
-        print(f"{v} = {os.environ[v]}")
+        print(f"{v} = {os.environ[v]}")             
 
 # Set the number of threads for intra-op parallelism (math operations)
 
@@ -105,38 +107,39 @@ def _get_alpha_from_matern_nu(nu, lengthscale):
         raise ValueError(f"Matern {nu} not supported for analytical integral.")
 
 def exp_1d_integral_between(xi, lengthscale, a, b):
+    import math
     # xi, lengthscale, a, b are scalars
-    l = float(lengthscale) # Ensure float for math lib
+    lens = float(lengthscale) # Ensure float for math lib
     xi_f = float(xi)
     a_f = float(a)
     b_f = float(b)
     # Using float() to ensure compatibility with math module
     return (
-        2 * l
-        - l * math.exp(-(xi_f - a_f) / l)
-        - l * math.exp(-(b_f - xi_f) / l)
+        2 * lens
+        - lens * math.exp(-(xi_f - a_f) / lens)
+        - lens * math.exp(-(b_f - xi_f) / lens)
     )
 
 def exp_1d_double_integral(xi, xj, lengthscale, a, b):
     # xi, xj, lengthscale, a, b are scalars
-    l = float(lengthscale)
+    lens = float(lengthscale)
     xi_f = float(xi)
     xj_f = float(xj)
     a_f = float(a)
     b_f = float(b)
     r = abs(xi_f - xj_f)
     return (
-        2 * l * math.exp(-r / l)
-        - l * math.exp(-(r + 2 * (b_f - a_f)) / l)
+        2 * lens * math.exp(-r / lens)
+        - lens * math.exp(-(r + 2 * (b_f - a_f)) / lens)
     )
 
 def matern32_1d_integral_between(xi, lengthscale, a, b):
     # xi, lengthscale, a, b are scalars
-    l = float(lengthscale)
+    lens = float(lengthscale)
     xi_f = float(xi)
     a_f = float(a)
     b_f = float(b)
-    alpha = math.sqrt(3) / l
+    alpha = math.sqrt(3) / lens
 
     def F(t_val):
         t_val_f = float(t_val)
@@ -148,13 +151,13 @@ def matern32_1d_integral_between(xi, lengthscale, a, b):
 
 def matern32_1d_double_integral(xi, xj, lengthscale, a, b):
     # xi, xj, lengthscale, a, b are scalars
-    l = float(lengthscale)
+    lens = float(lengthscale)
     xi_f = float(xi)
     xj_f = float(xj)
     a_f = float(a)
     b_f = float(b)
 
-    alpha = math.sqrt(3) / l
+    alpha = math.sqrt(3) / lens
     r = abs(xi_f - xj_f)
     term1 = (2 / alpha + 4 / (alpha**3)) * math.exp(-alpha * r)
     term2 = (1 / alpha + 2 / (alpha**3)) * math.exp(-alpha * (r + 2 * (b_f - a_f)))
@@ -162,12 +165,12 @@ def matern32_1d_double_integral(xi, xj, lengthscale, a, b):
 
 def matern52_1d_integral_between(xi, lengthscale, a, b):
     # xi, lengthscale, a, b are scalars
-    l = float(lengthscale)
+    lens = float(lengthscale)
     xi_f = float(xi)
     a_f = float(a)
     b_f = float(b)
 
-    alpha = math.sqrt(5) / l
+    alpha = math.sqrt(5) / lens
 
     def P(t_val):
         t_val_f = float(t_val)
@@ -184,13 +187,13 @@ def matern52_1d_integral_between(xi, lengthscale, a, b):
 
 def matern52_1d_double_integral(xi, xj, lengthscale, a, b):
     # xi, xj, lengthscale, a, b are scalars
-    l = float(lengthscale)
+    lens = float(lengthscale)
     xi_f = float(xi)
     xj_f = float(xj)
     a_f = float(a)
     b_f = float(b)
 
-    alpha = math.sqrt(5) / l
+    alpha = math.sqrt(5) / lens
     r = abs(xi_f - xj_f)
 
     # Compact closed form:
@@ -1069,7 +1072,7 @@ class GpyTorchActiveSampler(Sampler):
 
         # Initialize I as outputscale (variance) if using ScaleKernel, else 1.0
         outputscale, _, _ = self._get_normalized_hypers()
-        I = torch.full((n,), float(outputscale), dtype=self.dtype, device=self.device)
+        I_ = torch.full((n,), float(outputscale), dtype=self.dtype, device=self.device)
 
         for d in range(D):
             xi_d_scalars = X_unit[:, d].cpu().numpy() # Convert to numpy for scalar loop in math-based integrals
@@ -1088,9 +1091,9 @@ class GpyTorchActiveSampler(Sampler):
                 I_d_list = [single_integral_func(xi_val, ls, a, b) for xi_val in xi_d_scalars]
             
             I_d = torch.tensor(I_d_list, dtype=self.dtype, device=self.device)
-            I *= I_d
+            I_ *= I_d
         
-        return I
+        return I_
 
     def _integral_kk_over_domain(self, X_unit: torch.Tensor):
         """
