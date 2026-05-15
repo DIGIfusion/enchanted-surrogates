@@ -124,6 +124,7 @@ class Supervisor:
         last_complete_dataset = pd.DataFrame()
 
         for depth, group in enumerate(self.nested_groups):
+            log.debug(f'At depth {depth} with sampler {group.sampler} and executors {group.executors} and runners {group.runners}')
             batch_number = 0
             batch_dataset = pd.DataFrame()
 
@@ -144,7 +145,12 @@ class Supervisor:
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
-                if samples is None or group.sampler.submitted > group.sampler.budget:
+                if samples is None:
+                    log.debug('Sampler returned None.')
+                    break
+                
+                if group.sampler.submitted > group.sampler.budget:
+                    log.debug('Budget Exceeded')
                     break
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
@@ -164,6 +170,7 @@ class Supervisor:
                     executor.execute(list(zip(run_dirs, expanded)), runner)
 
                     # monitor runs for failures and update progress file
+                
                     self.write_current_progress_string(depth, batch_number, len(run_dirs), 0, 0)
                     self.monitor_runs(run_dirs, depth = depth, batch_number = batch_number)
                     
@@ -180,8 +187,11 @@ class Supervisor:
                     self.write_summary(df_batch, write_mode="w")
                 else:
                     self.write_summary(df_batch, write_mode="a")
+                
+                log.debug('Registering data with future...')
                 group.sampler.register_future(df_batch)
 
+                log.debug('Saving run data...')
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=depth,
@@ -192,14 +202,19 @@ class Supervisor:
                 # Appends hdf5 file with new datapoints
                 # The final dataset is written later
                 if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
+                    log.debug('Appending to hdf5 file...')
                     self.hdf5_append_datapoints(run_dirs)
 
+                log.debug('Fetching from local storage...')
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
+                log.debug('Deleting unwanted files...')
                 self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
+            
+            log.debug(f"Completed batch {batch_number} at depth {depth}")
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
@@ -214,6 +229,7 @@ class Supervisor:
 
             self.fetch_from_local_storage()
 
+
         # Convert summary now after batches if configured
         self.finalize_summary()
 
@@ -225,7 +241,7 @@ class Supervisor:
         self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
         # Clean run_dirs
-        print("Shutting down scheduler and workers...")
+        log.info("Shutting down scheduler and workers...")
         for group in self.nested_groups:
             for executor in group.executors:
                 executor.clean()
@@ -248,7 +264,7 @@ class Supervisor:
             write_mode (str): style of writing summary. appending ("a") is default, write ("w")
                 is used for overwriting summary
         """
-
+        log.debug(f'Writing summary to {filename} with write mode {write_mode}...')
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
@@ -261,7 +277,7 @@ class Supervisor:
         Attributes:
             filename (str): base filename without extension for summarized file
         """
-
+        log.debug('Finalizing summary...')
         if (
             self.args.supervisor
             and self.args.supervisor.get("summary_datatype") == "parquet"
@@ -488,6 +504,7 @@ class Supervisor:
         return True
 
     def wait_batch_dirs(self, run_dirs: list[str]):
+        log.debug('Waiting for runs to finnish...')
         """
         Waits for batch_dirs_done function to return True
 
@@ -498,6 +515,7 @@ class Supervisor:
             sleep(1)
     
     def monitor_runs(self, run_dirs: list[str], depth, batch_number):
+        log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
         
@@ -540,6 +558,7 @@ Result:
             file.write(latest_progress_string)
         
     def write_current_progress_string(self, depth, batch_number, total, completed, num_successes):
+        log.debug('Writing progress string')
         progress_string=f"""
         
 === PROGRESS REPORT =====================================
@@ -595,6 +614,7 @@ Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
         Returns:
             pd.DataFrame containing batch datapoints combined
         """
+        log.debug('Loading batch data to df...')
         dfs = []
         for d in run_dirs:
             file = os.path.join(d, "enchanted_datapoint.csv")
@@ -704,6 +724,7 @@ Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
         """
         Deletes files according to command given.
         """
+        log.debug('Deleting unwanted files...')
         default_list = ["enchanted_dataset.csv", "runs.h5"]
         if argument == "all":
             return
