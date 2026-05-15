@@ -120,7 +120,7 @@ class Supervisor:
             real_run_dir = self.local_storage
         else:
             real_run_dir = self.base_run_dir
-
+        
         last_complete_dataset = pd.DataFrame()
 
         for depth, group in enumerate(self.nested_groups):
@@ -197,7 +197,7 @@ class Supervisor:
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -222,7 +222,7 @@ class Supervisor:
             self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
 
         # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg, real_run_dir)
+        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -699,7 +699,6 @@ Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
                         meta_run_group.attrs["runners"],
                         str(run_group.runners[j].get("type")),
                     )
-
 
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
