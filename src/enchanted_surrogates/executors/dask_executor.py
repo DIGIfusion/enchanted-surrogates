@@ -4,7 +4,7 @@
 
 Handles execution of surrogate workflow on Dask.
 Supports both SLURMCluster and LocalCluster for distributed task execution.
-SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+See SLURMCluster documentation: https://jobqueue.dask.org/en/latest/index.html.
 
 ---
 
@@ -79,6 +79,8 @@ job_extra_directives: [
     '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
     '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
+
+---
 
 """
 
