@@ -1,5 +1,6 @@
 import time
 
+
 def time_format(seconds: int) -> str:
     """
     Convert a duration in seconds into a human‑readable time string.
