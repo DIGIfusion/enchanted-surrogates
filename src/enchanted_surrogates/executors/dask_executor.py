@@ -149,7 +149,7 @@ class DaskLocalLogPlugin(WorkerPlugin):
 
         # Emit a startup message so files are non-empty and easier to debug.
         logging.getLogger().info(
-            f"Worker logging initialised. worker.id={worker.id}, log_file={log_file}"
+            f"Worker logging initialised. worker.id={worker.id}"
         )
 
 
@@ -197,8 +197,6 @@ class DaskExecutor(Executor):
         self.expected_number_of_workers = None
         self.slurm_job_ids = set()
         self.is_closed = False
-        
-        
 
     def find_line_in_seff_output(self, lines, entry):
         """
