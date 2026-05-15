@@ -177,7 +177,7 @@ class Supervisor:
                     self.write_summary(df_batch, write_mode="w")
                 else:
                     self.write_summary(df_batch, write_mode="a")
-                group.sampler.register_future(batch_dataset)
+                group.sampler.register_future(df_batch)
 
                 run_data = RunData(
                     batch_number=batch_number,
