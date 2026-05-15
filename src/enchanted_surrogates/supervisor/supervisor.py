@@ -205,11 +205,9 @@ class Supervisor:
                     log.debug('Appending to hdf5 file...')
                     self.hdf5_append_datapoints(run_dirs)
 
-                log.debug('Fetching from local storage...')
                 self.fetch_from_local_storage()
 
                 # Clean unwanted files
-                log.debug('Deleting unwanted files...')
                 self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
@@ -764,6 +762,7 @@ Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
         """
         Moves all files from local_storage to base_run_dir, if local_storage is defined.
         """
+        log.debug('Fetching from local storage...')
         if self.local_storage:
             for item in os.listdir(self.local_storage):
                 src = os.path.join(self.local_storage, item)
