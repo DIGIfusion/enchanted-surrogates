@@ -180,11 +180,23 @@ class DaskExecutor(Executor):
         self.scale_n_jobs = kwargs.get('scale_n_jobs', None)
         self.scale_n_jobs_min = kwargs.get('scale_n_jobs_min', None)
         self.scale_n_jobs_max = kwargs.get('scale_n_jobs_max', None)
-        assert not (self.scale_n_jobs is not None and (self.scale_n_jobs_min is not None or self.scale_n_jobs_max is not None)), 'EITHER scale_n_jobs OR scale_n_jobs_min/scale_n_jobs_max CAN BE SET, NOT BOTH'        
-        # if one range boundary is set, ensure the other is set too.
-        if self.scale_n_jobs_min or self.scale_n_jobs_max:
-            assert self.scale_n_jobs_max is not None
-            assert self.scale_n_jobs_min is not None
+        
+        if "SLURMcluster_config" in kwargs:
+            both_set = (
+                self.scale_n_jobs_min is not None and
+                self.scale_n_jobs_max is not None
+            )
+            neither_set = (
+                self.scale_n_jobs_min is None and
+                self.scale_n_jobs_max is None
+            )
+
+            # Boundaries must be both set or both unset
+            assert both_set or neither_set
+
+            # If scale_n_jobs is None, boundaries must be set
+            if self.scale_n_jobs is None:
+                assert both_set
             
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
