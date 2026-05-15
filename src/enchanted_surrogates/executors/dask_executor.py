@@ -8,9 +8,7 @@ SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
 
 ---
 
-## Clusters
-
-### Local cluster
+## Local cluster
 
 Can be used for running on a local machine with multiple cores. Useful for testing or small scale runs.
 
@@ -25,7 +23,7 @@ processes: 1
 
 Example configuration: /configs/example_dask_local.yaml
 
-### SLURM cluster
+## SLURM cluster
 
 Arguments for the SLURM workers.
 
@@ -42,18 +40,8 @@ interface: 'ib0',
 
 Example configuration: /configs/example_dask_slurm.yaml
 
-### Notes
 
-Other arguments:
-
-```
-job_script_prologue: ['module load your-modules-here',],
-job_extra_directives: [
-    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
-    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
-```
-
-## Scaling options
+### Scaling options
 
 This executor exposes a few related options to control how many Dask workers are
 created when using a `SLURMCluster`:
@@ -79,13 +67,24 @@ Notes:
 - `scale_n_jobs` and the `scale_n_jobs_min`/`scale_n_jobs_max` pair are
     mutually exclusive — set either a fixed target or an adaptive range, not both.
 
+
+## Notes
+
+Other optional arguments:
+
+```
+job_script_prologue: ['module load your-modules-here',],
+job_extra_directives: [
+    '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
+    '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
+```
+
 """
 
 import os
 import subprocess
 import sys
 import time
-import pandas as pd
 import logging
 from dask.distributed import fire_and_forget
 
