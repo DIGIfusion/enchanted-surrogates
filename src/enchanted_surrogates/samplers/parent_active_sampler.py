@@ -861,7 +861,8 @@ class ParentActiveSampler(Sampler):
         Adds the observation(s) to the internal dataset.
         Supports multiple output variables.
         """
-
+        # only add succedded outputs to the training set
+        future_df = future_df[future_df['success']]
 
         # Extract X and Y
         X_real = future_df[self.parameters].to_numpy(dtype=float)
