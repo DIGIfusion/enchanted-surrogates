@@ -194,7 +194,7 @@ class ActiveLearningSampler(Sampler):
 
         return list_param_dicts
 
-    def register_future(self, future):
+    def register_future(self, future_df):
         """
         Register a completed evaluation.
 
@@ -204,8 +204,11 @@ class ActiveLearningSampler(Sampler):
 
         Adds the observation to the internal dataset.
         """
-        X = future[self.parameters].to_numpy()
-        y = future["output"].to_numpy()
+        # only add succedded outputs to the training set
+        future_df = future_df[future_df['success']]
+        
+        X = future_df[self.parameters].to_numpy()
+        y = future_df["output"].to_numpy()
 
         self.X_obs = np.vstack([self.X_obs, X])
         self.y_obs = np.append(self.y_obs, y)
