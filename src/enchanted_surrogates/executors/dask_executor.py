@@ -86,9 +86,8 @@ import subprocess
 import sys
 import time
 import logging
+
 from dask.distributed import fire_and_forget
-
-
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
 from dask.distributed import (
@@ -175,11 +174,11 @@ class DaskExecutor(Executor):
         """
         super().__init__(*args, **kwargs)
         log.info("INITIALISING DASK EXECUTOR")
-        
+
         self.scale_n_jobs = kwargs.get('scale_n_jobs', None)
         self.scale_n_jobs_min = kwargs.get('scale_n_jobs_min', None)
         self.scale_n_jobs_max = kwargs.get('scale_n_jobs_max', None)
-        
+
         if "SLURMcluster_config" in kwargs:
             both_set = (
                 self.scale_n_jobs_min is not None and
@@ -191,12 +190,18 @@ class DaskExecutor(Executor):
             )
 
             # Boundaries must be both set or both unset
-            assert both_set or neither_set
+            assert (both_set or neither_set), (
+                "scale_n_jobs_min and scale_n_jobs_max must either both be "
+                "set or both be None."
+            )
 
             # If scale_n_jobs is None, boundaries must be set
             if self.scale_n_jobs is None:
-                assert both_set
-            
+                assert both_set, (
+                    "When scale_n_jobs is None, you must set both "
+                    "scale_n_jobs_min and scale_n_jobs_max."
+                )
+
         self.timeout = kwargs.get("timeout", 1e10)
         self.SLURMcluster_config = kwargs.get("SLURMcluster_config")
         self.LocalCluster_config = kwargs.get("LocalCluster_config")
