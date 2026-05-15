@@ -131,7 +131,7 @@ class SLURMLogPlugin(WorkerPlugin):
 
         # Emit a startup message so files are non-empty and easier to debug.
         logging.getLogger().info(
-            f"Worker logging initialised. worker.id={worker.id}, log_file={log_file}"
+            f"Worker logging initialised. worker.id={worker.id}"
         )
 
 
