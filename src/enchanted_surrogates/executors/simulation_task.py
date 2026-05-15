@@ -52,7 +52,10 @@ def run_simulation_task(
 
     # Copy runner-specific success status
     runner_output[f"success_{runner_name}"] = runner_output["success"]
-    runner_output.pop("success")
+    
+    # Remove the generic 'success' key from params that could have came from previous sequential runners, 
+    # and to ensure that the current runner-specific success status is used in the enchanted_datapoint.csv
+    params.pop("success", None)
 
     # Update with conflict checking (in sequential runs 'output' and 'success'
     # causes conflicts)
