@@ -1,4 +1,4 @@
-import warnings
+
 
 def ascii_loading_bar(total, progress, bar_size=40):
     """
