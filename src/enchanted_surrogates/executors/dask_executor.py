@@ -4,13 +4,14 @@
 
 Handles execution of surrogate workflow on Dask.
 Supports both SLURMCluster and LocalCluster for distributed task execution.
-SLURMCluster: https://jobqueue.dask.org/en/latest/index.html
+See SLURMCluster documentation: https://jobqueue.dask.org/en/latest/index.html.
 
 ---
 
 ## Local cluster
 
-Can be used for running on a local machine with multiple cores. Useful for testing or small scale runs.
+Can be used for running on a local machine with multiple cores. Useful
+for testing or small scale runs.
 
 Arguments:
 
@@ -61,16 +62,16 @@ created when using a `SLURMCluster`:
     workers when there is back-pressure and remove them when idle.
 
 Notes:
+
 - `processes` in the SLURM cluster config multiplies the number of workers
     because a single job may start multiple worker processes; the executor takes
     that into account when calculating the expected worker count.
+
 - `scale_n_jobs` and the `scale_n_jobs_min`/`scale_n_jobs_max` pair are
     mutually exclusive — set either a fixed target or an adaptive range, not both.
 
 
-## Notes
-
-Other optional arguments:
+## Other optional arguments
 
 ```
 job_script_prologue: ['module load your-modules-here',],
@@ -78,6 +79,8 @@ job_extra_directives: [
     '-o tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.out',
     '-e tmp_path_hm/worker_out_MishkaRunner_1/%x.%j.err'],
 ```
+
+---
 
 """
 
@@ -90,22 +93,14 @@ import logging
 from dask.distributed import fire_and_forget
 from dask_jobqueue import SLURMCluster
 from dask.distributed import LocalCluster
-from dask.distributed import (
-    Client,
-    as_completed,
-    wait,
-    LocalCluster,
-    get_worker,
-    get_client,
-)
+from dask.distributed import Client
 from dask.distributed import print as dask_print
 
 from .base_executor import Executor
-from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
-
+from enchanted_surrogates.utils.logger import (
+    get_logger, setup_logging, LoggerConfig
+)
 from enchanted_surrogates.executors import simulation_task
-from enchanted_surrogates.utils.make_run_dir import make_run_dir
-from enchanted_surrogates.utils.precise_imports import import_sampler
 
 from dask.distributed import WorkerPlugin
 
@@ -118,6 +113,7 @@ class SLURMStreamHandler(logging.Handler):
     def emit(self, record) -> None:
         dask_print(self.formatter.format(record))
 
+
 class SLURMLogPlugin(WorkerPlugin):
     def __init__(self, config: LoggerConfig):
         self.config = config
@@ -125,7 +121,9 @@ class SLURMLogPlugin(WorkerPlugin):
     def setup(self, worker):
         log_file = os.path.join(self.config.log_dir, f"{worker.id}.log")
         dask_handler = SLURMStreamHandler()
-        setup_logging(self.config, dask_handler, file_handler=logging.FileHandler(filename=log_file))
+        setup_logging(
+            self.config, dask_handler,
+            file_handler=logging.FileHandler(filename=log_file))
 
         # Emit a startup message so files are non-empty and easier to debug.
         logging.getLogger().info(
@@ -170,7 +168,8 @@ class DaskExecutor(Executor):
                 - scale_n_jobs (int): Number of jobs to scale the cluster to.
                 - SLURMcluster_config (dict): Arguments for SLURMCluster.
                 - LocalCluster_config (dict): Arguments for LocalCluster.
-                - block_unitil_cluster_started (bool): Whether to block until the cluster is fully started.
+                - block_unitil_cluster_started (bool):
+                    Whether to block until the cluster is fully started.
         """
         super().__init__(*args, **kwargs)
         log.info("INITIALISING DASK EXECUTOR")
@@ -221,8 +220,10 @@ class DaskExecutor(Executor):
         Params:
             lines (list): list of lines
             entry (str): the entry that is being looked for
+
         Returns:
             str: time or percentage from the corresponding line, defaults to ""
+
         """
         return next(
             (
@@ -235,9 +236,12 @@ class DaskExecutor(Executor):
 
     def is_running_on_slurm(self):
         """
-        Checks if code is running on slurm or locally. This is done via checking if seff exists.
+        Checks if code is running on slurm or locally.
+        This is done via checking if seff exists.
+
         Retuns:
             bool: true is on slurm false otherwise
+
         """
         try:
             proc = subprocess.run(
@@ -255,9 +259,13 @@ class DaskExecutor(Executor):
     def get_slurm_usage_info(self, job_id=None):
         """
         Params:
-            job_id (list[int]): If you wish to only find the slurm usage info from one specific job pass this
+            job_id (list[int]):
+                If you wish to only find the slurm usage info from
+                one specific job pass this.
+
         Returns:
             list: dictionary containing the output info from running seff
+
         """
         job_ids = job_id if job_id else self.get_all_dask_job_ids()
         job_info = []
@@ -276,7 +284,8 @@ class DaskExecutor(Executor):
                 if len(output.strip()) == 0:
                     continue
 
-                cpu_time = self.find_line_in_seff_output(seff_lines, "CPU Utilized:")
+                cpu_time = self.find_line_in_seff_output(
+                    seff_lines, "CPU Utilized:")
                 cpu_efficiency = self.find_line_in_seff_output(
                     seff_lines, "CPU Efficiency:"
                 )
@@ -323,6 +332,7 @@ class DaskExecutor(Executor):
     def get_all_dask_job_ids(self):
         """
         Runs squeue to figure out all jobs from the cluster
+
         Returns:
             list: A list of Dask job IDs.
         """
@@ -533,8 +543,9 @@ class DaskExecutor(Executor):
         Shuts down the Dask cluster, including the scheduler and workers.
 
         Note:
-            This will also shut down the scheduler, which may not be desired if the scheduler
-            is controlling other clusters. To only shut down the workers, use a different method.
+            This will also shut down the scheduler, which may not be desired
+            if the scheduler is controlling other clusters. To only shut down
+            the workers, use a different method.
         """
         self.client.shutdown()
 
@@ -557,14 +568,18 @@ class DaskExecutor(Executor):
 
     def execute(self, input: list[(str, dict)], runner_config):
         """
-        Starts the execution of simulation tasks using the configured Dask cluster.
+        Starts the execution of simulation tasks using the configured
+        Dask cluster.
 
-        This method initializes the base run directory, checks for existing data to avoid overwrites,
-        and submits tasks to the Dask cluster in batches. It collects results from completed tasks
-        and writes them to a CSV file.
+        This method initializes the base run directory, checks for existing
+        data to avoid overwrites, and submits tasks to the Dask cluster
+        in batches. It collects results from completed tasks and writes them
+        to a CSV file.
 
         Raises:
-            FileExistsError: If the base run directory contains a file indicating a completed run.
+            FileExistsError: If the base run directory contains a file
+            indicating a completed run.
+
         """
 
         if not self.client:
@@ -583,11 +598,13 @@ class DaskExecutor(Executor):
         """
         Submits a batch of simulation tasks to the Dask cluster.
 
-        Each task is submitted with its own unique run directory. The tasks are executed
-        asynchronously, and their futures are returned for tracking.
+        Each task is submitted with its own unique run directory.
+        The tasks are executed asynchronously, and their futures are
+        returned for tracking.
 
         Args:
-            run_dir_sample_pairs (list): List of rundir, sample parameters for the simulation tasks.
+            run_dir_sample_pairs (list): List of rundir, sample parameters
+            for the simulation tasks.
 
         Returns:
             list: List of futures representing the submitted tasks.
@@ -599,5 +616,5 @@ class DaskExecutor(Executor):
         for run_dir, sample_params in run_dir_sample_pairs:
             new_future = client.submit(
                 run_simulation_task, runner_config, run_dir, sample_params
-            )            
+            )
             fire_and_forget(new_future)
