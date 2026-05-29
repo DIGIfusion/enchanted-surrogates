@@ -132,7 +132,7 @@ class Supervisor:
             real_run_dir = self.local_storage
         else:
             real_run_dir = self.base_run_dir
-        
+                
         last_complete_dataset = pd.DataFrame()
 
         for nested_depth, group in enumerate(self.nested_groups):
@@ -777,7 +777,6 @@ Current Batch:        {batch_number}
                         meta_run_group.attrs["runners"],
                         str(run_group.runners[j].get("type")),
                     )
-
 
     def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
         """
