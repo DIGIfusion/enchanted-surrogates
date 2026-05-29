@@ -1,8 +1,8 @@
+import shutil
 from datetime import datetime
 from enchanted_surrogates.utils.logger import get_logger
 
 log = get_logger(__name__)
-
 
 def print_stats_table(stats):
     """
