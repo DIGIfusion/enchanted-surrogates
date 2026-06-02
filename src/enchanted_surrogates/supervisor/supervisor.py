@@ -134,7 +134,9 @@ class Supervisor:
             real_run_dir = self.base_run_dir
                 
         last_complete_dataset = pd.DataFrame()
-
+        
+        log.info(f"\n\nProgress report will be saved to: {self.current_progress_info_file}\n\n")
+            
         for nested_depth, group in enumerate(self.nested_groups):
             self.reset_progress()
             batch_number = 0
@@ -159,7 +161,6 @@ class Supervisor:
             
             log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
             self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
-            log.info(f"\n\nFor progress report please see: {self.current_progress_info_file}\n\n")
             
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
