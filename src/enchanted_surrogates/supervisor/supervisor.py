@@ -540,6 +540,7 @@ class Supervisor:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
                     self.update_runner_progress(group_name, runner_config,completed=1)
+                    self.delete_unwanted_files(self.save_files_arg, run_dir)
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config,num_successes=1)
                     else:
