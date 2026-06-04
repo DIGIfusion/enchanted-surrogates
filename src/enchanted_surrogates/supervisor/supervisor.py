@@ -53,10 +53,17 @@ class Supervisor:
         """
         self.args = args
         self.nested_groups: list[RunGroup] = parse_all_run_groups(args)
-        self.runner_progress = {}
 
-        # set the progress counter to 0
-        self.reset_progress()
+        # start the progress for each runner at 0
+        self.runner_progress = {}
+        self.group_budget = {}
+        budget = 1
+        for i, group in enumerate(self.nested_groups):
+            budget = group.sampler.budget * budget
+            self.group_budget[f'G{i}'] = budget
+            self.runner_progress[f'G{i}'] = {}
+            for runner in group.runners:
+                self.runner_progress[f'G{i}'][runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
         
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
@@ -114,10 +121,10 @@ class Supervisor:
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
-    def reset_progress(self):
-        for group in self.nested_groups:
-            for runner in group.runners:
-                self.runner_progress[runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
+    # def reset_progress(self):
+    #     for group in self.nested_groups:
+    #         for runner in group.runners:
+    #             self.runner_progress[f'G{i}'][runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
 
     def start(self):
         """
@@ -134,12 +141,13 @@ class Supervisor:
             real_run_dir = self.base_run_dir
                 
         last_complete_dataset = pd.DataFrame()
-
+        
+        log.info(f"\n\nProgress report will be saved to: {self.current_progress_info_file}\n\n")
+        
         for nested_depth, group in enumerate(self.nested_groups):
-            self.reset_progress()
+            # self.reset_progress()
             batch_number = 0
             batch_dataset = pd.DataFrame()
-
             # Restore run state from previous data, if needed and in correct position of the loops
             if self.previous_run_data:
                 if nested_depth < self.previous_run_data.depth:
@@ -158,8 +166,7 @@ class Supervisor:
             group_start_time = time.time()
             
             log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
-            self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
-            log.info(f"\n\nFor progress report please see: {self.current_progress_info_file}\n\n")
+            self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_start_time=group_start_time)
             
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
@@ -182,10 +189,10 @@ class Supervisor:
                         for j in range(len(expanded))
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
-                    self.update_runner_progress(runner, submitted=len(expanded))
-                    self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group.sampler.budget, group_start_time)
+                    self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
+                    self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_sampler_budget=group.sampler.budget, group_start_time=group_start_time)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time)
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -245,10 +252,10 @@ class Supervisor:
             for executor in group.executors:
                 executor.clean()
 
-    def update_runner_progress(self, runner_config, submitted=0, completed=0, num_successes=0):
-        self.runner_progress[runner_config["__runner_name"]]['completed'] += completed
-        self.runner_progress[runner_config["__runner_name"]]['submitted'] += submitted
-        self.runner_progress[runner_config["__runner_name"]]['num_successes'] += num_successes
+    def update_runner_progress(self, group_name: str, runner_config: dict, submitted: int = 0, completed: int = 0, num_successes: int = 0):
+        self.runner_progress[group_name][runner_config["__runner_name"]]['completed'] += completed
+        self.runner_progress[group_name][runner_config["__runner_name"]]['submitted'] += submitted
+        self.runner_progress[group_name][runner_config["__runner_name"]]['num_successes'] += num_successes
     
     def write_summary(
         self,
@@ -517,7 +524,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time):
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
         
@@ -532,16 +539,15 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
-                    self.update_runner_progress(runner_config,completed=1)
-                    completed += 1
+                    self.update_runner_progress(group_name, runner_config,completed=1)
                     if result['success']:
-                        self.update_runner_progress(runner_config,num_successes=1)
+                        self.update_runner_progress(group_name, runner_config,num_successes=1)
                     else:
                         if self.log_failures:
                             details = "\n".join(f"  {k}: {v}" for k, v in result.items())
                             log_message = f"""\n\n
                             
-== 💥 FAILURE 💥 =====================================
+==   FAILURE  ========================================
 Run directory: {run_dir}
 
 Result:
@@ -551,25 +557,25 @@ Result:
                             \n""".strip()
 
                             log.error(log_message)                            
-                    self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time)
+                    self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                 sleep(0.1)
         
-    def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_sampler_budget, group_start_time):
+    def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_start_time):
 
-        def format_runner_progress(name, stats, group_sampler_budget):
+        def format_runner_progress(runner_name, stats, budget):
             submitted = stats.get("submitted", 0)
             completed = stats.get("completed", 0)
             successes = stats.get("num_successes", 0)
             failures = completed - successes
             success_rate = (successes * 100 / completed) if completed else 0
 
-            bar_completed = ascii_loading_bar(group_sampler_budget, completed)
+            bar_completed = ascii_loading_bar(budget, completed)
             bar_submitted = ascii_loading_bar(submitted if submitted else 1, completed)
 
             return f"""
-==================== 🔮 RUNNER: {name} 🔮 ====================
+--------------------   RUNNER: {runner_name}   --------------------
 
-✨ STATUS
+  STATUS
 --------------------------------------------------------
 Submitted:          {submitted}
 Completed:          {completed}
@@ -577,14 +583,14 @@ Successes:          {successes}
 Failures:           {failures}
 Success Rate:       {success_rate:5.1f}%
 
-🪄 COMPLETED vs SUBMITTED
+  COMPLETED vs SUBMITTED
 --------------------------------------------------------
 {completed} / {submitted if submitted else 0}
 {bar_submitted}
 
-📜 COMPLETED vs BUDGET
+  COMPLETED vs BUDGET
 --------------------------------------------------------
-{completed} / {group_sampler_budget}
+{completed} / {budget}
 {bar_completed}
 
 
@@ -593,38 +599,29 @@ Success Rate:       {success_rate:5.1f}%
         
         def format_all_runners_progress(runner_progress):
             blocks = []
-            for name, stats in runner_progress.items():
-                blocks.append(format_runner_progress(name, stats, group_sampler_budget))
+            for group, runners in runner_progress.items():
+                blocks.append(f'====================   GROUP: {group}   ====================')
+                for runner_name, stats in runners.items():
+                    blocks.append(format_runner_progress(runner_name, stats, self.group_budget[group]))
+            
             return "\n".join(blocks)
 
         runner_progress_string = format_all_runners_progress(self.runner_progress) 
-        current_time = time.time()
-        time_passed = current_time - group_start_time
-        last_runner_key = next(reversed(self.runner_progress))
-        sequential_runs_complete = self.runner_progress[last_runner_key].get('completed', 0)
-        sequential_runs_left = group_sampler_budget - sequential_runs_complete if sequential_runs_complete else group_sampler_budget
-        time_per_run = time_passed / sequential_runs_complete if sequential_runs_complete else 0
-        estimated_time_left = time_per_run * sequential_runs_left
-        
-        estimated_end_time = current_time + estimated_time_left if (time_per_run and np.isfinite(estimated_time_left)) else None
-        
         progress_string=f"""
 
 {enchanted_wizard_version_3}
 
-=== ✨ PROGRESS REPORT ✨ ====================================
+===   PROGRESS REPORT   ====================================
 
 Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
 Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
-Estimated End Time:   {datetime.fromtimestamp(estimated_end_time).strftime("%Y-%m-%d %H:%M:%S") if estimated_end_time is not None else "N/A"}
 
 Active Runner:        {current_runner_name}
 Nested Depth:         {nested_depth}
 Sequential Depth:     {sequential_depth}
 Current Batch:        {batch_number}
 
-📜 Group Sampler Budget: {group_sampler_budget}
-
+ 
 {runner_progress_string}
 
 ==============================================================
