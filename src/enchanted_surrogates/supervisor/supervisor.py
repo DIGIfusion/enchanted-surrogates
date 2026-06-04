@@ -196,9 +196,6 @@ class Supervisor:
 
                 self.fetch_from_local_storage()
 
-                # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
-
                 batch_number += 1
 
             # Update data rows for next nesting level
@@ -220,9 +217,6 @@ class Supervisor:
         # Create HDF5 file by default
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
-
-        # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
         # Clean run_dirs
         print("Shutting down scheduler and workers...")
@@ -515,6 +509,7 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
+                    self.delete_unwanted_files(self.save_files_arg, run_dir)
                     completed += 1
                     if result['success']:
                         num_successes += 1
