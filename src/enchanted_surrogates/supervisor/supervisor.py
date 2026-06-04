@@ -215,9 +215,6 @@ class Supervisor:
 
                 self.fetch_from_local_storage()
 
-                # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
-
                 batch_number += 1
 
             # Update data rows for next nesting level
@@ -240,9 +237,6 @@ class Supervisor:
         if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
             self.hdf5_write_aggregate_dataset_and_metadata(last_complete_dataset)
 
-        # Clean unwanted files
-        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
-        
         end_runs_time = time.time()
         log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
         # Clean run_dirs
@@ -539,6 +533,7 @@ class Supervisor:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
                     self.update_runner_progress(runner_config,completed=1)
+                    completed += 1
                     if result['success']:
                         self.update_runner_progress(runner_config,num_successes=1)
                     else:

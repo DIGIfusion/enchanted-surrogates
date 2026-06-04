@@ -58,16 +58,20 @@ def test_start_cluster_uses_SLURMCluster_adapt(
     mock_Client.return_value = MagicMock()
 
     # processes=2 so expected workers should be min * processes = 3*2 = 6
-    slurm_config = {"processes": 2}
+    num_processes = 2
+    slurm_config = {"processes": num_processes}
     executor = DaskExecutor(
         SLURMcluster_config=slurm_config, scale_n_jobs_min=3, scale_n_jobs_max=5
     )
     executor.base_run_dir = tmp_path
     executor.start_cluster()
 
+    num_min_workers = 3*num_processes
+    num_max_workers = 5*num_processes
+
     # SLURMCluster constructed and adapt called with provided bounds
     assert mock_SLURM.call_count == 1
-    mock_cluster.adapt.assert_called_once_with(minimum=3, maximum=5)
+    mock_cluster.adapt.assert_called_once_with(minimum=num_min_workers, maximum=num_max_workers)
     # expected_number_of_workers should be set to scale_n_jobs_min * processes
     assert executor.expected_number_of_workers == 6
     assert executor.cluster == mock_cluster
@@ -81,14 +85,17 @@ def test_start_cluster_adapt_called_with_bounds(mock_SLURM, mock_Client, tmp_pat
     mock_SLURM.return_value = mock_cluster
     mock_Client.return_value = MagicMock()
 
-    slurm_config = {"processes": 2}
+    num_processes = 2
+    slurm_config = {"processes": num_processes}
     executor = DaskExecutor(
         SLURMcluster_config=slurm_config, scale_n_jobs_min=4, scale_n_jobs_max=8
     )
     executor.base_run_dir = tmp_path
     executor.start_cluster()
 
-    mock_cluster.adapt.assert_called_once_with(minimum=4, maximum=8)
+    num_min_workers = 4*num_processes
+    num_max_workers = 8*num_processes
+    mock_cluster.adapt.assert_called_once_with(minimum=num_min_workers, maximum=num_max_workers)
     # expected_number_of_workers should be min * processes
     assert executor.expected_number_of_workers == 8
     assert executor.cluster == mock_cluster
