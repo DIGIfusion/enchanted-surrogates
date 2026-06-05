@@ -221,6 +221,9 @@ class Supervisor:
                     self.hdf5_append_datapoints(run_dirs)
 
                 self.fetch_from_local_storage()
+                
+                # Clean unwanted files
+                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -246,6 +249,10 @@ class Supervisor:
 
         end_runs_time = time.time()
         log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
+
+        # Clean unwanted files
+        self.delete_unwanted_files(self.save_files_arg, self.data_dir)
+
         # Clean run_dirs
         log.info("Shutting down scheduler and workers...")
         for group in self.nested_groups:
@@ -540,7 +547,7 @@ class Supervisor:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
                     self.update_runner_progress(group_name, runner_config,completed=1)
-                    self.delete_unwanted_files(self.save_files_arg, run_dir)
+                    self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config,num_successes=1)
                     else:
@@ -771,7 +778,7 @@ Current Batch:        {batch_number}
                         str(run_group.runners[j].get("type")),
                     )
 
-    def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
+    def delete_unwanted_files(self, argument: str, base_dir: str | None = None, extra_keep_files=[]):
         """
         Deletes files according to command given.
         """
@@ -781,9 +788,9 @@ Current Batch:        {batch_number}
 
         if argument == "custom":
             saved_list = import_saved_files_list(self.args)
-            allowed_files = set(default_list) | set(saved_list)
+            allowed_files = set(default_list) | set(saved_list) | set(extra_keep_files)
         elif argument == "none":
-            allowed_files = set(default_list)
+            allowed_files = set(default_list) | set(extra_keep_files)
         else:
             return
 
