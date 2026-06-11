@@ -5,6 +5,7 @@ import argparse
 from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logging, LoggerConfig
+import shutil
 import logging
 
 log = get_logger(__name__)
@@ -31,8 +32,6 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
-    config.supervisor["config_filepath"] = config_path
-
     log.debug(config)
     return config
 
@@ -65,7 +64,7 @@ def main(arguments: argparse.Namespace, config_path=None):
     """
     Main function for running the simulation workflow.
 
-    Args:
+    Args: 
         args (argparse.Namespace): Namespace containing the configuration parameters.
         config_path (str or None): Optional path for configuration file where
             configuration is fetched from.
@@ -76,7 +75,10 @@ def main(arguments: argparse.Namespace, config_path=None):
     log.info("\n" + enchanted_wizard_version_7)
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
-
+    
+    # copy the config file to the base_run_dir for future reference
+    shutil.copy(config_path, os.path.join(supervisor.base_run_dir, "config.yaml"))
+    
     supervisor.start()
 
 
@@ -91,4 +93,6 @@ if __name__ == "__main__":
     )
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
-    main(args, config_path=config_args.config_file)
+    #use absolute path to ensure no issues with relative directory later
+    config_path = os.path.abspath(config_args.config_file)
+    main(args, config_path=config_path)
