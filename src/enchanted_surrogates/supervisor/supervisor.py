@@ -146,6 +146,7 @@ class Supervisor:
         
         for nested_depth, group in enumerate(self.nested_groups):
             # self.reset_progress()
+            log.debug(f'At depth {depth} with sampler {group.sampler} and executors {group.executors} and runners {group.runners}')
             batch_number = 0
             batch_dataset = pd.DataFrame()
             # Restore run state from previous data, if needed and in correct position of the loops
@@ -171,7 +172,12 @@ class Supervisor:
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
-                if samples is None or group.sampler.submitted > group.sampler.budget:
+                if samples is None:
+                    log.debug('Sampler returned None.')
+                    break
+                
+                if group.sampler.submitted > group.sampler.budget:
+                    log.debug('Budget Exceeded')
                     break
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
@@ -206,8 +212,11 @@ class Supervisor:
                     self.write_summary(df_batch, write_mode="w")
                 else:
                     self.write_summary(df_batch, write_mode="a")
+                
+                log.debug('Registering data with future...')
                 group.sampler.register_future(df_batch)
 
+                log.debug('Saving run data...')
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=nested_depth,
@@ -218,14 +227,17 @@ class Supervisor:
                 # Appends hdf5 file with new datapoints
                 # The final dataset is written later
                 if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
+                    log.debug('Appending to hdf5 file...')
                     self.hdf5_append_datapoints(run_dirs)
 
                 self.fetch_from_local_storage()
-
+                
                 # Clean unwanted files
                 self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
+            
+            log.debug(f"Completed batch {batch_number} at depth {depth}")
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
@@ -239,6 +251,7 @@ class Supervisor:
                 )
 
             self.fetch_from_local_storage()
+
 
         # Convert summary now after batches if configured
         self.finalize_summary()
@@ -281,7 +294,7 @@ class Supervisor:
             write_mode (str): style of writing summary. appending ("a") is default, write ("w")
                 is used for overwriting summary
         """
-
+        log.debug(f'Writing summary to {filename} with write mode {write_mode}...')
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
@@ -294,7 +307,7 @@ class Supervisor:
         Attributes:
             filename (str): base filename without extension for summarized file
         """
-
+        log.debug('Finalizing summary...')
         if (
             self.args.supervisor
             and self.args.supervisor.get("summary_datatype") == "parquet"
@@ -521,6 +534,7 @@ class Supervisor:
         return True
 
     def wait_batch_dirs(self, run_dirs: list[str]):
+        log.debug('Waiting for runs to finnish...')
         """
         Waits for batch_dirs_done function to return True
 
@@ -531,6 +545,7 @@ class Supervisor:
             sleep(1)
     
     def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time):
+        log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
         
@@ -545,6 +560,7 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
+                    self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     self.update_runner_progress(group_name, runner_config,completed=1)
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config,num_successes=1)
@@ -567,7 +583,7 @@ Result:
                 sleep(0.1)
         
     def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_start_time):
-
+        log.debug('Writing progress string')
         def format_runner_progress(runner_name, stats, budget):
             submitted = stats.get("submitted", 0)
             completed = stats.get("completed", 0)
@@ -671,6 +687,7 @@ Current Batch:        {batch_number}
         Returns:
             pd.DataFrame containing batch datapoints combined
         """
+        log.debug('Loading batch data to df...')
         dfs = []
         for d in run_dirs:
             file = os.path.join(d, "enchanted_datapoint.csv")
@@ -776,19 +793,20 @@ Current Batch:        {batch_number}
                         str(run_group.runners[j].get("type")),
                     )
 
-    def delete_unwanted_files(self, argument: str, base_dir: str | None = None):
+    def delete_unwanted_files(self, argument: str, base_dir: str | None = None, extra_keep_files=[]):
         """
         Deletes files according to command given.
         """
+        log.debug('Deleting unwanted files...')
         default_list = ["enchanted_dataset.csv", "runs.h5"]
         if argument == "all":
             return
 
         if argument == "custom":
             saved_list = import_saved_files_list(self.args)
-            allowed_files = set(default_list) | set(saved_list)
+            allowed_files = set(default_list) | set(saved_list) | set(extra_keep_files)
         elif argument == "none":
-            allowed_files = set(default_list)
+            allowed_files = set(default_list) | set(extra_keep_files)
         else:
             return
 
@@ -819,6 +837,7 @@ Current Batch:        {batch_number}
         """
         Moves all files from local_storage to base_run_dir, if local_storage is defined.
         """
+        log.debug('Fetching from local storage...')
         if self.local_storage:
             for item in os.listdir(self.local_storage):
                 src = os.path.join(self.local_storage, item)
