@@ -70,6 +70,9 @@ class ParentActiveSampler(Sampler):
         self.base_run_dir = kwargs.get('base_run_dir', None)
         assert self.base_run_dir is not None
         self.seed = kwargs.get('seed', None)
+        self.reject_if_false = kwargs.get("reject_if_false", [])
+        self.reject_if_true = kwargs.get("reject_if_true", [])
+        self.criteria = kwargs.get("criteria", [])
         self.output_variables = kwargs.get("output_variables", None)
         if self.output_variables is None:
             raise ValueError('Must set ouptu_variables in sampler_config. It is a list of strings naming the output variables used for training and active learning.')
@@ -141,13 +144,101 @@ class ParentActiveSampler(Sampler):
     # ------------------------------------------------------------
     # TEST SET LOADING
     # ------------------------------------------------------------
+    @staticmethod
+    def _parse_criterion(expr):
+        """
+        Parse a human-readable criterion string.
+
+        Accepted formats:
+            reject -5 <= gamma <= 0
+            reject -inf <= gamma <= 0
+            accept 0 < paramA < 5
+            reject gamma <= 0          (single right-sided)
+            reject 0 <= gamma          (single left-sided)
+
+        Returns (action, col, lo, op_lo, hi, op_hi) where:
+            action  : 'reject' or 'accept'
+            col     : column name (str)
+            lo/hi   : float bound or None (None = unbounded on that side)
+            op_lo/op_hi : '<' or '<=' or None
+        """
+        expr = expr.strip()
+        m = re.match(r'^(reject|accept)\s+(.+)$', expr, re.IGNORECASE)
+        if not m:
+            raise ValueError(f"Criterion must start with 'reject' or 'accept': {expr!r}")
+
+        action = m.group(1).lower()
+        rest = m.group(2).strip()
+
+        num = r'([+-]?inf|[+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)'
+        op  = r'(<=|<)'
+        col = r'([^\s<>=]+)'
+
+        def parse_num(s):
+            f = float(s)
+            return None if (f == float('inf') or f == float('-inf')) else f
+
+        # Two-sided: num op col op num
+        two = re.fullmatch(rf'{num}\s*{op}\s*{col}\s*{op}\s*{num}', rest)
+        if two:
+            lo_s, op_lo, c, op_hi, hi_s = two.groups()
+            lo, hi = parse_num(lo_s), parse_num(hi_s)
+            return action, c, lo, (op_lo if lo is not None else None), hi, (op_hi if hi is not None else None)
+
+        # Right-sided: col op num
+        right = re.fullmatch(rf'{col}\s*{op}\s*{num}', rest)
+        if right:
+            c, op_hi, hi_s = right.groups()
+            return action, c, None, None, parse_num(hi_s), op_hi
+
+        # Left-sided: num op col
+        left = re.fullmatch(rf'{num}\s*{op}\s*{col}', rest)
+        if left:
+            lo_s, op_lo, c = left.groups()
+            return action, c, parse_num(lo_s), op_lo, None, None
+
+        raise ValueError(f"Cannot parse criterion expression: {rest!r}")
+
+    @staticmethod
+    def _apply_criterion(df, action, col, lo, op_lo, hi, op_hi):
+        if col not in df.columns:
+            return df
+        vals = df[col].astype(float)
+        cond = pd.Series(True, index=df.index)
+        if lo is not None:
+            cond &= (vals > lo) if op_lo == '<' else (vals >= lo)
+        if hi is not None:
+            cond &= (vals < hi) if op_hi == '<' else (vals <= hi)
+        return df[~cond] if action == 'reject' else df[cond]
+
+    def _apply_row_filters(self, df):
+        """
+        Drop rows excluded from both training and test sets:
+          - NaN in any output variable
+          - falsy value in any reject_if_false column
+          - truthy value in any reject_if_true column
+          - any criterion in criteria list, e.g.:
+              "reject -inf <= gamma <= 0"
+              "accept 0 < paramA < 5"
+        """
+        df = df[df[self.output_variables].notna().all(axis=1)]
+        for col in self.reject_if_false:
+            if col in df.columns:
+                df = df[df[col].astype(float).astype(bool)]
+        for col in self.reject_if_true:
+            if col in df.columns:
+                df = df[~df[col].astype(float).astype(bool)]
+        for expr in self.criteria:
+            df = self._apply_criterion(df, *self._parse_criterion(expr))
+        return df
+
     def _load_test_set(self, csv_path):
         assert self.output_variables
         df = pd.read_csv(csv_path)
+        df = self._apply_row_filters(df)
         X_real = df[self.parameters].to_numpy()
         y = df[self.output_variables].to_numpy()
         self._test_X = self.to_unit_numpy(X_real)
-        
         self._test_y = self._ensure_2d(y)
 
     def _should_trigger(self, every_n):
@@ -318,6 +409,15 @@ class ParentActiveSampler(Sampler):
         mask = [i not in self.removed_indices for i in indices]
         df = df[mask]
         indices = [i for i, keep in zip(indices, mask) if keep]
+
+        if df.empty:
+            return self.get_next_pool_chunk()
+
+        # Drop rows where any parameter column is NaN (e.g. failed upstream runs)
+        nan_valid = df[self.parameters].notna().all(axis=1).to_numpy()
+        if not nan_valid.all():
+            df = df[nan_valid]
+            indices = [idx for idx, keep in zip(indices, nan_valid) if keep]
 
         if df.empty:
             return self.get_next_pool_chunk()
@@ -863,6 +963,11 @@ class ParentActiveSampler(Sampler):
         """
         # only add succedded outputs to the training set
         future_df = future_df[future_df['success']]
+
+        future_df = self._apply_row_filters(future_df)
+
+        if future_df.empty:
+            return
 
         # Extract X and Y
         X_real = future_df[self.parameters].to_numpy(dtype=float)
