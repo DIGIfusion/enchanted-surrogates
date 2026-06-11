@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 
 
-def get_run_dir_count(path: str, pattern: str = r"^d\d+_b\d+_s\d+_r\d+$") -> int:
+def get_run_dir_count(path: str, pattern: str = r"dn\d+_ds\d+_b\d+_s\d+") -> int:
     """
     Get the amount of subdirectories inside the given path that match the pattern filter.
 
