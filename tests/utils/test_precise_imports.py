@@ -49,6 +49,7 @@ def test_import_instantiates_new_objects(
 
     clear_import_cache()
 
+
 def test_cached_import_caches_results(monkeypatch):
     class Mock:
         pass
@@ -61,7 +62,8 @@ def test_cached_import_caches_results(monkeypatch):
 
     # patch importlib.import_module to always return the Mock class
     monkeypatch.setattr(
-        importlib, "import_module", mock_import_module
+        "enchanted_surrogates.utils.precise_imports.importlib.import_module",
+        mock_import_module
     )
     monkeypatch.setattr(
         "enchanted_surrogates.utils.precise_imports.load_plugins",
