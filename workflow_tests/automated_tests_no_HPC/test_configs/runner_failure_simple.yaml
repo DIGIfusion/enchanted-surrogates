@@ -1,0 +1,25 @@
+# Simple config that creates 4 samples.
+# Runner fails if the sum of samples is 2.
+# So 1 failure is expected to be seen.
+logging: DEBUG
+
+executors:
+  e1:
+    type: LocalExecutor
+samplers:
+  s1:
+    type: ArraySampler
+    bounds: [[1, 2, 1, 3]]
+    parameters: ['c1']
+runners:
+  r1:
+    type: SumRunner
+    params_to_sum: [c1]
+    fail_if: 2
+
+supervisor:
+  base_run_dir: tmp_path
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: [r1]

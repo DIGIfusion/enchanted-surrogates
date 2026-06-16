@@ -1,0 +1,54 @@
+name: Workflow testing with Pytest
+
+on: 
+  workflow_call:
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Restore cached virtualenv
+      uses: actions/cache/restore@v5
+      with:
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+        path: .venv
+
+    - name: Install dependencies
+      run: |
+        if [ ! -d ".venv" ]; then
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -e . # ← Editable install, required for importlib to do precise imports
+        fi 
+        pip install coverage
+        git submodule init
+        git submodule update
+
+    - name: Running pytest
+      run: |
+        source .venv/bin/activate
+        coverage run --source=src --data-file=.coverage.workflow -m pytest workflow_tests/automated_tests_no_HPC
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: workflow_coverage
+        include-hidden-files: true
+        path: |
+          .coverage.workflow
+

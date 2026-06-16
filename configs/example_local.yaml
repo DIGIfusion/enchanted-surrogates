@@ -1,11 +1,32 @@
-executor:
-  type: LocalExecutor
+logging: INFO
+
+executors:
+  e1:
+    type: LocalExecutor
+samplers:
+  s1:
+    type: RandomSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 10
+    parameters: ['x', 'y']
+runners:
+  r1:
+    type: SyntheticDoubleGaussianRunner  
+    dimensions: 2
+    other_params: {}
+
+supervisor:
   base_run_dir: "data_dir/local"
-sampler:
-  type: RandomSampler
-  bounds: [[0.0, 1.0], [0.0, 10.0]]
-  budget: 4
-  parameters: ['c1', 'c2']
-runner:
-  type: ExampleRunner
-  other_params: {}
+  #local_storage: TMPDIR
+  run_mode: "fresh" # "resume" / "extend"
+  save_files: "all" # or "custom" or "none"
+  save_files_list:
+    - enchanted_dataset.csv
+    - example_local.csv
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+
+storage:
+  type: hdf5

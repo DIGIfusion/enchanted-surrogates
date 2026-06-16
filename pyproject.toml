@@ -15,9 +15,19 @@ dependencies = [
     "dask[complete]",
     "dask-jobqueue",
     "pandas",
-    "pylint",
+    "ruff",
     "coverage",
+    "matplotlib",
+    "plotly",
+    "PyYAML",
+    "scipy",
+    "pyarrow",
+    "h5py",
 ]
+
+[tool.ruff.lint]
+select = ["PLE", "E"]
+ignore = ["E401", "E501", "E402", "E731", "E711", "E722", "PLE1205"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -25,3 +35,35 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[project.optional-dependencies]
+sdsg = [
+  "sg-lib @ git+https://github.com/DanHarJor/sensitivity-driven-sparse-grid-approx.git"
+]
+
+pysgpp = [
+    "numpy<2.0",
+    "pysgpp",
+    "scikit-learn",
+]
+chaospy = [
+    "chaospy",
+    "numpy>2.0"
+]
+hdf5 = [
+    "h5py",
+    "ipykernel",
+    "ipywidgets",
+]
+GPy = [
+    "GPy",
+    "scikit-learn",
+]
+activelearning = [
+    "scikit-activeml"
+]
+
+bo = [
+  "torch",
+  "botorch",
+  "gpytorch"
+]

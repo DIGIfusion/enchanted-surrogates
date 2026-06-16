@@ -1,0 +1,135 @@
+site_name: Enchanted Surrogates
+site_description: Documentation for Enchanted Surrogates
+site_url: https://digifusion.github.io/enchanted-surrogates/
+
+repo_url: https://github.com/DIGIfusion/enchanted-surrogates
+repo_name: DIGIfusion/enchanted-surrogates
+
+nav:
+  - Home: 
+    - Overview: index.md
+    - Releases: releases.md
+    - Contribution: contribution.md
+  - Supervisor:
+    - Overview: supervisor.md
+  - Executors:
+    - Local Executor: executors/local_executor.md
+    - Joblib Executor: executors/joblib_executor.md
+    - Dask Executor: executors/dask_executor.md
+  - Samplers:
+    - Random Sampler: samplers/random_sampler.md
+    - Grid Sampler: samplers/grid_sampler.md
+    - Array Sampler: samplers/array_sampler.md
+    - Bayesian Optimization Sampler: samplers/bayesian_optimization_sampler.md
+    - Latin Hypercube Sampler: samplers/latin_hypercube_sampler.md
+    - Sobol Sequence Sampler: samplers/sobol_sequence_sampler.md
+    - Active Learning Sampler: samplers/active_learning_sampler.md
+    - Nested Sampler: samplers/nested_sampler.md
+  - Plugins:
+    - Overview: plugins/index.md
+    - MISHKA: plugins/mishka_plugin.md
+    - HELENA: plugins/helena_plugin.md
+    - CASTOR: plugins/castor_plugin.md
+    - GENE: plugins/gene_plugin.md
+    - DREAM: plugins/dream_plugin.md
+  - Tutorials:
+    - Sampler Comparison: tutorials/example_workflow.md
+    - Bayesian Optimization: tutorials/bayesian_optimization.md
+    - Documentation:
+      - Example Runner: runners/example_runner.md
+      - Double Gaussian Runner: runners/synthetic_double_gaussian_runner.md
+      - Double Gaussian Parser: parsers/synthetic_double_gaussian_parser.md
+
+theme:
+  name: material
+
+  # Color palette configuration
+  palette:
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+  icon:
+    repo: fontawesome/brands/git-alt 
+  
+  # Logo displayed in the header instead of the site name
+  # logo: img/es.jpg
+
+  # Favicon shown in the browser tab
+  favicon: img/es.jpg
+
+  # Custom HTML overrides
+  # This replaces Jekyll `_includes/head_custom.html`
+  # Files should be placed under: docs/overrides/partials/
+  custom_dir: docs/overrides
+
+  features:
+    - navigation.tabs
+    - navigation.instant       # Instant page loading
+    - navigation.tracking      # URL updates based on scroll position
+    - navigation.sections      # Group navigation sections
+    - navigation.expand        # Expand navigation by default
+    - navigation.top           # Back-to-top button
+    - content.code.copy        # Copy button for code blocks
+    - content.tabs.link        # Sync tabs across pages
+
+  enable_mathjax: true
+
+plugins:
+  # Full-text search
+  - search
+
+  # Automatic documentation generation from Python docstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          # Path to the Python source code
+          paths:
+            - src
+          options:
+            # Google-style docstrings
+            docstring_style: google
+            # Show link to source code
+            show_source: true
+            # Separate function signature from description
+            separate_signature: true
+            # Merge __init__ docstring into class documentation
+            merge_init_into_class: true
+            # Disable runtime inspection (safer for CI)
+            allow_inspection: true
+  - gen-files:
+      scripts:
+        - docs/scripts/gen_ref_pages.py
+
+
+
+markdown_extensions:
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+  # Tabbed content blocks
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  # Syntax highlighting and inline code improvements
+  - pymdownx.inlinehilite
+  - pymdownx.highlight
+  - pymdownx.snippets
+
+  # Math extension
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - docs/javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js

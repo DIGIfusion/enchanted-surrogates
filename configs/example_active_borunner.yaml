@@ -1,0 +1,28 @@
+logging: INFO
+
+executors:
+  e1:
+    type: LocalExecutor
+
+samplers:
+  s1:
+    type: ActiveLearningSampler
+    bounds: [[0.001, 1.0]]
+    budget: 50
+    batch_size: 3
+    n_candidates: 1000
+    parameters: ['x']
+    query_strategy: GreedySamplingTarget
+
+runners:
+  r1:
+    type: SyntheticDoubleGaussianRunner
+    other_params: {}
+
+supervisor:
+  base_run_dir: "data_dir/active_ml_borunner"
+  run_mode: "fresh" # "resume" / "extend"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1

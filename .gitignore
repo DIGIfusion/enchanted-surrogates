@@ -1,6 +1,8 @@
 #other
 personal_configs/
 *ignore*
+data_dir/
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -34,6 +36,7 @@ trial_*/
 notebooks/
 tglf_setup.sh
 .venv/
+.venv*/
 *.out
 *.err
 __pycache__/
@@ -41,8 +44,9 @@ __pycache__/
 data_store/*
 core
 *images*
-*.jpg
-*out*
+*out.txt
+# *.png
+# *.jpg
 tests/example/
 *example_base_run_dir*
 *example_nested_base_run_dir*
@@ -254,3 +258,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# MacOS specific
+.DS_Store

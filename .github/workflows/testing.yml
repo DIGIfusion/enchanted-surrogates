@@ -1,0 +1,72 @@
+name: Automated testing
+
+on: 
+  workflow_call:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  unit_tests:
+    name: Unit tests
+    uses: ./.github/workflows/pytest.yml
+
+  workflow_tests:
+    name: Workflow tests
+    uses: ./.github/workflows/pytest_workflow.yml
+
+  generate_coverage:
+    name: Generate coverage report
+    needs: [unit_tests, workflow_tests]
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install coverage
+
+    - name: Download unit test coverage
+      uses: actions/download-artifact@v7
+      with:
+        name: unit_coverage
+        path: coverage
+
+    - name: Download workflow test coverage
+      uses: actions/download-artifact@v7
+      with:
+        name: workflow_coverage
+        path: coverage
+
+    - name: Combine and generate coverage report
+      run: |
+        ls coverage
+        coverage combine coverage
+        coverage report -m > coverage_by_file.txt
+        coverage json
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: combined_coverage
+        path: |
+          coverage_by_file.txt
+          coverage.json
+
+    - name: Post coverage report
+      uses: ./.github/actions/coverage_report
