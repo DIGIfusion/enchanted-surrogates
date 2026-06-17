@@ -17,7 +17,9 @@ def load_configuration(config_path: str) -> argparse.Namespace:
     with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     config = argparse.Namespace(**config)
-    config.supervisor["config_filepath"] = config_path
+    
+    if hasattr(config, 'supervisor'):
+        config.supervisor["config_filepath"] = config_path
 
     log.debug(config)
     return config
