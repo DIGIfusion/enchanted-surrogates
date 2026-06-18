@@ -1,4 +1,5 @@
 import logging
+import os, sys
 
 LOG_FORMAT = "%(asctime)s [%(levelname)-5.5s] %(message)s"
 
@@ -46,6 +47,30 @@ def setup_logging(
 
     file_handler.setFormatter(logFormatter)
     logger.addHandler(file_handler)
+
+
+def setup_logger(base_run_dir: str, log_level: str, log_dir: str):
+    """
+    Prepares the logging module and creates log directory
+
+    Args:
+        base_run_dir (str): The base run directory from supervisor
+        log_level (str): Logging level to use, for example INFO or DEBUG
+    """
+    log_dir = os.path.join(base_run_dir, log_dir)
+    log_file = os.path.join(log_dir, "main.log")
+
+    # Store to logger config
+    config = LoggerConfig(log_level=log_level, log_dir=log_dir)
+
+    if not os.path.exists(config.log_dir):
+        os.makedirs(config.log_dir)
+
+    setup_logging(
+        config,
+        logging.StreamHandler(stream=sys.stdout),
+        logging.FileHandler(filename=log_file),
+    )
 
 
 def get_logger(name: str) -> logging.Logger:
