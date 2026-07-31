@@ -1,6 +1,6 @@
 executor:
   type: DaskExecutor
-  base_run_dir: "data_dir/dask_slurm"
+  base_run_dir: "data/dask_slurm"
   SLURMcluster_config:
     account: "project_2009007"
     queue: "small"
@@ -14,7 +14,7 @@ executor:
 sampler:
   type: RandomSampler
   bounds: [[0.0, 1.0], [0.0, 10.0]]
-  budget: 4
+  num_samples: 2
   parameters: ['c1', 'c2']
 runner:
   type: ExampleRunner
