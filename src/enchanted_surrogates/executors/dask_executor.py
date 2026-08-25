@@ -84,7 +84,6 @@ class DaskExecutor(Executor):
         self.current_batch = 0
         self.save_run_dirs = kwargs.get('save_run_dirs', True)
         self.submit_command = kwargs.get('submit_command', None)
-        self.enchanted_dataset_headder = None
         self.psudo_runner = import_runner(self.runner_config['type'], runner_config=self.runner_config)
 
 
@@ -264,6 +263,31 @@ class DaskExecutor(Executor):
     #         self.cluster.scale(num_workers)
     #     self.scale_n_jobs = num_workers
 
+    def _append_row_with_schema_alignment(self, dfi, path):
+        """
+        Appends the single-row DataFrame `dfi` to the CSV at `path`, keeping
+        the file's schema consistent even when `dfi`'s columns differ from
+        what's already on disk (different result/failure shapes can have
+        different keys). Columns present in `dfi` but not yet in the file
+        are added, with existing rows backfilled as NaN; columns in the
+        file but missing from `dfi` are written as NaN for this row.
+        """
+        if not os.path.exists(path):
+            dfi.to_csv(path, mode='w', header=True, index=False)
+            return
+
+        existing_header = pd.read_csv(path, nrows=0).columns.tolist()
+        new_cols = [c for c in dfi.columns if c not in existing_header]
+
+        if new_cols:
+            existing_df = pd.read_csv(path)
+            union_cols = existing_header + new_cols
+            existing_df = existing_df.reindex(columns=union_cols)
+            dfi = dfi.reindex(columns=union_cols)
+            pd.concat([existing_df, dfi], ignore_index=True).to_csv(path, mode='w', header=True, index=False)
+        else:
+            dfi.reindex(columns=existing_header).to_csv(path, mode='a', header=False, index=False)
+
     def start_runs(self):
         """
         Starts the execution of simulation tasks using the configured Dask cluster.
@@ -367,33 +391,12 @@ TO AVOID THIS PLEASE ISSUE INCLUDE ANY TIMEOUTS IN YOUR RUNNER AND HANDLE EARLY 
                     dfs.append(dfi)
                                                                         
                     if success:
-                        if not self.enchanted_dataset_headder:
-                            self.enchanted_dataset_headder = result.keys()
-                        extra_keys = [key for key in result.keys() if key not in self.enchanted_dataset_headder]
-                        if extra_keys:
-                            warnings.warn(f'A RESULT TO BE WRITTEN TO ENCHANTED DATASET HAS MORE HEADDER VALUES THAN IN THE FIRST SUCESSFUL RESULT. EXPECTED HEADDER: {self.enchanted_dataset_headder}. EXTRA HEADDER: {extra_keys}. FULL RESULT: {result}. THE extra_keys WILL BE REMOVED')
-                            dfi.drop(extra_keys, axis=1)
-                            
-                        if os.path.exists(enchanted_dataset_batch_path_success):
-                            dfi.to_csv(enchanted_dataset_batch_path_success, mode='a', header=False, index=False)
-                        else:
-                            dfi.to_csv(enchanted_dataset_batch_path_success, mode='w', header=True, index=False)
-
-                        if os.path.exists(enchanted_dataset_path_success):
-                            dfi.to_csv(enchanted_dataset_path_success, mode='a', header=False, index=False)
-                        else:
-                            dfi.to_csv(enchanted_dataset_path_success, mode='w', header=True, index=False)
+                        self._append_row_with_schema_alignment(dfi, enchanted_dataset_batch_path_success)
+                        self._append_row_with_schema_alignment(dfi, enchanted_dataset_path_success)
                     else:
-                        if os.path.exists(enchanted_dataset_batch_path_fail):
-                            dfi.to_csv(enchanted_dataset_batch_path_fail, mode='a', header=False, index=False)
-                        else:
-                            dfi.to_csv(enchanted_dataset_batch_path_fail, mode='w', header=True, index=False)
+                        self._append_row_with_schema_alignment(dfi, enchanted_dataset_batch_path_fail)
+                        self._append_row_with_schema_alignment(dfi, enchanted_dataset_path_fail)
 
-                        if os.path.exists(enchanted_dataset_path_fail):
-                            dfi.to_csv(enchanted_dataset_path_fail, mode='a', header=False, index=False)
-                        else:
-                            dfi.to_csv(enchanted_dataset_path_fail, mode='w', header=True, index=False)
-                        
 
                     print(f"{'_'*100}\nBATCH {self.current_batch}| [{i+1}/{num_samp_in_batch}] Futures Completed ({((i+1)/num_samp_in_batch)*100:.1f}%)","|",f"[{num_success}/{num_samp_in_batch}] Futures Succeded ({(num_success/num_samp_in_batch)*100:.1f}%)")
                     print(f"\n TOTAL | [{completed}/{self.sampler.budget}] Futures Completed ({(completed/self.sampler.budget)*100:.1f}%)","|",f"[{all_success}/{self.sampler.budget}] Futures Succeded ({(all_success/self.sampler.budget)*100:.1f}%)")

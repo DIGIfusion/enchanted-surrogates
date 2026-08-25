@@ -2223,15 +2223,15 @@ class GpyAnalyticSobolSampler(Sampler):
             "MAPE_percent": float(f"{mape_test:.3g}")
         }
 
+        n_test = X_test_unique.shape[0]
+
         fig.tight_layout(rect=[0, 0, 1, 0.92])
         # Save test-data plot
-        X_train_real, y_train_real = self.get_data()
-        n, D = X_train_real.shape
-        out_path = os.path.join(out_dir, f"residuals_train-{n}.png")
-        print("saving residuals plot to:", out_path)
+        out_path = os.path.join(out_dir, f"residuals_test-{n_test}.png")
+        print("saving test residuals plot to:", out_path)
         fig.savefig(out_path, dpi=300, bbox_inches="tight")
 
-        out_path = os.path.join(out_dir, f"residuals_train-{n}.txt")
+        out_path = os.path.join(out_dir, f"residuals_test-{n_test}.txt")
 
         with open(out_path, "w") as f:
             for key, value in title_dict.items():
@@ -2242,12 +2242,18 @@ class GpyAnalyticSobolSampler(Sampler):
         # PLOT 2 — TRAINING DATA (new behavior)
         # ============================================================
 
-        # Use the same training data you already load for n, D
-        y_pred_train, _ = self.surrogate_predict(X_train_real)
-        residuals_train = y_train_real - y_pred_train
+        # Collapse repeated training points the same way the test set was
+        # collapsed above: average each unique input's repeats before
+        # computing residuals against it.
+        X_train_real, y_train_real = self.get_data()
+        X_train_unique, y_train_unique, train_noise_vars, _, _, _ = self._collapse_data(X_train_real, y_train_real)
+        X_train_unique, y_train_unique = X_train_unique[train_noise_vars != 0], y_train_unique[train_noise_vars != 0]
+
+        y_pred_train, _ = self.surrogate_predict(X_train_unique)
+        residuals_train = y_train_unique - y_pred_train
 
         # Ensure both arrays are 1‑D for metric calculations
-        y_train_flat = np.asarray(y_train_real).reshape(-1)
+        y_train_flat = np.asarray(y_train_unique).reshape(-1)
         y_pred_train_flat = np.asarray(y_pred_train).reshape(-1)
 
 
@@ -2303,8 +2309,9 @@ class GpyAnalyticSobolSampler(Sampler):
         fig2.tight_layout(rect=[0, 0, 1, 0.92])
 
         # Save training-data plot
-        out_path2 = os.path.join(out_dir, f"residuals_trainset-{n}.png")
-        print("saving training residuals plot to:", out_path2)
+        n_train = X_train_unique.shape[0]
+        out_path2 = os.path.join(out_dir, f"residuals_train-{n_train}.png")
+        print("saving train residuals plot to:", out_path2)
         fig2.savefig(out_path2, dpi=300, bbox_inches="tight")
 
         return fig, fig2
