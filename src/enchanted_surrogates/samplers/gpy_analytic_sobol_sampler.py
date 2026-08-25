@@ -345,8 +345,9 @@ class GpyAnalyticSobolSampler(Sampler):
                 self._remove_from_pool(samples)
                 samples = samples * self.num_repeats
                 if self.include_index:
+                    start_ind = self.custom_submitted - len(samples)
                     samples = [
-                        {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+                        {**samp, 'index': ind} for samp, ind in zip(samples, range(start_ind, start_ind + len(samples)))]
                 return samples
 
         # Otherwise return random points from pool
@@ -375,7 +376,7 @@ class GpyAnalyticSobolSampler(Sampler):
         samples = samples * self.num_repeats
         if self.include_index:
             samples = [
-                {**samp, 'index': ind} for samp, ind in zip(samples, range(len(samples)))]
+                {**samp, 'index': ind} for samp, ind in zip(samples, range(self.custom_submitted, self.custom_submitted + len(samples)))]
 
         self.batch_number += 1
         self.submitted += len(samples)
