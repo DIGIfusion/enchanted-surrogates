@@ -531,6 +531,10 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
+                    
+                    if self.data_packer is not None:
+                        self.data_packer.pack_run_dir(run_dir, result)
+                    
                     self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     completed += 1
                     if result['success']:

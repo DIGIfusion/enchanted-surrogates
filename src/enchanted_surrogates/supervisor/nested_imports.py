@@ -1,25 +1,28 @@
 """
-Utilies for importing multiple executors, samplers and runners.
+Utilies for importing multiple executors, samplers, runners and packers.
 """
 
 from dataclasses import dataclass
 from enchanted_surrogates.utils.logger import get_logger
 from enchanted_surrogates.executors.base_executor import Executor
 from enchanted_surrogates.samplers.base_sampler import Sampler
-from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor
+from enchanted_surrogates.packers.base_packer import Packer
+from enchanted_surrogates.utils.precise_imports import import_sampler, import_executor, import_packer
 
 log = get_logger(__name__)
 
 @dataclass
 class RunGroup:
     """
-    Container for a group of executors, samplers, and runners. Represents one level of depth
-    in nested execution. If multiple executors or runners are defined, sequential execution is
-    (also) used.
+    Container for a group of executors, samplers, runners and packers. Represents one level of
+    depth in nested execution. If multiple executors or runners are defined, sequential
+    execution is (also) used. Packers are optional; a group with no packers configured has
+    `packers` set to None.
     """
     executors: list[Executor]
     sampler: Sampler
     runners: list[dict]
+    packers: list[Packer] | None = None
 
     def validate(self):
         """
@@ -33,19 +36,27 @@ class RunGroup:
             raise ValueError("At least one runner should be specified!")
         if not self.sampler:
             raise ValueError("Sampler should be specified!")
+        if self.packers is not None and len(self.packers) != len(self.runners):
+            raise ValueError(
+                "If packers are specified, the amount of packers and runners should be the same!"
+            )
 
 
-def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str]]:
+def parse_sequential_group(
+    group_config: dict,
+) -> tuple[str, list[str], list[str], list[str] | None]:
     """
-    Parses sampler and sequential executors and runners from group config. Executors and runners
-    can be defined either as a single value or a list.
+    Parses sampler and sequential executors, runners and packers from group config. Executors,
+    runners and packers can be defined either as a single value or a list. Packers are optional:
+    if the group config has no "packer" key, no packer is used for this group.
 
     Args:
         group_config (dict): Configuration dictionary parsed from yaml
 
     Returns:
-        out (tuple[str, list[str], list[str]]): Tuple containg name of sampler, list of names
-            of executors and list of names of runners
+        out (tuple[str, list[str], list[str], list[str] | None]): Tuple containing name of
+            sampler, list of names of executors, list of names of runners and, if defined,
+            list of names of packers (None otherwise)
     """
     group_executors = (
         group_config["executor"]
@@ -58,10 +69,18 @@ def parse_sequential_group(group_config: dict) -> tuple[str, list[str], list[str
         if type(group_config["runner"]) is list
         else [group_config["runner"]]
     )
-    
+
+    group_packers = None
+    if "packer" in group_config:
+        group_packers = (
+            group_config["packer"]
+            if type(group_config["packer"]) is list
+            else [group_config["packer"]]
+        )
+
     sampler = group_config["sampler"]
 
-    return (sampler, group_executors, group_runners)
+    return (sampler, group_executors, group_runners, group_packers)
 
 
 def import_executors(args) -> dict[str, Executor]:
@@ -98,6 +117,25 @@ def import_samplers(args) -> dict[str, Sampler]:
     return samplers
 
 
+def import_packers(args) -> dict[str, Packer]:
+    """
+    Imports all packers from config, under 'packers' key. The 'packers' key is optional;
+    if it is not present in the config, an empty dict is returned and no run group will
+    have any packers.
+
+    Args:
+        args: Dictionary or namespace object, parsed from yaml
+
+    Returns:
+        Dictionary mapping packer unique name to class instance
+    """
+    packers = {}
+    for name, packer_config in getattr(args, "packers", {}).items():
+        packers[name] = import_packer(packer_config["type"], packer_config)
+
+    return packers
+
+
 def import_run_groups(args) -> list[dict]:
     """
     Imports supervisor/run_order from config.
@@ -124,15 +162,19 @@ def parse_all_run_groups(args) -> list[RunGroup]:
     """
     executors = import_executors(args)
     samplers = import_samplers(args)
+    packers = import_packers(args)
     group_configs = import_run_groups(args)
 
     nested_groups: list[RunGroup] = []
     for group in group_configs:
-        group_sampler, group_executors, group_runners = parse_sequential_group(group)
+        group_sampler, group_executors, group_runners, group_packers = parse_sequential_group(
+            group
+        )
         run_group = RunGroup(
             [executors[e] for e in group_executors],
             samplers[group_sampler],
             [{**args.runners[r], "__runner_name": r} for r in group_runners],
+            [packers[p] for p in group_packers] if group_packers is not None else None,
         )
 
         try:
