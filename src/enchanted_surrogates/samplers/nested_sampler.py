@@ -96,9 +96,9 @@ class NestedSampler(Sampler):
                 Defaults to the total budget.
 
         """
-        samplers_keys = samplers.keys
-        samplers_types = [samplers[k]['type'] for k in samplers_keys()]
-        samplers_config = [samplers[k] for k in samplers_keys()]
+        samplers_keys = samplers.keys()
+        samplers_types = [samplers[k]['type'] for k in samplers_keys]
+        samplers_config = [samplers[k] for k in samplers_keys]
         self.all_samplers = [import_sampler(sampler_type, sampler_config) for sampler_type, sampler_config in zip(samplers_types, samplers_config)]
         
         default_budget = 1
@@ -126,7 +126,7 @@ class NestedSampler(Sampler):
         else:
             self._other_product = [dict()]  # identity element
 
-        self._num_combinations = len(self._all_combinations)
+        # self._num_combinations = len(self._all_combinations)
         self._cursor = 0
 
         self.current_batch = 0 
