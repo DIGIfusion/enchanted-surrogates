@@ -2,8 +2,11 @@
 Basic tests for the sequential workflow.
 """
 
+from pathlib import Path
+
 import pytest
 from workflow_tests.utils.test_utils import *
+from enchanted_surrogates.packers.ascii_bin_to_hdf5_packer import AsciiBinToHdf5Packer
 from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 def test_sequential_workflow(tmp_path, run_config):
@@ -52,3 +55,29 @@ def test_nested_sequential_workflow(tmp_path, run_config):
     # All results after second nested run will be 12+10
     for row in summary:
         assert row["output"] == pytest.approx(22.0)
+
+
+def test_nested_sequential_workflow_with_packer(tmp_path, run_config):
+    supervisor = run_config("test_configs/nested_sequential_with_packer.yaml", call_start=False)
+
+    packed_hdf5 = tmp_path / "packed_runs.h5"
+    for group in supervisor.nested_groups:
+        if group.packers is not None:
+            for packer in group.packers:
+                packer.hdf5_path = str(packed_hdf5)
+
+    supervisor.start()
+
+    assert len(supervisor.nested_groups) == 2
+    assert get_run_dir_count(tmp_path / "data") > 0
+    assert len(read_summary_file(tmp_path)) > 0
+    assert packed_hdf5.exists()
+
+    first_run_dir = next((path for path in (tmp_path / "data").iterdir() if path.is_dir()), None)
+    assert first_run_dir is not None
+
+    packer = AsciiBinToHdf5Packer(hdf5_path=str(packed_hdf5))
+    unpacked_dir = packer.unpack_run_dir(str(first_run_dir), str(tmp_path / "unpacked"))
+
+    assert Path(unpacked_dir).exists()
+    assert any(Path(unpacked_dir).iterdir())

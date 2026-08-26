@@ -161,6 +161,10 @@ class Supervisor:
                 for i, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
+                    packer = None
+                    if group.packers is not None:
+                        packer = group.packers[i]
+                        packer.base_run_dir = self.base_run_dir  # Assign base_run_dir to packer
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"d{depth}_b{batch_number}_s{j}_r{i}"
@@ -172,7 +176,7 @@ class Supervisor:
                     # monitor runs for failures and update progress file
                 
                     self.write_current_progress_string(depth, batch_number, len(run_dirs), 0, 0)
-                    self.monitor_runs(run_dirs, depth = depth, batch_number = batch_number)
+                    self.monitor_runs(run_dirs, depth = depth, batch_number = batch_number, packer=packer)
                     
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -512,7 +516,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, run_dirs: list[str], depth, batch_number):
+    def monitor_runs(self, run_dirs: list[str], depth, batch_number, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
@@ -532,8 +536,8 @@ class Supervisor:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
                     
-                    if self.data_packer is not None:
-                        self.data_packer.pack_run_dir(run_dir, result)
+                    if packer is not None:
+                        packer.pack_run_dir(run_dir, result)
                     
                     self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     completed += 1

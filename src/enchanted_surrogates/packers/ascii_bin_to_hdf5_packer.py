@@ -85,8 +85,51 @@ class AsciiBinToHdf5Packer(Packer):
                 path from `_default_hdf5_path` (`~/enchanted_data_packed.h5`,
                 falling back to `_1.h5`, `_2.h5`, etc. if it already exists).
         """
+        self._custom_hdf5_path = False
+        self._base_run_dir = None
+        self._hdf5_path = None
+
         super().__init__(**kwargs)
-        self.hdf5_path = kwargs.get('hdf5_path') or _default_hdf5_path()
+
+        self.base_run_dir = kwargs.get('base_run_dir')
+        if kwargs.get('hdf5_path') is not None:
+            self.hdf5_path = kwargs['hdf5_path']
+        elif self.base_run_dir is not None:
+            self.hdf5_path = os.path.join(self.base_run_dir, 'enchanted_data_packed.h5')
+        else:
+            self.hdf5_path = _default_hdf5_path()
+
+    @property
+    def base_run_dir(self):
+        return self._base_run_dir
+
+    @base_run_dir.setter
+    def base_run_dir(self, value):
+        self._base_run_dir = value
+        if value is not None and not self._custom_hdf5_path:
+            os.makedirs(value, exist_ok=True)
+            self._hdf5_path = os.path.join(value, 'enchanted_data_packed.h5')
+
+    @property
+    def hdf5_path(self):
+        if self._hdf5_path is None:
+            if self._base_run_dir is not None and not self._custom_hdf5_path:
+                self._hdf5_path = os.path.join(self._base_run_dir, 'enchanted_data_packed.h5')
+            elif not self._custom_hdf5_path:
+                self._hdf5_path = _default_hdf5_path()
+        return self._hdf5_path
+
+    @hdf5_path.setter
+    def hdf5_path(self, value):
+        self._hdf5_path = value
+        self._custom_hdf5_path = value is not None
+
+    def _ensure_hdf5_path(self):
+        """Move the default output into base_run_dir if that info becomes available later."""
+        if self._custom_hdf5_path or self._base_run_dir is None:
+            return
+
+        self.base_run_dir = self._base_run_dir
 
     def pack_run_dir(self, run_dir: str, results: dict = None) -> None:
         """
@@ -117,6 +160,7 @@ class AsciiBinToHdf5Packer(Packer):
         Returns:
             None
         """
+        self._ensure_hdf5_path()
         run_dir = os.path.abspath(run_dir)
         run_name = os.path.basename(os.path.normpath(run_dir))
 

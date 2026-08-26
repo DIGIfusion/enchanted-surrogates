@@ -13,7 +13,8 @@ class Packer(ABC):
     """
 
     def __init__(self, **kwargs):
-        pass
+        # this will be assigned by the supervisor and can be used by packers to determine the base run directory for relative paths
+        self.base_run_dir = kwargs.get("base_run_dir", None)
 
     @abstractmethod
     def pack_run_dir(self, run_dir: str, results: dict = None) -> dict:

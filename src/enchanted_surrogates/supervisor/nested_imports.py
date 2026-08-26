@@ -129,9 +129,19 @@ def import_packers(args) -> dict[str, Packer]:
     Returns:
         Dictionary mapping packer unique name to class instance
     """
+    supervisor_cfg = getattr(args, "supervisor", {}) or {}
+    base_run_dir = (
+        supervisor_cfg.get("base_run_dir")
+        if isinstance(supervisor_cfg, dict)
+        else getattr(supervisor_cfg, "get", lambda *args, **kwargs: None)("base_run_dir")
+    )
+
     packers = {}
     for name, packer_config in getattr(args, "packers", {}).items():
-        packers[name] = import_packer(packer_config["type"], packer_config)
+        packer_settings = dict(packer_config)
+        if base_run_dir is not None:
+            packer_settings.setdefault("base_run_dir", base_run_dir)
+        packers[name] = import_packer(packer_config["type"], packer_settings)
 
     return packers
 
