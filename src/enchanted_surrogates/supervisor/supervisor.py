@@ -188,6 +188,9 @@ class Supervisor:
                 for sequential_depth, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
+                    packer = None
+                    if group.packers is not None:
+                        packer = group.packers[i]
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
@@ -198,7 +201,7 @@ class Supervisor:
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
                     self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, packer=packer, group_start_time=group_start_time)
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -545,7 +548,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
@@ -562,6 +565,10 @@ class Supervisor:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
                     self.update_runner_progress(group_name, runner_config,completed=1)
+                    
+                    if packer is not None:
+                        packer.pack_run_dir(run_dir, result)
+                    
                     self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config,num_successes=1)

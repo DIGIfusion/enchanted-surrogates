@@ -29,9 +29,9 @@ def detect_case_style(s):
 
     if "_" in s and s.lower() == s:
         return "snake_case"
-    elif re.match(r"^[a-z]+(?:[A-Z][a-z]*)+$", s):
+    elif re.match(r"^[a-z]+[0-9]*(?:[A-Z][a-z]*[0-9]*)+$", s):
         return "camelCase"
-    elif re.match(r"^[A-Z][a-z]+(?:[A-Z][a-z]*)*$", s):
+    elif re.match(r"^[A-Z][a-z]+[0-9]*(?:[A-Z][a-z]*[0-9]*)*$", s):
         return "PascalCase"
     elif "-" in s and s.lower() == s:
         return "kebab-case"
@@ -271,6 +271,31 @@ def import_executor(executor_type, executor_config):
     """
     executor = cached_import(executor_type, "executors")(**executor_config)
     return executor
+
+
+def import_packer(packer_type, packer_config):
+    """
+    Dynamically imports and instantiates a packer class based on naming convention.
+
+    Parameters
+    ----------
+    packer_type : str
+        The name of the packer (in snake_case or PascalCase).
+    packer_config : dict
+        Keyword arguments to pass to the packer constructor.
+
+    Returns
+    -------
+    object
+        An instance of the packer class.
+
+    Raises
+    ------
+    ImportError
+        If the module or class cannot be found.
+    """
+    packer = cached_import(packer_type, "packers")(**packer_config)
+    return packer
 
 
 def import_parser(parser_type, parser_config):
