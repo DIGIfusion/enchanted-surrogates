@@ -164,7 +164,6 @@ class Supervisor:
                     packer = None
                     if group.packers is not None:
                         packer = group.packers[i]
-                        packer.base_run_dir = self.base_run_dir  # Assign base_run_dir to packer
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"d{depth}_b{batch_number}_s{j}_r{i}"
