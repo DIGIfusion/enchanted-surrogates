@@ -1,12 +1,7 @@
-import os
-import sys
-import yaml
 import argparse
 from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logger
-import shutil
-import logging
 from enchanted_surrogates.utils.config_helpers import load_configuration
 
 log = get_logger(__name__)
@@ -35,10 +30,7 @@ def main(arguments: argparse.Namespace, config_path=None):
     log.info("\n" + enchanted_wizard_version_7)
     log.info("Enchanted surrogates is starting.")
     log.info(f"Base run directory: {supervisor.base_run_dir}")
-    
-    # copy the config file to the base_run_dir for future reference
-    shutil.copy(config_path, os.path.join(supervisor.base_run_dir, "config.yaml"))
-    
+        
     supervisor.start()
 
 
