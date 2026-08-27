@@ -45,6 +45,4 @@ if __name__ == "__main__":
     )
     config_args = parser.parse_args()
     args = load_configuration(config_args.config_file)
-    #use absolute path to ensure no issues with relative directory later
-    config_path = os.path.abspath(config_args.config_file)
-    main(args, config_path=config_path)
+    main(args, config_path=config_args.config_file)
