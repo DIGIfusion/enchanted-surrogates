@@ -45,6 +45,8 @@ def main(arguments: argparse.Namespace, config_path=None):
             )
         except subprocess.CalledProcessError as e:
             log.error(f"Post processing script failed with exit code {e.returncode}")
+        except OSError as e:
+            log.error(f"Post processing script could not be run: {e}")
 
     log.info("Enchanted surrogates has completed")
     
