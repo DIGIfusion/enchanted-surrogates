@@ -190,7 +190,7 @@ class Supervisor:
                 ):
                     packer = None
                     if group.packers is not None:
-                        packer = group.packers[i]
+                        packer = group.packers[sequential_depth]
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
