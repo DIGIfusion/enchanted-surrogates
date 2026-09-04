@@ -197,4 +197,6 @@ supervisor:
     - file2.txt
 ```
 
-See config folder for example configurations.
+See config folder for example configurations. For a full walkthrough of every
+top-level config section (including running a post processing script after
+the run completes), see [Config Explained](config_explained.md).

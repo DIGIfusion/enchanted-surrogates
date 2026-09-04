@@ -6,8 +6,9 @@ repo_url: https://github.com/DIGIfusion/enchanted-surrogates
 repo_name: DIGIfusion/enchanted-surrogates
 
 nav:
-  - Home: 
+  - Home:
     - Overview: index.md
+    - Config Explained: config_explained.md
     - Releases: releases.md
     - Contribution: contribution.md
   - Supervisor:
