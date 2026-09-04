@@ -240,7 +240,7 @@ class Supervisor:
 
                 batch_number += 1
             
-            log.debug(f"Completed batch {batch_number} at depth {depth}")
+            log.debug(f"Completed batch {batch_number} at nested depth {nested_depth}")
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
