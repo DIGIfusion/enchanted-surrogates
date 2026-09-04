@@ -42,9 +42,13 @@ def main(arguments: argparse.Namespace, config_path=None):
                 [post_processing_script],
                 cwd=supervisor.base_run_dir,
                 check=True,
+                stderr=subprocess.PIPE,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             log.error(f"Post processing script failed with exit code {e.returncode}")
+            if e.stderr:
+                log.error(f"Post processing script stderr:\n{e.stderr}")
         except OSError as e:
             log.error(f"Post processing script could not be run: {e}")
 
