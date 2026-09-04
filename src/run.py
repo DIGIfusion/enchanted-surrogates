@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 from enchanted_surrogates.supervisor.supervisor import Supervisor, LOG_DIR
 from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_7
 from enchanted_surrogates.utils.logger import get_logger, setup_logger
@@ -33,7 +34,20 @@ def main(arguments: argparse.Namespace, config_path=None):
 
     supervisor.start()
 
+    post_processing_script = getattr(arguments, "post_processing", {}).get('script_path', None)
+    if post_processing_script:
+        log.info("Running post processing script on scheduler node")
+        try:
+            subprocess.run(
+                [post_processing_script],
+                cwd=supervisor.base_run_dir,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.error(f"Post processing script failed with exit code {e.returncode}")
 
+    log.info("Enchanted surrogates has completed")
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Runner")
     parser.add_argument(
