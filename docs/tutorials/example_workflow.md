@@ -58,6 +58,8 @@ In the random sampler, the budget defined the total number of samples. In the gr
 The same number of samples have been configured for both cases.
 The same parameters and parameters bounds have also been configured for both cases.
 
+The grid sampler also supports an optional `spacing` option, letting you choose `'linear'` (the default) or `'log'` spacing per parameter, e.g. `spacing: ['log', 'linear']`. Log spacing concentrates more points at the lower end of a parameter's bounds and requires that parameter's lower bound to be strictly positive. See [Grid Sampler](../samplers/grid_sampler.md) for details.
+
 Run enchanted-surrogates with the new configs.
 
 ```bash
