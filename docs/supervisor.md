@@ -91,6 +91,15 @@ supervisor:
         - code3_runner
 ```
 
+### Executor cleanup
+
+Each executor is cleaned up (e.g. Dask clusters are shut down) as soon as it is
+no longer needed, rather than waiting until the whole supervisor run finishes.
+An executor is kept open as long as a later runner in the same sequential
+group, or any runner in a later nested depth, still uses it - this includes an
+executor that is reused by name across multiple stages of `run_order`. Any
+executor not cleaned up along the way is cleaned once the whole run finishes.
+
 ### Resuming/extending previous runs
 
 The supervisor supports seamlessly resuming a previous run, in case of crashes
