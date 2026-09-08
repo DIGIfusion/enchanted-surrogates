@@ -182,27 +182,8 @@ class Supervisor:
                     expanded = df_batch.to_dict(orient="records")
                     
                     if group.sampler.submitted == group.sampler.budget:
-                        # Executors still needed: later runners in this group and
-                        # any executor used by a future group
-                        future_executors = group.executors[i + 1:] + [
-                            future_executor
-                            for future_group in self.nested_groups[depth + 1:]
-                            for future_executor in future_group.executors
-                        ]
-                        if executor not in future_executors:
-                            executor.clean()
+                        self._clean_redundant_executors(depth, i, group)
 
-                # Collect executors still needed by future groups so they stay open
-                future_executors = [
-                    executor
-                    for future_group in self.nested_groups[depth + 1:]
-                    for executor in future_group.executors
-                ]
-                # clean up executors that are not needed anymore to free up resources
-                for executor in group.executors:
-                    if executor not in future_executors:
-                        executor.clean()
-                
                 # Save batch results into summary files
                 batch_dataset = pd.concat([batch_dataset, df_batch])
                 if batch_number == 0:
@@ -265,6 +246,27 @@ class Supervisor:
         for group in self.nested_groups:
             for executor in group.executors:
                 executor.clean()
+
+    def _clean_redundant_executors(self, depth: int, i: int, group: RunGroup):
+        """
+        Cleans up group.executors[i] if it is not needed by a later runner in
+        this group or by any executor used in a later (nested) group. Should
+        only be called once the group's sampler has exhausted its budget,
+        i.e. on the last batch of the group.
+
+        Attributes:
+            depth (int): index of group within self.nested_groups
+            i (int): index of the executor within group.executors
+            group (RunGroup): the run group currently being processed
+        """
+        executor = group.executors[i]
+        future_executors = group.executors[i + 1:] + [
+            future_executor
+            for future_group in self.nested_groups[depth + 1:]
+            for future_executor in future_group.executors
+        ]
+        if executor not in future_executors:
+            executor.clean()
 
     def write_summary(
         self,
