@@ -1,6 +1,7 @@
 import importlib
 from types import SimpleNamespace
 import pytest
+import enchanted_surrogates.utils.precise_imports as precise_imports
 from enchanted_surrogates.utils.precise_imports import (
     clear_import_cache, cached_import, import_executor, import_sampler, import_runner
 )
@@ -64,7 +65,8 @@ def test_cached_import_caches_results(monkeypatch):
         importlib, "import_module", mock_import_module
     )
     monkeypatch.setattr(
-        "enchanted_surrogates.utils.precise_imports.load_plugins",
+        precise_imports,
+        "load_plugins",
         lambda: {}
     )
 
