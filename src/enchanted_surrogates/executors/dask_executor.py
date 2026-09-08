@@ -415,6 +415,7 @@ class DaskExecutor(Executor):
                 self.expected_number_of_workers = self.scale_n_jobs_min * int(self.SLURMcluster_config.get('processes',1))
 
             log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
+            self.SLURMcluster_config.setdefault("log_directory", slurm_out_dir)
             self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
             self.cluster.scale(self.scale_n_jobs)
             
