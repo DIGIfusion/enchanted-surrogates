@@ -197,6 +197,22 @@ supervisor:
     - file2.txt
 ```
 
-See config folder for example configurations. For a full walkthrough of every
-top-level config section (including running a post processing script after
-the run completes), see [Config Explained](config_explained.md).
+See config folder for example configurations.
+
+## `post_processing`
+
+Optional. Runs a script once the supervisor's `run_order` completes, useful
+for analysis or cleanup steps that depend on the full set of results being
+available. The script is run from `base_run_dir`, and only runs if the main
+run completes without an unhandled exception. If the script exits with a
+non-zero status, the failure is logged (`log.error`) but does not fail the
+overall enchanted-surrogates run. Omit `post_processing` entirely to skip
+this step.
+
+```yaml
+post_processing:
+  script_path: "path/to/script.sh" # must be executable, run from base_run_dir
+```
+
+See [example_post_processing.yaml](../configs/example_post_processing.yaml)
+for a full working example.

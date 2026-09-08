@@ -8,7 +8,6 @@ repo_name: DIGIfusion/enchanted-surrogates
 nav:
   - Home:
     - Overview: index.md
-    - Config Explained: config_explained.md
     - Releases: releases.md
     - Contribution: contribution.md
   - Supervisor:
