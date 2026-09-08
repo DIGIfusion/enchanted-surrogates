@@ -29,16 +29,19 @@ def run_simulation_task(
         runner_output: dict = runner.single_code_run(run_dir=run_dir, params=params)
 
     except Exception as exc:
-        log.error("=" * 100)
-        log.error("There was a Python ERROR on when running a simulation task:")
-        log.error(exc)
-        log.error(f"params: {params}")
-        log.error(f"run_dir: {run_dir}")
-        log.error(traceback.format_exc())
+        log.error(
+                f"{'=' * 100}"
+                f"There was a Python ERROR on when running a simulation task:"
+                f"{exc}"
+                f"params: {params}"
+                f"run_dir: {run_dir}"
+                f"{traceback.format_exc()}"
+            )
         # print the whole traceback and not just the last error
         runner_output = {"success": False}
     end = time()
-    
+
+    # Check that the runner output contains the required 'success' key with a boolean value
     if "success" not in runner_output or not isinstance(
         runner_output.get("success"), bool
     ):
@@ -46,17 +49,29 @@ def run_simulation_task(
             "THE RUNNER'S single_code_run MUST RETURN A DICT THAT ATLEAST CONTAINS THE KEY"
             + " VALUE PAIR 'success': bool"
         )
+
+    # Copy runner-specific success status
+    runner_output[f"success_{runner_name}"] = runner_output["success"]
     
-    # Update with conflict checking (in sequential runs 'output' and 'success' causes conflicts)
+    # Remove the generic 'success' key from params that could have came from previous sequential runners, 
+    # and to ensure that the current runner-specific success status is used in the enchanted_datapoint.csv
+    params.pop("success", None)
+
+    # Update with conflict checking (in sequential runs 'output' and 'success'
+    # causes conflicts)
     # Runner output has priority
     for key, value in params.items():
         if key not in runner_output:
             runner_output[key] = value
         else:
-            log.debug(f"Conflicting key in runner output and input params: {key}")
-
-    # Copy runner-specific success status
-    runner_output[f"success_{runner_name}"] = runner_output["success"]
+            log.debug(
+                f"Conflict run_simulation_task was provided with {key}: "
+                f"{params[key]} but the runner output has {key}: "
+                f"{runner_output[key]}"
+                f"These dicts are merged for enchanted_datapoint.csv and "
+                f"they should have unique keys. Keeping: {key}: "
+                f"{runner_output[key]}"
+            )
 
     # add the run_time for the runner to the output
     runner_output[f"runtime_sec_{runner_name}"] = end - start
