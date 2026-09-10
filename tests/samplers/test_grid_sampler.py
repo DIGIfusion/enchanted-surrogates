@@ -84,3 +84,72 @@ def test_generate_parameters_is_repeatable():
     second_call = list(sampler.generate_parameters())
 
     assert first_call == second_call
+
+
+def test_log_spacing_creates_geomspace_grid():
+    bounds = [(1, 100), (0, 1)]
+    num_samples = [3, 2]
+    params = ["x", "y"]
+
+    sampler = GridSampler(
+        bounds=bounds,
+        num_samples=num_samples,
+        parameters=params,
+        spacing=["log", "linear"],
+    )
+
+    samples = list(sampler.generate_parameters())
+    expected_x = np.geomspace(1, 100, 3)
+    expected_y = np.linspace(0, 1, 2)
+
+    expected = [[x, y] for x in expected_x for y in expected_y]
+    assert samples == expected
+
+
+def test_spacing_single_string_applies_to_all_parameters():
+    bounds = [(1, 10), (1, 1000)]
+    num_samples = [2, 4]
+    params = ["x", "y"]
+
+    sampler = GridSampler(
+        bounds=bounds, num_samples=num_samples, parameters=params, spacing="log"
+    )
+
+    samples = list(sampler.generate_parameters())
+    expected_x = np.geomspace(1, 10, 2)
+    expected_y = np.geomspace(1, 1000, 4)
+
+    expected = [[x, y] for x in expected_x for y in expected_y]
+    assert samples == expected
+
+
+def test_default_spacing_is_linear():
+    bounds = [(0, 1)]
+    num_samples = [4]
+    params = ["x"]
+
+    sampler = GridSampler(bounds=bounds, num_samples=num_samples, parameters=params)
+
+    assert sampler.spacing == ["linear"]
+
+
+def test_invalid_spacing_value_raises():
+    bounds = [(0, 1)]
+    num_samples = [4]
+    params = ["x"]
+
+    with pytest.raises(ValueError):
+        GridSampler(
+            bounds=bounds, num_samples=num_samples, parameters=params, spacing="foo"
+        )
+
+
+def test_log_spacing_requires_positive_lower_bound():
+    bounds = [(0, 10)]
+    num_samples = [3]
+    params = ["x"]
+
+    with pytest.raises(ValueError):
+        GridSampler(
+            bounds=bounds, num_samples=num_samples, parameters=params, spacing="log"
+        )

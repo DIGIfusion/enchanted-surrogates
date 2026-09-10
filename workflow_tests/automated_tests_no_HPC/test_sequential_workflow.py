@@ -5,8 +5,8 @@ Basic tests for the sequential workflow.
 from pathlib import Path
 
 import pytest
-from workflow_tests.utils.test_utils import *
 from enchanted_surrogates.packers.ascii_bin_to_hdf5_packer import AsciiBinToHdf5Packer
+from workflow_tests.utils.test_utils import get_run_dir_count, read_summary_file
 from enchanted_surrogates.supervisor.supervisor import Supervisor
 
 def test_sequential_workflow(tmp_path, run_config):
