@@ -4,13 +4,13 @@ import pandas as pd
 from pathlib import Path
 
 
-def get_run_dir_count(path: str, pattern: str = r"^d\d+_b\d+_s\d+_r\d+$") -> int:
+def get_run_dir_count(path: str, pattern: str = r"dn\d+_ds\d+_b\d+_s\d+") -> int:
     """
     Get the amount of subdirectories inside the given path that match the pattern filter.
 
     Arguments:
         path (str): Path to directory that is looked through.
-        pattern (str): Regex filter pattern. Defaults to d#_b#_s#_r# to find run directories
+        pattern (str): Regex filter pattern. Defaults to dn#_ds#_b#_s# to find run directories
     """
     base = Path(path)
     regex = re.compile(pattern)
