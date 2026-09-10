@@ -185,15 +185,8 @@ class Supervisor:
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
                     # monitor runs for failures and update progress file
-<<<<<<< HEAD
-                
-                    self.write_current_progress_string(depth, batch_number, len(run_dirs), 0, 0)
-                    self.monitor_runs(run_dirs, depth = depth, batch_number = batch_number, packer=packer)
-                    
-=======
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
 
->>>>>>> develop
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -537,11 +530,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-<<<<<<< HEAD
-    def monitor_runs(self, run_dirs: list[str], depth, batch_number, packer=None):
-=======
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time):
->>>>>>> develop
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
