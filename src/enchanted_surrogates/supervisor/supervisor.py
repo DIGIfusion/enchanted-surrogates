@@ -192,7 +192,7 @@ class Supervisor:
                     expanded = df_batch.to_dict(orient="records")
                     
                     if group.sampler.submitted == group.sampler.budget:
-                        self._clean_redundant_executors(depth, i, group)
+                        self._clean_redundant_executors(nested_depth, sequential_depth, group)
 
                 # Save batch results into summary files
                 batch_dataset = pd.concat([batch_dataset, df_batch])
@@ -257,7 +257,7 @@ class Supervisor:
             for executor in group.executors:
                 executor.clean()
 
-    def _clean_redundant_executors(self, depth: int, i: int, group: RunGroup):
+    def _clean_redundant_executors(self, nested_depth: int, sequential_depth: int, group: RunGroup):
         """
         Cleans up group.executors[i] if it is not needed by a later runner in
         this group or by any executor used in a later (nested) group. Should
@@ -265,14 +265,14 @@ class Supervisor:
         i.e. on the last batch of the group.
 
         Attributes:
-            depth (int): index of group within self.nested_groups
-            i (int): index of the executor within group.executors
+            nested_depth (int): index of group within self.nested_groups
+            sequential_depth (int): index of the executor within group.executors
             group (RunGroup): the run group currently being processed
         """
-        executor = group.executors[i]
-        future_executors = group.executors[i + 1:] + [
+        executor = group.executors[sequential_depth]
+        future_executors = group.executors[sequential_depth + 1:] + [
             future_executor
-            for future_group in self.nested_groups[depth + 1:]
+            for future_group in self.nested_groups[nested_depth + 1:]
             for future_executor in future_group.executors
         ]
         if executor not in future_executors:
