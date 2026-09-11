@@ -172,6 +172,9 @@ class Supervisor:
                 for sequential_depth, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
+                    packer = None
+                    if group.packers is not None:
+                        packer = group.packers[sequential_depth]
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
@@ -182,7 +185,7 @@ class Supervisor:
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -190,6 +193,9 @@ class Supervisor:
                     # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
+                    
+                    if group.sampler.submitted == group.sampler.budget:
+                        self._clean_redundant_executors(nested_depth, sequential_depth, group)
 
                 # Save batch results into summary files
                 batch_dataset = pd.concat([batch_dataset, df_batch])
@@ -253,6 +259,27 @@ class Supervisor:
         for group in self.nested_groups:
             for executor in group.executors:
                 executor.clean()
+
+    def _clean_redundant_executors(self, nested_depth: int, sequential_depth: int, group: RunGroup):
+        """
+        Cleans up group.executors[i] if it is not needed by a later runner in
+        this group or by any executor used in a later (nested) group. Should
+        only be called once the group's sampler has exhausted its budget,
+        i.e. on the last batch of the group.
+
+        Attributes:
+            nested_depth (int): index of group within self.nested_groups
+            sequential_depth (int): index of the executor within group.executors
+            group (RunGroup): the run group currently being processed
+        """
+        executor = group.executors[sequential_depth]
+        future_executors = group.executors[sequential_depth + 1:] + [
+            future_executor
+            for future_group in self.nested_groups[nested_depth + 1:]
+            for future_executor in future_group.executors
+        ]
+        if executor not in future_executors:
+            executor.clean()
 
     def write_summary(
         self,
@@ -527,7 +554,7 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
@@ -543,6 +570,10 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
+                    
+                    if packer is not None:
+                        packer.pack_run_dir(run_dir, result)
+                    
                     self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     self.update_runner_progress(group_name, runner_config, completed=1)
                     if result['success']:
