@@ -1,0 +1,722 @@
+"""
+Time-aware SVM boundary-uncertainty active sampler.
+
+Extends the strategy in svm_active_sampler.py (RBF-kernel SVM + convex-hull-
+restricted margin uncertainty) with a second, regression side-model that
+predicts simulation cost (e.g. GENE wallclock/simtime). The boundary
+sub-batch is then ranked by a weighted combination of classification
+uncertainty and predicted cost, so the sampler prefers points that are both
+informative for the class boundary *and* cheap to evaluate.
+
+Two output variables are required: a categorical class label and a
+continuous cost/time value, both produced by the same simulation. The
+exploration sub-batch (see svm_active_sampler.py's docstring for why it
+exists -- keeping the sampled region's convex hull growing) stays purely
+random and unbiased by predicted cost, since its role is coverage, not
+exploitation.
+"""
+
+import os
+
+import numpy as np
+import pandas as pd
+
+from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+
+from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
+from enchanted_surrogates.samplers.svm_active_sampler import _in_hull, _margin
+from enchanted_surrogates.utils.logger import get_logger
+
+log = get_logger(__name__)
+
+
+class SvmTimeAwareActiveSampler(ParentActiveSampler):
+    """
+    RBF-kernel SVM classifier + ExtraTrees simulation-cost regressor, jointly
+    driving hull-restricted boundary sampling.
+
+    Configuration (in addition to ParentActiveSampler's):
+        class_output_variable : str
+            Column name of the categorical class label.
+        time_output_variable : str
+            Column name of the continuous simulation cost/time.
+        svc_kwargs : dict, optional
+            Forwarded to sklearn.svm.SVC. Defaults to
+            ``kernel="rbf", C=10.0, gamma="scale", class_weight="balanced"``.
+        time_regressor_kwargs : dict, optional
+            Forwarded to sklearn.ensemble.ExtraTreesRegressor.
+        exploration_per_batch : int, optional
+            Unrestricted random exploration points drawn each batch (after
+            the initial batch). Default: max(1, batch_size // 5).
+        boundary_pool_fraction : float, optional
+            Fraction of the hull-restricted remaining pool to rank by the
+            combined uncertainty/cost score before drawing the boundary
+            sub-batch. Default: 0.10.
+        cost_lambda : float, optional
+            Weight of predicted cost in the combined boundary score:
+            ``score = uncertainty_rank - cost_lambda * predicted_time_rank``,
+            both ranks in [0, 1] (1 = most uncertain / most expensive).
+            Default: 0.5. Larger values favor cheaper points more strongly.
+        max_predicted_time : float, optional
+            Hard cutoff: pool points whose predicted simulation time exceeds
+            this value are excluded from both the exploration and boundary
+            sub-batches (e.g. set just below the GENE walltime/timeout so the
+            sampler stops proposing runs likely to time out). Applies from
+            the second batch onward, once a time model has been fit. If
+            fewer than the requested number of points remain under the
+            limit, a warning is logged and the sub-batch is filled with the
+            cheapest available points regardless of the limit. Default:
+            None (no filtering).
+        unclassified_label : str or None, optional
+            A class_output_variable value that carries no class information
+            (e.g. GENE runs where no known instability regime matched) and
+            should be excluded from training rather than learned as a real
+            class -- matching the reference active_sampling_svm.py demo
+            script's treatment of "Unclassified" points. Rows with this
+            label are dropped in register_future (the point is still
+            "spent": GENE ran, it just didn't yield a usable label). Set to
+            None to disable this filtering and treat it as a real class
+            instead. Default: "Unclassified".
+        test_data_csv : str, optional
+            Path to a held-out labeled CSV (same parameter + output-variable
+            columns as the training data) used for evaluation instead of
+            K-fold CV. When set, evaluate_model reports accuracy/F1/time-RMSE
+            on this fixed test set every evaluation, which is what
+            min_test_accuracy (below) checks against. Inherited from
+            ParentActiveSampler; see _load_test_set.
+        test_set_accuracy_target : float, optional
+            If set (requires test_data_csv), get_next_samples stops the run
+            early -- logging a warning and returning None, the same
+            mechanism used for budget exhaustion -- as soon as an
+            evaluate_model() call reports test-set accuracy below this
+            threshold. Default: None (no accuracy-based stopping).
+        cpuh_budget : float, optional
+            Total CPU-hours (core-hours) allowed across the whole run. Each
+            registered run's cost is computed from its per-stage wallclock
+            columns (gene_runtime_variable, helena_runtime_variable) times
+            the corresponding per-run core count (gene_cores_per_run,
+            helena_cores_per_run) -- accounting for actual completed runs
+            only, not a forecast. get_next_samples stops the run (same
+            mechanism as budget exhaustion) once the running total meets or
+            exceeds this value. Default: None (no CPU-hour limit).
+        gene_cores_per_run : int, optional
+            Cores used by one GENE run (e.g. the executor's SLURM --ntasks).
+            Required if cpuh_budget is set. Default: None.
+        helena_cores_per_run : int, optional
+            Cores used by one HELENA run. Required if cpuh_budget is set.
+            Default: None.
+        gene_runtime_variable : str, optional
+            Column name of GENE's per-run wallclock time in seconds.
+            Default: "runtime_sec_gene".
+        helena_runtime_variable : str, optional
+            Column name of HELENA's per-run wallclock time in seconds.
+            Default: "runtime_sec_helena".
+    """
+
+    DEFAULT_SVC_KWARGS = dict(kernel="rbf", C=10.0, gamma="scale", class_weight="balanced")
+    DEFAULT_TIME_REGRESSOR_KWARGS = dict(n_estimators=200, bootstrap=False)
+
+    def __init__(self, **kwargs):
+        self.class_output_variable = kwargs.get("class_output_variable")
+        self.time_output_variable = kwargs.get("time_output_variable")
+        if not self.class_output_variable or not self.time_output_variable:
+            raise ValueError(
+                "SvmTimeAwareActiveSampler requires both class_output_variable "
+                "and time_output_variable in sampler_config."
+            )
+        # ParentActiveSampler.__init__ uses output_variables for row-filtering
+        # (drop rows with NaN in either output) and output_dim bookkeeping.
+        kwargs = dict(kwargs)
+        kwargs["output_variables"] = [self.class_output_variable, self.time_output_variable]
+
+        super().__init__(**kwargs)
+
+        self.unclassified_label = kwargs.get("unclassified_label", "Unclassified")
+
+        # _test_y (if a test set was loaded) has columns [class, time] since
+        # output_variables was set to both above; split it apart and drop
+        # unclassified_label rows the same way register_future does, so the
+        # test set doesn't penalize the model for a label that isn't
+        # actually learnable.
+        if self._test_X is not None:
+            test_y_class = self._test_y[:, 0]
+            test_y_time = self._test_y[:, 1].astype(float)
+            if self.unclassified_label is not None:
+                keep = test_y_class != self.unclassified_label
+                self._test_X = self._test_X[keep]
+                test_y_class = test_y_class[keep]
+                test_y_time = test_y_time[keep]
+            self._test_y_class = test_y_class
+            self._test_y_time = test_y_time
+        else:
+            self._test_y_class = None
+            self._test_y_time = None
+
+        # Narrow train_y into two separate arrays now that the task shape is
+        # known (ParentActiveSampler initializes a single generic train_y).
+        self.train_x = np.empty((0, self.input_dim), dtype=float)
+        self.train_y_class = np.empty((0,), dtype=object)
+        self.train_y_time = np.empty((0,), dtype=float)
+
+        self.svc_kwargs = kwargs.get("svc_kwargs", None) or dict(self.DEFAULT_SVC_KWARGS)
+        self.time_regressor_kwargs = kwargs.get("time_regressor_kwargs", None) or \
+            dict(self.DEFAULT_TIME_REGRESSOR_KWARGS)
+
+        self.exploration_per_batch = int(
+            kwargs.get("exploration_per_batch", max(1, self.batch_size // 5))
+        )
+        if self.exploration_per_batch >= self.batch_size:
+            raise ValueError(
+                "exploration_per_batch must be smaller than batch_size "
+                f"(got {self.exploration_per_batch} >= {self.batch_size})."
+            )
+        self.boundary_pool_fraction = float(kwargs.get("boundary_pool_fraction", 0.10))
+        self.cost_lambda = float(kwargs.get("cost_lambda", 0.5))
+        max_predicted_time = kwargs.get("max_predicted_time", None)
+        self.max_predicted_time = float(max_predicted_time) if max_predicted_time is not None else None
+
+        test_set_accuracy_target = kwargs.get("test_set_accuracy_target", None)
+        self.test_set_accuracy_target = float(test_set_accuracy_target) \
+            if test_set_accuracy_target is not None else None
+        if self.test_set_accuracy_target is not None and self._test_X is None:
+            raise ValueError(
+                "test_set_accuracy_target requires test_data_csv to also be set."
+            )
+        self._stop_early = False
+
+        cpuh_budget = kwargs.get("cpuh_budget", None)
+        self.cpuh_budget = float(cpuh_budget) if cpuh_budget is not None else None
+        self.gene_cores_per_run = kwargs.get("gene_cores_per_run", None)
+        self.helena_cores_per_run = kwargs.get("helena_cores_per_run", None)
+        self.gene_runtime_variable = kwargs.get("gene_runtime_variable", "runtime_sec_gene")
+        self.helena_runtime_variable = kwargs.get("helena_runtime_variable", "runtime_sec_helena")
+        if self.cpuh_budget is not None and (
+            self.gene_cores_per_run is None or self.helena_cores_per_run is None
+        ):
+            raise ValueError(
+                "cpuh_budget requires both gene_cores_per_run and helena_cores_per_run "
+                "to also be set."
+            )
+        self.cpuh_used = 0.0
+
+        self.svm_model = None
+        self.scaler = None
+        self.time_model = None
+
+    # ------------------------------------------------------------
+    # MODEL FITTING / PREDICTION
+    # ------------------------------------------------------------
+    def _has_multiple_classes(self):
+        """
+        True once at least two distinct classes have been registered. Small
+        (or heavily imbalanced) initial batches can easily land entirely in
+        one class -- SVC.fit requires >= 2 classes, so callers must check
+        this before fitting/using self.svm_model.
+        """
+        return len(np.unique(self.train_y_class)) >= 2
+
+    def _fit_model(self):
+        self.scaler = StandardScaler().fit(self.train_x)
+
+        self.time_model = ExtraTreesRegressor(**self.time_regressor_kwargs)
+        self.time_model.fit(self.train_x, self.train_y_time)
+
+        if not self._has_multiple_classes():
+            # Not enough class diversity yet to fit an SVM boundary; leave
+            # svm_model unset so get_next_samples falls back to a fully
+            # random batch (see its batch_number > 0 branch) until a second
+            # class is observed.
+            self.svm_model = None
+            log.warning(
+                "Only one class (%r) seen in %d training point(s) so far; "
+                "skipping SVM fit and drawing a fully random batch instead "
+                "until a second class is observed.",
+                self.train_y_class[0] if len(self.train_y_class) else None,
+                len(self.train_y_class),
+            )
+            return
+
+        X_scaled = self.scaler.transform(self.train_x)
+        self.svm_model = SVC(**self.svc_kwargs)
+        self.svm_model.fit(X_scaled, self.train_y_class)
+
+    def _predict_labels(self, X_unit):
+        return self.svm_model.predict(self.scaler.transform(X_unit))
+
+    def _predict_time(self, X_unit):
+        return self.time_model.predict(X_unit)
+
+    def _compute_acquisition_unchunked(self, X_unit):
+        # Not used directly (see get_next_samples' explicit explore/boundary
+        # split), but kept for interface parity / potential reuse by
+        # ParentActiveSampler's generic batch-selection helpers.
+        return -_margin(self.svm_model, self.scaler.transform(X_unit))
+
+    # ------------------------------------------------------------
+    # EVALUATION
+    # ------------------------------------------------------------
+    def evaluate_model(self, do_write_batch_info=False, do_plot_residuals=False):
+        """
+        Evaluates against the held-out test set (if test_data_csv was
+        configured) or, failing that, stratified K-fold CV on the training
+        set. Also enforces test_set_accuracy_target (see class docstring):
+        if the test-set accuracy drops below it, self._stop_early is set so
+        get_next_samples ends the run on its next check.
+        """
+        if self._test_X is not None:
+            metrics = self.compute_testset_metrics()
+        else:
+            metrics = self.compute_kfold_metrics()
+
+        if metrics is None:
+            return None
+
+        if do_write_batch_info:
+            self.write_batch_info(metrics)
+
+        if self.test_set_accuracy_target is not None and self._test_X is not None:
+            if metrics["accuracy"] < self.test_set_accuracy_target:
+                log.warning(
+                    "Test-set accuracy %.3f fell below test_set_accuracy_target=%.3f; "
+                    "stopping the run.",
+                    metrics["accuracy"], self.test_set_accuracy_target,
+                )
+                self._stop_early = True
+
+        return metrics
+
+    @staticmethod
+    def _per_class_metrics(y_true, y_pred, labels):
+        """
+        Flat {class}_precision / {class}_recall / {class}_f1 columns for each
+        label, so a rare class (e.g. MTM) being learned poorly is visible in
+        batch_info.csv even when it's masked by a healthy macro F1.
+        """
+        precision, recall, f1, _ = precision_recall_fscore_support(
+            y_true, y_pred, labels=labels, average=None, zero_division=0
+        )
+        out = {}
+        for label, p, r, f in zip(labels, precision, recall, f1):
+            out[f"{label}_precision"] = float(p)
+            out[f"{label}_recall"] = float(r)
+            out[f"{label}_f1"] = float(f)
+        return out
+
+    def compute_kfold_metrics(self):
+        X = self.train_x
+        y_class = self.train_y_class
+        y_time = self.train_y_time
+
+        if not self._has_multiple_classes():
+            return None
+
+        class_counts = pd.Series(y_class).value_counts()
+        if len(y_class) < self.num_folds or class_counts.min() < self.num_folds:
+            return None
+
+        skf = StratifiedKFold(n_splits=self.num_folds, shuffle=True, random_state=self.seed)
+        all_y_true, all_y_pred = [], []
+        for train_idx, val_idx in skf.split(X, y_class):
+            scaler = StandardScaler().fit(X[train_idx])
+            clf = SVC(**self.svc_kwargs)
+            clf.fit(scaler.transform(X[train_idx]), y_class[train_idx])
+            y_pred = clf.predict(scaler.transform(X[val_idx]))
+            all_y_true.append(y_class[val_idx])
+            all_y_pred.append(y_pred)
+
+        y_true_all = np.concatenate(all_y_true)
+        y_pred_all = np.concatenate(all_y_pred)
+        labels = sorted(pd.unique(np.concatenate([y_true_all, y_pred_all])))
+
+        kf = KFold(n_splits=self.num_folds, shuffle=True, random_state=self.seed)
+        time_rmses = []
+        for train_idx, val_idx in kf.split(X):
+            reg = ExtraTreesRegressor(**self.time_regressor_kwargs)
+            reg.fit(X[train_idx], y_time[train_idx])
+            y_pred_time = reg.predict(X[val_idx])
+            time_rmses.append(np.sqrt(np.mean((y_pred_time - y_time[val_idx]) ** 2)))
+
+        return {
+            "eval_mode": "kfold",
+            "accuracy": float(accuracy_score(y_true_all, y_pred_all)),
+            "f1_macro": float(f1_score(y_true_all, y_pred_all, average="macro", zero_division=0)),
+            "time_rmse": float(np.mean(time_rmses)),
+            **self._per_class_metrics(y_true_all, y_pred_all, labels),
+            "labels": labels,
+            "confusion_matrix": confusion_matrix(y_true_all, y_pred_all, labels=labels),
+        }
+
+    def compute_testset_metrics(self):
+        """
+        Fits on all current training data and evaluates against the held-out
+        test set (self._test_X / self._test_y_class / self._test_y_time).
+        """
+        if len(self.train_y_class) == 0:
+            return None
+
+        self._fit_model()
+
+        if self.svm_model is None:
+            # Not enough class diversity yet to evaluate classification
+            # performance (see _fit_model); skip this evaluation cycle.
+            return None
+
+        y_pred_class = self.svm_model.predict(self.scaler.transform(self._test_X))
+        y_pred_time = self.time_model.predict(self._test_X)
+
+        accuracy = accuracy_score(self._test_y_class, y_pred_class)
+        f1_macro = f1_score(self._test_y_class, y_pred_class, average="macro", zero_division=0)
+        time_rmse = np.sqrt(np.mean((y_pred_time - self._test_y_time) ** 2))
+        labels = sorted(pd.unique(np.concatenate([self._test_y_class, y_pred_class])))
+
+        return {
+            "eval_mode": "test_set",
+            "accuracy": float(accuracy),
+            "f1_macro": float(f1_macro),
+            "time_rmse": float(time_rmse),
+            **self._per_class_metrics(self._test_y_class, y_pred_class, labels),
+            "labels": labels,
+            "confusion_matrix": confusion_matrix(self._test_y_class, y_pred_class, labels=labels),
+        }
+
+    def write_batch_info(self, metrics):
+        """
+        Appends one row to batch_info.csv. Per-class columns (e.g.
+        MTM_precision) only exist once that class has been observed, so
+        later rows can introduce columns earlier rows never had (see
+        _per_class_metrics / compute_kfold_metrics/compute_testset_metrics,
+        which derive `labels` fresh from whatever's been seen so far). A
+        plain mode="a", header=False append would silently misalign those
+        new columns under the stale header instead of adding them, so when
+        the new row's columns aren't a subset of the existing header, the
+        whole file is rewritten with the union of old + new columns
+        (missing values become blank/NaN for rows that predate a class).
+        """
+        scalar_metrics = {k: v for k, v in metrics.items() if k not in ("labels", "confusion_matrix")}
+        row = {"num_train_samples": self.train_x.shape[0], **scalar_metrics}
+        df = pd.DataFrame([row])
+
+        csv_path = os.path.join(self.base_run_dir, 'batch_info.csv')
+        if not os.path.exists(csv_path):
+            df.to_csv(csv_path, index=False)
+            return
+
+        existing = pd.read_csv(csv_path)
+        if set(df.columns).issubset(existing.columns):
+            df = df.reindex(columns=existing.columns)
+            df.to_csv(csv_path, mode="a", header=False, index=False)
+        else:
+            combined = pd.concat([existing, df], ignore_index=True, sort=False)
+            combined.to_csv(csv_path, index=False)
+
+    # ------------------------------------------------------------
+    # TRAINING SET BOOKKEEPING
+    # ------------------------------------------------------------
+    def register_future(self, future_df):
+        if self.cpuh_budget is not None:
+            self._accumulate_cpuh(future_df)
+
+        future_df = future_df[future_df['success']]
+        future_df = self._apply_row_filters(future_df)
+
+        if self.unclassified_label is not None:
+            n_before = len(future_df)
+            future_df = future_df[future_df[self.class_output_variable] != self.unclassified_label]
+            n_dropped = n_before - len(future_df)
+            if n_dropped:
+                log.debug(
+                    f"Dropped {n_dropped} row(s) labeled {self.unclassified_label!r} "
+                    "(carries no class information; not added to training set)."
+                )
+
+        if future_df.empty:
+            return
+
+        X_real = future_df[self.parameters].to_numpy(dtype=float)
+        y_class = future_df[self.class_output_variable].to_numpy()
+        y_time = future_df[self.time_output_variable].to_numpy(dtype=float)
+
+        X_unit = self.to_unit_numpy(X_real)
+
+        self.train_x = np.vstack([self.train_x, X_unit])
+        self.train_y_class = np.concatenate([self.train_y_class, y_class])
+        self.train_y_time = np.concatenate([self.train_y_time, y_time])
+
+        log.debug(
+            f"future_df rows: {len(future_df)}\n"
+            f"train_x new shape: {self.train_x.shape}"
+        )
+
+    def _accumulate_cpuh(self, future_df):
+        """
+        Adds this batch's CPU-hour cost to self.cpuh_used, from every row
+        submitted (successful or not -- a failed run still burns CPU-hours),
+        using gene_runtime_variable/helena_runtime_variable * the configured
+        per-run core counts. Missing/NaN runtime values contribute 0 (rather
+        than raising), so a run missing one stage's timing column doesn't
+        block CPU-hour tracking for the rest.
+        """
+        gene_hours = 0.0
+        if self.gene_runtime_variable in future_df.columns:
+            gene_sec = future_df[self.gene_runtime_variable].fillna(0).to_numpy(dtype=float)
+            gene_hours = float(gene_sec.sum()) / 3600.0 * self.gene_cores_per_run
+
+        helena_hours = 0.0
+        if self.helena_runtime_variable in future_df.columns:
+            helena_sec = future_df[self.helena_runtime_variable].fillna(0).to_numpy(dtype=float)
+            helena_hours = float(helena_sec.sum()) / 3600.0 * self.helena_cores_per_run
+
+        batch_cpuh = gene_hours + helena_hours
+        self.cpuh_used += batch_cpuh
+        log.debug(
+            f"Batch CPU-hours: {batch_cpuh:.2f} (gene={gene_hours:.2f}, "
+            f"helena={helena_hours:.2f}); running total: {self.cpuh_used:.2f}"
+        )
+
+    # ------------------------------------------------------------
+    # MAIN ENTRY: GET NEXT SAMPLES
+    # ------------------------------------------------------------
+    def get_next_samples(self):
+        if self.batch_number == 0:
+            initial_pool_indices = self._get_initial_batch()
+            real_selected_samples = self._get_samples_from_pool(initial_pool_indices)
+            self._remove_from_pool(initial_pool_indices)
+        else:
+            self._fit_model()
+            self.evaluate_model(
+                do_write_batch_info=self._should_trigger(self.write_batch_info_every),
+            )
+
+            if self._stop_early:
+                log.warning(
+                    "Stopping early: test-set accuracy fell below "
+                    "test_set_accuracy_target (submitted %d/%d of budget).",
+                    self.submitted, self.budget,
+                )
+                self._light_post_process()
+                return None
+
+            if self.cpuh_budget is not None and self.cpuh_used >= self.cpuh_budget:
+                log.warning(
+                    "Stopping: CPU-hour budget reached (%.2f/%.2f CPU-hours used, "
+                    "submitted %d/%d of sample budget).",
+                    self.cpuh_used, self.cpuh_budget, self.submitted, self.budget,
+                )
+                self._light_post_process()
+                return None
+
+            if self.svm_model is None:
+                # Not enough class diversity yet to fit an SVM boundary (see
+                # _fit_model): draw a fully random batch instead, same as
+                # the initial batch, until a second class is observed.
+                selected_indices = self._get_initial_batch_n(self.batch_size)
+            else:
+                explore_indices = self._get_initial_batch_n(
+                    self.exploration_per_batch, filter_by_time=True
+                )
+                boundary_indices = self._compute_boundary_candidates(
+                    self.batch_size - self.exploration_per_batch, exclude=explore_indices
+                )
+                selected_indices = np.concatenate([explore_indices, boundary_indices]).astype(int)
+
+            real_selected_samples = self._get_samples_from_pool(selected_indices)
+            self._remove_from_pool(selected_indices)
+
+        self.batch_number += 1
+        self.submitted += len(real_selected_samples)
+        params_dict = self.samples_to_params_dict(real_selected_samples)
+
+        # Always return this batch, even if submitting it exhausts (or
+        # crosses) the budget -- the caller's own has_budget/submitted>budget
+        # checks stop the loop on the *next* call. Returning None here
+        # instead would silently discard the batch just selected and
+        # computed, wasting it (see supervisor.py's `if samples is None:
+        # break` -- it never runs the batch in that case).
+        if not self.has_budget:
+            self._light_post_process()
+
+        return params_dict
+
+    def samples_to_params_dict(self, samples):
+        """
+        Same as ParentActiveSampler.samples_to_params_dict, but tags each
+        sample with batch_num (self.batch_number at submission time). This
+        column is not a real simulation parameter -- gene_parser.py's
+        parameter_nml_map / write_input_file only forward keys it recognizes
+        (dropping unknown ones with a warning) and helena_parser.py's
+        write_input_file_noKBMconstraint only reads named keys, so an unknown
+        batch_num key is safely ignored by both and simply flows through to
+        enchanted_dataset.csv. Recording it there (rather than saving model
+        snapshots) is enough to fully reconstruct any checkpoint later: refit
+        the sampler's model on the subset of rows with batch_num <= N using
+        the same sampler config.
+        """
+        params_dict = super().samples_to_params_dict(samples)
+        for p in params_dict:
+            p["batch_num"] = self.batch_number
+        return params_dict
+
+    def _get_initial_batch_n(self, n, filter_by_time=False):
+        """
+        Unrestricted random draw of size n. If filter_by_time and
+        max_predicted_time are set (and a time model has been fit, i.e. this
+        isn't the very first batch), points predicted to exceed
+        max_predicted_time are excluded before the random draw; if too few
+        qualify, a warning is logged and the draw falls back to the n
+        cheapest-predicted points in the pool regardless of the limit.
+        """
+        use_time_filter = filter_by_time and self.max_predicted_time is not None and \
+            self.time_model is not None
+
+        cand_scores = np.array([], float)
+        cand_indices = np.array([], int)
+        under_limit_indices = np.array([], int)
+
+        cheapest_times = np.array([], float)
+        cheapest_indices = np.array([], int)
+
+        self._reset_iterator()
+        while True:
+            X_chunk_unit, _, chunk_indices = self.get_next_pool_chunk()
+            if X_chunk_unit is None:
+                break
+            chunk_indices = np.asarray(chunk_indices)
+
+            if use_time_filter:
+                pred_time = self._predict_time(X_chunk_unit)
+                under_limit_indices = np.concatenate(
+                    [under_limit_indices, chunk_indices[pred_time <= self.max_predicted_time]]
+                )
+                # Keep a running set of the cheapest-seen points as a fallback
+                # in case not enough points end up under the limit.
+                cheapest_times = np.concatenate([cheapest_times, pred_time])
+                cheapest_indices = np.concatenate([cheapest_indices, chunk_indices])
+                if len(cheapest_times) > n:
+                    keep = np.argsort(cheapest_times)[:n]
+                    cheapest_times = cheapest_times[keep]
+                    cheapest_indices = cheapest_indices[keep]
+
+            scores = self.rng.random(len(chunk_indices))
+            combined_scores = np.concatenate([cand_scores, scores])
+            combined_indices = np.concatenate([cand_indices, chunk_indices])
+            if len(combined_scores) > n:
+                top_m = np.argpartition(combined_scores, -n)[-n:]
+                cand_scores = combined_scores[top_m]
+                cand_indices = combined_indices[top_m]
+            else:
+                cand_scores = combined_scores
+                cand_indices = combined_indices
+
+        if not use_time_filter:
+            return cand_indices.astype(int)
+
+        if len(under_limit_indices) < n:
+            log.warning(
+                "Only %d/%d pool points are predicted under max_predicted_time=%s; "
+                "falling back to the %d cheapest-predicted points for the exploration sub-batch.",
+                len(under_limit_indices), n, self.max_predicted_time, n,
+            )
+            return cheapest_indices.astype(int)
+
+        chosen = self.rng.choice(under_limit_indices, size=n, replace=False)
+        return chosen.astype(int)
+
+    def _compute_boundary_candidates(self, n, exclude=()):
+        """
+        Streams the remaining pool, restricts to the convex hull of the
+        points sampled so far, drops any point whose predicted time exceeds
+        max_predicted_time (if set -- see the class docstring), and ranks
+        the survivors by a weighted combination of classification-margin
+        uncertainty and predicted simulation cost:
+
+            score = uncertainty_rank - cost_lambda * predicted_time_rank
+
+        with both ranks normalized to [0, 1] over the candidate pool (1 =
+        most uncertain / most expensive), so cost_lambda directly trades off
+        informativeness against cost regardless of each quantity's raw
+        scale. The boundary sub-batch is then drawn uniformly at random from
+        the top boundary_pool_fraction slice by this combined score,
+        mirroring SVMActiveSampler's own random-within-uncertain-pool draw.
+
+        If the time limit leaves fewer than n hull-restricted candidates, a
+        warning is logged and the limit is relaxed (falling back to the
+        cheapest-predicted hull-restricted candidates) so the boundary
+        sub-batch is still filled.
+        """
+        hull_points = self.scaler.transform(self.train_x)
+        exclude = set(int(i) for i in exclude)
+
+        all_margins = []
+        all_times = []
+        all_indices = []
+
+        self._reset_iterator()
+        while True:
+            X_chunk_unit, _, chunk_indices = self.get_next_pool_chunk()
+            if X_chunk_unit is None:
+                break
+
+            chunk_indices = np.asarray(chunk_indices)
+            keep = np.array([idx not in exclude for idx in chunk_indices])
+            if not keep.any():
+                continue
+            X_chunk_unit = X_chunk_unit[keep]
+            chunk_indices = chunk_indices[keep]
+
+            X_chunk_scaled = self.scaler.transform(X_chunk_unit)
+            inside = _in_hull(X_chunk_scaled, hull_points)
+            if inside.sum() > 0:
+                m = _margin(self.svm_model, X_chunk_scaled[inside])
+                t = self._predict_time(X_chunk_unit[inside])
+                all_margins.append(m)
+                all_times.append(t)
+                all_indices.append(chunk_indices[inside])
+
+        if not all_indices or sum(len(idx) for idx in all_indices) < n:
+            log.warning(
+                "Hull-restricted pool has fewer than %d classifiable candidates; "
+                "falling back to an unrestricted random draw for the boundary sub-batch.",
+                n,
+            )
+            fallback = self._get_initial_batch_n(n + len(exclude), filter_by_time=True)
+            fallback = fallback[~np.isin(fallback, list(exclude))]
+            return fallback[:n]
+
+        margins = np.concatenate(all_margins)
+        times = np.concatenate(all_times)
+        indices = np.concatenate(all_indices)
+
+        if self.max_predicted_time is not None:
+            under_limit = times <= self.max_predicted_time
+            if under_limit.sum() >= n:
+                margins = margins[under_limit]
+                times = times[under_limit]
+                indices = indices[under_limit]
+            else:
+                log.warning(
+                    "Only %d/%d hull-restricted candidates are predicted under "
+                    "max_predicted_time=%s; relaxing the limit and using the "
+                    "cheapest-predicted hull-restricted candidates instead.",
+                    under_limit.sum(), n, self.max_predicted_time,
+                )
+                pool_size = max(n, int(len(times) * self.boundary_pool_fraction))
+                cheapest = np.argsort(times)[:min(pool_size, len(times))]
+                margins = margins[cheapest]
+                times = times[cheapest]
+                indices = indices[cheapest]
+
+        # Smallest margin = most uncertain -> rank 1 is most uncertain.
+        uncertainty_rank = pd.Series(-margins).rank(pct=True).to_numpy()
+        time_rank = pd.Series(times).rank(pct=True).to_numpy()
+        combined_score = uncertainty_rank - self.cost_lambda * time_rank
+
+        pool_size = max(n, int(len(indices) * self.boundary_pool_fraction))
+        pool_size = min(pool_size, len(indices))
+        boundary_pool = indices[np.argsort(combined_score)[-pool_size:]]
+
+        chosen = self.rng.choice(boundary_pool, size=n, replace=False)
+        return chosen.astype(int)

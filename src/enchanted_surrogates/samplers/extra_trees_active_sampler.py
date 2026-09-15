@@ -2,8 +2,8 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error, r2_score
 import numpy as np
-from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
-class ExtraTreesActiveSampler(ParentActiveSampler):
+from enchanted_surrogates.samplers.parent_active_sampler_regression import ParentActiveSamplerRegression
+class ExtraTreesActiveSampler(ParentActiveSamplerRegression):
     """
     Extra Trees surrogate plugged into the model-agnostic parent sampler.
     """
