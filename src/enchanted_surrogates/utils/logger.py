@@ -47,7 +47,7 @@ def setup_logging(
 
     file_handler.setFormatter(logFormatter)
     logger.addHandler(file_handler)
-    
+
 
 def setup_logger(base_run_dir: str, log_level: str, log_dir: str):
     """
