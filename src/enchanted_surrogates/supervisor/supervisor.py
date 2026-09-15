@@ -121,11 +121,6 @@ class Supervisor:
         else:
             self.create_base_run_dir(self.base_run_dir, config_path)
 
-    # def reset_progress(self):
-    #     for group in self.nested_groups:
-    #         for runner in group.runners:
-    #             self.runner_progress[f'G{i}'][runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
-
     def start(self):
         """
         Main function of the supervisor. Starts the simulation process. Currently
