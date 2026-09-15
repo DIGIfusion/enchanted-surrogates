@@ -12,6 +12,7 @@ import shutil
 import glob
 from time import sleep
 import h5py
+from datetime import datetime
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.logger import get_logger
@@ -22,7 +23,9 @@ from enchanted_surrogates.supervisor.nested_imports import (
     import_saved_files_list,
 )
 from enchanted_surrogates.utils.ascii_loading_bar import ascii_loading_bar
-
+from enchanted_surrogates.utils.time_format import time_format
+from enchanted_surrogates.utils.ascii_art import enchanted_wizard_version_3
+import time
 log = get_logger(__name__)
 
 LOG_DIR = "logs"
@@ -37,6 +40,7 @@ class Supervisor:
         args (argparse.Namespace):  Namespace containing the configuration parameters
 
     """
+
 
     def __init__(self, args, config_path=None):
         """
@@ -124,21 +128,21 @@ class Supervisor:
         Gathers samples and paths, and gives them to executor. After all processes
         are finished, creates summary file.
         """
-
+        start_runs_time = time.time()
         log.info("Starting runs...")
         if self.local_storage:
             real_run_dir = self.local_storage
         else:
             real_run_dir = self.base_run_dir
-        
+                
         last_complete_dataset = pd.DataFrame()
+
+        log.info(f"\n\nProgress report will be saved to: {self.current_progress_info_file}\n\n")
 
         for nested_depth, group in enumerate(self.nested_groups):
             log.debug(f'At depth {nested_depth} with sampler {group.sampler} and executors {group.executors} and runners {group.runners}')
             batch_number = 0
             batch_dataset = pd.DataFrame()
-            group_start_time = 0  # Placeholder, used in progress reporting (branch 5)
-
             # Restore run state from previous data, if needed and in correct position of the loops
             if self.previous_run_data:
                 if nested_depth < self.previous_run_data.depth:
@@ -153,6 +157,12 @@ class Supervisor:
                     )
                     group.sampler.register_future(last_complete_dataset)
 
+            # initalise the current progress file
+            group_start_time = time.time()
+            
+            log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
+            self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_start_time=group_start_time)
+            
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
@@ -183,10 +193,9 @@ class Supervisor:
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
-
+                    self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                     # monitor runs for failures and update progress file
                     self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
-
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
@@ -253,12 +262,19 @@ class Supervisor:
 
         # Clean unwanted files
         self.delete_unwanted_files(self.save_files_arg, self.data_dir)
-
+        
+        end_runs_time = time.time()
+        log.info(f"All Runs completed in {time_format(int(end_runs_time - start_runs_time))} (days - hours:minutes:seconds)")
         # Clean run_dirs
         log.info("Shutting down scheduler and workers...")
         for group in self.nested_groups:
             for executor in group.executors:
                 executor.clean()
+
+    def update_runner_progress(self, group_name: str, runner_config: dict, submitted: int = 0, completed: int = 0, num_successes: int = 0):
+        self.runner_progress[group_name][runner_config["__runner_name"]]['completed'] += completed
+        self.runner_progress[group_name][runner_config["__runner_name"]]['submitted'] += submitted
+        self.runner_progress[group_name][runner_config["__runner_name"]]['num_successes'] += num_successes
 
     def _clean_redundant_executors(self, nested_depth: int, sequential_depth: int, group: RunGroup):
         """
@@ -582,7 +598,6 @@ class Supervisor:
                         if self.log_failures:
                             details = "\n".join(f"  {k}: {v}" for k, v in result.items())
                             log_message = f"""\n\n
-
 === FAILURE =========================================
 Run directory: {run_dir}
 
@@ -593,26 +608,74 @@ Result:
                             \n""".strip()
 
                             log.error(log_message)
+                    self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                 sleep(0.1)
 
-    def write_current_progress_string(self, depth, batch_number, total, completed, num_successes):
+    def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_start_time):
         log.debug('Writing progress string')
-        progress_string=f"""
+        def format_runner_progress(runner_name, stats, budget):
+            submitted = stats.get("submitted", 0)
+            completed = stats.get("completed", 0)
+            successes = stats.get("num_successes", 0)
+            failures = completed - successes
+            success_rate = (successes * 100 / completed) if completed else 0
+
+            bar_completed = ascii_loading_bar(budget, completed)
+            bar_submitted = ascii_loading_bar(submitted if submitted else 1, completed)
+
+            return f"""
+--------------------   RUNNER: {runner_name}   --------------------
+
+  STATUS
+--------------------------------------------------------
+Submitted:          {submitted}
+Completed:          {completed}
+Successes:          {successes}
+Failures:           {failures}
+Success Rate:       {success_rate:5.1f}%
+
+  COMPLETED vs SUBMITTED
+--------------------------------------------------------
+{completed} / {submitted if submitted else 0}
+{bar_submitted}
+
+  COMPLETED vs BUDGET
+--------------------------------------------------------
+{completed} / {budget}
+{bar_completed}
+
+
+
+""".rstrip()
         
-=== PROGRESS REPORT =====================================
+        def format_all_runners_progress(runner_progress):
+            blocks = []
+            for group, runners in runner_progress.items():
+                blocks.append(f'====================   GROUP: {group}   ====================')
+                for runner_name, stats in runners.items():
+                    blocks.append(format_runner_progress(runner_name, stats, self.group_budget[group]))
+            
+            return "\n".join(blocks)
 
-Time:            {pd.Timestamp.now()}
-Depth:           {depth}
-Batch:           {batch_number}
+        runner_progress_string = format_all_runners_progress(self.runner_progress) 
+        progress_string=f"""
 
-Completed:       {completed}/{total}
-Successes:       {num_successes}
-Failures:        {completed-num_successes}
-Success Rate:    {num_successes*100/completed if completed else 0:5.1f}%
+{enchanted_wizard_version_3}
 
-{ascii_loading_bar(total, completed)}
+===   PROGRESS REPORT   ====================================
 
-==========================================================
+Group Start Time:     {datetime.fromtimestamp(group_start_time).strftime("%Y-%m-%d %H:%M:%S")}
+Last Update:          {datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d %H:%M:%S")}
+
+Active Runner:        {current_runner_name}
+Nested Depth:         {nested_depth}
+Sequential Depth:     {sequential_depth}
+Current Batch:        {batch_number}
+
+ 
+{runner_progress_string}
+
+==============================================================
 
 """
 

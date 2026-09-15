@@ -80,15 +80,16 @@ A Github Actions workflow is also used for running Ruff tests. These are
 currently only testing for issues categorized as Errors or Fatal. Message
 overview [here](https://docs.astral.sh/ruff/rules/). The list of enabled rules
 can be found in pyproject.toml. To check the linting locally and get a full
-overview of all possible issues, run:
+overview of all possible issues, activate your enchanted surrogates python
+environment, then run:
 
 For single file check:
 
-    ruff /path/to/file.py
+    ruff check /path/to/file.py
 
-For all python files in $PWD:
+For all files in $PWD:
 
-    ruff $(find $PWD -name "*.py")
+    ruff check .
 
 #### Machine Specific Tests
 
