@@ -10,7 +10,7 @@ def get_run_dir_count(path: str, pattern: str = r"dn\d+_ds\d+_b\d+_s\d+") -> int
 
     Arguments:
         path (str): Path to directory that is looked through.
-        pattern (str): Regex filter pattern. Defaults to d#_b#_s#_r# to find run directories
+        pattern (str): Regex filter pattern. Defaults to dn#_ds#_b#_s# to find run directories
     """
     base = Path(path)
     regex = re.compile(pattern)

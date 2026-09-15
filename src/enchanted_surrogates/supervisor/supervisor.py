@@ -64,7 +64,7 @@ class Supervisor:
             self.runner_progress[f'G{i}'] = {}
             for runner in group.runners:
                 self.runner_progress[f'G{i}'][runner["__runner_name"]] = {'submitted':0, 'completed':0,'num_successes':0}
-        
+
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
@@ -141,19 +141,20 @@ class Supervisor:
             real_run_dir = self.base_run_dir
                 
         last_complete_dataset = pd.DataFrame()
-        
-        log.info(f"\n\nProgress report will be saved to: {self.current_progress_info_file}\n\n")
-        
+
         for nested_depth, group in enumerate(self.nested_groups):
-            # self.reset_progress()
             log.debug(f'At depth {nested_depth} with sampler {group.sampler} and executors {group.executors} and runners {group.runners}')
             batch_number = 0
             batch_dataset = pd.DataFrame()
+            group_start_time = 0  # Placeholder, used in progress reporting (branch 5)
+
             # Restore run state from previous data, if needed and in correct position of the loops
             if self.previous_run_data:
                 if nested_depth < self.previous_run_data.depth:
+                if nested_depth < self.previous_run_data.depth:
                     continue
 
+                if nested_depth == self.previous_run_data.depth:
                 if nested_depth == self.previous_run_data.depth:
                     batch_number = self.previous_run_data.batch_number + 1
 
@@ -191,23 +192,31 @@ class Supervisor:
                     packer = None
                     if group.packers is not None:
                         packer = group.packers[sequential_depth]
+                    packer = None
+                    if group.packers is not None:
+                        packer = group.packers[sequential_depth]
                     run_dirs = [
                         os.path.join(
+                            real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
                         )
                         for j in range(len(expanded))
                     ]
                     executor.execute(list(zip(run_dirs, expanded)), runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
-                    self.write_current_progress_string(runner["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
+
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, packer=packer, group_start_time=group_start_time)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
+
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
                     # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
+                    
+                    if group.sampler.submitted == group.sampler.budget:
+                        self._clean_redundant_executors(nested_depth, sequential_depth, group)
                     
                     if group.sampler.submitted == group.sampler.budget:
                         self._clean_redundant_executors(nested_depth, sequential_depth, group)
@@ -226,6 +235,7 @@ class Supervisor:
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=nested_depth,
+                    depth=nested_depth,
                     submitted_samples=group.sampler.submitted,
                 )
                 run_data.save(self.previous_run_file)
@@ -242,13 +252,14 @@ class Supervisor:
                 self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
-            
-            log.debug(f"Completed batch {batch_number} at nested depth {nested_depth}")
+
+            log.debug(f"Completed batch {batch_number} at depth {nested_depth}")
 
             # Update data rows for next nesting level
             last_complete_dataset = batch_dataset.copy()
 
             # Create a summary file with last_complete_dataset for nesting
+            if nested_depth < len(self.nested_groups) - 1:
             if nested_depth < len(self.nested_groups) - 1:
                 self.write_summary(
                     dataset=last_complete_dataset,
@@ -299,11 +310,6 @@ class Supervisor:
         if executor not in future_executors:
             executor.clean()
 
-    def update_runner_progress(self, group_name: str, runner_config: dict, submitted: int = 0, completed: int = 0, num_successes: int = 0):
-        self.runner_progress[group_name][runner_config["__runner_name"]]['completed'] += completed
-        self.runner_progress[group_name][runner_config["__runner_name"]]['submitted'] += submitted
-        self.runner_progress[group_name][runner_config["__runner_name"]]['num_successes'] += num_successes
-    
     def write_summary(
         self,
         dataset: pd.DataFrame,
@@ -326,6 +332,11 @@ class Supervisor:
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
         write_header = write_mode != "a"
         dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
+
+    def update_runner_progress(self, group_name: str, runner_config: dict, submitted: int = 0, completed: int = 0, num_successes: int = 0):
+        self.runner_progress[group_name][runner_config["__runner_name"]]['completed'] += completed
+        self.runner_progress[group_name][runner_config["__runner_name"]]['submitted'] += submitted
+        self.runner_progress[group_name][runner_config["__runner_name"]]['num_successes'] += num_successes
 
     def finalize_summary(self, filename: str = "enchanted_dataset"):
         """
@@ -573,14 +584,15 @@ class Supervisor:
             sleep(1)
     
     def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
-        
+
         Attributes:
             run_dirs (list[str]): List of running directories to monitor
         """
-        
+
         run_dirs = set(run_dirs)   # if it isn't already a set
         while run_dirs:
             for run_dir in list(run_dirs):   # iterate over a snapshot
@@ -588,20 +600,20 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
-                    self.update_runner_progress(group_name, runner_config,completed=1)
                     
                     if packer is not None:
                         packer.pack_run_dir(run_dir, result)
                     
                     self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
+                    self.update_runner_progress(group_name, runner_config, completed=1)
                     if result['success']:
-                        self.update_runner_progress(group_name, runner_config,num_successes=1)
+                        self.update_runner_progress(group_name, runner_config, num_successes=1)
                     else:
                         if self.log_failures:
                             details = "\n".join(f"  {k}: {v}" for k, v in result.items())
                             log_message = f"""\n\n
-                            
-==   FAILURE  ========================================
+
+=== FAILURE =========================================
 Run directory: {run_dir}
 
 Result:
@@ -610,6 +622,7 @@ Result:
 
                             \n""".strip()
 
+                            log.error(log_message)
                             log.error(log_message)                            
                     self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
                 sleep(0.1)
@@ -682,11 +695,10 @@ Current Batch:        {batch_number}
 
 """
 
-        
         os.makedirs(os.path.dirname(self.current_progress_info_file), exist_ok=True)
         with open(self.current_progress_info_file, 'w') as file:
             file.write(progress_string)
-        
+
         return progress_string
         
         
