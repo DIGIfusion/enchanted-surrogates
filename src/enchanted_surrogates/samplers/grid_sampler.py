@@ -24,11 +24,17 @@ class GridSampler(Sampler):
           parameters: ['x', 'y']
           bounds: [[1, 10], [0, 1]]
           num_samples: [4, 3]
+          spacing: ['log', 'linear']
     ```
     In this configuration:
-    - parameter x is sampled at 4 evenly spaced points between 1 and 10
+    - parameter x is sampled at 4 log-spaced points between 1 and 10 (more points concentrated at lower values)
     - parameter y is sampled at 3 evenly spaced points between 0 and 1
     - resulting in a total of 4 × 3 = 12 samples.
+
+    The `spacing` argument is optional and defaults to `'linear'` for every
+    parameter. It can be a single string (applied to all parameters) or a
+    list of per-parameter strings, each either `'linear'` or `'log'`. Log
+    spacing requires the corresponding lower bound to be strictly positive.
 
 
     Attributes:
@@ -46,14 +52,14 @@ class GridSampler(Sampler):
     ## Assumptions and Notes
 
       - The sampler assumes continuous numeric parameters.
-      - Parameter values are generated using numpy.linspace, resulting in evenly spaced points that include both bounds. The total number of samples (budget) is the product of num_samples across all parameters.
+      - Parameter values are generated using numpy.linspace (or numpy.geomspace for log spacing), resulting in points that include both bounds. The total number of samples (budget) is the product of num_samples across all parameters.
       - Grid size grows exponentially with the number of parameters; careful configuration is recommended. This throws errors if you are asking for something insane, e.g., 10 parameters for 10 samples each -> 10 billion. To prevent excessive memory usage, the sampler enforces a hard limit of 100,000 total samples.
 
     ---
 
     """
 
-    def __init__(self, bounds, num_samples, parameters, *args, **kwargs):
+    def __init__(self, bounds, num_samples, parameters, spacing="linear", *args, **kwargs):
         """
         Initializes the Grid sampler.
 
@@ -61,15 +67,32 @@ class GridSampler(Sampler):
             bounds (list of tuple of float): The bounds of each parameter.
             num_samples (list of int): The number of samples for each parameter.
             parameters (list of str): The names of the parameters.
+            spacing (str or list of str): 'linear' or 'log' for each parameter.
+                A single string is applied to all parameters. Defaults to 'linear'.
         """
         super().__init__()
 
         if isinstance(num_samples, int):
             num_samples = [num_samples] * len(parameters)
 
+        if isinstance(spacing, str):
+            spacing = [spacing] * len(parameters)
+
+        for s in spacing:
+            if s not in ("linear", "log"):
+                raise ValueError(f"spacing must be 'linear' or 'log', got {s!r}")
+
+        for i, s in enumerate(spacing):
+            if s == "log" and bounds[i][0] <= 0:
+                raise ValueError(
+                    f"log spacing requires a strictly positive lower bound, "
+                    f"got bounds {bounds[i]} for parameter {parameters[i]!r}"
+                )
+
         self.parameters = parameters
         self.bounds = bounds
         self.num_samples = num_samples
+        self.spacing = spacing
         # check for stupidity
         self.budget = np.prod(np.array(num_samples))
         self.batch_size = kwargs.get("batch_size", self.budget)
@@ -92,10 +115,13 @@ class GridSampler(Sampler):
         Yields:
             list of float: The next parameter combination.
         """
-        samples = [
-            np.linspace(self.bounds[i][0], self.bounds[i][1], self.num_samples[i])
-            for i in range(len(self.bounds))
-        ]
+        samples = []
+        for i in range(len(self.bounds)):
+            lo, hi = self.bounds[i][0], self.bounds[i][1]
+            if self.spacing[i] == "log":
+                samples.append(np.geomspace(lo, hi, self.num_samples[i]))
+            else:
+                samples.append(np.linspace(lo, hi, self.num_samples[i]))
         # Use itertools.product to create a Cartesian product of sample
         # points, representing the hypercube
         for params_tuple in product(*samples):

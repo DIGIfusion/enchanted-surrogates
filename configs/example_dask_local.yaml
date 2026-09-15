@@ -18,7 +18,8 @@ runners:
 
 supervisor:
   base_run_dir: "data_dir/dask_local"
-  local_storage: TMPDIR
+  # can use local_storage to direct run_dir to a temporary location that might have faster read-write. Use with caution.
+  #local_storage: TMPDIR 
   run_mode: "fresh" # "resume" / "extend"
   run_order:
   - executor: e1

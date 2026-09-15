@@ -1,12 +1,15 @@
 import importlib
 from types import SimpleNamespace
 import pytest
+import enchanted_surrogates.utils.precise_imports as precise_imports
 from enchanted_surrogates.utils.precise_imports import (
-    clear_import_cache, cached_import, import_executor, import_sampler, import_runner
+    clear_import_cache, cached_import, import_executor, import_sampler, import_runner,
+    import_packer
 )
 from enchanted_surrogates.executors import LocalExecutor
 from enchanted_surrogates.samplers.random_sampler import RandomSampler
 from enchanted_surrogates.runners.example_runner import ExampleRunner
+from enchanted_surrogates.packers.ascii_bin_to_hdf5_packer import AsciiBinToHdf5Packer
 
 @pytest.mark.parametrize(
     "import_function, type_name, config, expected_type",
@@ -28,9 +31,15 @@ from enchanted_surrogates.runners.example_runner import ExampleRunner
             "ExampleRunner",
             {},
             ExampleRunner
+        ),
+        (
+            import_packer,
+            "AsciiBinToHdf5Packer",
+            {},
+            AsciiBinToHdf5Packer
         )
     ],
-    ids=["executor", "sampler", "runner"]
+    ids=["executor", "sampler", "runner", "packer"]
 )
 def test_import_instantiates_new_objects(
     import_function,
@@ -64,7 +73,8 @@ def test_cached_import_caches_results(monkeypatch):
         importlib, "import_module", mock_import_module
     )
     monkeypatch.setattr(
-        "enchanted_surrogates.utils.precise_imports.load_plugins",
+        precise_imports,
+        "load_plugins",
         lambda: {}
     )
 

@@ -91,6 +91,15 @@ supervisor:
         - code3_runner
 ```
 
+### Executor cleanup
+
+Each executor is cleaned up (e.g. Dask clusters are shut down) as soon as it is
+no longer needed, rather than waiting until the whole supervisor run finishes.
+An executor is kept open as long as a later runner in the same sequential
+group, or any runner in a later nested depth, still uses it - this includes an
+executor that is reused by name across multiple stages of `run_order`. Any
+executor not cleaned up along the way is cleaned once the whole run finishes.
+
 ### Resuming/extending previous runs
 
 The supervisor supports seamlessly resuming a previous run, in case of crashes
@@ -198,3 +207,21 @@ supervisor:
 ```
 
 See config folder for example configurations.
+
+## `post_processing`
+
+Optional. Runs a script once the supervisor's `run_order` completes, useful
+for analysis or cleanup steps that depend on the full set of results being
+available. The script is run from `base_run_dir`, and only runs if the main
+run completes without an unhandled exception. If the script exits with a
+non-zero status, the failure is logged (`log.error`) but does not fail the
+overall enchanted-surrogates run. Omit `post_processing` entirely to skip
+this step.
+
+```yaml
+post_processing:
+  script_path: "path/to/script.sh" # must be executable, run from base_run_dir
+```
+
+See [example_post_processing.yaml](../configs/example_post_processing.yaml)
+for a full working example.
