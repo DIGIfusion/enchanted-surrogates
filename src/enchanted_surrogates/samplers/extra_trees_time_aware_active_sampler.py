@@ -1,19 +1,32 @@
 """
-Time-aware SVM boundary-uncertainty active sampler.
+Time-aware ExtraTrees boundary-uncertainty active sampler.
 
-Extends the strategy in svm_active_sampler.py (RBF-kernel SVM + convex-hull-
-restricted margin uncertainty) with a second, regression side-model that
-predicts simulation cost (e.g. GENE wallclock/simtime). The boundary
-sub-batch is then ranked by a weighted combination of classification
-uncertainty and predicted cost, so the sampler prefers points that are both
-informative for the class boundary *and* cheap to evaluate.
+Same overall structure as svm_time_aware_active_sampler.py, but replaces the
+RBF-SVM classifier with a forest of extremely randomized trees
+(sklearn.ensemble.ExtraTreesClassifier) and the SVM decision-margin
+acquisition with a choice of forest-native acquisition functions computed
+from the per-tree vote distribution:
+
+    - "margin":  top1-vs-top2 gap of the forest's averaged class
+      probabilities (predict_proba). Smallest gap = most uncertain. Direct
+      analog of SvmActiveSampler's decision-function margin.
+    - "entropy": Shannon entropy of the averaged class probabilities.
+      Highest entropy = most uncertain.
+    - "vote_disagreement": query-by-committee style disagreement across the
+      individual trees' hard votes (1 - fraction of trees agreeing with the
+      plurality class). Highest disagreement = most uncertain. Unlike
+      "margin"/"entropy" (which use the forest's averaged probabilities),
+      this looks at the spread of individual trees' opinions directly, so it
+      can flag disagreement that a smooth average washes out.
+
+A second ExtraTreesRegressor side-model predicts simulation cost (e.g. GENE
+wallclock/simtime), exactly as in svm_time_aware_active_sampler.py: the
+boundary sub-batch is ranked by a weighted combination of classification
+uncertainty and predicted cost, while the exploration sub-batch stays purely
+random and unbiased by predicted cost (coverage, not exploitation).
 
 Two output variables are required: a categorical class label and a
-continuous cost/time value, both produced by the same simulation. The
-exploration sub-batch (see svm_active_sampler.py's docstring for why it
-exists -- keeping the sampled region's convex hull growing) stays purely
-random and unbiased by predicted cost, since its role is coverage, not
-exploitation.
+continuous cost/time value, both produced by the same simulation.
 """
 
 import os
@@ -21,28 +34,55 @@ import os
 import numpy as np
 import pandas as pd
 
-from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
 
 from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
-from enchanted_surrogates.samplers.svm_active_sampler import _in_hull, _margin
+from enchanted_surrogates.samplers.svm_active_sampler import _in_hull
 from enchanted_surrogates.utils.logger import get_logger
 
 log = get_logger(__name__)
 
 
+def _forest_class_probs(clf, X):
+    """
+    Averaged class-probability matrix (N, n_classes) in clf.classes_ order.
+    Thin wrapper around predict_proba kept separate so the acquisition
+    helpers below read as forest-uncertainty math rather than sklearn calls.
+    """
+    return clf.predict_proba(X)
+
+
+def _margin_from_probs(probs):
+    """Top1-vs-top2 gap of averaged class probabilities; smaller = more uncertain."""
+    sorted_p = np.sort(probs, axis=1)
+    return sorted_p[:, -1] - sorted_p[:, -2]
+
+
 def _entropy_from_probs(probs):
-    """Shannon entropy (nats) of class probabilities; larger = more uncertain."""
+    """Shannon entropy (nats) of averaged class probabilities; larger = more uncertain."""
     p = np.clip(probs, 1e-12, 1.0)
     return -np.sum(p * np.log(p), axis=1)
 
 
-class SvmTimeAwareActiveSampler(ParentActiveSampler):
+def _vote_disagreement(clf, X):
     """
-    RBF-kernel SVM classifier + ExtraTrees simulation-cost regressor, jointly
+    Query-by-committee disagreement: 1 - (fraction of trees whose hard vote
+    matches the plurality class), per sample. Larger = more uncertain.
+    """
+    tree_preds = np.stack([tree.predict(X) for tree in clf.estimators_], axis=0)  # (T, B)
+    T = tree_preds.shape[0]
+    agree_counts = np.array([
+        np.max(np.unique(tree_preds[:, b], return_counts=True)[1])
+        for b in range(tree_preds.shape[1])
+    ])
+    return 1.0 - agree_counts / T
+
+
+class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
+    """
+    ExtraTrees classifier + ExtraTrees simulation-cost regressor, jointly
     driving hull-restricted boundary sampling.
 
     Configuration (in addition to ParentActiveSampler's):
@@ -51,19 +91,13 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         time_output_variable : str
             Column name of the continuous simulation cost/time.
         acquisition_mode : str, optional
-            Uncertainty score used to rank the boundary sub-batch: "margin"
-            (default; SVC decision-function top1-vs-top2 gap, negated so
-            larger = more uncertain -- same quantity SvmActiveSampler uses)
-            or "entropy" (Shannon entropy of SVC.predict_proba's class
-            probabilities). "entropy" requires Platt-scaled probabilities,
-            so svc_kwargs['probability'] is forced True automatically when
-            this mode is selected (unless the caller already set it
-            explicitly) -- this makes fitting noticeably slower than
-            "margin", since predict_proba requires an internal cross-
-            validation pass during SVC.fit.
-        svc_kwargs : dict, optional
-            Forwarded to sklearn.svm.SVC. Defaults to
-            ``kernel="rbf", C=10.0, gamma="scale", class_weight="balanced"``.
+            Forest-uncertainty score used to rank the boundary sub-batch:
+            "margin" (predict_proba top1-vs-top2 gap, default), "entropy"
+            (predict_proba Shannon entropy), or "vote_disagreement"
+            (fraction of trees disagreeing with the plurality vote).
+        classifier_kwargs : dict, optional
+            Forwarded to sklearn.ensemble.ExtraTreesClassifier. Defaults to
+            ``n_estimators=200, bootstrap=False, class_weight="balanced"``.
         time_regressor_kwargs : dict, optional
             Forwarded to sklearn.ensemble.ExtraTreesRegressor.
         exploration_per_batch : int, optional
@@ -81,51 +115,35 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         max_predicted_time : float, optional
             Hard cutoff: pool points whose predicted simulation time exceeds
             this value are excluded from both the exploration and boundary
-            sub-batches (e.g. set just below the GENE walltime/timeout so the
-            sampler stops proposing runs likely to time out). Applies from
-            the second batch onward, once a time model has been fit. If
-            fewer than the requested number of points remain under the
-            limit, a warning is logged and the sub-batch is filled with the
-            cheapest available points regardless of the limit. Default:
-            None (no filtering).
+            sub-batches. Applies from the second batch onward, once a time
+            model has been fit. If fewer than the requested number of points
+            remain under the limit, a warning is logged and the sub-batch is
+            filled with the cheapest available points regardless of the
+            limit. Default: None (no filtering).
         unclassified_label : str or None, optional
             A class_output_variable value that carries no class information
-            (e.g. GENE runs where no known instability regime matched) and
-            should be excluded from training rather than learned as a real
-            class -- matching the reference active_sampling_svm.py demo
-            script's treatment of "Unclassified" points. Rows with this
-            label are dropped in register_future (the point is still
-            "spent": GENE ran, it just didn't yield a usable label). Set to
-            None to disable this filtering and treat it as a real class
-            instead. Default: "Unclassified".
+            and should be excluded from training rather than learned as a
+            real class. Rows with this label are dropped in register_future
+            (the point is still "spent": the simulation ran, it just didn't
+            yield a usable label). Set to None to disable this filtering and
+            treat it as a real class instead. Default: "Unclassified".
         test_data_csv : str, optional
-            Path to a held-out labeled CSV (same parameter + output-variable
-            columns as the training data) used for evaluation instead of
-            K-fold CV. When set, evaluate_model reports accuracy/F1/time-RMSE
-            on this fixed test set every evaluation, which is what
-            min_test_accuracy (below) checks against. Inherited from
-            ParentActiveSampler; see _load_test_set.
+            Path to a held-out labeled CSV used for evaluation instead of
+            K-fold CV. Inherited from ParentActiveSampler; see _load_test_set.
         test_set_accuracy_target : float, optional
             If set (requires test_data_csv), get_next_samples stops the run
-            early -- logging a warning and returning None, the same
-            mechanism used for budget exhaustion -- as soon as an
-            evaluate_model() call reports test-set accuracy below this
-            threshold. Default: None (no accuracy-based stopping).
+            early as soon as an evaluate_model() call reports test-set
+            accuracy below this threshold. Default: None.
         cpuh_budget : float, optional
-            Total CPU-hours (core-hours) allowed across the whole run. Each
-            registered run's cost is computed from its per-stage wallclock
-            columns (gene_runtime_variable, helena_runtime_variable) times
-            the corresponding per-run core count (gene_cores_per_run,
-            helena_cores_per_run) -- accounting for actual completed runs
-            only, not a forecast. get_next_samples stops the run (same
-            mechanism as budget exhaustion) once the running total meets or
-            exceeds this value. Default: None (no CPU-hour limit).
+            Total CPU-hours (core-hours) allowed across the whole run,
+            computed from per-stage wallclock columns (gene_runtime_variable,
+            helena_runtime_variable) times the corresponding per-run core
+            counts. get_next_samples stops the run once the running total
+            meets or exceeds this value. Default: None.
         gene_cores_per_run : int, optional
-            Cores used by one GENE run (e.g. the executor's SLURM --ntasks).
-            Required if cpuh_budget is set. Default: None.
+            Cores used by one GENE run. Required if cpuh_budget is set.
         helena_cores_per_run : int, optional
             Cores used by one HELENA run. Required if cpuh_budget is set.
-            Default: None.
         gene_runtime_variable : str, optional
             Column name of GENE's per-run wallclock time in seconds.
             Default: "runtime_sec_gene".
@@ -134,24 +152,17 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             Default: "runtime_sec_helena".
     """
 
-    DEFAULT_SVC_KWARGS = dict(kernel="rbf", C=10.0, gamma="scale", class_weight="balanced")
+    DEFAULT_CLASSIFIER_KWARGS = dict(n_estimators=200, bootstrap=False, class_weight="balanced")
     DEFAULT_TIME_REGRESSOR_KWARGS = dict(n_estimators=200, bootstrap=False)
-    VALID_ACQUISITION_MODES = ("margin", "entropy")
+    VALID_ACQUISITION_MODES = ("margin", "entropy", "vote_disagreement")
 
     def __init__(self, **kwargs):
         self.class_output_variable = kwargs.get("class_output_variable")
         self.time_output_variable = kwargs.get("time_output_variable")
         if not self.class_output_variable or not self.time_output_variable:
             raise ValueError(
-                "SvmTimeAwareActiveSampler requires both class_output_variable "
+                "ExtraTreesTimeAwareActiveSampler requires both class_output_variable "
                 "and time_output_variable in sampler_config."
-            )
-
-        self.acquisition_mode = kwargs.get("acquisition_mode", "margin")
-        if self.acquisition_mode not in self.VALID_ACQUISITION_MODES:
-            raise ValueError(
-                f"acquisition_mode must be one of {self.VALID_ACQUISITION_MODES}, "
-                f"got {self.acquisition_mode!r}."
             )
         # ParentActiveSampler.__init__ uses output_variables for row-filtering
         # (drop rows with NaN in either output) and output_dim bookkeeping.
@@ -162,11 +173,16 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
 
         self.unclassified_label = kwargs.get("unclassified_label", "Unclassified")
 
+        self.acquisition_mode = kwargs.get("acquisition_mode", "margin")
+        if self.acquisition_mode not in self.VALID_ACQUISITION_MODES:
+            raise ValueError(
+                f"acquisition_mode must be one of {self.VALID_ACQUISITION_MODES}, "
+                f"got {self.acquisition_mode!r}."
+            )
+
         # _test_y (if a test set was loaded) has columns [class, time] since
         # output_variables was set to both above; split it apart and drop
-        # unclassified_label rows the same way register_future does, so the
-        # test set doesn't penalize the model for a label that isn't
-        # actually learnable.
+        # unclassified_label rows the same way register_future does.
         if self._test_X is not None:
             test_y_class = self._test_y[:, 0]
             test_y_time = self._test_y[:, 1].astype(float)
@@ -187,7 +203,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         self.train_y_class = np.empty((0,), dtype=object)
         self.train_y_time = np.empty((0,), dtype=float)
 
-        self.svc_kwargs = kwargs.get("svc_kwargs", None) or dict(self.DEFAULT_SVC_KWARGS)
+        self.classifier_kwargs = kwargs.get("classifier_kwargs", None) or dict(self.DEFAULT_CLASSIFIER_KWARGS)
         self.time_regressor_kwargs = kwargs.get("time_regressor_kwargs", None) or \
             dict(self.DEFAULT_TIME_REGRESSOR_KWARGS)
 
@@ -228,8 +244,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             )
         self.cpuh_used = 0.0
 
-        self.svm_model = None
-        self.scaler = None
+        self.classifier_model = None
         self.time_model = None
 
     # ------------------------------------------------------------
@@ -237,64 +252,56 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
     # ------------------------------------------------------------
     def _has_multiple_classes(self):
         """
-        True once at least two distinct classes have been registered. Small
-        (or heavily imbalanced) initial batches can easily land entirely in
-        one class -- SVC.fit requires >= 2 classes, so callers must check
-        this before fitting/using self.svm_model.
+        True once at least two distinct classes have been registered.
+        ExtraTreesClassifier.fit requires >= 2 classes for a meaningful
+        decision boundary, so callers must check this before fitting/using
+        self.classifier_model.
         """
         return len(np.unique(self.train_y_class)) >= 2
 
     def _fit_model(self):
-        self.scaler = StandardScaler().fit(self.train_x)
-
         self.time_model = ExtraTreesRegressor(**self.time_regressor_kwargs)
         self.time_model.fit(self.train_x, self.train_y_time)
 
         if not self._has_multiple_classes():
-            # Not enough class diversity yet to fit an SVM boundary; leave
-            # svm_model unset so get_next_samples falls back to a fully
-            # random batch (see its batch_number > 0 branch) until a second
-            # class is observed.
-            self.svm_model = None
+            # Not enough class diversity yet to fit a classifier boundary;
+            # leave classifier_model unset so get_next_samples falls back to
+            # a fully random batch until a second class is observed.
+            self.classifier_model = None
             log.warning(
                 "Only one class (%r) seen in %d training point(s) so far; "
-                "skipping SVM fit and drawing a fully random batch instead "
+                "skipping classifier fit and drawing a fully random batch instead "
                 "until a second class is observed.",
                 self.train_y_class[0] if len(self.train_y_class) else None,
                 len(self.train_y_class),
             )
             return
 
-        X_scaled = self.scaler.transform(self.train_x)
-        svc_kwargs = dict(self.svc_kwargs)
-        if self.acquisition_mode == "entropy" and "probability" not in svc_kwargs:
-            # predict_proba (needed for entropy) requires Platt-scaled
-            # probabilities, which SVC only computes when probability=True.
-            # Not set for "margin" mode: it's slower to fit (an internal CV
-            # pass) and unneeded there, since margin uses decision_function.
-            svc_kwargs["probability"] = True
-        self.svm_model = SVC(**svc_kwargs)
-        self.svm_model.fit(X_scaled, self.train_y_class)
+        self.classifier_model = ExtraTreesClassifier(**self.classifier_kwargs)
+        self.classifier_model.fit(self.train_x, self.train_y_class)
 
     def _predict_labels(self, X_unit):
-        return self.svm_model.predict(self.scaler.transform(X_unit))
-
-    def _uncertainty(self, X_unit):
-        """
-        Uncertainty score for X_unit, per self.acquisition_mode. Larger =
-        more uncertain in both modes (entropy is "larger = more uncertain"
-        natively; margin is negated so the same convention holds across
-        modes, matching the ExtraTrees/SGDE samplers' _uncertainty).
-        """
-        X_scaled = self.scaler.transform(X_unit)
-        if self.acquisition_mode == "margin":
-            return -_margin(self.svm_model, X_scaled)
-        if self.acquisition_mode == "entropy":
-            return _entropy_from_probs(self.svm_model.predict_proba(X_scaled))
-        raise ValueError(f"Unknown acquisition_mode: {self.acquisition_mode!r}")
+        return self.classifier_model.predict(X_unit)
 
     def _predict_time(self, X_unit):
         return self.time_model.predict(X_unit)
+
+    def _uncertainty(self, X_unit):
+        """
+        Forest-native uncertainty score for X_unit, per self.acquisition_mode.
+        Larger = more uncertain in all three modes (vote_disagreement and
+        entropy are "larger = more uncertain" natively; margin is negated so
+        the same convention holds across modes).
+        """
+        if self.acquisition_mode == "margin":
+            probs = _forest_class_probs(self.classifier_model, X_unit)
+            return -_margin_from_probs(probs)
+        if self.acquisition_mode == "entropy":
+            probs = _forest_class_probs(self.classifier_model, X_unit)
+            return _entropy_from_probs(probs)
+        if self.acquisition_mode == "vote_disagreement":
+            return _vote_disagreement(self.classifier_model, X_unit)
+        raise ValueError(f"Unknown acquisition_mode: {self.acquisition_mode!r}")
 
     def _compute_acquisition_unchunked(self, X_unit):
         # Not used directly (see get_next_samples' explicit explore/boundary
@@ -309,9 +316,9 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         """
         Evaluates against the held-out test set (if test_data_csv was
         configured) or, failing that, stratified K-fold CV on the training
-        set. Also enforces test_set_accuracy_target (see class docstring):
-        if the test-set accuracy drops below it, self._stop_early is set so
-        get_next_samples ends the run on its next check.
+        set. Also enforces test_set_accuracy_target: if the test-set
+        accuracy drops below it, self._stop_early is set so get_next_samples
+        ends the run on its next check.
         """
         if self._test_X is not None:
             metrics = self.compute_testset_metrics()
@@ -339,7 +346,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
     def _per_class_metrics(y_true, y_pred, labels):
         """
         Flat {class}_precision / {class}_recall / {class}_f1 columns for each
-        label, so a rare class (e.g. MTM) being learned poorly is visible in
+        label, so a rare class being learned poorly is visible in
         batch_info.csv even when it's masked by a healthy macro F1.
         """
         precision, recall, f1, _ = precision_recall_fscore_support(
@@ -367,10 +374,9 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         skf = StratifiedKFold(n_splits=self.num_folds, shuffle=True, random_state=self.seed)
         all_y_true, all_y_pred = [], []
         for train_idx, val_idx in skf.split(X, y_class):
-            scaler = StandardScaler().fit(X[train_idx])
-            clf = SVC(**self.svc_kwargs)
-            clf.fit(scaler.transform(X[train_idx]), y_class[train_idx])
-            y_pred = clf.predict(scaler.transform(X[val_idx]))
+            clf = ExtraTreesClassifier(**self.classifier_kwargs)
+            clf.fit(X[train_idx], y_class[train_idx])
+            y_pred = clf.predict(X[val_idx])
             all_y_true.append(y_class[val_idx])
             all_y_pred.append(y_pred)
 
@@ -406,12 +412,12 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
 
         self._fit_model()
 
-        if self.svm_model is None:
+        if self.classifier_model is None:
             # Not enough class diversity yet to evaluate classification
             # performance (see _fit_model); skip this evaluation cycle.
             return None
 
-        y_pred_class = self.svm_model.predict(self.scaler.transform(self._test_X))
+        y_pred_class = self.classifier_model.predict(self._test_X)
         y_pred_time = self.time_model.predict(self._test_X)
 
         accuracy = accuracy_score(self._test_y_class, y_pred_class)
@@ -433,14 +439,12 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         """
         Appends one row to batch_info.csv. Per-class columns (e.g.
         MTM_precision) only exist once that class has been observed, so
-        later rows can introduce columns earlier rows never had (see
-        _per_class_metrics / compute_kfold_metrics/compute_testset_metrics,
-        which derive `labels` fresh from whatever's been seen so far). A
-        plain mode="a", header=False append would silently misalign those
-        new columns under the stale header instead of adding them, so when
-        the new row's columns aren't a subset of the existing header, the
-        whole file is rewritten with the union of old + new columns
-        (missing values become blank/NaN for rows that predate a class).
+        later rows can introduce columns earlier rows never had. A plain
+        mode="a", header=False append would silently misalign those new
+        columns under the stale header instead of adding them, so when the
+        new row's columns aren't a subset of the existing header, the whole
+        file is rewritten with the union of old + new columns (missing
+        values become blank/NaN for rows that predate a class).
         """
         scalar_metrics = {k: v for k, v in metrics.items() if k not in ("labels", "confusion_matrix")}
         row = {"num_train_samples": self.train_x.shape[0], **scalar_metrics}
@@ -555,10 +559,10 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
                 self._light_post_process()
                 return None
 
-            if self.svm_model is None:
-                # Not enough class diversity yet to fit an SVM boundary (see
-                # _fit_model): draw a fully random batch instead, same as
-                # the initial batch, until a second class is observed.
+            if self.classifier_model is None:
+                # Not enough class diversity yet to fit a classifier boundary
+                # (see _fit_model): draw a fully random batch instead, same
+                # as the initial batch, until a second class is observed.
                 selected_indices = self._get_initial_batch_n(self.batch_size)
             else:
                 explore_indices = self._get_initial_batch_n(
@@ -591,15 +595,11 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         """
         Same as ParentActiveSampler.samples_to_params_dict, but tags each
         sample with batch_num (self.batch_number at submission time). This
-        column is not a real simulation parameter -- gene_parser.py's
-        parameter_nml_map / write_input_file only forward keys it recognizes
-        (dropping unknown ones with a warning) and helena_parser.py's
-        write_input_file_noKBMconstraint only reads named keys, so an unknown
-        batch_num key is safely ignored by both and simply flows through to
-        enchanted_dataset.csv. Recording it there (rather than saving model
-        snapshots) is enough to fully reconstruct any checkpoint later: refit
-        the sampler's model on the subset of rows with batch_num <= N using
-        the same sampler config.
+        column is not a real simulation parameter and is safely ignored by
+        the GENE/HELENA parsers -- it just flows through to
+        enchanted_dataset.csv, which is enough to fully reconstruct any
+        checkpoint later: refit the sampler's model on the subset of rows
+        with batch_num <= N using the same sampler config.
         """
         params_dict = super().samples_to_params_dict(samples)
         for p in params_dict:
@@ -675,10 +675,9 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         """
         Streams the remaining pool, restricts to the convex hull of the
         points sampled so far, drops any point whose predicted time exceeds
-        max_predicted_time (if set -- see the class docstring), and ranks
-        the survivors by a weighted combination of classification
-        uncertainty (per self.acquisition_mode / _uncertainty) and predicted
-        simulation cost:
+        max_predicted_time (if set), and ranks the survivors by a weighted
+        combination of forest uncertainty (see self.acquisition_mode /
+        _uncertainty) and predicted simulation cost:
 
             score = uncertainty_rank - cost_lambda * predicted_time_rank
 
@@ -686,15 +685,14 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         most uncertain / most expensive), so cost_lambda directly trades off
         informativeness against cost regardless of each quantity's raw
         scale. The boundary sub-batch is then drawn uniformly at random from
-        the top boundary_pool_fraction slice by this combined score,
-        mirroring SVMActiveSampler's own random-within-uncertain-pool draw.
+        the top boundary_pool_fraction slice by this combined score.
 
         If the time limit leaves fewer than n hull-restricted candidates, a
         warning is logged and the limit is relaxed (falling back to the
         cheapest-predicted hull-restricted candidates) so the boundary
         sub-batch is still filled.
         """
-        hull_points = self.scaler.transform(self.train_x)
+        hull_points = self.train_x
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
@@ -714,8 +712,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             X_chunk_unit = X_chunk_unit[keep]
             chunk_indices = chunk_indices[keep]
 
-            X_chunk_scaled = self.scaler.transform(X_chunk_unit)
-            inside = _in_hull(X_chunk_scaled, hull_points)
+            inside = _in_hull(X_chunk_unit, hull_points)
             if inside.sum() > 0:
                 u = self._uncertainty(X_chunk_unit[inside])
                 t = self._predict_time(X_chunk_unit[inside])

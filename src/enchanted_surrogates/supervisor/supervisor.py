@@ -151,10 +151,8 @@ class Supervisor:
             # Restore run state from previous data, if needed and in correct position of the loops
             if self.previous_run_data:
                 if nested_depth < self.previous_run_data.depth:
-                if nested_depth < self.previous_run_data.depth:
                     continue
 
-                if nested_depth == self.previous_run_data.depth:
                 if nested_depth == self.previous_run_data.depth:
                     batch_number = self.previous_run_data.batch_number + 1
 
@@ -198,7 +196,6 @@ class Supervisor:
                     run_dirs = [
                         os.path.join(
                             real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
-                            real_run_dir, "data", f"dn{nested_depth}_ds{sequential_depth}_b{batch_number}_s{j}"
                         )
                         for j in range(len(expanded))
                     ]
@@ -235,7 +232,6 @@ class Supervisor:
                 run_data = RunData(
                     batch_number=batch_number,
                     depth=nested_depth,
-                    depth=nested_depth,
                     submitted_samples=group.sampler.submitted,
                 )
                 run_data.save(self.previous_run_file)
@@ -259,7 +255,6 @@ class Supervisor:
             last_complete_dataset = batch_dataset.copy()
 
             # Create a summary file with last_complete_dataset for nesting
-            if nested_depth < len(self.nested_groups) - 1:
             if nested_depth < len(self.nested_groups) - 1:
                 self.write_summary(
                     dataset=last_complete_dataset,
@@ -583,7 +578,6 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
     def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
