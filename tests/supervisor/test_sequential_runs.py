@@ -1,4 +1,5 @@
 import os
+import glob
 from enchanted_surrogates.supervisor.supervisor import Supervisor
 from types import SimpleNamespace
 import pytest
@@ -21,7 +22,49 @@ def test_supervisor_batches(sequence_count, patch_supervisor_imports, tmp_path):
     assert sum(executor.execute.call_count for executor in executors) == batch_count * sequence_count
     assert len(next(os.walk(tmp_path / "data"))[1]) == sequence_count * batch_count
 
-def make_sequential_args(tmp_path, sequence_count: int):
+
+@pytest.mark.parametrize("sequence_count", [2, 3, 5])
+def test_intermediate_stage_files_kept_until_next_stage_done(sequence_count, patch_supervisor_imports, tmp_path):
+    """
+    Intermediate-output.dat files (standing in for e.g. HELENA's eliteinp, which a later
+    GENE stage needs to read) should not be deleted until the NEXT sequential stage for
+    that sample has finished, even though save_files="none" would otherwise delete them
+    as soon as their own stage completes.
+    """
+    args = make_sequential_args(tmp_path, sequence_count, save_files="none")
+
+    patch_supervisor_imports([
+        [ # sampler
+            [{"a": 1, "b": 2}],
+        ]
+    ])
+
+    supervisor = Supervisor(args)
+
+    original_monitor_runs = supervisor.monitor_runs
+    marker_existed_when_next_stage_started = {}
+
+    def spying_monitor_runs(*args, **kwargs):
+        sequential_depth = kwargs.get("sequential_depth")
+        if sequential_depth is not None and sequential_depth > 0:
+            previous_dirs = glob.glob(str(tmp_path / "data" / f"dn0_ds{sequential_depth - 1}_b0_s*"))
+            marker_existed_when_next_stage_started[sequential_depth - 1] = bool(previous_dirs) and all(
+                os.path.exists(os.path.join(d, "intermediate_output.dat")) for d in previous_dirs
+            )
+        return original_monitor_runs(*args, **kwargs)
+
+    supervisor.monitor_runs = spying_monitor_runs
+    supervisor.start()
+
+    # Every non-final stage's marker file must still have existed once the following
+    # stage started monitoring (i.e. it was not deleted prematurely).
+    for sequential_depth in range(sequence_count - 1):
+        assert marker_existed_when_next_stage_started.get(sequential_depth) is True, (
+            f"stage {sequential_depth}'s intermediate_output.dat was deleted before stage {sequential_depth + 1} started"
+        )
+
+
+def make_sequential_args(tmp_path, sequence_count: int, save_files: str | None = None):
     """
     Helper function to create constructor arguments with multiple sequential runners.
     One sampler is used and sequence_count specifies how many executors and runners there will be.
@@ -55,12 +98,16 @@ def make_sequential_args(tmp_path, sequence_count: int):
             runner_name
         )
 
+    supervisor_config = {
+        "base_run_dir": str(tmp_path),
+        "run_order": run_order
+    }
+    if save_files is not None:
+        supervisor_config["save_files"] = save_files
+
     return SimpleNamespace(
         executors=executors,
         samplers=samplers,
         runners=runners,
-        supervisor={
-            "base_run_dir": str(tmp_path),
-            "run_order": run_order
-        }
+        supervisor=supervisor_config
     )

@@ -169,6 +169,7 @@ class Supervisor:
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
+                previous_run_dirs = None
                 for sequential_depth, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
@@ -184,16 +185,26 @@ class Supervisor:
                     executor.execute(list(zip(run_dirs, expanded)), runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
+                    # Earlier sequential stages are not cleaned up immediately: a later
+                    # stage may still need to read their output files. They are cleaned
+                    # once this stage confirms it is done reading from them, below.
+                    is_last_stage = sequential_depth == len(group.runners) - 1
+
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer, defer_cleanup=not is_last_stage)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
 
+                    if previous_run_dirs is not None:
+                        for previous_run_dir in previous_run_dirs:
+                            self.delete_unwanted_files(self.save_files_arg, previous_run_dir, extra_keep_files=['enchanted_datapoint.csv'])
+                    previous_run_dirs = run_dirs
+
                     # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
-                    
+
                     if group.sampler.submitted == group.sampler.budget:
                         self._clean_redundant_executors(nested_depth, sequential_depth, group)
 
@@ -554,13 +565,17 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None, defer_cleanup=False):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
 
         Attributes:
             run_dirs (list[str]): List of running directories to monitor
+            defer_cleanup (bool): If True, skip deleting unwanted files in a run_dir once
+                it finishes. Used when a later sequential stage still needs to read this
+                run_dir's output files; the caller is responsible for cleaning it up once
+                it is no longer needed.
         """
 
         run_dirs = set(run_dirs)   # if it isn't already a set
@@ -570,11 +585,12 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
-                    
+
                     if packer is not None:
                         packer.pack_run_dir(run_dir, result)
-                    
-                    self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
+
+                    if not defer_cleanup:
+                        self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     self.update_runner_progress(group_name, runner_config, completed=1)
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config, num_successes=1)
