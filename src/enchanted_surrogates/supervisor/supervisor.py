@@ -64,6 +64,7 @@ class Supervisor:
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
+        self.delete_immediately = args.supervisor.get("delete_immediately", False)
         self.log_failures = args.supervisor.get("log_failures", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
@@ -169,7 +170,6 @@ class Supervisor:
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
-                previous_run_dirs = None
                 for sequential_depth, (executor, runner) in enumerate(
                     zip(group.executors, group.runners)
                 ):
@@ -185,21 +185,11 @@ class Supervisor:
                     executor.execute(list(zip(run_dirs, expanded)), runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
-                    # Earlier sequential stages are not cleaned up immediately: a later
-                    # stage may still need to read their output files. They are cleaned
-                    # once this stage confirms it is done reading from them, below.
-                    is_last_stage = sequential_depth == len(group.runners) - 1
-
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer, defer_cleanup=not is_last_stage)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
-
-                    if previous_run_dirs is not None:
-                        for previous_run_dir in previous_run_dirs:
-                            self.delete_unwanted_files(self.save_files_arg, previous_run_dir, extra_keep_files=['enchanted_datapoint.csv'])
-                    previous_run_dirs = run_dirs
 
                     # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
@@ -233,9 +223,13 @@ class Supervisor:
                     self.hdf5_append_datapoints(run_dirs)
 
                 self.fetch_from_local_storage()
-                
-                # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
+
+                # Run_dirs may still be needed by a later nested or sequential stage, so
+                # by default this is skipped here and left to the final sweep below.
+                # Only sweep per-batch if delete_immediately opts into freeing disk
+                # space as soon as possible.
+                if self.delete_immediately:
+                    self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -565,17 +559,13 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None, defer_cleanup=False):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
 
         Attributes:
             run_dirs (list[str]): List of running directories to monitor
-            defer_cleanup (bool): If True, skip deleting unwanted files in a run_dir once
-                it finishes. Used when a later sequential stage still needs to read this
-                run_dir's output files; the caller is responsible for cleaning it up once
-                it is no longer needed.
         """
 
         run_dirs = set(run_dirs)   # if it isn't already a set
@@ -589,7 +579,11 @@ class Supervisor:
                     if packer is not None:
                         packer.pack_run_dir(run_dir, result)
 
-                    if not defer_cleanup:
+                    # A run_dir may still be needed by a later nested or sequential
+                    # stage, so by default cleanup is deferred to the final sweep in
+                    # start(). Set delete_immediately if no stage reads another
+                    # stage's run_dir and disk usage from many run_dirs is a concern.
+                    if self.delete_immediately:
                         self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     self.update_runner_progress(group_name, runner_config, completed=1)
                     if result['success']:

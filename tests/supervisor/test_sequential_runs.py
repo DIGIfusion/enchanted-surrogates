@@ -64,7 +64,40 @@ def test_intermediate_stage_files_kept_until_next_stage_done(sequence_count, pat
         )
 
 
-def make_sequential_args(tmp_path, sequence_count: int, save_files: str | None = None):
+def test_delete_immediately_deletes_before_next_stage_starts(patch_supervisor_imports, tmp_path):
+    """
+    With delete_immediately=True, the old eager-cleanup behavior is restored: an earlier
+    sequential stage's files are deleted as soon as its own runs finish, not deferred.
+    """
+    args = make_sequential_args(tmp_path, sequence_count=2, save_files="none", delete_immediately=True)
+
+    patch_supervisor_imports([
+        [ # sampler
+            [{"a": 1, "b": 2}],
+        ]
+    ])
+
+    supervisor = Supervisor(args)
+
+    original_monitor_runs = supervisor.monitor_runs
+    marker_existed_when_next_stage_started = {}
+
+    def spying_monitor_runs(*args, **kwargs):
+        sequential_depth = kwargs.get("sequential_depth")
+        if sequential_depth is not None and sequential_depth > 0:
+            previous_dirs = glob.glob(str(tmp_path / "data" / f"dn0_ds{sequential_depth - 1}_b0_s*"))
+            marker_existed_when_next_stage_started[sequential_depth - 1] = bool(previous_dirs) and any(
+                os.path.exists(os.path.join(d, "intermediate_output.dat")) for d in previous_dirs
+            )
+        return original_monitor_runs(*args, **kwargs)
+
+    supervisor.monitor_runs = spying_monitor_runs
+    supervisor.start()
+
+    assert marker_existed_when_next_stage_started.get(0) is False
+
+
+def make_sequential_args(tmp_path, sequence_count: int, save_files: str | None = None, delete_immediately: bool | None = None):
     """
     Helper function to create constructor arguments with multiple sequential runners.
     One sampler is used and sequence_count specifies how many executors and runners there will be.
@@ -104,6 +137,8 @@ def make_sequential_args(tmp_path, sequence_count: int, save_files: str | None =
     }
     if save_files is not None:
         supervisor_config["save_files"] = save_files
+    if delete_immediately is not None:
+        supervisor_config["delete_immediately"] = delete_immediately
 
     return SimpleNamespace(
         executors=executors,
