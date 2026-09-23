@@ -39,8 +39,9 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support
 
 from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
-from enchanted_surrogates.samplers.svm_active_sampler import _in_hull
+from enchanted_surrogates.samplers.svm_active_sampler import _build_hull, _in_hull
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.utils.memory_debug import log_rss
 
 log = get_logger(__name__)
 
@@ -500,6 +501,7 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
             f"future_df rows: {len(future_df)}\n"
             f"train_x new shape: {self.train_x.shape}"
         )
+        log_rss(log, f"et_batch{self.batch_number}_ntrain{self.train_x.shape[0]}_after_register_future")
 
     def _accumulate_cpuh(self, future_df):
         """
@@ -531,15 +533,19 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
     # MAIN ENTRY: GET NEXT SAMPLES
     # ------------------------------------------------------------
     def get_next_samples(self):
+        rss_label_prefix = f"et_batch{self.batch_number}_ntrain{self.train_x.shape[0]}"
+        log_rss(log, f"{rss_label_prefix}_start")
         if self.batch_number == 0:
             initial_pool_indices = self._get_initial_batch()
             real_selected_samples = self._get_samples_from_pool(initial_pool_indices)
             self._remove_from_pool(initial_pool_indices)
         else:
             self._fit_model()
+            log_rss(log, f"{rss_label_prefix}_after_fit_model")
             self.evaluate_model(
                 do_write_batch_info=self._should_trigger(self.write_batch_info_every),
             )
+            log_rss(log, f"{rss_label_prefix}_after_evaluate_model")
 
             if self._stop_early:
                 log.warning(
@@ -568,14 +574,17 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
                 explore_indices = self._get_initial_batch_n(
                     self.exploration_per_batch, filter_by_time=True
                 )
+                log_rss(log, f"{rss_label_prefix}_after_explore_indices")
                 boundary_indices = self._compute_boundary_candidates(
                     self.batch_size - self.exploration_per_batch, exclude=explore_indices
                 )
+                log_rss(log, f"{rss_label_prefix}_after_boundary_indices")
                 selected_indices = np.concatenate([explore_indices, boundary_indices]).astype(int)
 
             real_selected_samples = self._get_samples_from_pool(selected_indices)
             self._remove_from_pool(selected_indices)
 
+        log_rss(log, f"{rss_label_prefix}_end")
         self.batch_number += 1
         self.submitted += len(real_selected_samples)
         params_dict = self.samples_to_params_dict(real_selected_samples)
@@ -693,6 +702,7 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
         sub-batch is still filled.
         """
         hull_points = self.train_x
+        hull = _build_hull(hull_points)
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
@@ -712,7 +722,7 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
             X_chunk_unit = X_chunk_unit[keep]
             chunk_indices = chunk_indices[keep]
 
-            inside = _in_hull(X_chunk_unit, hull_points)
+            inside = _in_hull(X_chunk_unit, hull)
             if inside.sum() > 0:
                 u = self._uncertainty(X_chunk_unit[inside])
                 t = self._predict_time(X_chunk_unit[inside])

@@ -1,0 +1,97 @@
+logging: WARNING
+
+supervisor:
+  base_run_dir: "/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/packer_memory_test/work_supervisor/run"
+  run_mode: 'fresh'
+  run_order:
+  - executor: [helena_executor, gene_executor]
+    sampler: svm_margin_active_sampler
+    runner: [helena, gene]
+
+storage:
+  type: hdf5
+
+executors:
+  gene_executor:
+    type: DaskExecutor
+    LocalCluster_config:
+      n_workers: 4
+      threads_per_worker: 1
+
+  helena_executor:
+    type: DaskExecutor
+    LocalCluster_config:
+      n_workers: 4
+      threads_per_worker: 1
+
+runners:
+  helena:
+    type: synthetic_al_runner
+    sleep_sec: 0.02
+    write_files: true
+    binary_file_sizes_mb:
+      helena_output_blob: 1
+
+  gene:
+    type: synthetic_al_runner
+    sleep_sec: 0.02
+    write_files: true
+    binary_file_sizes_mb:
+      field.dat: 2
+      mom_e.dat: 1
+      mom_i.dat: 1
+
+samplers:
+  svm_margin_active_sampler:
+    type: svm_time_aware_active_sampler
+    acquisition_mode: margin
+
+    parameters:
+      - 'kymin'
+      - 'x0_norm_ped_width'
+      - 'T_eped'
+      - 'n_eped'
+      - 'd_n_ped'
+      - 'd_T_ped'
+      - 'n_esep'
+      - 'Ti_ov_Te_ped'
+      - 'Ti_ov_Te_sep'
+      - 'd_Ti_ped_ov_d_Te_ped'
+    bounds:
+      - [0.05, 1]
+      - [0.05, 0.95]
+      - [0.467, 0.667]
+      - [7.95, 9.95]
+      - [0.016, 0.046]
+      - [0.047, 0.087]
+      - [3.61, 5.61]
+      - [0.82, 1.12]
+      - [3.11, 3.31]
+      - [0.52, 0.72]
+
+    class_output_variable: gene_daniel_tree_classifier
+    time_output_variable: runtime_sec_gene
+
+    base_run_dir: "/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/packer_memory_test/work_supervisor/run"
+
+    total_pool_size: 200000
+    pool_chunk_size: 5000
+
+    batch_size: 20
+    initial_batch_size: 20
+    budget: 2000
+    exploration_per_batch: 5
+
+    svc_kwargs:
+      kernel: rbf
+      C: 1000.0
+      gamma: scale
+      class_weight: null
+
+    max_predicted_time: 1800
+    cpuh_budget: 999999
+    gene_cores_per_run: 128
+    helena_cores_per_run: 1
+
+    write_batch_info_every: 20
+    seed: 0

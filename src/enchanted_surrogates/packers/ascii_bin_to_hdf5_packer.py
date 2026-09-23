@@ -6,6 +6,7 @@ import numpy as np
 from .base_packer import Packer
 
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.utils.memory_debug import log_rss
 log = get_logger(__name__)
 
 def _is_binary_file(path: str, chunk_size: int = 8192) -> bool:
@@ -130,6 +131,9 @@ class AsciiBinToHdf5Packer(Packer):
         run_dir = os.path.abspath(run_dir)
         run_name = os.path.basename(os.path.normpath(run_dir))
 
+        h5_size_mb = os.path.getsize(self.hdf5_path) / 1e6 if os.path.exists(self.hdf5_path) else 0.0
+        log_rss(log, f"pack_run_dir_{run_name}_start_h5size{h5_size_mb:.0f}MB")
+
         try:
             with h5py.File(self.hdf5_path, 'a') as f:
                 runs_group = f.require_group('runs')
@@ -169,6 +173,8 @@ class AsciiBinToHdf5Packer(Packer):
                             log.error("Failed to pack file '%s'", file_path, exc_info=True)
         except Exception:
             log.error("Failed to pack run dir '%s' into %s", run_dir, self.hdf5_path, exc_info=True)
+
+        log_rss(log, f"pack_run_dir_{run_name}_end")
 
     def unpack_run_dir(self, run_dir: str, dest_dir: str) -> str:
         """

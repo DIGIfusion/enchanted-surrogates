@@ -23,6 +23,7 @@ dependencies = [
     "scipy",
     "pyarrow",
     "h5py",
+    "psutil",
 ]
 
 [tool.ruff.lint]

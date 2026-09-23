@@ -28,8 +28,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
-from enchanted_surrogates.samplers.svm_active_sampler import _in_hull, _margin
+from enchanted_surrogates.samplers.svm_active_sampler import _build_hull, _in_hull, _margin
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.utils.memory_debug import log_rss
 
 log = get_logger(__name__)
 
@@ -296,6 +297,65 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
     def _predict_time(self, X_unit):
         return self.time_model.predict(X_unit)
 
+    class _ChunkBuffer:
+        """
+        Accumulates (X_unit, indices) pairs from successive pool chunks and
+        yields them concatenated once the buffered row count reaches
+        flush_size, instead of every downstream computation (time/uncertainty
+        prediction) running once per pool_chunk_size-sized raw chunk.
+
+        Why this exists: _get_initial_batch_n and _compute_boundary_candidates
+        both stream the pool in pool_chunk_size chunks (to keep the mmap-backed
+        pool read memory-bounded), and originally called _predict_time (and,
+        in _compute_boundary_candidates, _uncertainty too) on every chunk as
+        they went. That's correct but wasteful -- each ExtraTreesRegressor.
+        predict() call pays a fixed dispatch overhead (joblib scheduling,
+        estimator validation, walking all n_estimators trees) regardless of
+        how few rows are in that chunk, so calling it ~40 times/batch
+        (total_pool_size / pool_chunk_size) instead of once or twice
+        multiplies that fixed cost ~40x for no benefit -- the model and the
+        rows scored are identical either way. This is especially wasteful in
+        _compute_boundary_candidates, where most of each raw chunk is first
+        dropped by the convex-hull filter (see _in_hull), so many chunks'
+        surviving row count is a small fraction of pool_chunk_size.
+
+        Buffering (rather than concatenating the whole stream up front) keeps
+        peak memory bounded to flush_size rows, same as the chunked read
+        already guarantees, while cutting the number of downstream calls down
+        to roughly (rows that actually need scoring) / flush_size.
+        """
+
+        def __init__(self, flush_size):
+            self._flush_size = flush_size
+            self._X_parts = []
+            self._idx_parts = []
+            self._row_count = 0
+
+        def add(self, X_unit, indices):
+            if len(X_unit) == 0:
+                return
+            self._X_parts.append(X_unit)
+            self._idx_parts.append(indices)
+            self._row_count += len(X_unit)
+
+        def _drain(self):
+            X = np.concatenate(self._X_parts)
+            idx = np.concatenate(self._idx_parts)
+            self._X_parts = []
+            self._idx_parts = []
+            self._row_count = 0
+            return X, idx
+
+        def ready_batches(self):
+            """Yield (X_unit, indices) once enough rows are buffered."""
+            if self._row_count >= self._flush_size:
+                yield self._drain()
+
+        def flush(self):
+            """Yield the final (possibly partial) buffered batch, if any."""
+            if self._row_count > 0:
+                yield self._drain()
+
     def _compute_acquisition_unchunked(self, X_unit):
         # Not used directly (see get_next_samples' explicit explore/boundary
         # split), but kept for interface parity / potential reuse by
@@ -496,6 +556,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             f"future_df rows: {len(future_df)}\n"
             f"train_x new shape: {self.train_x.shape}"
         )
+        log_rss(log, f"svm_batch{self.batch_number}_ntrain{self.train_x.shape[0]}_after_register_future")
 
     def _accumulate_cpuh(self, future_df):
         """
@@ -527,15 +588,19 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
     # MAIN ENTRY: GET NEXT SAMPLES
     # ------------------------------------------------------------
     def get_next_samples(self):
+        rss_label_prefix = f"svm_batch{self.batch_number}_ntrain{self.train_x.shape[0]}"
+        log_rss(log, f"{rss_label_prefix}_start")
         if self.batch_number == 0:
             initial_pool_indices = self._get_initial_batch()
             real_selected_samples = self._get_samples_from_pool(initial_pool_indices)
             self._remove_from_pool(initial_pool_indices)
         else:
             self._fit_model()
+            log_rss(log, f"{rss_label_prefix}_after_fit_model")
             self.evaluate_model(
                 do_write_batch_info=self._should_trigger(self.write_batch_info_every),
             )
+            log_rss(log, f"{rss_label_prefix}_after_evaluate_model")
 
             if self._stop_early:
                 log.warning(
@@ -564,14 +629,17 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
                 explore_indices = self._get_initial_batch_n(
                     self.exploration_per_batch, filter_by_time=True
                 )
+                log_rss(log, f"{rss_label_prefix}_after_explore_indices")
                 boundary_indices = self._compute_boundary_candidates(
                     self.batch_size - self.exploration_per_batch, exclude=explore_indices
                 )
+                log_rss(log, f"{rss_label_prefix}_after_boundary_indices")
                 selected_indices = np.concatenate([explore_indices, boundary_indices]).astype(int)
 
             real_selected_samples = self._get_samples_from_pool(selected_indices)
             self._remove_from_pool(selected_indices)
 
+        log_rss(log, f"{rss_label_prefix}_end")
         self.batch_number += 1
         self.submitted += len(real_selected_samples)
         params_dict = self.samples_to_params_dict(real_selected_samples)
@@ -625,6 +693,22 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         cheapest_times = np.array([], float)
         cheapest_indices = np.array([], int)
 
+        def _absorb_time_predictions(chunk_indices, pred_time):
+            nonlocal under_limit_indices, cheapest_times, cheapest_indices
+            under_limit_indices = np.concatenate(
+                [under_limit_indices, chunk_indices[pred_time <= self.max_predicted_time]]
+            )
+            # Keep a running set of the cheapest-seen points as a fallback
+            # in case not enough points end up under the limit.
+            cheapest_times = np.concatenate([cheapest_times, pred_time])
+            cheapest_indices = np.concatenate([cheapest_indices, chunk_indices])
+            if len(cheapest_times) > n:
+                keep = np.argsort(cheapest_times)[:n]
+                cheapest_times = cheapest_times[keep]
+                cheapest_indices = cheapest_indices[keep]
+
+        time_buffer = self._ChunkBuffer(self.pool_chunk_size) if use_time_filter else None
+
         self._reset_iterator()
         while True:
             X_chunk_unit, _, chunk_indices = self.get_next_pool_chunk()
@@ -633,18 +717,9 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             chunk_indices = np.asarray(chunk_indices)
 
             if use_time_filter:
-                pred_time = self._predict_time(X_chunk_unit)
-                under_limit_indices = np.concatenate(
-                    [under_limit_indices, chunk_indices[pred_time <= self.max_predicted_time]]
-                )
-                # Keep a running set of the cheapest-seen points as a fallback
-                # in case not enough points end up under the limit.
-                cheapest_times = np.concatenate([cheapest_times, pred_time])
-                cheapest_indices = np.concatenate([cheapest_indices, chunk_indices])
-                if len(cheapest_times) > n:
-                    keep = np.argsort(cheapest_times)[:n]
-                    cheapest_times = cheapest_times[keep]
-                    cheapest_indices = cheapest_indices[keep]
+                time_buffer.add(X_chunk_unit, chunk_indices)
+                for X_batch, idx in time_buffer.ready_batches():
+                    _absorb_time_predictions(idx, self._predict_time(X_batch))
 
             scores = self.rng.random(len(chunk_indices))
             combined_scores = np.concatenate([cand_scores, scores])
@@ -656,6 +731,10 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             else:
                 cand_scores = combined_scores
                 cand_indices = combined_indices
+
+        if use_time_filter:
+            for X_batch, idx in time_buffer.flush():
+                _absorb_time_predictions(idx, self._predict_time(X_batch))
 
         if not use_time_filter:
             return cand_indices.astype(int)
@@ -695,11 +774,27 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         sub-batch is still filled.
         """
         hull_points = self.scaler.transform(self.train_x)
+        hull = _build_hull(hull_points)
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
         all_times = []
         all_indices = []
+
+        # Buffers hull-filtered candidates across chunks so _predict_time and
+        # _uncertainty run once per pool_chunk_size-sized batch of *actual
+        # candidates* instead of once per raw pool chunk -- most chunks'
+        # hull-filtered survivor count is far below pool_chunk_size
+        # (especially early in a run, when the hull is still small), so this
+        # collapses many near-empty predict() calls into far fewer full ones
+        # without ever buffering more than pool_chunk_size rows at a time.
+        # See _ChunkBuffer's docstring.
+        candidate_buffer = self._ChunkBuffer(self.pool_chunk_size)
+
+        def _score_and_absorb(X_batch, idx_batch):
+            all_uncertainty.append(self._uncertainty(X_batch))
+            all_times.append(self._predict_time(X_batch))
+            all_indices.append(idx_batch)
 
         self._reset_iterator()
         while True:
@@ -715,13 +810,16 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             chunk_indices = chunk_indices[keep]
 
             X_chunk_scaled = self.scaler.transform(X_chunk_unit)
-            inside = _in_hull(X_chunk_scaled, hull_points)
-            if inside.sum() > 0:
-                u = self._uncertainty(X_chunk_unit[inside])
-                t = self._predict_time(X_chunk_unit[inside])
-                all_uncertainty.append(u)
-                all_times.append(t)
-                all_indices.append(chunk_indices[inside])
+            inside = _in_hull(X_chunk_scaled, hull)
+            if inside.sum() == 0:
+                continue
+
+            candidate_buffer.add(X_chunk_unit[inside], chunk_indices[inside])
+            for X_batch, idx_batch in candidate_buffer.ready_batches():
+                _score_and_absorb(X_batch, idx_batch)
+
+        for X_batch, idx_batch in candidate_buffer.flush():
+            _score_and_absorb(X_batch, idx_batch)
 
         if not all_indices or sum(len(idx) for idx in all_indices) < n:
             log.warning(
