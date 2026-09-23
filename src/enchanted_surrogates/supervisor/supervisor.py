@@ -64,6 +64,7 @@ class Supervisor:
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
+        self.delete_immediately = args.supervisor.get("delete_immediately", False)
         self.log_failures = args.supervisor.get("log_failures", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
@@ -193,7 +194,7 @@ class Supervisor:
                     # Load runner output of this batch, used as input for next sequential run
                     df_batch = self.load_batch_to_df(run_dirs)
                     expanded = df_batch.to_dict(orient="records")
-                    
+
                     if group.sampler.submitted == group.sampler.budget:
                         self._clean_redundant_executors(nested_depth, sequential_depth, group)
 
@@ -222,9 +223,13 @@ class Supervisor:
                     self.hdf5_append_datapoints(run_dirs)
 
                 self.fetch_from_local_storage()
-                
-                # Clean unwanted files
-                self.delete_unwanted_files(self.save_files_arg, self.data_dir)
+
+                # Run_dirs may still be needed by a later nested or sequential stage, so
+                # by default this is skipped here and left to the final sweep below.
+                # Only sweep per-batch if delete_immediately opts into freeing disk
+                # space as soon as possible.
+                if self.delete_immediately:
+                    self.delete_unwanted_files(self.save_files_arg, self.data_dir)
 
                 batch_number += 1
 
@@ -570,11 +575,16 @@ class Supervisor:
                 if result is not None:
                     # remove so it is not rechecked and we are closer to while loop stopping
                     run_dirs.remove(run_dir)
-                    
+
                     if packer is not None:
                         packer.pack_run_dir(run_dir, result)
-                    
-                    self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
+
+                    # A run_dir may still be needed by a later nested or sequential
+                    # stage, so by default cleanup is deferred to the final sweep in
+                    # start(). Set delete_immediately if no stage reads another
+                    # stage's run_dir and disk usage from many run_dirs is a concern.
+                    if self.delete_immediately:
+                        self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
                     self.update_runner_progress(group_name, runner_config, completed=1)
                     if result['success']:
                         self.update_runner_progress(group_name, runner_config, num_successes=1)
