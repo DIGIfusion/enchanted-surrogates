@@ -16,6 +16,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from enchanted_surrogates.utils.logger import get_logger
+from enchanted_surrogates.utils.memory_debug import log_rss
 from enchanted_surrogates.supervisor.run_data import RunData
 from enchanted_surrogates.supervisor.nested_imports import (
     RunGroup,
@@ -169,8 +170,10 @@ class Supervisor:
             self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_start_time=group_start_time)
             
             while group.sampler.has_budget:
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_start")
                 samples = group.sampler.get_next_samples()
-                
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_after_get_next_samples")
+
                 if samples is None:
                     log.debug('Sampler returned None.')
                     break
@@ -204,6 +207,7 @@ class Supervisor:
 
                     # monitor runs for failures and update progress file
                     self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
+                    log_rss(log, f"G{nested_depth}_batch{batch_number}_seq{sequential_depth}_after_monitor_runs")
 
                     # Wait processes of current batch to complete
                     self.wait_batch_dirs(run_dirs)
@@ -224,9 +228,11 @@ class Supervisor:
                     self.write_summary(df_batch, write_mode="w")
                 else:
                     self.write_summary(df_batch, write_mode="a")
-                
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_after_batch_dataset_concat")
+
                 log.debug('Registering data with future...')
                 group.sampler.register_future(df_batch)
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_after_register_future")
 
                 log.debug('Saving run data...')
                 run_data = RunData(
@@ -241,11 +247,13 @@ class Supervisor:
                 if not hasattr(self.args, "storage") or self.args.storage.get("type") != "None":
                     log.debug('Appending to hdf5 file...')
                     self.hdf5_append_datapoints(run_dirs)
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_after_hdf5_append")
 
                 self.fetch_from_local_storage()
-                
+
                 # Clean unwanted files
                 self.delete_unwanted_files(self.save_files_arg, self.data_dir)
+                log_rss(log, f"G{nested_depth}_batch{batch_number}_end")
 
                 batch_number += 1
 

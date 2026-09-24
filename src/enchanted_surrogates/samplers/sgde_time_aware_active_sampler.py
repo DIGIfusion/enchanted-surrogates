@@ -81,7 +81,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support
 
 from enchanted_surrogates.samplers.parent_active_sampler import ParentActiveSampler
-from enchanted_surrogates.samplers.svm_active_sampler import _in_hull
+from enchanted_surrogates.samplers.svm_active_sampler import _build_hull, _in_hull
 from enchanted_surrogates.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -906,6 +906,7 @@ class SgdeTimeAwareActiveSampler(ParentActiveSampler):
         sub-batch is still filled.
         """
         hull_points = self.train_x
+        hull = _build_hull(hull_points)
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
@@ -925,7 +926,7 @@ class SgdeTimeAwareActiveSampler(ParentActiveSampler):
             X_chunk_unit = X_chunk_unit[keep]
             chunk_indices = chunk_indices[keep]
 
-            inside = _in_hull(X_chunk_unit, hull_points)
+            inside = _in_hull(X_chunk_unit, hull)
             if inside.sum() > 0:
                 u = self._uncertainty(X_chunk_unit[inside])
                 t = self._predict_time(X_chunk_unit[inside])

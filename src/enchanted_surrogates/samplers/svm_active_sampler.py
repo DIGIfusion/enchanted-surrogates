@@ -37,17 +37,37 @@ from enchanted_surrogates.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-def _in_hull(points, hull_points):
+def _build_hull(hull_points):
     """
-    Boolean mask of which rows of ``points`` fall inside the convex hull of
-    ``hull_points`` (both in the same feature space). Falls back to "keep
-    everything" if the hull is degenerate (fewer than 3 non-collinear hull
-    points), which can happen early on.
+    Builds the Delaunay triangulation of hull_points once, for reuse across
+    many _in_hull calls (e.g. once per pool chunk in a streaming loop).
+    Returns None if the hull is degenerate (fewer than 3 non-collinear hull
+    points, which can happen early on) -- _in_hull treats None as "keep
+    everything".
+
+    Building this is expensive (worse than linear in point count, and
+    scipy/Qhull's Delaunay triangulation scales particularly poorly past
+    ~6-8 dimensions) and does not depend on the points being tested against
+    it, only on hull_points -- so callers that test many batches of points
+    against the *same* hull_points (e.g. a chunked pool stream) should build
+    it once here and pass the result to every _in_hull call, rather than
+    rebuilding it per chunk.
     """
     try:
-        return Delaunay(hull_points).find_simplex(points) >= 0
+        return Delaunay(hull_points)
     except QhullError:
+        return None
+
+
+def _in_hull(points, hull):
+    """
+    Boolean mask of which rows of ``points`` fall inside the convex hull
+    represented by ``hull``, a value returned by _build_hull (or None, which
+    means "keep everything" -- see _build_hull's docstring).
+    """
+    if hull is None:
         return np.ones(len(points), dtype=bool)
+    return hull.find_simplex(points) >= 0
 
 
 def _margin(clf, X):
@@ -226,6 +246,7 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
         been removed from the pool.
         """
         hull_points = self.scaler.transform(self.train_x)
+        hull = _build_hull(hull_points)
         exclude = set(int(i) for i in exclude)
 
         all_scores = []
@@ -245,7 +266,7 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
             chunk_indices = chunk_indices[keep]
 
             X_chunk_scaled = self.scaler.transform(X_chunk_unit)
-            inside = _in_hull(X_chunk_scaled, hull_points)
+            inside = _in_hull(X_chunk_scaled, hull)
             if inside.sum() > 0:
                 m = _margin(self.svm_model, X_chunk_scaled[inside])
                 all_scores.append(m)

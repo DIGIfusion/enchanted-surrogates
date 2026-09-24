@@ -1,0 +1,2 @@
+num_train_samples,eval_mode,accuracy,f1_macro,time_rmse,ETG_precision,ETG_recall,ETG_f1,ITG_precision,ITG_recall,ITG_f1,KBM_precision,KBM_recall,KBM_f1,MTM_precision,MTM_recall,MTM_f1,TEM_precision,TEM_recall,TEM_f1
+40,kfold,0.125,0.11076923076923077,71.63752949014133,0.0,0.0,0.0,0.0,0.0,0.0,0.375,0.42857142857142855,0.4,0.13333333333333333,0.18181818181818182,0.15384615384615385,0.0,0.0,0.0

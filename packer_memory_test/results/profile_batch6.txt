@@ -1,0 +1,38 @@
+         3782855 function calls (3753391 primitive calls) in 6.744 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1125 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.006    0.006    6.791    6.791 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:588(get_next_samples)
+       37    0.000    0.000    3.384    0.091 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/utils/parallel.py:54(__call__)
+       37    0.002    0.000    3.384    0.091 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/joblib/parallel.py:1969(__call__)
+     7474    0.024    0.000    3.381    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/joblib/parallel.py:1888(_get_sequential_output)
+     7400    0.233    0.000    3.224    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/utils/parallel.py:140(__call__)
+       31    0.001    0.000    2.742    0.088 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:1044(predict)
+        1    0.003    0.003    2.614    2.614 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:668(_get_initial_batch_n)
+       26    0.000    0.000    2.559    0.098 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:296(_predict_time)
+        1    0.008    0.008    2.311    2.311 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:744(_compute_boundary_candidates)
+     6200    0.044    0.000    1.933    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:704(_accumulate_prediction)
+     6200    1.622    0.000    1.887    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/tree/_classes.py:501(predict)
+       18    0.000    0.000    1.557    0.087 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:1381(wrapper)
+        6    0.000    0.000    1.534    0.256 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:302(fit)
+        1    0.000    0.000    1.516    1.516 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:367(evaluate_model)
+        1    0.001    0.001    1.509    1.509 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_time_aware_active_sampler.py:414(compute_kfold_metrics)
+       40    1.298    0.032    1.298    0.032 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_active_sampler.py:62(_in_hull)
+        6    0.001    0.000    0.866    0.144 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:457(<listcomp>)
+     1200    0.005    0.000    0.865    0.001 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_base.py:141(_make_estimator)
+        1    0.825    0.825    0.825    0.825 /pfs/lustrep2/scratch/project_462001429/daniel/enchanted_develop/enchanted-surrogates/src/enchanted_surrogates/samplers/svm_active_sampler.py:40(_build_hull)
+     6018    0.037    0.000    0.735    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:248(get_params)
+     6018    0.039    0.000    0.686    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:218(_get_param_names)
+     6045    0.004    0.000    0.537    0.000 /opt/cray/pe/python/3.11.7/lib/python3.11/inspect.py:3278(signature)
+     6045    0.004    0.000    0.533    0.000 /opt/cray/pe/python/3.11.7/lib/python3.11/inspect.py:3024(from_callable)
+     6045    0.032    0.000    0.529    0.000 /opt/cray/pe/python/3.11.7/lib/python3.11/inspect.py:2428(_signature_from_callable)
+     1200    0.004    0.000    0.504    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:132(_parallel_build_trees)
+     1200    0.134    0.000    0.500    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/tree/_classes.py:226(_fit)
+     6045    0.143    0.000    0.479    0.000 /opt/cray/pe/python/3.11.7/lib/python3.11/inspect.py:2333(_signature_from_function)
+15600/1200    0.010    0.000    0.363    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:46(clone)
+     1200    0.001    0.000    0.361    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:444(__sklearn_clone__)
+15600/1200    0.030    0.000    0.360    0.000 /scratch/project_462001429/daniel/enchanted_develop/enchanted_cont/lib/python3.11/site-packages/sklearn/base.py:100(_clone_parametrized)
+
+
