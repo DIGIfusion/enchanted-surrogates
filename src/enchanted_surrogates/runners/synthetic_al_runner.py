@@ -25,6 +25,8 @@ class SyntheticAlRunner(Runner):
     def __init__(self, *args, **kwargs):
         self.sleep_sec = kwargs.get("sleep_sec", 0.001)
         self.write_files = bool(kwargs.get("write_files", False))
+        self.class_output_variable = kwargs.get("class_output_variable", "gene_daniel_tree_classifier")
+        self.time_output_variable = kwargs.get("time_output_variable", None)
         self.binary_file_sizes_mb = kwargs.get(
             "binary_file_sizes_mb",
             {"field.dat": 1, "mom_e.dat": 1},
@@ -38,10 +40,12 @@ class SyntheticAlRunner(Runner):
         result = {
             "success": True,
             "helena_dir": run_dir,
-            "gene_daniel_tree_classifier": str(rng.choice(CLASSES)),
+            self.class_output_variable: str(rng.choice(CLASSES)),
             "runtime_sec_gene": float(rng.uniform(100, 300)),
             "runtime_sec_helena": float(rng.uniform(50, 150)),
         }
+        if self.time_output_variable:
+            result[self.time_output_variable] = float(rng.uniform(100, 300))
 
         if self.write_files:
             for name, mb in self.binary_file_sizes_mb.items():

@@ -135,6 +135,11 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
             If set (requires test_data_csv), get_next_samples stops the run
             early as soon as an evaluate_model() call reports test-set
             accuracy below this threshold. Default: None.
+        test_set_f1_macro_target : float, optional
+            If set (requires test_data_csv), get_next_samples stops the run
+            early as soon as an evaluate_model() call reports test-set
+            macro-averaged F1 at or above this threshold (i.e., target reached).
+            Default: None.
         cpuh_budget : float, optional
             Total CPU-hours (core-hours) allowed across the whole run,
             computed from per-stage wallclock columns (gene_runtime_variable,
@@ -228,6 +233,15 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
             raise ValueError(
                 "test_set_accuracy_target requires test_data_csv to also be set."
             )
+
+        test_set_f1_macro_target = kwargs.get("test_set_f1_macro_target", None)
+        self.test_set_f1_macro_target = float(test_set_f1_macro_target) \
+            if test_set_f1_macro_target is not None else None
+        if self.test_set_f1_macro_target is not None and self._test_X is None:
+            raise ValueError(
+                "test_set_f1_macro_target requires test_data_csv to also be set."
+            )
+
         self._stop_early = False
 
         cpuh_budget = kwargs.get("cpuh_budget", None)
@@ -338,6 +352,15 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
                     "Test-set accuracy %.3f fell below test_set_accuracy_target=%.3f; "
                     "stopping the run.",
                     metrics["accuracy"], self.test_set_accuracy_target,
+                )
+                self._stop_early = True
+
+        if self.test_set_f1_macro_target is not None and self._test_X is not None:
+            if metrics["f1_macro"] >= self.test_set_f1_macro_target:
+                log.warning(
+                    "Test-set f1_macro %.4f reached test_set_f1_macro_target=%.4f; "
+                    "stopping the run.",
+                    metrics["f1_macro"], self.test_set_f1_macro_target,
                 )
                 self._stop_early = True
 
