@@ -88,3 +88,50 @@ def test_cached_import_caches_results(monkeypatch):
     assert len(import_calls) == 1
 
     clear_import_cache()
+
+
+class _KwargsSampler:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+class _StrictSampler:
+    def __init__(self, budget):
+        self.budget = budget
+
+
+@pytest.mark.parametrize(
+    "sampler_cls, config, expected_base_run_dir",
+    [
+        (_KwargsSampler, {"type": "s"}, "/runs/supervisor"),
+        (_KwargsSampler, {"type": "s", "base_run_dir": "/runs/supervisor"}, "/runs/supervisor"),
+        (_KwargsSampler, {"type": "s", "base_run_dir": "/runs/other"}, "/runs/other"),
+    ],
+    ids=["inherited", "same_as_supervisor", "config_overrides"],
+)
+def test_import_sampler_passes_supervisor_base_run_dir(monkeypatch, sampler_cls, config, expected_base_run_dir):
+    monkeypatch.setattr(precise_imports, "cached_import", lambda t, m: sampler_cls)
+    sampler = import_sampler("s", config, base_run_dir="/runs/supervisor")
+    assert sampler.kwargs["base_run_dir"] == expected_base_run_dir
+    assert "type" not in sampler.kwargs
+
+
+def test_import_sampler_warns_on_conflicting_base_run_dir(monkeypatch):
+    monkeypatch.setattr(precise_imports, "cached_import", lambda t, m: _KwargsSampler)
+    warnings = []
+    monkeypatch.setattr(precise_imports.log, "warning", lambda msg: warnings.append(msg))
+    import_sampler("s", {"base_run_dir": "/runs/other"}, base_run_dir="/runs/supervisor")
+    assert len(warnings) == 1 and "/runs/other" in warnings[0]
+
+
+def test_import_sampler_leaves_samplers_without_base_run_dir_untouched(monkeypatch):
+    monkeypatch.setattr(precise_imports, "cached_import", lambda t, m: _StrictSampler)
+    sampler = import_sampler("s", {"type": "s", "budget": 3}, base_run_dir="/runs/supervisor")
+    assert sampler.budget == 3
+    assert not hasattr(sampler, "base_run_dir")
+
+
+def test_import_sampler_without_base_run_dir_is_unchanged(monkeypatch):
+    monkeypatch.setattr(precise_imports, "cached_import", lambda t, m: _KwargsSampler)
+    sampler = import_sampler("s", {"type": "s", "budget": 3})
+    assert sampler.kwargs == {"budget": 3}

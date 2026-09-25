@@ -110,9 +110,19 @@ def import_samplers(args) -> dict[str, Sampler]:
     Returns:
         Dictionary mapping sampler unique name to class instance
     """
+    supervisor_cfg = getattr(args, "supervisor", {}) or {}
+    base_run_dir = (
+        supervisor_cfg.get("base_run_dir")
+        if isinstance(supervisor_cfg, dict)
+        else getattr(supervisor_cfg, "get", lambda *args, **kwargs: None)("base_run_dir")
+    )
+
     samplers = {}
     for name, sampler_config in args.samplers.items():
-        samplers[name] = import_sampler(sampler_config["type"], sampler_config)
+        sampler = import_sampler(sampler_config["type"], sampler_config, base_run_dir=base_run_dir)
+        if base_run_dir is not None and hasattr(sampler, "base_run_dir"):
+            sampler.base_run_dir = sampler.base_run_dir or base_run_dir
+        samplers[name] = sampler
 
     return samplers
 

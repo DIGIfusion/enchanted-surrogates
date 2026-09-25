@@ -74,7 +74,7 @@ def test_parse_all_run_groups_wires_packers(monkeypatch):
     )
     monkeypatch.setattr(
         "enchanted_surrogates.supervisor.nested_imports.import_sampler",
-        lambda t, c: f"sampler:{t}",
+        lambda t, c, base_run_dir=None: f"sampler:{t}",
     )
     monkeypatch.setattr(
         "enchanted_surrogates.supervisor.nested_imports.import_packer",
