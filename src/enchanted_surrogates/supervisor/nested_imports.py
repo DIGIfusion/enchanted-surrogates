@@ -119,7 +119,7 @@ def import_samplers(args) -> dict[str, Sampler]:
 
     samplers = {}
     for name, sampler_config in args.samplers.items():
-        sampler = import_sampler(sampler_config["type"], sampler_config)
+        sampler = import_sampler(sampler_config["type"], sampler_config, base_run_dir=base_run_dir)
         if base_run_dir is not None and hasattr(sampler, "base_run_dir"):
             sampler.base_run_dir = sampler.base_run_dir or base_run_dir
         samplers[name] = sampler

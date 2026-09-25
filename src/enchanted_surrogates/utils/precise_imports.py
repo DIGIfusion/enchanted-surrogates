@@ -4,8 +4,13 @@ imported and cached.
 """
 
 import re
+import os
+import inspect
 import importlib
 from enchanted_surrogates import load_plugins
+from enchanted_surrogates.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 # All imported module entry points are stored to ensure modules are only imported once.
 # Mapping from [module_name (str) -> class]
@@ -195,7 +200,7 @@ def cached_import_external(type_name: str, module: str):
     return imported_type
 
 
-def import_sampler(sampler_type, sampler_config):
+def import_sampler(sampler_type, sampler_config, base_run_dir=None):
     """
     Dynamically imports and instantiates a sampler class based on naming convention.
 
@@ -205,6 +210,10 @@ def import_sampler(sampler_type, sampler_config):
         The name of the sampler (in snake_case or PascalCase).
     sampler_config : dict
         Keyword arguments to pass to the sampler constructor.
+    base_run_dir : str, optional
+        The supervisor's base_run_dir. Passed to the sampler constructor when the
+        sampler accepts a base_run_dir argument and sampler_config does not set one.
+        Samplers that do not accept it are constructed unchanged.
 
     Returns
     -------
@@ -219,8 +228,25 @@ def import_sampler(sampler_type, sampler_config):
     config: dict = sampler_config.copy()
     config.pop("type", None)
 
-    sampler = cached_import(sampler_type, "samplers")(**config)
-    return sampler
+    sampler_cls = cached_import(sampler_type, "samplers")
+    if base_run_dir is not None and _init_accepts(sampler_cls, "base_run_dir"):
+        configured = config.get("base_run_dir")
+        if configured is None:
+            config["base_run_dir"] = base_run_dir
+        elif os.path.abspath(configured) != os.path.abspath(base_run_dir):
+            log.warning(
+                f"Sampler '{sampler_type}' sets base_run_dir={configured!r}, which differs from "
+                f"the supervisor base_run_dir={base_run_dir!r}. Using the sampler's value; remove "
+                "base_run_dir from the sampler config to inherit the supervisor's."
+            )
+
+    return sampler_cls(**config)
+
+
+def _init_accepts(cls, name: str) -> bool:
+    """True if cls.__init__ takes a keyword argument called `name` (explicitly or via **kwargs)."""
+    params = inspect.signature(cls.__init__).parameters.values()
+    return any(p.name == name or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
 
 
 def import_runner(runner_type, runner_config):
