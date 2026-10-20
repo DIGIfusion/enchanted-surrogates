@@ -58,6 +58,10 @@ class ParentActiveSampler(Sampler):
             raise ValueError('Must set ouptu_variables in sampler_config. It is a list of strings naming the output variables used for training and active learning.')
         self.output_dim = 1 if isinstance(self.output_variables, str) else len(self.output_variables)
         self.residual_plot_save_dir = os.path.join(self.base_run_dir, 'residual_plots')
+        # Class-discovery bookkeeping (classification samplers): number of
+        # evaluated samples before each class was first seen.
+        self._n_evaluated = 0
+        self.class_first_found = {}
         
         self.plot_residuals_every = int(kwargs.get("plot_residuals_every", 0))
         self.write_batch_info_every = int(kwargs.get("write_batch_info_every", 0))
@@ -100,6 +104,15 @@ class ParentActiveSampler(Sampler):
             self._range = self._ub - self._lb
             
         
+        # Optional class grouping for classification samplers (see
+        # _group_labels). None = every label is its own class.
+        self.classes = kwargs.get("classes", None)
+        self.other_label = kwargs.get("other_label", "OTHER")
+        if self.classes is not None:
+            self.classes = list(self.classes)
+            if len(set(self.classes)) != len(self.classes):
+                raise ValueError(f"classes contains duplicates: {self.classes!r}")
+
         # Training data. train_y dtype is object here since labels may be
         # categorical (classification) or continuous (regression); task-specific
         # subclasses may re-initialize it with a narrower dtype.
@@ -225,6 +238,160 @@ class ParentActiveSampler(Sampler):
         y = df[self.output_variables].to_numpy()
         self._test_X = self.to_unit_numpy(X_real)
         self._test_y = self._ensure_2d(y)
+
+    # ------------------------------------------------------------
+    # CPU-HOUR BUDGET
+    # ------------------------------------------------------------
+    def _init_cpuh_budget(self, kwargs):
+        """
+        Set up CPU-hour tracking from sampler config (see the samplers'
+        docstrings for the user-facing description):
+
+            cpuh_budget : float          total core-hours allowed
+            cpuh_stages : list of {runtime_variable, cores_per_run}
+            cores_per_run : int          shorthand for a single stage timed by
+                                         self.time_output_variable
+
+        The legacy gene_/helena_ runtime_variable / cores_per_run keys are
+        still accepted and translated into two stages (deprecated).
+        """
+        budget = kwargs.get("cpuh_budget", None)
+        self.cpuh_budget = float(budget) if budget is not None else None
+        self.cpuh_used = 0.0
+        self.cpuh_stages = []
+        if self.cpuh_budget is None:
+            return
+
+        stages = kwargs.get("cpuh_stages", None)
+        cores = kwargs.get("cores_per_run", None)
+        legacy = {
+            "gene": kwargs.get("gene_cores_per_run", None),
+            "helena": kwargs.get("helena_cores_per_run", None),
+        }
+        if stages:
+            self.cpuh_stages = [
+                (st["runtime_variable"], int(st["cores_per_run"])) for st in stages
+            ]
+        elif cores is not None:
+            tov = getattr(self, "time_output_variable", None)
+            if not tov:
+                raise ValueError(
+                    "cores_per_run needs time_output_variable to be set; "
+                    "otherwise use cpuh_stages."
+                )
+            self.cpuh_stages = [(tov, int(cores))]
+        elif any(v is not None for v in legacy.values()):
+            if any(v is None for v in legacy.values()):
+                raise ValueError(
+                    "cpuh_budget requires both gene_cores_per_run and "
+                    "helena_cores_per_run (or use cpuh_stages)."
+                )
+            log.warning(
+                "gene_/helena_ runtime_variable and cores_per_run are deprecated; "
+                "use cpuh_stages or cores_per_run."
+            )
+            self.cpuh_stages = [
+                (kwargs.get("gene_runtime_variable", "runtime_sec_gene"), int(legacy["gene"])),
+                (kwargs.get("helena_runtime_variable", "runtime_sec_helena"), int(legacy["helena"])),
+            ]
+        else:
+            raise ValueError(
+                "cpuh_budget requires cores_per_run (single stage timed by "
+                "time_output_variable) or cpuh_stages."
+            )
+
+    def _accumulate_cpuh(self, future_df):
+        """
+        Adds this batch's CPU-hour cost to self.cpuh_used, from every row
+        submitted (successful or not -- a failed run still burns CPU-hours):
+        sum over stages of runtime_variable (seconds) * cores_per_run / 3600.
+        Missing columns or NaN runtimes contribute 0 (rather than raising), so
+        a run missing one stage's timing doesn't block tracking for the rest.
+        """
+        parts = []
+        for runtime_variable, cores in self.cpuh_stages:
+            if runtime_variable in future_df.columns:
+                sec = future_df[runtime_variable].fillna(0).to_numpy(dtype=float)
+                parts.append(float(sec.sum()) / 3600.0 * cores)
+            else:
+                parts.append(0.0)
+        batch_cpuh = sum(parts)
+        self.cpuh_used += batch_cpuh
+        detail = ", ".join(
+            f"{rv}={h:.2f}" for (rv, _), h in zip(self.cpuh_stages, parts)
+        )
+        log.debug(
+            f"Batch CPU-hours: {batch_cpuh:.2f} ({detail}); "
+            f"running total: {self.cpuh_used:.2f}"
+        )
+
+    def _tag_eval_order(self, future_df):
+        """
+        Number the (successful, row-filtered) rows of a completed batch in
+        evaluation order, continuing the running count of evaluated samples.
+        Includes rows later dropped as unclassified -- they cost budget too.
+        Adds an `_eval_n` column (1-based) used by _record_class_discovery.
+        """
+        future_df = future_df.assign(
+            _eval_n=np.arange(len(future_df)) + self._n_evaluated + 1
+        )
+        self._n_evaluated += len(future_df)
+        return future_df
+
+    def _record_class_discovery(self, future_df, y_class):
+        """
+        Record, for each class not yet seen, how many samples had been
+        evaluated (`n_evaluated`, counting unclassified rows) and how many
+        labelled training points existed (`n_train`) when it first appeared.
+        Call before appending the batch to the training set, with future_df
+        carrying `_eval_n` (see _tag_eval_order) aligned row-for-row with
+        y_class (the grouped labels). Writes class_discovery.csv.
+        """
+        n_train_before = len(self.train_x)
+        new = False
+        for i, label in enumerate(y_class):
+            if label in self.class_first_found:
+                continue
+            self.class_first_found[label] = {
+                "n_evaluated": int(future_df["_eval_n"].iloc[i]),
+                "n_train": n_train_before + i + 1,
+            }
+            new = True
+            log.info(
+                f"Class {label!r} first found after "
+                f"{self.class_first_found[label]['n_evaluated']} evaluated samples "
+                f"({self.class_first_found[label]['n_train']} training samples)."
+            )
+        if new:
+            rows = [{"class": k, **v} for k, v in self.class_first_found.items()]
+            pd.DataFrame(rows).to_csv(
+                os.path.join(self.base_run_dir, "class_discovery.csv"), index=False
+            )
+
+    def _group_labels(self, labels):
+        """
+        Map raw class labels onto the configured `classes` list.
+
+        Labels listed in `classes` are kept as-is. Any other label is
+        relabelled to `other_label` (default "OTHER") if that is one of the
+        configured classes, otherwise it is dropped. With `classes=None`
+        labels pass through unchanged.
+
+        Returns (mapped_labels, keep_mask) as numpy arrays; callers must
+        apply keep_mask to X (and any other per-row arrays) alongside labels.
+        """
+        labels = np.asarray(labels, dtype=object)
+        keep = np.ones(len(labels), dtype=bool)
+        if self.classes is None:
+            return labels, keep
+        known = set(self.classes)
+        in_list = np.array([l in known for l in labels], dtype=bool)
+        if self.other_label in known:
+            mapped = np.where(in_list, labels, self.other_label).astype(object)
+        else:
+            mapped = labels
+            keep = in_list
+        return mapped, keep
 
     def _should_trigger(self, every_n):
         """

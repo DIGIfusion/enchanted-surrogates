@@ -34,6 +34,16 @@ class ParentActiveSamplerClassification(ParentActiveSampler):
             ran, it just didn't yield a usable label). Set to None to
             disable this filtering and treat it as a real class instead.
             Default: "Unclassified".
+        classes : list of str or None, optional
+            Class labels to learn, e.g. ["ETG", "KBM", "OTHER"]. Any label
+            not in the list is relabelled to `other_label` if that is in the
+            list (so MTM -> OTHER), otherwise the row is dropped. Applies to
+            training rows and the test set. unclassified_label filtering
+            happens first, so "Unclassified" is never folded into OTHER
+            (set unclassified_label to None to fold it in). Default: None
+            (every label is its own class).
+        other_label : str, optional
+            Name of the catch-all class in `classes`. Default: "OTHER".
 
     Child classes must implement:
         - _fit_model()
@@ -55,6 +65,15 @@ class ParentActiveSamplerClassification(ParentActiveSampler):
         # the task is known to be classification.
         self.train_x = np.empty((0, self.input_dim), dtype=float)
         self.train_y = np.empty((0,), dtype=object)
+
+        if self._test_X is not None:
+            test_y = self._test_y[:, 0]
+            if self.unclassified_label is not None:
+                keep = test_y != self.unclassified_label
+                self._test_X, test_y = self._test_X[keep], test_y[keep]
+            test_y, keep = self._group_labels(test_y)
+            self._test_X, test_y = self._test_X[keep], test_y[keep]
+            self._test_y = test_y.reshape(-1, 1)
 
     # ------------------------------------------------------------
     # EVALUATION
@@ -268,6 +287,7 @@ class ParentActiveSamplerClassification(ParentActiveSampler):
         future_df = future_df[future_df['success']]
 
         future_df = self._apply_row_filters(future_df)
+        future_df = self._tag_eval_order(future_df)
 
         output_col = self.output_variables if isinstance(self.output_variables, str) \
             else self.output_variables[0]
@@ -285,8 +305,15 @@ class ParentActiveSamplerClassification(ParentActiveSampler):
         if future_df.empty:
             return
 
+        y, keep = self._group_labels(future_df[output_col].to_numpy())
+        future_df = future_df[keep]
+        y = y[keep]
+        if future_df.empty:
+            return
+
+        self._record_class_discovery(future_df, y)
+
         X_real = future_df[self.parameters].to_numpy(dtype=float)
-        y = future_df[output_col].to_numpy()
 
         X_unit = self.to_unit_numpy(X_real)
 

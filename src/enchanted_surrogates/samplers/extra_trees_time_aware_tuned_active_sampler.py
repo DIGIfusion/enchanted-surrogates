@@ -56,6 +56,11 @@ class ExtraTreesTimeAwareTunedActiveSampler(ExtraTreesTimeAwareActiveSampler):
             Minimum holdout rows required to attempt tuning; below this,
             tuning is skipped and the previous (max_depth, max_features) is
             kept. Default: 4.
+        use_hull : bool, optional
+            Whether to restrict the boundary sub-batch to the convex/approx
+            hull of points sampled so far at all. Default: False -- see
+            SvmActiveSampler.use_hull's docstring for why. Only relevant
+            when True does hull_method below have any effect.
         hull_method : {"approx", "exact"}, optional
             "approx" (default): PCA-whitened ellipsoid boundary test
             (approx_hull.py) -- O(train points x dim^2) to fit, O(1) per
@@ -184,18 +189,19 @@ class ExtraTreesTimeAwareTunedActiveSampler(ExtraTreesTimeAwareActiveSampler):
         """
         Identical to ExtraTreesTimeAwareActiveSampler._compute_boundary_candidates
         (see that method's docstring for the scoring/fallback logic), except
-        the hull is built/tested via self.hull_method: "approx"
-        (approx_hull.py's PCA-whitened ellipsoid, default) or "exact"
-        (svm_active_sampler.py's Delaunay triangulation, the base class's
-        original behavior) -- see this module's docstring for the tradeoff.
+        when self.use_hull is True, the hull is built/tested via
+        self.hull_method: "approx" (approx_hull.py's PCA-whitened ellipsoid,
+        default) or "exact" (svm_active_sampler.py's Delaunay triangulation)
+        -- see this module's docstring for the tradeoff. use_hull defaults
+        to False (see SvmActiveSampler.use_hull's docstring for why).
         """
-        if self.hull_method == "exact":
-            build_hull_fn, in_hull_fn = _build_hull, _in_hull
+        in_hull_fn = _in_hull if self.hull_method == "exact" else approx_in_hull
+        if not self.use_hull:
+            hull = None
+        elif self.hull_method == "exact":
+            hull = _build_hull(self.train_x)
         else:
-            build_hull_fn, in_hull_fn = build_approx_hull, approx_in_hull
-
-        hull_points = self.train_x
-        hull = build_hull_fn(hull_points)
+            hull = build_approx_hull(self.train_x)
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
@@ -215,18 +221,23 @@ class ExtraTreesTimeAwareTunedActiveSampler(ExtraTreesTimeAwareActiveSampler):
             X_chunk_unit = X_chunk_unit[keep]
             chunk_indices = chunk_indices[keep]
 
-            inside = in_hull_fn(X_chunk_unit, hull)
-            if inside.sum() > 0:
-                u = self._uncertainty(X_chunk_unit[inside])
-                t = self._predict_time(X_chunk_unit[inside])
-                all_uncertainty.append(u)
-                all_times.append(t)
-                all_indices.append(chunk_indices[inside])
+            if self.use_hull:
+                inside = in_hull_fn(X_chunk_unit, hull)
+                if inside.sum() == 0:
+                    continue
+                X_chunk_unit, chunk_indices = X_chunk_unit[inside], chunk_indices[inside]
+
+            u = self._uncertainty(X_chunk_unit)
+            t = self._predict_time(X_chunk_unit)
+            all_uncertainty.append(u)
+            all_times.append(t)
+            all_indices.append(chunk_indices)
 
         if not all_indices or sum(len(idx) for idx in all_indices) < n:
             log.warning(
-                "Hull-restricted pool has fewer than %d classifiable candidates; "
+                "%s pool has fewer than %d classifiable candidates; "
                 "falling back to an unrestricted random draw for the boundary sub-batch.",
+                "Hull-restricted" if self.use_hull else "Remaining",
                 n,
             )
             fallback = self._get_initial_batch_n(n + len(exclude), filter_by_time=True)

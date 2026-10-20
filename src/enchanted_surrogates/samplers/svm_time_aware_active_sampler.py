@@ -71,9 +71,13 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             Unrestricted random exploration points drawn each batch (after
             the initial batch). Default: max(1, batch_size // 5).
         boundary_pool_fraction : float, optional
-            Fraction of the hull-restricted remaining pool to rank by the
-            combined uncertainty/cost score before drawing the boundary
-            sub-batch. Default: 0.10.
+            Fraction of the (hull-restricted, if use_hull) remaining pool to
+            rank by the combined uncertainty/cost score before drawing the
+            boundary sub-batch. Default: 0.10.
+        use_hull : bool, optional
+            Whether to restrict the boundary sub-batch to the convex hull of
+            points sampled so far. Default: False -- see
+            SvmActiveSampler.use_hull's docstring for why.
         cost_lambda : float, optional
             Weight of predicted cost in the combined boundary score:
             ``score = uncertainty_rank - cost_lambda * predicted_time_rank``,
@@ -99,6 +103,15 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             "spent": GENE ran, it just didn't yield a usable label). Set to
             None to disable this filtering and treat it as a real class
             instead. Default: "Unclassified".
+        classes : list of str or None, optional
+            Class labels to learn, e.g. ["ETG", "KBM", "OTHER"]. Any label
+            not in the list is relabelled to `other_label` if that is in the
+            list (so MTM -> OTHER), otherwise the row is dropped. Applies to
+            training rows and the test set. unclassified_label filtering
+            happens first, so "Unclassified" is never folded into OTHER.
+            Default: None (every label is its own class).
+        other_label : str, optional
+            Name of the catch-all class in `classes`. Default: "OTHER".
         test_data_csv : str, optional
             Path to a held-out labeled CSV (same parameter + output-variable
             columns as the training data) used for evaluation instead of
@@ -113,26 +126,18 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             evaluate_model() call reports test-set accuracy below this
             threshold. Default: None (no accuracy-based stopping).
         cpuh_budget : float, optional
-            Total CPU-hours (core-hours) allowed across the whole run. Each
-            registered run's cost is computed from its per-stage wallclock
-            columns (gene_runtime_variable, helena_runtime_variable) times
-            the corresponding per-run core count (gene_cores_per_run,
-            helena_cores_per_run) -- accounting for actual completed runs
-            only, not a forecast. get_next_samples stops the run (same
-            mechanism as budget exhaustion) once the running total meets or
+            Total CPU-hours (core-hours) allowed across the whole run,
+            computed from actual completed runs (not a forecast).
+            get_next_samples stops the run once the running total meets or
             exceeds this value. Default: None (no CPU-hour limit).
-        gene_cores_per_run : int, optional
-            Cores used by one GENE run (e.g. the executor's SLURM --ntasks).
-            Required if cpuh_budget is set. Default: None.
-        helena_cores_per_run : int, optional
-            Cores used by one HELENA run. Required if cpuh_budget is set.
-            Default: None.
-        gene_runtime_variable : str, optional
-            Column name of GENE's per-run wallclock time in seconds.
-            Default: "runtime_sec_gene".
-        helena_runtime_variable : str, optional
-            Column name of HELENA's per-run wallclock time in seconds.
-            Default: "runtime_sec_helena".
+        cores_per_run : int, optional
+            Cores used by one run; cost is time_output_variable (seconds)
+            times this. Required if cpuh_budget is set, unless cpuh_stages
+            is given.
+        cpuh_stages : list of dict, optional
+            For multi-stage workflows: [{runtime_variable: <column>,
+            cores_per_run: <int>}, ...]. Cost is summed over stages.
+            Takes precedence over cores_per_run.
     """
 
     DEFAULT_SVC_KWARGS = dict(kernel="rbf", C=10.0, gamma="scale", class_weight="balanced")
@@ -176,6 +181,10 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
                 self._test_X = self._test_X[keep]
                 test_y_class = test_y_class[keep]
                 test_y_time = test_y_time[keep]
+            test_y_class, keep = self._group_labels(test_y_class)
+            self._test_X = self._test_X[keep]
+            test_y_class = test_y_class[keep]
+            test_y_time = test_y_time[keep]
             self._test_y_class = test_y_class
             self._test_y_time = test_y_time
         else:
@@ -201,6 +210,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
                 f"(got {self.exploration_per_batch} >= {self.batch_size})."
             )
         self.boundary_pool_fraction = float(kwargs.get("boundary_pool_fraction", 0.10))
+        self.use_hull = bool(kwargs.get("use_hull", False))
         self.cost_lambda = float(kwargs.get("cost_lambda", 0.5))
         max_predicted_time = kwargs.get("max_predicted_time", None)
         self.max_predicted_time = float(max_predicted_time) if max_predicted_time is not None else None
@@ -214,20 +224,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             )
         self._stop_early = False
 
-        cpuh_budget = kwargs.get("cpuh_budget", None)
-        self.cpuh_budget = float(cpuh_budget) if cpuh_budget is not None else None
-        self.gene_cores_per_run = kwargs.get("gene_cores_per_run", None)
-        self.helena_cores_per_run = kwargs.get("helena_cores_per_run", None)
-        self.gene_runtime_variable = kwargs.get("gene_runtime_variable", "runtime_sec_gene")
-        self.helena_runtime_variable = kwargs.get("helena_runtime_variable", "runtime_sec_helena")
-        if self.cpuh_budget is not None and (
-            self.gene_cores_per_run is None or self.helena_cores_per_run is None
-        ):
-            raise ValueError(
-                "cpuh_budget requires both gene_cores_per_run and helena_cores_per_run "
-                "to also be set."
-            )
-        self.cpuh_used = 0.0
+        self._init_cpuh_budget(kwargs)
 
         self.svm_model = None
         self.scaler = None
@@ -405,12 +402,19 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         precision, recall, f1, _ = precision_recall_fscore_support(
             y_true, y_pred, labels=labels, average=None, zero_division=0
         )
-        out = {}
+        from sklearn.metrics import matthews_corrcoef
+        yt, yp = np.asarray(y_true), np.asarray(y_pred)
+        out = {"mcc": float(matthews_corrcoef(yt, yp))}          # multiclass Matthews correlation
         for label, p, r, f in zip(labels, precision, recall, f1):
             out[f"{label}_precision"] = float(p)
             out[f"{label}_recall"] = float(r)
             out[f"{label}_f1"] = float(f)
+            out[f"{label}_mcc"] = float(matthews_corrcoef(yt == label, yp == label))   # class-vs-rest Matthews correlation
         return out
+
+    def _make_fold_classifier(self):
+        # Hook so subclasses can cross-validate the same model they deploy.
+        return SVC(**self.svc_kwargs)
 
     def compute_kfold_metrics(self):
         X = self.train_x
@@ -428,7 +432,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         all_y_true, all_y_pred = [], []
         for train_idx, val_idx in skf.split(X, y_class):
             scaler = StandardScaler().fit(X[train_idx])
-            clf = SVC(**self.svc_kwargs)
+            clf = self._make_fold_classifier()
             clf.fit(scaler.transform(X[train_idx]), y_class[train_idx])
             y_pred = clf.predict(scaler.transform(X[val_idx]))
             all_y_true.append(y_class[val_idx])
@@ -528,6 +532,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
 
         future_df = future_df[future_df['success']]
         future_df = self._apply_row_filters(future_df)
+        future_df = self._tag_eval_order(future_df)
 
         if self.unclassified_label is not None:
             n_before = len(future_df)
@@ -542,8 +547,15 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         if future_df.empty:
             return
 
+        y_class, keep = self._group_labels(future_df[self.class_output_variable].to_numpy())
+        future_df = future_df[keep]
+        y_class = y_class[keep]
+        if future_df.empty:
+            return
+
+        self._record_class_discovery(future_df, y_class)
+
         X_real = future_df[self.parameters].to_numpy(dtype=float)
-        y_class = future_df[self.class_output_variable].to_numpy()
         y_time = future_df[self.time_output_variable].to_numpy(dtype=float)
 
         X_unit = self.to_unit_numpy(X_real)
@@ -557,32 +569,6 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             f"train_x new shape: {self.train_x.shape}"
         )
         log_rss(log, f"svm_batch{self.batch_number}_ntrain{self.train_x.shape[0]}_after_register_future")
-
-    def _accumulate_cpuh(self, future_df):
-        """
-        Adds this batch's CPU-hour cost to self.cpuh_used, from every row
-        submitted (successful or not -- a failed run still burns CPU-hours),
-        using gene_runtime_variable/helena_runtime_variable * the configured
-        per-run core counts. Missing/NaN runtime values contribute 0 (rather
-        than raising), so a run missing one stage's timing column doesn't
-        block CPU-hour tracking for the rest.
-        """
-        gene_hours = 0.0
-        if self.gene_runtime_variable in future_df.columns:
-            gene_sec = future_df[self.gene_runtime_variable].fillna(0).to_numpy(dtype=float)
-            gene_hours = float(gene_sec.sum()) / 3600.0 * self.gene_cores_per_run
-
-        helena_hours = 0.0
-        if self.helena_runtime_variable in future_df.columns:
-            helena_sec = future_df[self.helena_runtime_variable].fillna(0).to_numpy(dtype=float)
-            helena_hours = float(helena_sec.sum()) / 3600.0 * self.helena_cores_per_run
-
-        batch_cpuh = gene_hours + helena_hours
-        self.cpuh_used += batch_cpuh
-        log.debug(
-            f"Batch CPU-hours: {batch_cpuh:.2f} (gene={gene_hours:.2f}, "
-            f"helena={helena_hours:.2f}); running total: {self.cpuh_used:.2f}"
-        )
 
     # ------------------------------------------------------------
     # MAIN ENTRY: GET NEXT SAMPLES
@@ -752,8 +738,10 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
 
     def _compute_boundary_candidates(self, n, exclude=()):
         """
-        Streams the remaining pool, restricts to the convex hull of the
-        points sampled so far, drops any point whose predicted time exceeds
+        Streams the remaining pool, optionally restricts to the convex hull
+        of the points sampled so far (only when self.use_hull; see
+        SvmActiveSampler.use_hull's docstring for why this defaults to
+        False), drops any point whose predicted time exceeds
         max_predicted_time (if set -- see the class docstring), and ranks
         the survivors by a weighted combination of classification
         uncertainty (per self.acquisition_mode / _uncertainty) and predicted
@@ -773,8 +761,7 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
         cheapest-predicted hull-restricted candidates) so the boundary
         sub-batch is still filled.
         """
-        hull_points = self.scaler.transform(self.train_x)
-        hull = _build_hull(hull_points)
+        hull = _build_hull(self.scaler.transform(self.train_x)) if self.use_hull else None
         exclude = set(int(i) for i in exclude)
 
         all_uncertainty = []
@@ -809,12 +796,14 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
             X_chunk_unit = X_chunk_unit[keep]
             chunk_indices = chunk_indices[keep]
 
-            X_chunk_scaled = self.scaler.transform(X_chunk_unit)
-            inside = _in_hull(X_chunk_scaled, hull)
-            if inside.sum() == 0:
-                continue
+            if self.use_hull:
+                X_chunk_scaled = self.scaler.transform(X_chunk_unit)
+                inside = _in_hull(X_chunk_scaled, hull)
+                if inside.sum() == 0:
+                    continue
+                X_chunk_unit, chunk_indices = X_chunk_unit[inside], chunk_indices[inside]
 
-            candidate_buffer.add(X_chunk_unit[inside], chunk_indices[inside])
+            candidate_buffer.add(X_chunk_unit, chunk_indices)
             for X_batch, idx_batch in candidate_buffer.ready_batches():
                 _score_and_absorb(X_batch, idx_batch)
 
@@ -823,8 +812,9 @@ class SvmTimeAwareActiveSampler(ParentActiveSampler):
 
         if not all_indices or sum(len(idx) for idx in all_indices) < n:
             log.warning(
-                "Hull-restricted pool has fewer than %d classifiable candidates; "
+                "%s pool has fewer than %d classifiable candidates; "
                 "falling back to an unrestricted random draw for the boundary sub-batch.",
+                "Hull-restricted" if self.use_hull else "Remaining",
                 n,
             )
             fallback = self._get_initial_batch_n(n + len(exclude), filter_by_time=True)

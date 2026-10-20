@@ -25,6 +25,7 @@ nav:
     - Sobol Sequence Sampler: samplers/sobol_sequence_sampler.md
     - Active Learning Sampler: samplers/active_learning_sampler.md
     - Nested Sampler: samplers/nested_sampler.md
+    - HELENA Volume Average Sampler: samplers/helena_volume_average_sampler.md
   - Plugins:
     - Overview: plugins/index.md
     - MISHKA: plugins/mishka_plugin.md

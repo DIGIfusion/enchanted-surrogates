@@ -97,9 +97,24 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
             Number of unrestricted random exploration points drawn each
             batch (after the initial batch). Default: max(1, batch_size // 5).
         boundary_pool_fraction : float, optional
-            Fraction of the (hull-restricted) remaining pool to treat as the
-            "most uncertain" candidate pool, from which the boundary
-            sub-batch is drawn uniformly at random. Default: 0.10.
+            Fraction of the (hull-restricted, if use_hull) remaining pool to
+            treat as the "most uncertain" candidate pool, from which the
+            boundary sub-batch is drawn uniformly at random. Default: 0.10.
+        use_hull : bool, optional
+            Whether to restrict the boundary sub-batch to the convex hull of
+            points sampled so far (see _compute_boundary_candidates).
+            Default: False. Hull restriction exists to guard against RBF
+            margins spuriously looking "uncertain" in unexplored
+            extrapolation regions (see this module's docstring), but an
+            ablation study on a real GENE classification dataset
+            (97481_50ky_50x0_exp_nominal, 3-class KBM/ETG/OTHER) found it
+            net-negative there: the hull grows too slowly relative to the
+            unrestricted exploration budget, so it persistently starves
+            classes/regions whose true boundary sits near the domain edge
+            (see active_sampling_hull_experiment/ in that dataset's
+            directory for the comparison plots and per-class learning
+            curves). Set True to restore the original guarded behavior if a
+            given dataset's geometry needs it.
     """
 
     DEFAULT_SVC_KWARGS = dict(kernel="rbf", C=10.0, gamma="scale", class_weight="balanced")
@@ -117,6 +132,7 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
                 f"(got {self.exploration_per_batch} >= {self.batch_size})."
             )
         self.boundary_pool_fraction = float(kwargs.get("boundary_pool_fraction", 0.10))
+        self.use_hull = bool(kwargs.get("use_hull", False))
 
         self.svm_model = None
         self.scaler = None
@@ -235,18 +251,18 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
 
     def _compute_boundary_candidates(self, n, exclude=()):
         """
-        Streams the remaining pool, restricts to the convex hull of the
-        points sampled so far (see _in_hull), and draws n points uniformly
-        at random from the most-uncertain (smallest-margin) slice of that
-        hull-restricted pool -- mirroring active_sampling_svm.py's boundary
+        Streams the remaining pool, optionally restricts to the convex hull
+        of the points sampled so far (see _in_hull; only when
+        self.use_hull), and draws n points uniformly at random from the
+        most-uncertain (smallest-margin) slice of that (possibly
+        hull-restricted) pool -- mirroring active_sampling_svm.py's boundary
         draw exactly, but streaming-friendly.
 
         ``exclude`` is a set of pool indices to skip (e.g. this batch's
         exploration draws), so they aren't double-selected before either has
         been removed from the pool.
         """
-        hull_points = self.scaler.transform(self.train_x)
-        hull = _build_hull(hull_points)
+        hull = _build_hull(self.scaler.transform(self.train_x)) if self.use_hull else None
         exclude = set(int(i) for i in exclude)
 
         all_scores = []
@@ -266,7 +282,7 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
             chunk_indices = chunk_indices[keep]
 
             X_chunk_scaled = self.scaler.transform(X_chunk_unit)
-            inside = _in_hull(X_chunk_scaled, hull)
+            inside = _in_hull(X_chunk_scaled, hull) if self.use_hull else np.ones(len(X_chunk_scaled), dtype=bool)
             if inside.sum() > 0:
                 m = _margin(self.svm_model, X_chunk_scaled[inside])
                 all_scores.append(m)
@@ -274,8 +290,9 @@ class SvmActiveSampler(ParentActiveSamplerClassification):
 
         if not all_indices or sum(len(idx) for idx in all_indices) < n:
             log.warning(
-                "Hull-restricted pool has fewer than %d classifiable candidates; "
+                "%s pool has fewer than %d classifiable candidates; "
                 "falling back to an unrestricted random draw for the boundary sub-batch.",
+                "Hull-restricted" if self.use_hull else "Remaining",
                 n,
             )
             fallback = self._get_initial_batch_n(n + len(exclude))
