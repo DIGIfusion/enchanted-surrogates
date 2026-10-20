@@ -71,6 +71,40 @@ Notes:
     mutually exclusive — set either a fixed target or an adaptive range, not both.
 
 
+## Workers that start before the main process (`external_workers`)
+
+Normally the main process creates the Dask scheduler and submits the worker
+jobs itself, so it has to be running (and, if it is a SLURM job, using up its
+walltime) while the worker jobs wait in the queue. With `external_workers: true`
+the order is reversed:
+
+1. `python -m enchanted_surrogates.executors.dask_worker_pool_run -cf config.yaml
+   --main-job-script main.sbatch --mode <mode>` (run on the login node) submits the
+   worker jobs. They wait for the file `scheduler_file` to appear (the dask
+   `--scheduler-file` mechanism).
+2. The main job (`main.sbatch`, which runs run.py with the same config) is held back
+   until workers are available, depending on `--mode`:
+   - `first_any`: separate jobs, the main job depends on any worker job of the
+     first external executor having started (`--dependency=after:w1?after:w2`).
+   - `each_any`: the main job is submitted held and is released by the first
+     worker job of the last executor to get a running worker.
+   - `all`: the main process and all workers form one heterogeneous job and
+     start together, so no worker waits idle.
+3. The main process starts the scheduler (which writes `scheduler_file`) and the
+   waiting workers connect to it. No worker jobs are submitted by the main process.
+
+Arguments (in addition to `SLURMcluster_config` and `scale_n_jobs`):
+
+```
+scheduler_file: '/path/outside/base_run_dir/scheduler.json',
+external_workers: true,
+external_workers_timeout: 600,  # seconds to wait for the first worker to connect
+```
+
+`scheduler_file` must not be inside `base_run_dir`. Adaptive scaling
+(`scale_n_jobs_min/max`) is not supported with `external_workers`.
+Example configuration: /configs/example_dask_slurm_external_workers.yaml
+
 ## Other optional arguments
 
 ```
@@ -230,6 +264,15 @@ class DaskExecutor(Executor):
         self.block_until_cluster_started = kwargs.get(
             "block_until_cluster_started", False
         )  # for debugging purposes only
+        self.scheduler_file = kwargs.get("scheduler_file", None)
+        self.external_workers = kwargs.get("external_workers", False)
+        self.external_workers_timeout = kwargs.get("external_workers_timeout", 600)
+        if self.external_workers:
+            assert self.scheduler_file, "external_workers requires scheduler_file."
+            assert self.SLURMcluster_config and self.scale_n_jobs, (
+                "external_workers requires SLURMcluster_config and scale_n_jobs "
+                "(adaptive scaling is not supported)."
+            )
         self.cluster = None
         self.client = None
         self.expected_number_of_workers = None
@@ -416,10 +459,19 @@ class DaskExecutor(Executor):
 
             log.info(f"Output of SLURM workers saved in: {slurm_out_dir}")
             self.SLURMcluster_config.setdefault("log_directory", slurm_out_dir)
-            self.cluster = SLURMCluster(silence_logs=False, **self.SLURMcluster_config)
-            self.cluster.scale(self.scale_n_jobs)
-            
-            if self.scale_n_jobs:
+            cluster_config = dict(self.SLURMcluster_config)
+            if self.scheduler_file:
+                # the scheduler writes its address here, workers can connect with --scheduler-file
+                cluster_config["scheduler_options"] = {
+                    **cluster_config.get("scheduler_options", {}),
+                    "scheduler_file": self.scheduler_file,
+                }
+            self.cluster = SLURMCluster(silence_logs=False, **cluster_config)
+
+            if self.external_workers:
+                # workers were already submitted by dask_worker_pool_run, do not submit more
+                log.info(f"Waiting for external workers to connect through {self.scheduler_file}")
+            elif self.scale_n_jobs:
                 self.cluster.scale(self.scale_n_jobs)
             elif self.scale_n_jobs_min and self.scale_n_jobs_max:
                 n_workers_min = self.scale_n_jobs_min * self.SLURMcluster_config.get('processes',1)
@@ -437,7 +489,10 @@ class DaskExecutor(Executor):
             log.info(f"SCHEDULER ADDRESS: {self.cluster.scheduler_address}")
             log.info(f"DASHBOARD LINK: {self.client.dashboard_link}")
 
-            if self.block_until_cluster_started:
+            if self.external_workers:
+                self.client.wait_for_workers(1, timeout=self.external_workers_timeout)
+                log.info(f"{len(self.client.scheduler_info()['workers'])} external workers connected.")
+            elif self.block_until_cluster_started:
                 log.info("WAIT UNTILL ALL dask-wor JOBS ARE RUNNING")
                 self.wait_for_all_dask_jobs_running()
 
