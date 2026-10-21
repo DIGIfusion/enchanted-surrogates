@@ -427,11 +427,21 @@ from types import SimpleNamespace as _NS
 def _monitor_in_thread(supervisor, run_dirs, executor, samples=None, timeout=30):
     """Run monitor_runs in a thread so that a monitor that waits forever fails the test and does not hang it."""
     runner = supervisor.nested_groups[0].runners[0]
-    t = threading.Thread(target=supervisor.monitor_runs, kwargs=dict(
-        group_name="G0", runner_config=runner, run_dirs=run_dirs, nested_depth=0, sequential_depth=0, batch_number=0,
-        group_start_time=_time.time(), executor=executor, samples=samples), daemon=True)
+    errors = []
+
+    def target():
+        try:
+            supervisor.monitor_runs(
+                group_name="G0", runner_config=runner, run_dirs=run_dirs, nested_depth=0, sequential_depth=0,
+                batch_number=0, group_start_time=_time.time(), executor=executor, samples=samples)
+        except BaseException as exc:   # a crashed monitor must fail the test, not look like a finished one
+            errors.append(exc)
+
+    t = threading.Thread(target=target, daemon=True)
     t.start()
     t.join(timeout)
+    if errors:
+        raise errors[0]
     return not t.is_alive()
 
 

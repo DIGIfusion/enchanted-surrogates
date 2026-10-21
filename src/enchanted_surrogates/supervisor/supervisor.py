@@ -10,7 +10,7 @@ import sys
 import warnings
 import shutil
 import glob
-from time import sleep, time
+from time import sleep, monotonic as _monotonic
 import h5py
 import numpy as np
 import pandas as pd
@@ -605,8 +605,8 @@ class Supervisor:
                 if executor.is_tasks_running():
                     no_tasks_since = None
                 elif no_tasks_since is None:
-                    no_tasks_since = time()
-                elif time() - no_tasks_since >= self.lost_run_grace:
+                    no_tasks_since = _monotonic()
+                elif _monotonic() - no_tasks_since >= self.lost_run_grace:
                     # a last look: a result may have been written after the scan above
                     self._collect_finished_runs(run_dirs, group_name, runner_config, packer)
                     if run_dirs:
