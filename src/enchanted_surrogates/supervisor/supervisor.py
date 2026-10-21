@@ -68,15 +68,15 @@ class Supervisor:
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
-        self.save_files_arg = args.supervisor.get("save_files", "all")
-        self.log_failures = args.supervisor.get("log_failures", False)
-        # Nested runs: do not run the next level for samples whose previous level failed (success False)
-        self.skip_failed_parents = args.supervisor.get("skip_failed_parents", False)
         # Lost runs: a run without a result while its executor has no task left (e.g. its worker was killed) is recorded
         # as failed instead of being waited for forever. lost_run_grace [s] is how long the executor must have been
         # without tasks first, so that a result that is still arriving on the file system is not mistaken for a lost run.
         self.detect_lost_runs = args.supervisor.get("detect_lost_runs", True)
         self.lost_run_grace = float(args.supervisor.get("lost_run_grace", 30))
+        self.save_files_arg = args.supervisor.get("save_files", "all")
+        self.log_failures = args.supervisor.get("log_failures", False)
+        # Nested runs: do not run the next level for samples whose previous level failed (success False)
+        self.skip_failed_parents = args.supervisor.get("skip_failed_parents", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
