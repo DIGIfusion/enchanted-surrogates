@@ -44,3 +44,7 @@ class LocalExecutor(Executor):
     def clean(self):
         log.warning("Local runner doesn't clean up any resources")
         return
+
+    def is_tasks_running(self) -> bool:
+        """execute runs every task to completion before it returns, so nothing is ever left running."""
+        return False

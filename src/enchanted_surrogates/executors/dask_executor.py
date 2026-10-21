@@ -212,6 +212,12 @@ log = get_logger(__name__)
 run_simulation_task = simulation_task.run_simulation_task
 
 
+def _count_unfinished_tasks(dask_scheduler) -> int:
+    """Run on the Dask scheduler (client.run_on_scheduler): number of tasks that have not finished."""
+    unfinished = ("waiting", "queued", "processing", "no-worker", "constrained")
+    return sum(1 for task in dask_scheduler.tasks.values() if task.state in unfinished)
+
+
 class DaskExecutor(Executor):
     def __init__(self, *args, **kwargs):
         """
@@ -646,6 +652,22 @@ class DaskExecutor(Executor):
         if self.count_alive_workers == self.scale_n_jobs:
             self.cluster.scale(num_workers)
         self.scale_n_jobs = num_workers
+
+    def is_tasks_running(self) -> bool:
+        """
+        True if the scheduler still has unfinished tasks (waiting, queued, processing or without a worker), False if it
+        has none or the cluster was never started. If the scheduler cannot be asked, True is returned (cannot tell).
+
+        This covers all tasks of the cluster, also ones of other batches if the executor is shared, so it can only err
+        towards "still running".
+        """
+        if self.client is None or self.is_closed:
+            return False
+        try:
+            return self.client.run_on_scheduler(_count_unfinished_tasks) > 0
+        except Exception as exc:
+            log.warning(f"Could not ask the Dask scheduler for unfinished tasks, assuming some are running: {exc!r}")
+            return True
 
     def execute(self, input: list[(str, dict)], runner_config):
         """

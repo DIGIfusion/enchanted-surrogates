@@ -56,3 +56,7 @@ class JoblibExecutor(Executor):
     def clean(self):
         log.warning("Joblib runner doesn't clean up any resources")
         return
+
+    def is_tasks_running(self) -> bool:
+        """execute waits for all tasks to finish before it returns, so nothing is ever left running."""
+        return False
