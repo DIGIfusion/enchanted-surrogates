@@ -121,3 +121,85 @@ def test_sobol_with_ti_ratios_and_bad_method():
     assert all(0.8 <= s["Ti_ov_Te_ped"] <= 1.2 for s in a)
     with pytest.raises(ValueError):
         _sampler(method="halton")
+
+
+# ---- parameters / bounds interface -------------------------------------------------------------------------------------
+
+ALL_NAMES = ["Te_avg", "ne_avg", "Te_ped_ov_core", "Te_sep_ov_ped", "ne_ped_ov_core", "ne_sep_ov_ped",
+             "Ti_ov_Te_ped", "Ti_ov_Te_sep", "Ti_ov_Te_core", "d_T_ped", "d_n_ped",
+             "alpha_T1", "alpha_T2", "alpha_n1", "alpha_n2"]
+ALL_BOUNDS = [[3.1, 6.3], [4.2, 8.1], [0.3, 0.8], [0.02, 0.3], [0.3, 0.8], [0.2, 0.5], [0.8, 1.2], [1.0, 2.0], [0.8, 1.2],
+              [0.03, 0.3], [0.03, 0.3], [1.5, 2.5], [1.5, 2.5], [1.5, 2.5], [1.5, 2.5]]
+
+
+def _new(**kw):
+    base = dict(budget=64, batch_size=64, seed=2, method="sobol", parameters=ALL_NAMES, bounds=ALL_BOUNDS)
+    base.update(kw)
+    return HelenaVolumeAverageSampler(**base)
+
+
+def test_parameters_and_bounds_match_the_deprecated_range_keywords():
+    new = _new(method="random")
+    with pytest.warns(DeprecationWarning):
+        old = HelenaVolumeAverageSampler(
+            budget=64, batch_size=64, seed=2, method="random", te_avg_range=[3.1, 6.3], ne_avg_range=[4.2, 8.1],
+            te_ped_range=[0.3, 0.8], te_sep_range=[0.02, 0.3], ne_ped_range=[0.3, 0.8], ne_sep_range=[0.2, 0.5],
+            ti_te_ped_range=[0.8, 1.2], ti_te_sep_range=[1.0, 2.0], ti_te_core_range=[0.8, 1.2],
+            d_T_ped_range=[0.03, 0.3], d_n_ped_range=[0.03, 0.3], alpha_T_range=[1.5, 2.5], alpha_n_range=[1.5, 2.5])
+    assert new.get_next_samples() == old.get_next_samples()
+    assert new.parameters == old.parameters
+
+
+def test_unlisted_parameters_keep_their_defaults():
+    smp = HelenaVolumeAverageSampler(budget=20, batch_size=20, seed=0, parameters=["Te_avg"], bounds=[[3, 6]])
+    assert set(smp.parameters) == TE_KEYS
+    for s in smp.get_next_samples():
+        assert 0.01 <= s["d_T_ped"] <= 0.3 and 1 <= s["alpha_T1"] <= 2.5
+
+
+def test_a_parameter_with_equal_bounds_is_fixed():
+    smp = HelenaVolumeAverageSampler(budget=8, batch_size=8, seed=1, method="sobol", parameters=["Te_avg", "d_T_ped"],
+                                     bounds=[[4, 4], [0.05, 0.05]])
+    assert {s["d_T_ped"] for s in smp.get_next_samples()} == {0.05}
+
+
+@pytest.mark.parametrize("kw, message", [
+    (dict(parameters=["bogus"], bounds=[[1, 2]]), "unknown parameters"),
+    (dict(parameters=["Te_avg", "ne_avg"], bounds=[[1, 2]]), "same length"),
+    (dict(parameters=["Te_avg", "Te_avg"], bounds=[[1, 2], [1, 2]]), "duplicate"),
+    (dict(parameters=["d_T_ped"], bounds=[[0.1, 0.2]]), "Te_avg and/or ne_avg"),
+    (dict(parameters=["Te_avg", "Ti_ov_Te_ped"], bounds=[[3, 6], [0.8, 1.2]]), "both Ti_ov_Te_ped and Ti_ov_Te_sep"),
+    (dict(parameters=["Te_avg", "Ti_ov_Te_core"], bounds=[[3, 6], [0.8, 1.2]]), "needs Ti_ov_Te_ped"),
+    (dict(parameters=["Te_avg", "Te_ped_ov_core"], bounds=[[3, 6], [0.5, 1.5]]), "within"),
+])
+def test_invalid_parameters_and_bounds_are_rejected(kw, message):
+    with pytest.raises(ValueError, match=message):
+        HelenaVolumeAverageSampler(budget=4, **kw)
+
+
+def test_new_and_deprecated_options_cannot_be_mixed():
+    with pytest.raises(ValueError, match="do not mix"):
+        HelenaVolumeAverageSampler(budget=4, parameters=["Te_avg"], bounds=[[3, 6]], ne_avg_range=[4, 8])
+
+
+# ---- Ti on the axis ---------------------------------------------------------------------------------------------------
+
+def test_ti_core_ratio_is_within_bounds_and_never_gives_a_hollow_ti_core():
+    smp = _new(budget=128, batch_size=128)
+    samples = smp.get_next_samples()
+    k = 2 * np.tanh(1.0)
+    for s in samples:
+        assert 0.8 <= s["Ti_ov_Te_core"] <= 1.2
+        # Ti core term = Ti(0) - Ti_sep - ati*c must be >= 0 (Ti(0) = ratio * Te(0); Te(0) is the scale of the Te profile)
+        c = np.tanh(1.0) + np.tanh(2 * (1 - s["d_T_ped"] / 2) / s["d_T_ped"])
+        te_axis = s["T_esep"] + (s["T_eped"] - s["T_esep"]) / k * c + s["aT1"]
+        ti_sep, ti_ped = s["Ti_ov_Te_sep"] * s["T_esep"], s["Ti_ov_Te_ped"] * s["T_eped"]
+        assert s["Ti_ov_Te_core"] * te_axis - ti_sep - (ti_ped - ti_sep) / k * c >= -1e-9
+
+
+def test_ti_core_ratio_needs_both_other_ratios():
+    smp = _new(parameters=ALL_NAMES, bounds=ALL_BOUNDS)
+    assert "Ti_ov_Te_core" in smp.parameters
+    s = _new(parameters=[n for n in ALL_NAMES if n != "Ti_ov_Te_core"],
+             bounds=[b for n, b in zip(ALL_NAMES, ALL_BOUNDS) if n != "Ti_ov_Te_core"]).get_next_samples()[0]
+    assert "Ti_ov_Te_core" not in s and "Ti_ov_Te_ped" in s
