@@ -65,6 +65,8 @@ class Supervisor:
         self.run_mode = args.supervisor.get("run_mode", "fresh")
         self.save_files_arg = args.supervisor.get("save_files", "all")
         self.log_failures = args.supervisor.get("log_failures", False)
+        # Nested runs: do not run the next level for samples whose previous level failed (success False)
+        self.skip_failed_parents = args.supervisor.get("skip_failed_parents", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
@@ -166,6 +168,10 @@ class Supervisor:
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = self.get_cartesian_product(samples, last_complete_dataset)
+                if len(expanded) == 0:
+                    # Only possible with skip_failed_parents: every sample of the previous level failed
+                    log.warning("No runs left in this batch: all samples of the previous level failed.")
+                    continue
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
@@ -360,16 +366,34 @@ class Supervisor:
 
         Returns:
             out (list[dict]): Cartesian product samples x last_dataset. If last_dataset is empty,
-                only the unaltered samples are returned.
+                only the unaltered samples are returned. With the supervisor option
+                skip_failed_parents, rows of last_dataset whose run failed (column success is
+                False) get no children; the result is then empty if all of them failed.
         """
         if last_dataset.empty:
             return samples
 
+        parents = last_dataset.to_dict(orient="records")
+        if self.skip_failed_parents:
+            ok = [p for p in parents if not self._run_failed(p)]
+            if len(ok) < len(parents):
+                log.info(
+                    f"skip_failed_parents: {len(parents) - len(ok)} of {len(parents)} samples of the "
+                    "previous level failed and are not run at this level."
+                )
+            parents = ok
+
         expanded = []
-        for parent in last_dataset.to_dict(orient="records"):
+        for parent in parents:
             for sample in samples:
                 expanded.append({**parent, **sample})
         return expanded
+
+    @staticmethod
+    def _run_failed(row: dict) -> bool:
+        """True if the row of a finished run reports success False. A missing or empty success counts as not failed."""
+        success = row.get("success")
+        return success is not None and not pd.isna(success) and not bool(success)
 
     def continue_with_base_run_dir(self, config_path):
         """

@@ -380,3 +380,38 @@ def create_dummy_files(path):
     (subfolder / "subfile.txt").write_text("dummy")
     (subfolder / "keep_me.txt").write_text("dummy")
 
+
+
+def test_cartesian_product_keeps_failed_parents_by_default(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    parents = pd.DataFrame([{"a": 0, "success": True}, {"a": 1, "success": False}])
+    out = supervisor.get_cartesian_product([{"c": 5}, {"c": 6}], parents)
+    assert len(out) == 4
+
+
+def test_cartesian_product_skip_failed_parents(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    args = make_args(tmp_path)
+    args.supervisor["skip_failed_parents"] = True
+    supervisor = Supervisor(args)
+
+    parents = pd.DataFrame([
+        {"a": 0, "success": True},
+        {"a": 1, "success": False},
+        {"a": 2, "success": None},     # unknown: kept
+        {"a": 3, "success": float("nan")},  # unknown: kept
+    ])
+    out = supervisor.get_cartesian_product([{"c": 5}, {"c": 6}], parents)
+    assert sorted({o["a"] for o in out}) == [0, 2, 3]
+    assert len(out) == 3 * 2
+
+    # no success column at all: nothing is skipped
+    out = supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame([{"a": 0}, {"a": 1}]))
+    assert len(out) == 2
+
+    # every parent failed: empty, not the unaltered samples
+    assert supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame([{"a": 0, "success": False}])) == []
+
+    # first level (no previous dataset): the samples are returned as they are
+    assert supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame()) == [{"c": 5}]

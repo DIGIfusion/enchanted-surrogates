@@ -59,6 +59,23 @@ different stages of the workflow, note that in this example, both runners use
 
 See [example_nested.yaml](../configs/example_nested.yaml).
 
+#### Skipping failed samples
+
+By default every sample of a level is crossed with every sample of the previous level,
+including the ones whose run failed (`success` is `False`). Those children cannot
+succeed when they need the output of their parent, and they only add rows and run
+directories. To not run them, set
+
+```yaml
+supervisor:
+  skip_failed_parents: true
+```
+
+Samples whose `success` is missing or empty count as not failed. The failed samples
+stay in the summary of their own level, they just get no children. If all samples of
+the previous level failed, the batch is skipped with a warning. The first level is not
+affected.
+
 ### Multi-runner sequential execution
 
 Alongside nested executing, the supervisor also supports sequential sampling. In
