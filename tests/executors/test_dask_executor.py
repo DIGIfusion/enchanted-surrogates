@@ -99,3 +99,66 @@ def test_start_cluster_adapt_called_with_bounds(mock_SLURM, mock_Client, tmp_pat
     # expected_number_of_workers should be min * processes
     assert executor.expected_number_of_workers == 8
     assert executor.cluster == mock_cluster
+
+
+# ---- is_tasks_running --------------------------------------------------------------------------------------------------
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+from enchanted_surrogates.executors.base_executor import Executor
+from enchanted_surrogates.executors.dask_executor import DaskExecutor, _count_unfinished_tasks
+
+
+def test_base_executor_cannot_tell_so_it_says_tasks_are_running():
+    class Dummy(Executor):
+        def execute(self, samples, runner_config):
+            pass
+
+        def clean(self):
+            pass
+
+    assert Dummy().is_tasks_running() is True
+
+
+def test_count_unfinished_tasks_counts_the_unfinished_states_only():
+    states = ["waiting", "queued", "processing", "no-worker", "constrained", "memory", "released", "erred", "forgotten"]
+    scheduler = SimpleNamespace(tasks={i: SimpleNamespace(state=s) for i, s in enumerate(states)})
+    assert _count_unfinished_tasks(scheduler) == 5
+
+
+def test_dask_is_tasks_running_follows_the_scheduler():
+    executor = DaskExecutor(LocalCluster_config={"n_workers": 1})
+    assert executor.is_tasks_running() is False        # the cluster was never started
+
+    executor.client = MagicMock()
+    executor.client.run_on_scheduler.return_value = 3
+    assert executor.is_tasks_running() is True
+    executor.client.run_on_scheduler.return_value = 0
+    assert executor.is_tasks_running() is False
+
+    executor.client.run_on_scheduler.side_effect = RuntimeError("scheduler unreachable")
+    assert executor.is_tasks_running() is True          # cannot tell: assume running
+
+    executor.is_closed = True
+    assert executor.is_tasks_running() is False
+
+
+def test_dask_is_tasks_running_on_a_real_local_cluster(tmp_path):
+    import time
+    from dask.distributed import Client, LocalCluster, fire_and_forget
+    executor = DaskExecutor(LocalCluster_config={"n_workers": 1})
+    cluster = LocalCluster(n_workers=1, threads_per_worker=1, processes=False, dashboard_address=None)
+    executor.cluster, executor.client = cluster, Client(cluster)
+    try:
+        assert executor.is_tasks_running() is False
+        fire_and_forget(executor.client.submit(time.sleep, 3, pure=False))
+        time.sleep(0.5)
+        assert executor.is_tasks_running() is True
+        for _ in range(100):
+            if not executor.is_tasks_running():
+                break
+            time.sleep(0.2)
+        assert executor.is_tasks_running() is False
+    finally:
+        executor.client.close()
+        cluster.close()
