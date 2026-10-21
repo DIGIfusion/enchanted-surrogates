@@ -105,3 +105,7 @@ def create_fake_output_csv(run_dir: str, sample: dict):
     df_point.to_csv(
         os.path.join(run_dir, "enchanted_datapoint.csv"), header=True, index=False
     )
+    # Extra intermediate output file, standing in for e.g. a HELENA output file that a
+    # later sequential stage (e.g. GENE) would need to read before it is cleaned up.
+    with open(os.path.join(run_dir, "intermediate_output.dat"), "w") as f:
+        f.write("intermediate output")
