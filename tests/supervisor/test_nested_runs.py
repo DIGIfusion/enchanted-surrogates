@@ -93,7 +93,7 @@ def test_skip_failed_parents_runs_children_of_successful_parents_only(patch_supe
     # the children carry the parameters of the successful parents only
     children = [sample for _, sample in executors[1].execute.call_args[0][0]]
     assert sorted({c["a"] for c in children}) == [0, 2]
-    assert all(c["success"] is True or c["success"] == True for c in children)
+    assert all(bool(c["success"]) for c in children)   # the parents that were run all succeeded
 
 
 def test_skip_failed_parents_when_all_parents_failed(patch_supervisor_imports, tmp_path):
