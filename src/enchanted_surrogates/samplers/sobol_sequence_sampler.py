@@ -30,6 +30,7 @@ class SobolSequenceSampler(Sampler):
         num_samples: 64
         scramble: true
         seed: 42
+        num_repeats: 3
     ```
 
     Attributes:
@@ -101,9 +102,17 @@ class SobolSequenceSampler(Sampler):
         if self.budget != 2**self.power:
             warnings.warn(f'SOBOL SEQUENCE BUDGET MUST BE A POWER OF 2 eg, 2,4,16,32... SETTING BUDGET TO {2**self.power}')
         self.budget = 2**self.power
+        # num_repeats > 1: every Sobol point is repeated that many times in a row and gets a 'repeat' index (0, 1, ...),
+        # e.g. to measure Monte Carlo noise. budget is then the number of distinct points; the number of samples
+        # (the budget the supervisor sees) is budget * num_repeats.
+        self.num_repeats = int(kwargs.get("num_repeats", 1))
+        if self.num_repeats < 1:
+            raise ValueError(f"num_repeats must be >= 1, got {self.num_repeats}")
+        self.n_points = self.budget
+        self.budget = self.n_points * self.num_repeats
 
         self.bounds = bounds
-        self.parameters = parameters
+        self.parameters = list(parameters) + (["repeat"] if self.num_repeats > 1 else [])
         self.batch_size = kwargs.get("batch_size", self.budget)
         self.scramble = kwargs.get("scramble", True)
         self.batch_number = 0
@@ -127,6 +136,9 @@ class SobolSequenceSampler(Sampler):
         # TODO not use uniform?
         # TODO batch samples
         samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples[self.batch_number*self.batch_size  :  min((self.batch_number+1)*self.batch_size, self.budget)]]
+        if self.num_repeats > 1:
+            for sample in samples:
+                sample["repeat"] = int(sample["repeat"])
         # samples = [{key: value for key, value in zip(self.parameters, params)} for params in self.samples[self.batch_number*self.batch_size  :  (self.batch_number+1)*self.batch_size]]
 
         self.batch_number += 1
@@ -146,7 +158,7 @@ class SobolSequenceSampler(Sampler):
                 of samples equals 2^power.
         """
         # Define the dimensionality
-        dim = len(self.parameters)  # Change this for the number of dimensions
+        dim = len(self.bounds)  # number of sampled parameters (self.parameters also holds 'repeat' when num_repeats > 1)
 
         # Define the bounds for each dimension
         lower_bounds = np.array(self.bounds).T[0]
@@ -163,6 +175,9 @@ class SobolSequenceSampler(Sampler):
 
         # Scale the points to the desired bounds
         scaled_points = lower_bounds + points * (upper_bounds - lower_bounds)
+
+        if self.num_repeats > 1:   # each point num_repeats times in a row, with the repeat index as last column
+            scaled_points = np.array([np.r_[pt, r] for pt in scaled_points for r in range(self.num_repeats)])
 
         return scaled_points.tolist()
 

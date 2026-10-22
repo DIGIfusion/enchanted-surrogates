@@ -25,3 +25,8 @@ def test_execute(mock_run_simulation_task, mock_parallel, mock_delayed):
 
     # Executor should not directly call get next samples
     assert mock_run_simulation_task.call_count == 2
+
+
+def test_is_tasks_running_is_false_for_the_synchronous_joblib_executor():
+    from enchanted_surrogates.executors.joblib_executor import JoblibExecutor
+    assert JoblibExecutor().is_tasks_running() is False

@@ -59,6 +59,53 @@ different stages of the workflow, note that in this example, both runners use
 
 See [example_nested.yaml](../configs/example_nested.yaml).
 
+#### Skipping failed samples
+
+By default every sample of a level is crossed with every sample of the previous level,
+including the ones whose run failed (`success` is `False`). Those children cannot
+succeed when they need the output of their parent, and they only add rows and run
+directories. To not run them, set
+
+```yaml
+supervisor:
+  skip_failed_parents: true
+```
+
+Samples whose `success` is missing or empty count as not failed. The failed samples
+stay in the summary of their own level, they just get no children. If all samples of
+the previous level failed, the batch is skipped with a warning. The first level is not
+affected.
+
+### Lost runs
+
+A run can disappear without writing a result, for example when the worker that runs it
+is killed. The supervisor would then wait for its `enchanted_datapoint.csv` forever.
+To prevent this the supervisor asks the executor in every monitoring cycle whether it
+still has tasks, with `Executor.is_tasks_running()`:
+
+- `DaskExecutor` asks the scheduler for unfinished tasks (waiting, queued, processing or
+  without a worker).
+- `LocalExecutor` and `JoblibExecutor` run every task to completion in `execute`, so
+  they always return `False` afterwards.
+- A custom executor that does not override it returns `True` ("cannot tell"), and the
+  supervisor then waits as before.
+
+When the executor has had no task for `lost_run_grace` seconds and some run directories
+still have no result, those are logged as `LOST RUNS` and a failed result is written for
+each of them (`success: False`, an `error` message and the sample's parameters). They are
+then handled like any other failed run, which also makes them subject to
+`skip_failed_parents`.
+
+```yaml
+supervisor:
+  detect_lost_runs: true   # default
+  lost_run_grace: 30       # seconds without any task before a missing result counts as lost (default)
+```
+
+The grace period is there so that a result that is still becoming visible on a network
+file system is not mistaken for a lost run. Set `detect_lost_runs: false` to switch the
+check off.
+
 ### Multi-runner sequential execution
 
 Alongside nested executing, the supervisor also supports sequential sampling. In
@@ -128,6 +175,16 @@ Normal run and the default
   - Supervisor keeps track of the run state (how many batches sampled, which
     nesting depth, and how many samples have been submitted) and using this data
     restores the run from where it left off and continues from there.
+
+- The run state is saved when a batch is finished. If the run stopped in the middle of a
+  batch, that batch is started again from its first run, but runs that already have a result
+  (`enchanted_datapoint.csv`, successful or failed) in their run directory are not submitted
+  again. Their results are used as they are. This matters for a large batch (for example a
+  sampler whose budget is one batch), where otherwise a resume would redo all of it.
+
+- The supervisor sees the runs that finished before the interruption again and hands them to
+  the packer again. Packers must therefore handle repacking an existing run directory (skip
+  it by default, or overwrite it, never duplicate it), see [Packers](packers.md).
 
 - Resume a previous run that was completed but increase the budget:
   - Set run mode to resume and also increase the budget of the sampler. From

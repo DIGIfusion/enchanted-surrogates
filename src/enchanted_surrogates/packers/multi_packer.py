@@ -24,6 +24,8 @@ class MultiPacker(Packer):
             base_run_dir (str, optional): Forwarded to each sub-packer's
                 constructor (as with any other packer), unless a sub-packer
                 config already sets its own `base_run_dir`.
+            on_existing (str, optional): If given, forwarded to each
+                sub-packer that does not set its own `on_existing`.
         """
         super().__init__(**kwargs)
 
@@ -39,6 +41,8 @@ class MultiPacker(Packer):
             packer_type = packer_settings.pop('type')
             if self.base_run_dir is not None:
                 packer_settings.setdefault('base_run_dir', self.base_run_dir)
+            if 'on_existing' in kwargs:
+                packer_settings.setdefault('on_existing', self.on_existing)
             self.packers.append(import_packer(packer_type, packer_settings))
 
     def pack_run_dir(self, run_dir: str, results: dict = None) -> dict:

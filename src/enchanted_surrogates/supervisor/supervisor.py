@@ -10,7 +10,7 @@ import sys
 import warnings
 import shutil
 import glob
-from time import sleep
+from time import sleep, monotonic as _monotonic
 import h5py
 from datetime import datetime
 import numpy as np
@@ -68,8 +68,15 @@ class Supervisor:
 
         self.base_run_dir = args.supervisor.get("base_run_dir")
         self.run_mode = args.supervisor.get("run_mode", "fresh")
+        # Lost runs: a run without a result while its executor has no task left (e.g. its worker was killed) is recorded
+        # as failed instead of being waited for forever. lost_run_grace [s] is how long the executor must have been
+        # without tasks first, so that a result that is still arriving on the file system is not mistaken for a lost run.
+        self.detect_lost_runs = args.supervisor.get("detect_lost_runs", True)
+        self.lost_run_grace = float(args.supervisor.get("lost_run_grace", 30))
         self.save_files_arg = args.supervisor.get("save_files", "all")
         self.log_failures = args.supervisor.get("log_failures", False)
+        # Nested runs: do not run the next level for samples whose previous level failed (success False)
+        self.skip_failed_parents = args.supervisor.get("skip_failed_parents", False)
         if self.base_run_dir is None:
             if sys.stdout.isatty():
                 self.base_run_dir = "base_run_dir"
@@ -184,6 +191,10 @@ class Supervisor:
 
                 # Merge parameter names for nesting. On first depth run, expanded=samples
                 expanded = self.get_cartesian_product(samples, last_complete_dataset)
+                if len(expanded) == 0:
+                    # Only possible with skip_failed_parents: every sample of the previous level failed
+                    log.warning("No runs left in this batch: all samples of the previous level failed.")
+                    continue
 
                 # Run for each sequential runner/executor combination
                 df_batch = pd.DataFrame()
@@ -202,11 +213,18 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(list(zip(run_dirs, expanded)), runner)
+                    to_run = list(zip(run_dirs, expanded))
+                    if self.run_mode == "resume":
+                        # A resumed batch that was interrupted: do not rerun runs that already have a result
+                        # (state is saved per batch, so a long batch would otherwise start again from its first run)
+                        to_run = [(d, s) for d, s in to_run if self.load_run_result(d) is None]
+                        if len(to_run) < len(run_dirs):
+                            log.info(f"Resume: {len(run_dirs) - len(to_run)} of {len(run_dirs)} runs already have a result and are not rerun.")
+                    executor.execute(to_run, runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
                     # monitor runs for failures and update progress file
-                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer)
+                    self.monitor_runs(f'G{nested_depth}', runner, run_dirs, nested_depth = nested_depth, sequential_depth = sequential_depth, batch_number = batch_number, group_start_time=group_start_time, packer=packer, executor=executor, samples=dict(zip(run_dirs, expanded)))
                     log_rss(log, f"G{nested_depth}_batch{batch_number}_seq{sequential_depth}_after_monitor_runs")
 
                     # Wait processes of current batch to complete
@@ -392,16 +410,34 @@ class Supervisor:
 
         Returns:
             out (list[dict]): Cartesian product samples x last_dataset. If last_dataset is empty,
-                only the unaltered samples are returned.
+                only the unaltered samples are returned. With the supervisor option
+                skip_failed_parents, rows of last_dataset whose run failed (column success is
+                False) get no children; the result is then empty if all of them failed.
         """
         if last_dataset.empty:
             return samples
 
+        parents = last_dataset.to_dict(orient="records")
+        if self.skip_failed_parents:
+            ok = [p for p in parents if not self._run_failed(p)]
+            if len(ok) < len(parents):
+                log.info(
+                    f"skip_failed_parents: {len(parents) - len(ok)} of {len(parents)} samples of the "
+                    "previous level failed and are not run at this level."
+                )
+            parents = ok
+
         expanded = []
-        for parent in last_dataset.to_dict(orient="records"):
+        for parent in parents:
             for sample in samples:
                 expanded.append({**parent, **sample})
         return expanded
+
+    @staticmethod
+    def _run_failed(row: dict) -> bool:
+        """True if the row of a finished run reports success False. A missing or empty success counts as not failed."""
+        success = row.get("success")
+        return success is not None and not pd.isna(success) and not bool(success)
 
     def continue_with_base_run_dir(self, config_path):
         """
@@ -586,34 +622,60 @@ class Supervisor:
         while not self.batch_dirs_done(run_dirs):
             sleep(1)
     
-    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None):
+    def monitor_runs(self, group_name, runner_config, run_dirs: list[str], nested_depth, sequential_depth, batch_number, group_start_time, packer=None, executor=None, samples=None):
         log.debug('Monitoring runs...')
         """
         Keeps checking all the run_dirs for failures and logs the failures it finds
 
         Attributes:
             run_dirs (list[str]): List of running directories to monitor
+            executor: the executor running them. If given and detect_lost_runs is on, each cycle asks it
+                is_tasks_running(); when it has had no task for lost_run_grace seconds and run_dirs still has
+                no result, those are lost runs: they are logged and recorded as failed so that the loop ends.
+            samples (dict[str, dict]): run_dir -> sample, to put the parameters in the row of a lost run
         """
 
         run_dirs = set(run_dirs)   # if it isn't already a set
+        progress = (nested_depth, sequential_depth, batch_number, group_start_time)
+        no_tasks_since = None
         while run_dirs:
-            for run_dir in list(run_dirs):   # iterate over a snapshot
-                result = self.load_run_result(run_dir)
-                if result is not None:
-                    # remove so it is not rechecked and we are closer to while loop stopping
-                    run_dirs.remove(run_dir)
-                    
-                    if packer is not None:
-                        packer.pack_run_dir(run_dir, result)
-                    
-                    self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
-                    self.update_runner_progress(group_name, runner_config, completed=1)
-                    if result['success']:
-                        self.update_runner_progress(group_name, runner_config, num_successes=1)
-                    else:
-                        if self.log_failures:
-                            details = "\n".join(f"  {k}: {v}" for k, v in result.items())
-                            log_message = f"""\n\n
+            self._collect_finished_runs(run_dirs, group_name, runner_config, packer, *progress)
+
+            if run_dirs and self.detect_lost_runs and executor is not None:
+                if executor.is_tasks_running():
+                    no_tasks_since = None
+                elif no_tasks_since is None:
+                    no_tasks_since = _monotonic()
+                elif _monotonic() - no_tasks_since >= self.lost_run_grace:
+                    # a last look: a result may have been written after the scan above
+                    self._collect_finished_runs(run_dirs, group_name, runner_config, packer, *progress)
+                    if run_dirs:
+                        self._record_lost_runs(sorted(run_dirs), runner_config, samples or {})
+                        # the rows are picked up like any other result in the next pass
+                        no_tasks_since = None
+                        continue
+            if run_dirs:
+                sleep(1)
+
+    def _collect_finished_runs(self, run_dirs: set, group_name, runner_config, packer, nested_depth, sequential_depth, batch_number, group_start_time):
+        """One pass over run_dirs: handle the runs that have a result and remove them from the set."""
+        for run_dir in list(run_dirs):   # iterate over a snapshot
+            result = self.load_run_result(run_dir)
+            if result is not None:
+                # remove so it is not rechecked and we are closer to while loop stopping
+                run_dirs.remove(run_dir)
+
+                if packer is not None:
+                    packer.pack_run_dir(run_dir, result)
+
+                self.delete_unwanted_files(self.save_files_arg, run_dir, extra_keep_files=['enchanted_datapoint.csv'])
+                self.update_runner_progress(group_name, runner_config, completed=1)
+                if result['success']:
+                    self.update_runner_progress(group_name, runner_config, num_successes=1)
+                else:
+                    if self.log_failures:
+                        details = "\n".join(f"  {k}: {v}" for k, v in result.items())
+                        log_message = f"""\n\n
 
 === FAILURE =========================================
 Run directory: {run_dir}
@@ -624,11 +686,31 @@ Result:
 
                             \n""".strip()
 
-                            log.error(log_message)
-                            log.error(log_message)                            
-                    self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
-                sleep(0.1)
-        
+                        log.error(log_message)
+                self.write_current_progress_string(runner_config["__runner_name"], nested_depth, sequential_depth, batch_number, group_start_time)
+            sleep(0.1)
+
+    def _record_lost_runs(self, lost_run_dirs: list[str], runner_config, samples: dict):
+        """Log the run directories that have no result and no task left, and write a failed result for each."""
+        listing = "\n".join(f"  {d}" for d in lost_run_dirs)
+        log.error(
+            f"LOST RUNS: {len(lost_run_dirs)} run directories have no result, but the executor has had no task "
+            f"for {self.lost_run_grace:g} s. Their tasks were lost (for example the worker was killed). They are "
+            f"recorded as failed:\n{listing}"
+        )
+        runner_name = runner_config.get("__runner_name", "runner") if isinstance(runner_config, dict) else "runner"
+        for run_dir in lost_run_dirs:
+            row = {
+                "success": False,
+                f"success_{runner_name}": False,
+                "error": "Run lost: no result and the executor had no task left (the task was lost, e.g. its worker was killed)",
+            }
+            row.update({k: v for k, v in (samples.get(run_dir) or {}).items() if k != "success" and k not in row})
+            row["run_dir"] = run_dir
+            os.makedirs(run_dir, exist_ok=True)
+            pd.DataFrame({k: [v] for k, v in row.items()}).to_csv(
+                os.path.join(run_dir, "enchanted_datapoint.csv"), header=True, index=False)
+
     def write_current_progress_string(self, current_runner_name, nested_depth, sequential_depth, batch_number, group_start_time):
 
         def format_runner_progress(runner_name, stats, budget):

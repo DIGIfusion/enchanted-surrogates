@@ -46,6 +46,11 @@ class CsvPacker(Packer):
     run's `enchanted_datapoint.csv`). Each call appends one row to the csv
     file, adding a `run_dir` column so each row can be traced back to its
     source run directory.
+
+    Packing a run directory that is already in the csv file (a resumed ES run
+    or a rerun of the run directory) never adds a second row: with
+    `on_existing: skip` (default) the existing row is kept, with `overwrite` it
+    is replaced, see `Packer`.
     """
 
     def __init__(self, **kwargs):
@@ -71,7 +76,9 @@ class CsvPacker(Packer):
 
     def pack_run_dir(self, run_dir: str, results: dict = None) -> None:
         """
-        Append `results` as a single row to this packer's csv file.
+        Write `results` as a single row to this packer's csv file: appended,
+        or, if the csv file already has a row for `run_dir`, kept as it is
+        (`on_existing: skip`, default) or replaced (`on_existing: overwrite`).
 
         The row includes a `run_dir` column (the absolute path to
         `run_dir`) alongside every key in `results`. If the csv file
@@ -99,7 +106,20 @@ class CsvPacker(Packer):
             with _write_lock:
                 if os.path.exists(self.csv_path) and os.path.getsize(self.csv_path) > 0:
                     existing = pd.read_csv(self.csv_path)
-                    combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+                    same_run = existing['run_dir'] == run_dir if 'run_dir' in existing else pd.Series(False, index=existing.index)
+                    if same_run.any() and self.on_existing == 'skip':
+                        return
+                    if same_run.any():
+                        # repacked run dir: overwrite the (first) row in place and drop any duplicates of it
+                        first = same_run.idxmax()
+                        for column in row:
+                            if column not in existing:
+                                existing[column] = pd.NA
+                        existing = existing.astype(object)
+                        existing.loc[first, :] = pd.Series(row).reindex(existing.columns)
+                        combined = existing[~same_run | (existing.index == first)]
+                    else:
+                        combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
                     combined.to_csv(self.csv_path, index=False)
                 else:
                     pd.DataFrame([row]).to_csv(self.csv_path, index=False)

@@ -380,3 +380,64 @@ def create_dummy_files(path):
     (subfolder / "subfile.txt").write_text("dummy")
     (subfolder / "keep_me.txt").write_text("dummy")
 
+
+
+def test_cartesian_product_keeps_failed_parents_by_default(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    supervisor = Supervisor(make_args(tmp_path))
+    parents = pd.DataFrame([{"a": 0, "success": True}, {"a": 1, "success": False}])
+    out = supervisor.get_cartesian_product([{"c": 5}, {"c": 6}], parents)
+    assert len(out) == 4
+
+
+def test_cartesian_product_skip_failed_parents(tmp_path, patch_supervisor_imports):
+    patch_supervisor_imports()
+    args = make_args(tmp_path)
+    args.supervisor["skip_failed_parents"] = True
+    supervisor = Supervisor(args)
+
+    parents = pd.DataFrame([
+        {"a": 0, "success": True},
+        {"a": 1, "success": False},
+        {"a": 2, "success": None},     # unknown: kept
+        {"a": 3, "success": float("nan")},  # unknown: kept
+    ])
+    out = supervisor.get_cartesian_product([{"c": 5}, {"c": 6}], parents)
+    assert sorted({o["a"] for o in out}) == [0, 2, 3]
+    assert len(out) == 3 * 2
+
+    # no success column at all: nothing is skipped
+    out = supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame([{"a": 0}, {"a": 1}]))
+    assert len(out) == 2
+
+    # every parent failed: empty, not the unaltered samples
+    assert supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame([{"a": 0, "success": False}])) == []
+
+    # first level (no previous dataset): the samples are returned as they are
+    assert supervisor.get_cartesian_product([{"c": 5}], pd.DataFrame()) == [{"c": 5}]
+
+
+def test_resume_does_not_rerun_runs_that_already_have_a_result(tmp_path, patch_supervisor_imports):
+    samplers, executors = patch_supervisor_imports([[[{"a": 0}, {"a": 1}, {"a": 2}]]])
+    supervisor = Supervisor(make_args(tmp_path))
+    supervisor.run_mode = "resume"   # as after loading the run state of an interrupted batch
+
+    done = tmp_path / "data" / "dn0_ds0_b0_s0"
+    os.makedirs(done)
+    pd.DataFrame({"success": [True], "a": [0], "run_dir": [str(done)]}).to_csv(done / "enchanted_datapoint.csv", index=False)
+
+    supervisor.start()
+
+    executed = executors[0].execute.call_args.args[0]
+    assert [s["a"] for _, s in executed] == [1, 2]            # the finished run is not submitted again
+    rows = pd.read_csv(tmp_path / "enchanted_dataset.csv")
+    assert sorted(rows["a"]) == [0, 1, 2]                      # but it is part of the dataset
+
+
+def test_fresh_run_submits_every_run(tmp_path, patch_supervisor_imports):
+    samplers, executors = patch_supervisor_imports([[[{"a": 0}, {"a": 1}]]])
+    supervisor = Supervisor(make_args(tmp_path))
+    supervisor.start()
+
+    executed = executors[0].execute.call_args.args[0]
+    assert [s["a"] for _, s in executed] == [0, 1]
