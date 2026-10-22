@@ -86,6 +86,8 @@ class AsciiBinToHdf5Packer(Packer):
                 otherwise falls back to the first available path from
                 `_default_hdf5_path` (`~/enchanted_data_packed.h5`, falling
                 back to `_1.h5`, `_2.h5`, etc. if it already exists).
+            on_existing (str, optional): "skip" (default) or "overwrite",
+                what to do with a run that is already packed, see `Packer`.
         """
         super().__init__(**kwargs)
 
@@ -107,8 +109,11 @@ class AsciiBinToHdf5Packer(Packer):
         subdirectory structure as nested hdf5 groups. Each file is stored
         either as utf-8 text or as a raw `uint8` byte array, based on
         whether it is detected as ascii or binary (see `_is_binary_file`).
-        If a run with the same name was already packed, it is deleted and
-        replaced.
+        If a run with the same name was already packed (a resumed run, or a
+        rerun of the same run directory), what happens depends on
+        `on_existing` (see `Packer`): "skip" (default) leaves the packed run
+        as it is, "overwrite" deletes it and packs the current content of
+        `run_dir`.
 
         Errors (per file, or packing `run_dir` as a whole) are caught and
         logged rather than raised, so a single bad run does not interrupt a
@@ -135,7 +140,10 @@ class AsciiBinToHdf5Packer(Packer):
                 runs_group = f.require_group('runs')
 
                 if run_name in runs_group:
-                    log.warning(
+                    if self.on_existing == "skip":
+                        log.info("Run '%s' is already packed in %s, skipping", run_name, self.hdf5_path)
+                        return
+                    log.info(
                         "Run '%s' already exists in %s, overwriting", run_name, self.hdf5_path
                     )
                     del runs_group[run_name]
