@@ -170,6 +170,17 @@ class Supervisor:
                     )
                     group.sampler.register_future(last_complete_dataset)
 
+                    # The progress counters start at 0 in a new supervisor process: restore those of the batches that
+                    # are already done from their rows in the summary, so that the progress report is not 0 / budget
+                    if len(batch_dataset) > 0:
+                        done = len(batch_dataset)
+                        successes = int((batch_dataset["success"] == True).sum()) if "success" in batch_dataset else 0  # noqa: E712
+                        for runner in group.runners:
+                            counters = self.runner_progress[f"G{nested_depth}"][runner["__runner_name"]]
+                            counters["submitted"] += done
+                            counters["completed"] += done
+                            counters["num_successes"] += successes
+
             # initalise the current progress file
             group_start_time = time.time()
             

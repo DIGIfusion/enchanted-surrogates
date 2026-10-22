@@ -441,3 +441,25 @@ def test_fresh_run_submits_every_run(tmp_path, patch_supervisor_imports):
 
     executed = executors[0].execute.call_args.args[0]
     assert [s["a"] for _, s in executed] == [0, 1]
+
+
+def test_resume_restores_the_progress_counters_of_the_finished_level(tmp_path, patch_supervisor_imports):
+    from enchanted_surrogates.supervisor.run_data import RunData
+    from test_nested_runs import make_nested_args
+
+    samplers, executors = patch_supervisor_imports([[[{"a": 0}, {"a": 1}, {"a": 2}]], [[{"c": 5}]]])
+    supervisor = Supervisor(make_nested_args(tmp_path, nested_count=2))
+
+    # state of an interrupted run: level 0 finished with 3 runs (one failed), level 1 not started
+    level0 = pd.DataFrame({"success": [True, False, True], "a": [0, 1, 2]})
+    level0.to_csv(tmp_path / "enchanted_dataset.csv", index=False)
+    level0.to_csv(tmp_path / "last_complete_enchanted_dataset.csv", index=False)
+    supervisor.previous_run_data = RunData(batch_number=0, depth=0, submitted_samples=3)
+    samplers[0]._submitted = samplers[0]._budget          # what sampler.skip() does for a resumed level
+
+    supervisor.start()
+
+    level0_progress = next(iter(supervisor.runner_progress["G0"].values()))
+    assert level0_progress == {"submitted": 3, "completed": 3, "num_successes": 2}
+    level1_progress = next(iter(supervisor.runner_progress["G1"].values()))
+    assert level1_progress["submitted"] == level1_progress["completed"] == 3   # 3 parents x 1 sample: only the new level is counted
