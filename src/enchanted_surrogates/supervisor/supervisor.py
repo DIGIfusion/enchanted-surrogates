@@ -153,6 +153,17 @@ class Supervisor:
                     )
                     group.sampler.register_future(last_complete_dataset)
 
+                    # The progress counters start at 0 in a new supervisor process: restore those of the batches that
+                    # are already done from their rows in the summary, so that the progress report is not 0 / budget
+                    if len(batch_dataset) > 0:
+                        done = len(batch_dataset)
+                        successes = int((batch_dataset["success"] == True).sum()) if "success" in batch_dataset else 0  # noqa: E712
+                        for runner in group.runners:
+                            counters = self.runner_progress[f"G{nested_depth}"][runner["__runner_name"]]
+                            counters["submitted"] += done
+                            counters["completed"] += done
+                            counters["num_successes"] += successes
+
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
@@ -181,7 +192,14 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(list(zip(run_dirs, expanded)), runner)
+                    to_run = list(zip(run_dirs, expanded))
+                    if self.run_mode == "resume":
+                        # A resumed batch that was interrupted: do not rerun runs that already have a result
+                        # (state is saved per batch, so a long batch would otherwise start again from its first run)
+                        to_run = [(d, s) for d, s in to_run if self.load_run_result(d) is None]
+                        if len(to_run) < len(run_dirs):
+                            log.info(f"Resume: {len(run_dirs) - len(to_run)} of {len(run_dirs)} runs already have a result and are not rerun.")
+                    executor.execute(to_run, runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
                     # monitor runs for failures and update progress file
