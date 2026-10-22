@@ -143,7 +143,8 @@ Normal run and the default
 
 When a run is resumed, runs that finished before the interruption are seen by the
 supervisor again and handed to the packer again. Packers must therefore handle repacking
-an existing run directory (overwrite, no duplicates), see [Packers](packers.md).
+an existing run directory (skip it by default, or overwrite it, never duplicate it), see
+[Packers](packers.md).
 
 ### HPC cluster local storage
 

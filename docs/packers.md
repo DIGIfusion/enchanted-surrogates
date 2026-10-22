@@ -28,18 +28,30 @@ the same run directory when:
   before the interruption are seen as finished again and are handed to the packer again;
 - a run directory is deliberately rerun.
 
-In both cases `pack_run_dir` must **overwrite** what is packed for that run directory and
-never add a duplicate. Packing the same run directory twice leaves the same packed state as
-packing it once. A packer that cannot do this makes a resumed run produce duplicate or
-stale data.
+A packer never adds a duplicate. What it does instead is set by `on_existing`:
 
-Because the supervisor deletes the files it does not keep (`save_files`) after packing, a
-run directory that is packed again after a resume may contain fewer files than when it was
-first packed. The packer packs what is in the directory at that time.
+```yaml
+packers:
+  packer1:
+    type: ascii_bin_to_hdf5_packer
+    on_existing: skip        # default; or: overwrite
+```
+
+- `skip` (default): what is already packed is kept and the call does nothing. This is the
+  safe choice for resuming. The supervisor deletes the files it does not keep
+  (`save_files`) after packing, so a run directory that is packed again after a resume is
+  often almost empty, and overwriting would replace the complete packed copy with that.
+- `overwrite`: what is packed for the run directory is replaced by its current content. Use
+  it when run directories are rerun and the packed data must be refreshed. The packers
+  then also overwrite after a resume, so keep the files you want to preserve in
+  `save_files_list`.
+
+Packing the same run directory twice leaves the same packed state as packing it once in both
+modes. A custom packer must do the same, or a resumed run produces duplicate or stale data.
 
 ## Available packers
 
 - `ascii_bin_to_hdf5_packer`: stores every file of the run directory in an HDF5 file, under
-  `runs/<run directory name>/`, as text or bytes. An existing group with the same name is
-  deleted and replaced. Note that HDF5 does not give the space of a deleted group back, so
-  the file grows when many runs are packed again.
+  `runs/<run directory name>/`, as text or bytes. With `on_existing: overwrite` an existing
+  group with the same name is deleted and replaced; note that HDF5 does not give the space
+  of a deleted group back, so the file grows when many runs are packed again.

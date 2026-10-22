@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import pytest
 
 from enchanted_surrogates.packers.ascii_bin_to_hdf5_packer import AsciiBinToHdf5Packer
 
@@ -11,8 +12,8 @@ def _make_run_dir(path, files):
     return str(path)
 
 
-def _packer(tmp_path):
-    return AsciiBinToHdf5Packer(base_run_dir=str(tmp_path), hdf5_path=str(tmp_path / "packed.h5"))
+def _packer(tmp_path, **kwargs):
+    return AsciiBinToHdf5Packer(base_run_dir=str(tmp_path), hdf5_path=str(tmp_path / "packed.h5"), **kwargs)
 
 
 def test_packing_a_run_dir_twice_gives_the_same_state_as_once(tmp_path):
@@ -27,8 +28,8 @@ def test_packing_a_run_dir_twice_gives_the_same_state_as_once(tmp_path):
         assert np.array_equal(f["runs/r0/b.bin"][()], [0, 1, 2, 255])
 
 
-def test_repacking_replaces_the_packed_content_with_the_current_content(tmp_path):
-    packer = _packer(tmp_path)
+def test_overwrite_replaces_the_packed_content_with_the_current_content(tmp_path):
+    packer = _packer(tmp_path, on_existing="overwrite")
     run = _make_run_dir(tmp_path / "data" / "r0", {"a.txt": "first", "gone.txt": "x"})
     packer.pack_run_dir(run)
 
@@ -42,7 +43,7 @@ def test_repacking_replaces_the_packed_content_with_the_current_content(tmp_path
 
 
 def test_repacking_one_run_leaves_the_others_alone(tmp_path):
-    packer = _packer(tmp_path)
+    packer = _packer(tmp_path, on_existing="overwrite")
     r0 = _make_run_dir(tmp_path / "data" / "r0", {"a.txt": "zero"})
     r1 = _make_run_dir(tmp_path / "data" / "r1", {"a.txt": "one"})
     packer.pack_run_dir(r0)
@@ -52,3 +53,23 @@ def test_repacking_one_run_leaves_the_others_alone(tmp_path):
     with h5py.File(tmp_path / "packed.h5", "r") as f:
         assert sorted(f["runs"]) == ["r0", "r1"]
         assert f["runs/r1/a.txt"][()].decode() == "one"
+
+
+def test_skip_is_the_default_and_keeps_the_complete_packed_copy(tmp_path):
+    packer = _packer(tmp_path)
+    assert packer.on_existing == "skip"
+    run = _make_run_dir(tmp_path / "data" / "r0", {"a.txt": "complete", "big.bin": bytes(range(10))})
+    packer.pack_run_dir(run)
+
+    (tmp_path / "data" / "r0" / "big.bin").unlink()   # the supervisor deleted the files it does not keep
+    (tmp_path / "data" / "r0" / "a.txt").write_text("changed")
+    packer.pack_run_dir(run)
+
+    with h5py.File(tmp_path / "packed.h5", "r") as f:
+        assert f["runs/r0/a.txt"][()].decode() == "complete"
+        assert "big.bin" in f["runs/r0"]
+
+
+def test_unknown_on_existing_is_refused(tmp_path):
+    with pytest.raises(ValueError):
+        _packer(tmp_path, on_existing="append")

@@ -12,17 +12,28 @@ class Packer(ABC):
     specific storage format.
 
     Repacking is the packer's responsibility: `pack_run_dir` may be called for
-    a run directory that is already packed, and must then replace what was
-    packed for it (overwrite), never add a duplicate. This happens when a
-    crashed or interrupted ES run is resumed (`run_mode: resume`), when the
-    supervisor sees the results of runs that finished before the interruption,
-    and when someone deliberately reruns a run directory. Packing the same run
-    directory twice must leave the same packed state as packing it once.
+    a run directory that is already packed. This happens when a crashed or
+    interrupted ES run is resumed (`run_mode: resume`), because the supervisor
+    sees the results of runs that finished before the interruption again, and
+    when someone deliberately reruns a run directory. What the packer does is
+    set by `on_existing` and must never be a duplicate:
+
+    - `"skip"` (default): keep what is packed, do nothing. The supervisor
+      deletes the files it does not keep after packing, so a run directory
+      that is packed again after a resume is often almost empty, and
+      overwriting would replace a complete packed copy with that.
+    - `"overwrite"`: replace what is packed with the current content of the
+      run directory. Use it when run directories are rerun and the packed data
+      must be refreshed.
     """
 
     def __init__(self, **kwargs):
         # this will be assigned by the supervisor and can be used by packers to determine the base run directory for relative paths
         self.base_run_dir = kwargs.get("base_run_dir", None)
+        # what to do when a run directory is already packed: "skip" (default) or "overwrite"
+        self.on_existing = kwargs.get("on_existing", "skip")
+        if self.on_existing not in ("skip", "overwrite"):
+            raise ValueError(f"on_existing must be 'skip' or 'overwrite', not {self.on_existing!r}")
 
     @abstractmethod
     def pack_run_dir(self, run_dir: str, results: dict = None) -> dict:
