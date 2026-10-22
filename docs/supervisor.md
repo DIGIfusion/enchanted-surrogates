@@ -141,6 +141,10 @@ Normal run and the default
   - Set `run_mode: extend` under `Supervisor` in the config file
   - Now setting sampler budget to 10 means that 10 new samples are created.
 
+When a run is resumed, runs that finished before the interruption are seen by the
+supervisor again and handed to the packer again. Packers must therefore handle repacking
+an existing run directory (overwrite, no duplicates), see [Packers](packers.md).
+
 ### HPC cluster local storage
 
 Some partitions on some HPC clusters have access to local memory on the run

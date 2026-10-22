@@ -10,6 +10,14 @@ class Packer(ABC):
     Subclasses implement `pack_run_dir` (and, where it makes sense, an
     `unpack_run_dir` counterpart) for a specific on-disk file layout and a
     specific storage format.
+
+    Repacking is the packer's responsibility: `pack_run_dir` may be called for
+    a run directory that is already packed, and must then replace what was
+    packed for it (overwrite), never add a duplicate. This happens when a
+    crashed or interrupted ES run is resumed (`run_mode: resume`), when the
+    supervisor sees the results of runs that finished before the interruption,
+    and when someone deliberately reruns a run directory. Packing the same run
+    directory twice must leave the same packed state as packing it once.
     """
 
     def __init__(self, **kwargs):
