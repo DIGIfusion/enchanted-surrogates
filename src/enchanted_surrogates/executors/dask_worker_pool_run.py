@@ -47,7 +47,7 @@ def build_worker_job_script(slurm_config: dict, scheduler_file: str, index: int 
     `prologue` lines run first in the job, before the configured job_script_prologue."""
     config = {
         k: v for k, v in slurm_config.items()
-        if k not in ("scheduler_options", "n_workers", "silence_logs")
+        if k not in ("scheduler_options", "n_workers", "silence_logs", "name")  # name: the cluster's name, the worker job gets its own
     }
     config.setdefault("job_name", "enc_dask_worker")
     config.setdefault("death_timeout", WAIT_FOREVER)  # default 60 s would end the wait for the scheduler
