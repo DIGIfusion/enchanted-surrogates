@@ -135,6 +135,10 @@ Normal run and the default
   again. Their results are used as they are. This matters for a large batch (for example a
   sampler whose budget is one batch), where otherwise a resume would redo all of it.
 
+- The supervisor sees the runs that finished before the interruption again and hands them to
+  the packer again. Packers must therefore handle repacking an existing run directory (skip
+  it by default, or overwrite it, never duplicate it), see [Packers](packers.md).
+
 - Resume a previous run that was completed but increase the budget:
   - Set run mode to resume and also increase the budget of the sampler. From
     Supervisor point of view, this is same as if the budget always was that much
@@ -146,11 +150,6 @@ Normal run and the default
 - Extend a previous run:
   - Set `run_mode: extend` under `Supervisor` in the config file
   - Now setting sampler budget to 10 means that 10 new samples are created.
-
-When a run is resumed, runs that finished before the interruption are seen by the
-supervisor again and handed to the packer again. Packers must therefore handle repacking
-an existing run directory (skip it by default, or overwrite it, never duplicate it), see
-[Packers](packers.md).
 
 ### HPC cluster local storage
 
