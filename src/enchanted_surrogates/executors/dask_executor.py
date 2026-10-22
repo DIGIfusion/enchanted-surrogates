@@ -395,7 +395,8 @@ class DaskExecutor(Executor):
             self.cluster.scale(self.scale_n_jobs)
             
             if self.scale_n_jobs:
-                self.cluster.scale(self.scale_n_jobs)
+                # SLURMCluster.scale(n) counts workers (processes), not jobs: scale(8) with processes=12 starts ONE job
+                self.cluster.scale(self.scale_n_jobs * int(self.SLURMcluster_config.get('processes', 1)))
             elif self.scale_n_jobs_min and self.scale_n_jobs_max:
                 n_workers_min = self.scale_n_jobs_min * self.SLURMcluster_config.get('processes',1)
                 n_workers_max = self.scale_n_jobs_max * self.SLURMcluster_config.get('processes',1)
