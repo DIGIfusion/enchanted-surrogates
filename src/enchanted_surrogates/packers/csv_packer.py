@@ -48,8 +48,9 @@ class CsvPacker(Packer):
     source run directory.
 
     Packing a run directory that is already in the csv file (a resumed ES run
-    or a rerun of the run directory) overwrites its row, there is never more
-    than one row per `run_dir`.
+    or a rerun of the run directory) never adds a second row: with
+    `on_existing: skip` (default) the existing row is kept, with `overwrite` it
+    is replaced, see `Packer`.
     """
 
     def __init__(self, **kwargs):
@@ -76,7 +77,8 @@ class CsvPacker(Packer):
     def pack_run_dir(self, run_dir: str, results: dict = None) -> None:
         """
         Write `results` as a single row to this packer's csv file: appended,
-        or, if the csv file already has a row for `run_dir`, replacing it.
+        or, if the csv file already has a row for `run_dir`, kept as it is
+        (`on_existing: skip`, default) or replaced (`on_existing: overwrite`).
 
         The row includes a `run_dir` column (the absolute path to
         `run_dir`) alongside every key in `results`. If the csv file
@@ -105,6 +107,8 @@ class CsvPacker(Packer):
                 if os.path.exists(self.csv_path) and os.path.getsize(self.csv_path) > 0:
                     existing = pd.read_csv(self.csv_path)
                     same_run = existing['run_dir'] == run_dir if 'run_dir' in existing else pd.Series(False, index=existing.index)
+                    if same_run.any() and self.on_existing == 'skip':
+                        return
                     if same_run.any():
                         # repacked run dir: overwrite the (first) row in place and drop any duplicates of it
                         first = same_run.idxmax()

@@ -55,3 +55,8 @@ modes. A custom packer must do the same, or a resumed run produces duplicate or 
   `runs/<run directory name>/`, as text or bytes. With `on_existing: overwrite` an existing
   group with the same name is deleted and replaced; note that HDF5 does not give the space
   of a deleted group back, so the file grows when many runs are packed again.
+- `csv_packer`: appends the parsed results of a run (the `results` dict, plus a `run_dir`
+  column) as one row to a csv file. A run directory that is already in the file keeps its
+  row (`skip`) or has the row replaced in place (`overwrite`); there is never a second row.
+- `multi_packer`: runs several packers in turn on every run directory, so one packer
+  failing does not stop the others.
