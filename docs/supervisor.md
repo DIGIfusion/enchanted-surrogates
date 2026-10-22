@@ -129,6 +129,12 @@ Normal run and the default
     nesting depth, and how many samples have been submitted) and using this data
     restores the run from where it left off and continues from there.
 
+- The run state is saved when a batch is finished. If the run stopped in the middle of a
+  batch, that batch is started again from its first run, but runs that already have a result
+  (`enchanted_datapoint.csv`, successful or failed) in their run directory are not submitted
+  again. Their results are used as they are. This matters for a large batch (for example a
+  sampler whose budget is one batch), where otherwise a resume would redo all of it.
+
 - Resume a previous run that was completed but increase the budget:
   - Set run mode to resume and also increase the budget of the sampler. From
     Supervisor point of view, this is same as if the budget always was that much

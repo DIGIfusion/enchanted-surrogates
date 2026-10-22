@@ -181,7 +181,14 @@ class Supervisor:
                         )
                         for j in range(len(expanded))
                     ]
-                    executor.execute(list(zip(run_dirs, expanded)), runner)
+                    to_run = list(zip(run_dirs, expanded))
+                    if self.run_mode == "resume":
+                        # A resumed batch that was interrupted: do not rerun runs that already have a result
+                        # (state is saved per batch, so a long batch would otherwise start again from its first run)
+                        to_run = [(d, s) for d, s in to_run if self.load_run_result(d) is None]
+                        if len(to_run) < len(run_dirs):
+                            log.info(f"Resume: {len(run_dirs) - len(to_run)} of {len(run_dirs)} runs already have a result and are not rerun.")
+                    executor.execute(to_run, runner)
                     self.update_runner_progress(f'G{nested_depth}', runner, submitted=len(expanded))
 
                     # monitor runs for failures and update progress file
