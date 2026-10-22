@@ -41,6 +41,8 @@ def test_start_cluster_uses_SLURMCluster(mock_SLURM, mock_Client, tmp_path):
     assert mock_SLURM.call_count == 1
     # Implementation may call scale more than once (internal checks), ensure it was called
     assert mock_cluster.scale.call_count >= 1
+    # scale() counts workers, not jobs: 3 jobs x 2 processes (scale(3) would start only 2 jobs)
+    mock_cluster.scale.assert_called_with(6)
     assert executor.cluster == mock_cluster
 
     # scale_n_jobs times processes
