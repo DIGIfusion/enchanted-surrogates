@@ -12,24 +12,19 @@ equal sampled target values. It emits absolute parameters named as in
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from enchanted_surrogates.samplers.base_sampler import Sampler
+from enchanted_surrogates.utils.volume_scaling import CURVE_COLUMNS, KNOTS, MEAN_V_CURVE, TANH_K, volume_weights
 
 from enchanted_surrogates.utils.logger import get_logger
 log = get_logger(__name__)
 
-# V(psiN)/V_total from a HELENA run of JT-60SA scenario #2 (Table 1-1 geometry).
-# Used for the volume average; override with `volume_profile`.
-_DEFAULT_PSI = [0.0, 0.02, 0.06, 0.1, 0.14, 0.18, 0.22, 0.26, 0.3, 0.34, 0.38, 0.42, 0.46,
-                0.5, 0.54, 0.58, 0.62, 0.66, 0.7, 0.74, 0.78, 0.82, 0.86, 0.9, 0.92, 0.94,
-                0.96, 0.97, 0.98, 0.99, 1.0]
-_DEFAULT_V = [0.0, 0.00728, 0.02243, 0.03844, 0.05543, 0.0735, 0.0927, 0.11313, 0.13485,
-              0.15796, 0.18255, 0.20879, 0.23675, 0.26663, 0.29866, 0.333, 0.36989, 0.40978,
-              0.45303, 0.50013, 0.5518, 0.60897, 0.67301, 0.74607, 0.78702, 0.8317, 0.88083,
-              0.90733, 0.93549, 0.96594, 1.0]
+# Names kept for the ascot plugin (it compares its realised averages with this table): V(psiN)/V_total at psiN
+_DEFAULT_PSI = KNOTS
+_DEFAULT_V = MEAN_V_CURVE
 
-# Same constant as helena_parser.TANH_NORMALIZER = tanh(1) - tanh(-1)
-_K = 2 * np.tanh(1.0)
+_K = TANH_K
 
 # Sampled parameters: name -> (default range, kind). kind "unit": must lie within [0, 1]; "pos": > 0.
 # A parameter listed in `parameters` takes its range from the matching entry of `bounds`; the others keep the
@@ -88,7 +83,8 @@ class HelenaVolumeAverageSampler(Sampler):
         - [0.8, 1.2]     # Ti_ped / Te_ped
         - [1.0, 2.0]     # Ti_sep / Te_sep
         - [0.8, 1.2]     # Ti(0) / Te(0)
-      volume_profile: null          # optional csv "psiN,V/V_total" (default: JT-60SA #2)
+      volume_profile: null          # optional csv "psiN,V/V_total" (default: the mean curve, updated, see below)
+      volume_prior_weight: 10       # weight of the default curve in equilibria when it is updated (0: do not update)
       seed: null
       batch_size: 1
       method: random                # or "sobol" (see below)
@@ -123,7 +119,8 @@ class HelenaVolumeAverageSampler(Sampler):
     | `batch_size` | int | 1 | samples per call |
     | `seed` | int | none | random seed (also the Sobol scrambling seed) |
     | `method` | `random` / `sobol` | `random` | `sobol`: every sample's drawn quantities come from one scrambled Sobol point (all species and the Ti ratios share the point). Use a power-of-2 `batch_size` (e.g. 256, drawn as one batch) to keep the Sobol balance properties |
-    | `volume_profile` | csv path | JT-60SA #2 | `psiN,V/V_total` table used for the volume average |
+    | `volume_profile` | csv path | mean curve | `psiN,V/V_total` table used for the volume average; a given table is not updated |
+    | `volume_prior_weight` | equilibria | 10 | weight of the default curve when it is updated with solved equilibria; 0 keeps it fixed |
 
     The old keywords (`te_avg_range`, `ne_avg_range`, `te_ped_range`, `te_sep_range`, `ne_ped_range`,
     `ne_sep_range`, `ti_te_ped_range`, `ti_te_sep_range`, `ti_te_core_range`, `d_T_ped_range`,
@@ -189,7 +186,13 @@ class HelenaVolumeAverageSampler(Sampler):
     - `density_shift` is not sampled (0).
     - Only the volume-average ranges come from machine tables; the relative-parameter,
       width and exponent defaults are broad assumptions, not device data.
-    - The volume average uses V(psiN) of JT-60SA scenario #2 by default; supply
+    - The volume average uses V(psiN)/V_total, the mean curve of 115 equilibria of a first JT-60SA run
+      (`utils.volume_scaling.MEAN_V_CURVE`) by default. It is updated while the run goes on: after every batch
+      the curves of the successful equilibria (the `V_over_Vtot_*` columns that `HelenaRunner` returns) are averaged
+      into it, so that the later samples are scaled with a curve closer to the equilibria that this run produces. This needs
+      batches (`batch_size` smaller than the budget) and a join sampler that passes the results on. The samples
+      also carry the targets, `Te_avg_target` and `ne_avg_target`, which `HelenaRunner` uses to correct the scaling
+      once the equilibrium is solved (`volume_scaling_iterations`). Supply
       `volume_profile` for another device.
 
     ---
@@ -198,7 +201,7 @@ class HelenaVolumeAverageSampler(Sampler):
     MAX_REDRAWS = 1000
 
     def __init__(self, budget, parameters=None, bounds=None, volume_profile=None,
-                 seed=None, batch_size=1, method="random", **kwargs):
+                 seed=None, batch_size=1, method="random", volume_prior_weight=10.0, **kwargs):
         self.budget = budget
         self.batch_size = batch_size
         self.rng = np.random.default_rng(seed)
@@ -230,9 +233,9 @@ class HelenaVolumeAverageSampler(Sampler):
         # Names of the parameters in each sample (needed e.g. by SampleWiseJoinSampler)
         self.parameters = []
         if self.te_avg:
-            self.parameters += ["T_eped", "T_esep", "aT1", "d_T_ped", "alpha_T1", "alpha_T2"]
+            self.parameters += ["T_eped", "T_esep", "aT1", "d_T_ped", "alpha_T1", "alpha_T2", "Te_avg_target"]
         if self.ne_avg:
-            self.parameters += ["n_eped", "n_esep", "an1", "d_n_ped", "alpha_n1", "alpha_n2"]
+            self.parameters += ["n_eped", "n_esep", "an1", "d_n_ped", "alpha_n1", "alpha_n2", "ne_avg_target"]
         if self._ti:
             self.parameters += ["Ti_ov_Te_ped", "Ti_ov_Te_sep"]
         if self._ti_core:
@@ -246,17 +249,22 @@ class HelenaVolumeAverageSampler(Sampler):
             self._sobol = qmc.Sobol(d=dim, scramble=True, seed=seed)
 
         if volume_profile is None:
-            psi_v, v = np.array(_DEFAULT_PSI), np.array(_DEFAULT_V)
+            prior = MEAN_V_CURVE
+            # the prior is updated with the solved equilibria that come back, see register_future
+            self._update_curve = volume_prior_weight is not None and volume_prior_weight > 0
         else:
             data = np.loadtxt(volume_profile, delimiter=",", comments="#")
-            psi_v, v = data[:, 0], data[:, 1]
-            v = v / v[-1]
-        grid = np.linspace(0.0, 1.0, 801)
-        vcum = np.interp(grid, np.r_[0.0, psi_v] if psi_v[0] > 0 else psi_v,
-                         np.r_[0.0, v] if psi_v[0] > 0 else v)
-        dv = np.diff(vcum)
-        self._dv = dv / dv.sum()
-        self._psi = 0.5 * (grid[1:] + grid[:-1])
+            psi_v, v = data[:, 0], data[:, 1] / data[-1, 1]
+            prior = np.interp(KNOTS, np.r_[0.0, psi_v] if psi_v[0] > 0 else psi_v, np.r_[0.0, v] if psi_v[0] > 0 else v)
+            self._update_curve = False        # a table given for another device stays as it is
+        self._curve_sum = float(volume_prior_weight or 0.0) * np.asarray(prior, dtype=float)
+        self._curve_weight = float(volume_prior_weight or 0.0)
+        self._set_curve(np.asarray(prior, dtype=float))
+
+    def _set_curve(self, curve):
+        """Use `curve` (V/V_total at KNOTS) as the assumed V(psiN) from now on."""
+        self.curve = curve
+        self._psi, self._dv = volume_weights(curve, 800)
 
     @staticmethod
     def _read_ranges(parameters, bounds, legacy_kwargs):
@@ -332,7 +340,7 @@ class HelenaVolumeAverageSampler(Sampler):
             a0, sep, a1, t1, t2 = prof
             unit_avg = np.sum((sep + a0 * t1 + a1 * t2) * self._dv)
             scale = avg / unit_avg                    # exact: profile is linear in scale
-            return dict(ped=ped_frac * scale, sep=sep * scale, core=a1 * scale, axis=scale,
+            return dict(ped=ped_frac * scale, sep=sep * scale, core=a1 * scale, axis=scale, avg=avg,
                         delta=delta, alpha1=alpha1, alpha2=alpha2)
         raise RuntimeError(
             f"Could not draw a valid profile in {self.MAX_REDRAWS} tries; the pedestal-top "
@@ -373,12 +381,14 @@ class HelenaVolumeAverageSampler(Sampler):
                 te = self._draw(self.te_avg, o["Te_ped_ov_core"], o["Te_sep_ov_ped"],
                                 o["d_T_ped"], o["alpha_T1"], o["alpha_T2"])
                 sample.update(T_eped=te["ped"], T_esep=te["sep"], aT1=te["core"],
-                              d_T_ped=te["delta"], alpha_T1=te["alpha1"], alpha_T2=te["alpha2"])
+                              d_T_ped=te["delta"], alpha_T1=te["alpha1"], alpha_T2=te["alpha2"],
+                              Te_avg_target=te["avg"])
             if self.ne_avg:
                 ne = self._draw(self.ne_avg, o["ne_ped_ov_core"], o["ne_sep_ov_ped"],
                                 o["d_n_ped"], o["alpha_n1"], o["alpha_n2"])
                 sample.update(n_eped=ne["ped"], n_esep=ne["sep"], an1=ne["core"],
-                              d_n_ped=ne["delta"], alpha_n1=ne["alpha1"], alpha_n2=ne["alpha2"])
+                              d_n_ped=ne["delta"], alpha_n1=ne["alpha1"], alpha_n2=ne["alpha2"],
+                              ne_avg_target=ne["avg"])
             if self._ti:
                 sample.update(self._draw_ti(te))
             samples.append({k: float(v) for k, v in sample.items()})
@@ -387,6 +397,28 @@ class HelenaVolumeAverageSampler(Sampler):
         return samples
 
     def register_future(self, future):
+        """Update the assumed V(psiN)/V_total with the solved equilibria of a finished batch.
+
+        `future` is the dataset of the batch. Its successful rows that carry the V(psiN)/V_total curve of their equilibrium
+        (the V_over_Vtot_* columns that HelenaRunner returns) are averaged into the curve, which starts as the table (the
+        mean of an earlier run) with the weight `volume_prior_weight`, in equilibria. The next samples are scaled with the
+        updated curve, so that their volume averages are closer to the targets before the runner has to correct them.
+        """
+        if not self._update_curve or not isinstance(future, pd.DataFrame) or future.empty:
+            return None
+        if not set(CURVE_COLUMNS) <= set(future.columns):
+            return None
+        rows = future
+        if "success" in rows:
+            rows = rows[rows["success"] == True]   # noqa: E712
+        curves = rows[CURVE_COLUMNS].dropna().to_numpy(dtype=float)
+        if len(curves) == 0:
+            return None
+        self._curve_sum = self._curve_sum + curves.sum(axis=0)
+        self._curve_weight += len(curves)
+        self._set_curve(self._curve_sum / self._curve_weight)
+        log.info(f"Volume curve updated with {len(curves)} equilibria (weight {self._curve_weight:g}): "
+                 f"V/V_total at psiN = 0.5 is {self.curve[10]:.3f}")
         return None
 
     def register_futures(self, futures):

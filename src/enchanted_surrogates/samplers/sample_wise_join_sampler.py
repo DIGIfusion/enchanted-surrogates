@@ -170,9 +170,13 @@ class SampleWiseJoinSampler(Sampler):
     # No‑op registration hooks
     # ---------------------------------------------------------
     def register_future(self, future):
-        """No‑op: joining does not depend on evaluation results."""
+        """Joining does not depend on evaluation results itself, but a sub-sampler may (for example
+        HelenaVolumeAverageSampler updates its volume curve with the solved equilibria), so pass the results on."""
+        for sampler in self.all_samplers:
+            sampler.register_future(future)
         return None
 
     def register_futures(self, futures):
-        """No‑op: joining does not depend on evaluation results."""
+        for sampler in self.all_samplers:
+            sampler.register_futures(futures)
         return None
