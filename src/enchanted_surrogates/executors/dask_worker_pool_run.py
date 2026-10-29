@@ -28,6 +28,14 @@ main job may start:
                component, with an `srun` wrapper first on its PATH that adds
                --het-group=k, so a runner that calls srun itself (e.g. GENE) lands on
                the worker's own nodes. The job ends when the main process ends.
+    main_on_worker
+               no separate main job: the first worker job of any executor to start also
+               runs the main process, in the background on its own node, next to its
+               dask worker. The workers race for the right to do so with an atomic
+               `mkdir <pool dir>/main_on_worker_lock`; this stale lock is removed when
+               this script submits the workers. The main process ends with the job of the
+               worker that hosts it (walltime, node failure); a run can then be continued
+               with `run_mode: resume`. Its output goes where the main script sends it.
 """
 import argparse
 import os
@@ -39,7 +47,7 @@ from dask_jobqueue.slurm import SLURMJob
 from enchanted_surrogates.utils.config_helpers import load_configuration
 
 WAIT_FOREVER = 60 * 60 * 24 * 30  # seconds a worker waits for the scheduler file
-MODES = ("first_any", "each_any", "all")
+MODES = ("first_any", "each_any", "all", "main_on_worker")
 
 
 def build_worker_job_script(slurm_config: dict, scheduler_file: str, index: int = 0, prologue: list[str] = ()) -> str:
@@ -67,6 +75,12 @@ def checkin_prologue(checkin_dir: str, executor: str, all_executors: list[str], 
         f"mkdir -p {checkin_dir} && touch {checkin_dir}/{executor}.$SLURM_JOB_ID",
         f"if {have_all}; then scontrol release {main_job_id} || true; fi",
     ]
+
+
+def main_on_worker_prologue(lock_dir: str, main_body_path: str, log_path: str) -> list[str]:
+    """Lines for a worker job: the first worker job to get here (mkdir is atomic, also on Lustre)
+    starts the main process in the background. The others skip it, whatever the state of base_run_dir."""
+    return [f"if mkdir {lock_dir} 2>/dev/null; then nohup bash {main_body_path} > {log_path}-$SLURM_JOB_ID.out 2>&1 & fi"]
 
 
 def split_script(script: str) -> tuple[list[str], list[str]]:
@@ -147,6 +161,17 @@ def main(argv=None):
         checkin_dir = os.path.join(first_dir, f"checkin_{main_id}")
         prologue_for = {name: checkin_prologue(checkin_dir, name, list(executors), main_id) for name in executors}
 
+    if args.mode == "main_on_worker":
+        lock_dir = os.path.join(first_dir, "main_on_worker_lock")
+        main_body_path = os.path.join(first_dir, "main_on_worker_body.sh")
+        if not args.dry_run:
+            if os.path.isdir(lock_dir):
+                os.rmdir(lock_dir)  # a stale lock from an earlier launch would stop every worker from starting the main process
+            _, main_body = split_script(open(args.main_job_script).read())
+            write_executable(main_body_path, "\n".join(["#!/bin/bash"] + main_body) + "\n")
+        mow_prologue = main_on_worker_prologue(lock_dir, main_body_path, os.path.join(first_dir, "main_on_worker"))
+        prologue_for = {name: mow_prologue for name in executors}
+
     ids = {name: [] for name in executors}
     het_workers = []
     for name, cfg in executors.items():
@@ -186,7 +211,9 @@ def main(argv=None):
         else:
             print(f"submitted heterogeneous job {sbatch([het_path])} (main process + {len(het_workers)} workers)")
         return
-    if args.dry_run or args.mode == "each_any":
+    if args.dry_run or args.mode in ("each_any", "main_on_worker"):
+        if args.mode == "main_on_worker" and not args.dry_run:
+            print(f"no main job: the first worker job to start runs {args.main_job_script}'s commands in the background")
         return
     dependency = "--dependency=" + "?".join(f"after:{j}" for j in ids[next(iter(executors))])
     main_id = sbatch([dependency, "--kill-on-invalid-dep=yes", args.main_job_script])
