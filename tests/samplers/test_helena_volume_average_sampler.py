@@ -1,8 +1,11 @@
+import os
+
 import numpy as np
 import pytest
 
 from enchanted_surrogates.samplers.helena_volume_average_sampler import HelenaVolumeAverageSampler
 
+BASE_FORT10 = os.path.join(os.path.dirname(__file__), "data", "fort.10")
 TE_KEYS = {"T_eped", "T_esep", "aT1", "d_T_ped", "alpha_T1", "alpha_T2", "Te_avg_target"}
 NE_KEYS = {"n_eped", "n_esep", "an1", "d_n_ped", "alpha_n1", "alpha_n2", "ne_avg_target"}
 
@@ -284,3 +287,80 @@ def test_a_join_sampler_passes_the_results_on_so_that_the_curve_is_updated():
     kinetic = join.all_samplers[1]
     join.register_future(_batch_of_curves(KNOTS ** 2, 2))
     assert kinetic.curve == pytest.approx(0.5 * MEAN_V_CURVE + 0.5 * KNOTS ** 2)
+
+
+# ---- end-to-end through the HELENA plugin parser (skipped if the plugin is not installed) -------------------------------
+
+@pytest.fixture
+def parser():
+    pytest.importorskip("f90nml")
+    mod = pytest.importorskip("enchanted_plugin_helena.helena_parser")
+    return mod.HelenaParser()
+
+
+def test_end_to_end_through_noKBM_parser_hits_volume_averages(tmp_path, parser):
+    import f90nml
+    smp = _sampler(budget=30, batch_size=30, ti_te_ped_range=[0.8, 1.2],
+                   ti_te_sep_range=[1.0, 3.0])
+    for i, s in enumerate(smp.get_next_samples()):
+        run = tmp_path / f"run{i}"
+        run.mkdir()
+        assert parser.write_input_file_noKBMconstraint(s, str(run), BASE_FORT10)["success"]
+        phys = f90nml.read(run / "fort.10")["phys"]
+        te_avg = np.sum(_profile(phys, "t", smp._psi) * smp._dv)
+        ne_avg = np.sum(_profile(phys, "d", smp._psi) * smp._dv)
+        assert 3.1 - 1e-6 <= te_avg <= 6.3 + 1e-6
+        assert 4.2 - 1e-6 <= ne_avg <= 8.1 + 1e-6
+        # pedestal-top values round-trip through the parser's a0 convention
+        ped_t = _profile(phys, "t", np.array([phys["fte"]]))[0]
+        assert ped_t == pytest.approx(s["T_eped"], rel=1e-9)
+
+
+def test_scaling_is_exact_through_parser(tmp_path, parser):
+    import f90nml
+    smp = _sampler(budget=10, batch_size=10, te_avg_range=[5.0, 5.0], ne_avg_range=[6.0, 6.0])
+    for i, s in enumerate(smp.get_next_samples()):
+        run = tmp_path / f"r{i}"
+        run.mkdir()
+        parser.write_input_file_noKBMconstraint(s, str(run), BASE_FORT10)
+        phys = f90nml.read(run / "fort.10")["phys"]
+        assert np.sum(_profile(phys, "t", smp._psi) * smp._dv) == pytest.approx(5.0, rel=1e-9)
+        assert np.sum(_profile(phys, "d", smp._psi) * smp._dv) == pytest.approx(6.0, rel=1e-9)
+
+
+# ---- end-to-end through the HELENA plugin parser (skipped if the plugin is not installed) -------------------------------
+
+@pytest.fixture
+def parser():
+    pytest.importorskip("f90nml")
+    mod = pytest.importorskip("enchanted_plugin_helena.helena_parser")
+    return mod.HelenaParser()
+
+
+def test_end_to_end_through_noKBM_parser_hits_volume_averages(tmp_path, parser):
+    import f90nml
+    smp = _sampler(budget=30, batch_size=30, ti_te_ped_range=[0.8, 1.2],
+                   ti_te_sep_range=[1.0, 3.0])
+    for i, s in enumerate(smp.get_next_samples()):
+        run = tmp_path / f"run{i}"
+        run.mkdir()
+        assert parser.write_input_file_noKBMconstraint(s, str(run), BASE_FORT10)["success"]
+        phys = f90nml.read(run / "fort.10")["phys"]
+        te_avg = np.sum(_profile(phys, "t", smp._psi) * smp._dv)
+        ne_avg = np.sum(_profile(phys, "d", smp._psi) * smp._dv)
+        assert 3.1 - 1e-6 <= te_avg <= 6.3 + 1e-6
+        assert 4.2 - 1e-6 <= ne_avg <= 8.1 + 1e-6
+        ped_t = _profile(phys, "t", np.array([phys["fte"]]))[0]
+        assert ped_t == pytest.approx(s["T_eped"], rel=1e-9)
+
+
+def test_scaling_is_exact_through_parser(tmp_path, parser):
+    import f90nml
+    smp = _sampler(budget=10, batch_size=10, te_avg_range=[5.0, 5.0], ne_avg_range=[6.0, 6.0])
+    for i, s in enumerate(smp.get_next_samples()):
+        run = tmp_path / f"r{i}"
+        run.mkdir()
+        parser.write_input_file_noKBMconstraint(s, str(run), BASE_FORT10)
+        phys = f90nml.read(run / "fort.10")["phys"]
+        assert np.sum(_profile(phys, "t", smp._psi) * smp._dv) == pytest.approx(5.0, rel=1e-9)
+        assert np.sum(_profile(phys, "d", smp._psi) * smp._dv) == pytest.approx(6.0, rel=1e-9)

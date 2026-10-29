@@ -366,6 +366,8 @@ class ExtraTreesTimeAwareActiveSampler(ParentActiveSampler):
                 )
                 self._stop_early = True
 
+        self._check_mcc_convergence(metrics)
+
         return metrics
 
     @staticmethod

@@ -119,6 +119,8 @@ class ParentActiveSampler(Sampler):
         self.train_x = np.empty((0, self.input_dim), dtype=float)
         self.train_y = np.empty((0, self.output_dim), dtype=object)
 
+        self._init_mcc_convergence(kwargs)
+
         # Test set (optional)
         self.test_data_csv = kwargs.get("test_data_csv", None)
         self._test_X = None
@@ -238,6 +240,81 @@ class ParentActiveSampler(Sampler):
         y = df[self.output_variables].to_numpy()
         self._test_X = self.to_unit_numpy(X_real)
         self._test_y = self._ensure_2d(y)
+
+    # ------------------------------------------------------------
+    # MCC CONVERGENCE STOPPING
+    # ------------------------------------------------------------
+    def _init_mcc_convergence(self, kwargs):
+        """
+        Optional stopping rule for classification samplers: stop once the
+        class-vs-rest MCC of the monitored class(es) has stayed within a narrow
+        band over the last few batches. Config (all in sampler_config):
+
+            mcc_convergence_class   : str or list of str, optional
+                Class label(s) to monitor, e.g. "KBM". None (default) disables
+                the rule. With several classes, all must have converged.
+            mcc_convergence_batches : int, default 5
+                Number of most recent batch evaluations in the window.
+            mcc_convergence_range   : float, default 0.02
+                Converged when max - min of the class MCC over the window is
+                <= this value. A window whose MCC is 0 throughout (class not
+                learned yet) never counts as converged.
+
+        The MCC comes from the confusion matrix of each evaluate_model() call
+        (test set if test_data_csv is set, otherwise K-fold CV), so it needs no
+        extra model fits. Child classes call _check_mcc_convergence(metrics)
+        from evaluate_model(); it sets self._stop_early when converged.
+        """
+        cls = kwargs.get("mcc_convergence_class", None)
+        self.mcc_convergence_classes = [] if cls is None else ([cls] if isinstance(cls, str) else list(cls))
+        self.mcc_convergence_batches = int(kwargs.get("mcc_convergence_batches", 5))
+        self.mcc_convergence_range = float(kwargs.get("mcc_convergence_range", 0.02))
+        if self.mcc_convergence_batches < 2:
+            raise ValueError("mcc_convergence_batches must be >= 2")
+        if self.mcc_convergence_range < 0:
+            raise ValueError("mcc_convergence_range must be >= 0")
+        self._mcc_history = {c: [] for c in self.mcc_convergence_classes}
+        self._mcc_history_n_train = -1
+
+    @staticmethod
+    def _class_vs_rest_mcc(cm, labels, label):
+        """Class-vs-rest Matthews correlation of `label` from a confusion matrix (0.0 if undefined)."""
+        labels = list(labels)
+        if label not in labels:
+            return 0.0
+        i = labels.index(label)
+        tp = float(cm[i, i]); fn = float(cm[i].sum()) - tp; fp = float(cm[:, i].sum()) - tp
+        tn = float(cm.sum()) - tp - fn - fp
+        den = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+        return float((tp * tn - fp * fn) / den) if den > 0 else 0.0
+
+    def _check_mcc_convergence(self, metrics):
+        """
+        Record this batch's class-vs-rest MCC for each monitored class and set
+        self._stop_early once every one has a full window whose range is within
+        mcc_convergence_range. No-op if the rule is disabled or metrics is None.
+        """
+        if not self.mcc_convergence_classes or metrics is None or "confusion_matrix" not in metrics:
+            return
+        n_train = len(self.train_x)
+        if n_train == self._mcc_history_n_train:  # repeated evaluation of the same training set
+            return
+        self._mcc_history_n_train = n_train
+        k, tol = self.mcc_convergence_batches, self.mcc_convergence_range
+        converged = True
+        for c in self.mcc_convergence_classes:
+            hist = self._mcc_history[c]
+            hist.append(self._class_vs_rest_mcc(metrics["confusion_matrix"], metrics["labels"], c))
+            win = hist[-k:]
+            if len(win) < k or max(win) <= 0.0 or max(win) - min(win) > tol:
+                converged = False
+        if converged:
+            log.warning(
+                "MCC converged: %s changed by <= %.3f over the last %d batches (%d training samples); stopping the run.",
+                ", ".join(f"{c} MCC={self._mcc_history[c][-1]:.3f}" for c in self.mcc_convergence_classes),
+                tol, k, n_train,
+            )
+            self._stop_early = True
 
     # ------------------------------------------------------------
     # CPU-HOUR BUDGET
