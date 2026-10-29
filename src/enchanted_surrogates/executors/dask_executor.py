@@ -93,6 +93,9 @@ the order is reversed:
    - `main_on_worker`: no separate main job; the first worker job to start also runs
      the main process in the background on its own node (a `mkdir` lock decides which).
      The main process ends with that worker's job; continue with `run_mode: resume`.
+   - `main_on_worker_takeover`: as `main_on_worker`, but when the main process dies another
+     worker job takes over (heartbeat file, atomic lock per attempt) and resumes the run;
+     the workers reconnect to the new scheduler.
 3. The main process starts the scheduler (which writes `scheduler_file`) and the
    waiting workers connect to it. No worker jobs are submitted by the main process.
 
