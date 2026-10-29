@@ -90,6 +90,9 @@ the order is reversed:
      worker job of the last executor to get a running worker.
    - `all`: the main process and all workers form one heterogeneous job and
      start together, so no worker waits idle.
+   - `main_on_worker`: no separate main job; the first worker job to start also runs
+     the main process in the background on its own node (a `mkdir` lock decides which).
+     The main process ends with that worker's job; continue with `run_mode: resume`.
 3. The main process starts the scheduler (which writes `scheduler_file`) and the
    waiting workers connect to it. No worker jobs are submitted by the main process.
 

@@ -101,6 +101,7 @@ The modes decide when the main process starts:
 |---|---|---|
 | `first_any` (default) | any worker job of the first external executor has started | workers are separate jobs; the main job has `--dependency=after:w1?after:w2...` |
 | `each_any` | at least one worker job of every external executor has started | workers are separate jobs; the main job is submitted held (`--hold`) and each worker job, when it starts, writes a check-in file and runs `scontrol release <main job>` once every executor has checked in |
+| `main_on_worker` | the first worker job of any executor to start | no separate main job: that worker also runs the main process in the background on its node (atomic `mkdir main_on_worker_lock` picks the host; a stale lock is removed at launch). The main process ends with the host worker's job, so continue with `run_mode: resume` |
 | `all` | all resources can start at the same time | the main process and all workers form one heterogeneous job (`#SBATCH hetjob`) |
 
 In `first_any` and `each_any`, workers that start before the main job wait idle for
