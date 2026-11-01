@@ -17,11 +17,15 @@ All workers are ordinary, separate SLURM jobs. The modes only decide when the
 main job may start:
     first_any  once ANY worker job of the first external executor has started
                (--dependency=after:w1?after:w2?...)
-    each_any   once at least one worker job of EVERY external executor has started.
-               SLURM cannot express this as a dependency, so the main job is
-               submitted held and each worker job, when it starts, checks in and
-               releases the main job (scontrol release) when every executor has
-               checked in.
+    each_any   once at least one worker job of EVERY external executor has started, and
+               the main job itself has started too: the main job is submitted at once, like
+               the workers, so it queues in parallel with them and does NOT wait in the queue
+               after the workers have started. Its script is the given one with a wait inserted
+               after the #SBATCH lines: it polls the check-in files that each worker job writes
+               when it starts (<pool dir>/checkin_each_any/<executor>.<job id>) until every
+               executor has one, and only then runs the script's commands. The walltime of the
+               main job must therefore cover this wait as well as the run (the main job is
+               small, so waiting costs little).
     all        everything at once: the main process and all workers form one
                heterogeneous job (#SBATCH hetjob), so no worker waits idle for the
                main job. Each worker runs as `srun --het-group=k --overlap` on its own
@@ -80,14 +84,22 @@ def build_worker_job_script(slurm_config: dict, scheduler_file: str, index: int 
     return script.replace(placeholder, f"--scheduler-file {scheduler_file}")
 
 
-def checkin_prologue(checkin_dir: str, executor: str, all_executors: list[str], main_job_id: str) -> list[str]:
-    """Lines for a worker job: record that it started, and release the held main job
-    once at least one worker of every executor has started."""
-    have_all = " && ".join(f"ls {checkin_dir}/{e}.* >/dev/null 2>&1" for e in all_executors)
-    return [
-        f"mkdir -p {checkin_dir} && touch {checkin_dir}/{executor}.$SLURM_JOB_ID",
-        f"if {have_all}; then scontrol release {main_job_id} || true; fi",
-    ]
+def checkin_prologue(checkin_dir: str, executor: str) -> list[str]:
+    """Lines for a worker job: record that it started (each_any: the main job waits for these files)."""
+    return [f"mkdir -p {checkin_dir} && touch {checkin_dir}/{executor}.$SLURM_JOB_ID"]
+
+
+def wait_for_checkins(checkin_dir: str, executors: list[str], poll: int = 10) -> list[str]:
+    """Lines for the main job: wait until a worker job of every executor has checked in."""
+    have_all = " && ".join(f"ls {checkin_dir}/{e}.* >/dev/null 2>&1" for e in executors)
+    return [f"until {have_all}; do sleep {poll}; done"]
+
+
+def build_each_any_main_script(script: str, checkin_dir: str, executors: list[str], poll: int = 10) -> str:
+    """The main job script with the wait for the check-ins of every executor after its #SBATCH lines."""
+    directives, body = split_script(script)
+    wait = ["# each_any: wait until a worker job of every external executor has started (they check in with a file)"]
+    return "\n".join(["#!/bin/bash"] + directives + wait + wait_for_checkins(checkin_dir, executors, poll) + body) + "\n"
 
 
 def main_on_worker_prologue(lock_dir: str, main_body_path: str, log_path: str) -> list[str]:
@@ -298,14 +310,13 @@ def main(argv=None):
         raise SystemExit("No executor with external_workers: true in the config")
     first_dir = os.path.dirname(os.path.abspath(next(iter(executors.values()))["scheduler_file"]))
 
-    # each_any: the main job is submitted first, held, so the workers know which job to release
-    main_id, prologue_for = None, {}
+    # each_any: the workers check in when they start; the main job (submitted with them, not held) waits for the check-ins itself
+    prologue_for = {}
+    checkin_dir = os.path.join(first_dir, "checkin_each_any")
     if args.mode == "each_any":
-        main_id = "MAINJOBID" if args.dry_run else sbatch(["--hold", args.main_job_script])
         if not args.dry_run:
-            print(f"submitted main job {main_id} (held until a worker of every executor has started)")
-        checkin_dir = os.path.join(first_dir, f"checkin_{main_id}")
-        prologue_for = {name: checkin_prologue(checkin_dir, name, list(executors), main_id) for name in executors}
+            shutil.rmtree(checkin_dir, ignore_errors=True)   # check-ins of an earlier launch would end the wait at once
+        prologue_for = {name: checkin_prologue(checkin_dir, name) for name in executors}
 
     if args.mode == "main_on_worker":
         lock_dir = os.path.join(first_dir, "main_on_worker_lock")
@@ -349,8 +360,6 @@ def main(argv=None):
                 try:
                     ids[name].append(sbatch([path]))
                 except subprocess.CalledProcessError as e:
-                    if main_id:
-                        print(f"WARNING: worker submission failed, main job {main_id} stays held: scancel {main_id}")
                     raise SystemExit(e.stderr)
                 print(f"submitted worker job {ids[name][-1]} ({name} worker {i})")
 
@@ -366,7 +375,16 @@ def main(argv=None):
         else:
             print(f"submitted heterogeneous job {sbatch([het_path])} (main process + {len(het_workers)} workers)")
         return
-    if args.dry_run or args.mode in ("each_any", "main_on_worker", TAKEOVER):
+    if args.mode == "each_any":
+        main_path = os.path.join(first_dir, "main_each_any.sbatch")
+        with open(main_path, "w") as f:
+            f.write(build_each_any_main_script(open(args.main_job_script).read(), checkin_dir, list(executors)))
+        if args.dry_run:
+            print(f"wrote {main_path}")
+        else:
+            print(f"submitted main job {sbatch([main_path])} (queues with the workers, waits for a worker of every executor to start)")
+        return
+    if args.dry_run or args.mode in ("main_on_worker", TAKEOVER):
         if args.mode in ("main_on_worker", TAKEOVER) and not args.dry_run:
             print(f"no main job: the first worker job to start runs {args.main_job_script}'s commands in the background")
         return

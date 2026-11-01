@@ -100,21 +100,25 @@ The modes decide when the main process starts:
 | Mode | Main process starts when | How |
 |---|---|---|
 | `first_any` (default) | any worker job of the first external executor has started | workers are separate jobs; the main job has `--dependency=after:w1?after:w2...` |
-| `each_any` | at least one worker job of every external executor has started | workers are separate jobs; the main job is submitted held (`--hold`) and each worker job, when it starts, writes a check-in file and runs `scontrol release <main job>` once every executor has checked in |
+| `each_any` | at least one worker job of every external executor has started, and the main job itself has started | workers and the main job are all submitted at once, so the main job queues in parallel with the workers and does not wait in the queue after they have started. Its script is yours with a wait after the `#SBATCH` lines: it polls the check-in files that each worker job writes when it starts (`checkin_each_any/<executor>.<job id>` next to the first executor's `scheduler_file`) until every executor has one |
 | `main_on_worker` | the first worker job of any executor to start | no separate main job: that worker also runs the main process in the background on its node (atomic `mkdir main_on_worker_lock` picks the host; a stale lock is removed at launch). The main process ends with the host worker's job, so continue with `run_mode: resume` |
 | `main_on_worker_takeover` | the first worker job of any executor to start | like `main_on_worker`, and when the main process dies (host job at its walltime, node failure, crash) another worker job takes over: every worker job runs a watchdog, the main process touches `main_heartbeat`, and when it is stale for `--takeover-stale` s (default 300) one worker (atomic `mkdir main_lock_<attempt>`) starts the main process again with `run_mode: resume`, appending to the output file. The dask workers reconnect to the new scheduler. It gives up after `--takeover-max` takeovers (default 3, `main_gave_up`) and stops when run.py exits with code 0 (`main_done`). In-flight runs of a dead main process are lost and rerun by the resume |
 | `all` | all resources can start at the same time | the main process and all workers form one heterogeneous job (`#SBATCH hetjob`) |
 
-In `first_any` and `each_any`, workers that start before the main job wait idle for
-it, and that time comes out of their walltime. `first_any` gets the main process
-going soonest. `each_any` guarantees that every executor of a sequential workflow
-(e.g. HELENA then GENE) has a worker when the first batch is submitted.
+In `first_any`, workers that start before the main job wait idle for it, and that time
+comes out of their walltime; the main job is only queued once a worker has started.
+`first_any` gets the main process going soonest. In `each_any` the main job is queued
+together with the workers, so it can start before them and then waits (a small job, little
+cost) until a worker of every executor has started: the walltime of the main job must cover
+that wait as well as the run. `each_any` guarantees that every executor of a sequential
+workflow (e.g. HELENA then GENE) has a worker when the first batch is submitted. Workers that
+start before the main job wait idle for it.
 
 `all` has no idle workers: everything starts at the same moment, at the cost of
 SLURM having to find all the resources at once, which can make the queue wait
-longer. With `each_any`, the check-in files are written to `checkin_<main job id>/`
-next to the first executor's `scheduler_file`. If a worker submission fails, the
-held main job is reported and has to be cancelled by hand (`scancel <id>`).
+longer. With `each_any`, the derived main script is written to `main_each_any.sbatch` next to
+the first executor's `scheduler_file`, and the check-in files of an earlier launch are removed
+when the workers are submitted.
 
 ### How `all` runs the workers
 
