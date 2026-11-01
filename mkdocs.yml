@@ -16,6 +16,8 @@ nav:
     - Local Executor: executors/local_executor.md
     - Joblib Executor: executors/joblib_executor.md
     - Dask Executor: executors/dask_executor.md
+    - Starting Workers Before the Main Process: queue_efficient_runs.md
+    - Dask Worker Pool Run: executors/dask_worker_pool_run.md
   - Samplers:
     - Random Sampler: samplers/random_sampler.md
     - Grid Sampler: samplers/grid_sampler.md
