@@ -82,31 +82,41 @@ def test_modes_submission(tmp_path, monkeypatch, mode):
         wrapper = open(os.path.join(os.path.dirname(submitted[0][0]), "srun_wrapper", "srun")).read()
         assert "--het-group=${ENC_HET_GROUP:?}" in wrapper
         return
+    if mode == "each_any":    # the main job is submitted like the workers: not held, no dependency, and it waits for the check-ins itself
+        derived = [a for a in submitted if os.path.basename(a[-1]) == "main_each_any.sbatch"]
+        assert len(workers) == 4 and len(derived) == 1 and not mains
+        assert derived[0] == [derived[0][-1]]                  # no --hold, no --dependency
+        script = open(derived[0][-1]).read()
+        assert "#SBATCH -p small" in script and "#SBATCH -t 01:00:00" in script
+        assert script.index("#SBATCH -t") < script.index("until ") < script.index("python run.py")
+        assert "e0.*" in script and "e1.*" in script
+        worker = open(workers[0][0]).read()
+        assert "touch" in worker and "scontrol" not in worker
+        assert worker.index("touch") < worker.index("distributed.cli.dask_worker")
+        return
     assert len(workers) == 4 and len(mains) == 1      # ordinary separate worker jobs
-    if mode == "first_any":   # workers 101..104, e0 = 101, 102
-        assert mains[0][0] == "--dependency=after:101?after:102"
-    else:                     # main submitted first and held, workers release it
-        assert submitted[0] == ["--hold", main]
-        script = open(workers[0][0]).read()
-        assert "scontrol release 101" in script
-        assert script.index("scontrol release") < script.index("distributed.cli.dask_worker")
+    assert mains[0][0] == "--dependency=after:101?after:102"   # first_any: workers 101..104, e0 = 101, 102
 
 
-def test_checkin_releases_only_when_every_executor_started(tmp_path):
-    from enchanted_surrogates.executors.dask_worker_pool_run import checkin_prologue
-    fake = tmp_path / "bin"
-    fake.mkdir()
-    (fake / "scontrol").write_text(f"#!/bin/bash\necho \"$@\" >> {tmp_path}/released\n")
-    (fake / "scontrol").chmod(0o755)
+def test_main_job_waits_until_every_executor_has_checked_in(tmp_path):
+    from enchanted_surrogates.executors.dask_worker_pool_run import checkin_prologue, wait_for_checkins
     checkin = tmp_path / "checkin"
 
     def start_worker(executor, job_id):
-        lines = checkin_prologue(str(checkin), executor, ["e0", "e1"], "999")
-        subprocess.run(["bash", "-c", "\n".join(lines)], check=True,
-                       env={"PATH": f"{fake}:/usr/bin:/bin", "SLURM_JOB_ID": job_id})
+        subprocess.run(["bash", "-c", "\n".join(checkin_prologue(str(checkin), executor))], check=True,
+                       env={"PATH": "/usr/bin:/bin", "SLURM_JOB_ID": job_id})
 
+    def main_job_gets_through():
+        try:
+            subprocess.run(["bash", "-c", "\n".join(wait_for_checkins(str(checkin), ["e0", "e1"], poll=1))],
+                           check=True, timeout=3, env={"PATH": "/usr/bin:/bin"})
+            return True
+        except subprocess.TimeoutExpired:
+            return False
+
+    assert not main_job_gets_through()           # nobody has started
     start_worker("e0", "1")
     start_worker("e0", "2")
-    assert not (tmp_path / "released").exists()          # only e0 has started
+    assert not main_job_gets_through()           # only e0 has started
     start_worker("e1", "3")
-    assert (tmp_path / "released").read_text().strip() == "release 999"
+    assert main_job_gets_through()
