@@ -87,8 +87,14 @@ class HelenaVolumeAverageSampler(Sampler):
       volume_prior_weight: 10       # weight of the default curve in equilibria when it is updated (0: do not update)
       seed: null
       batch_size: 1
-      method: random                # or "sobol" (see below)
+      method: random                # or "sobol" (see below), or "design"
+      design_csv: null              # only for method "design": csv with one column per sampled parameter, one row per sample
     ```
+
+    With `method: design` the values are not drawn: row i of `design_csv` is sample i (e.g. one-at-a-time slices through the
+    ranges). The columns are the parameters of this sampler (`Te_avg`, `ne_avg`, ... as in `parameters`), their values must lie
+    in `bounds`, and `budget` must equal the number of rows. A row whose profile is not valid (core term < 0) raises an error
+    instead of being redrawn, because a redraw would silently replace the design point by random values.
 
     ## Parameters
 
@@ -201,12 +207,12 @@ class HelenaVolumeAverageSampler(Sampler):
     MAX_REDRAWS = 1000
 
     def __init__(self, budget, parameters=None, bounds=None, volume_profile=None,
-                 seed=None, batch_size=1, method="random", volume_prior_weight=10.0, **kwargs):
+                 seed=None, batch_size=1, method="random", volume_prior_weight=10.0, design_csv=None, **kwargs):
         self.budget = budget
         self.batch_size = batch_size
         self.rng = np.random.default_rng(seed)
-        if method not in ("random", "sobol"):
-            raise ValueError(f"method must be 'random' or 'sobol', got {method!r}")
+        if method not in ("random", "sobol", "design"):
+            raise ValueError(f"method must be 'random', 'sobol' or 'design', got {method!r}")
         self.method = method
         self._unit = None      # iterator over the unit-cube numbers of the current sample
 
@@ -241,6 +247,12 @@ class HelenaVolumeAverageSampler(Sampler):
         if self._ti_core:
             self.parameters += ["Ti_ov_Te_core"]
 
+        self._design = None
+        if method == "design":
+            self._design = self._read_design(design_csv)
+            if len(self._design) != budget:
+                raise ValueError(f"budget is {budget} but the design has {len(self._design)} rows")
+            self._design_row = 0
         if method == "sobol":
             from scipy.stats import qmc
             # per species: avg, ped, sep, width, alpha1, alpha2; Ti: two ratios
@@ -289,13 +301,47 @@ class HelenaVolumeAverageSampler(Sampler):
             raise ValueError(f"unknown parameters {bad}; valid names: {list(_PARAMETERS)}")
         return dict(zip(parameters, bounds))
 
+    def _design_names(self):
+        """Parameters in the order in which `_draw` and `_draw_ti` take their uniform numbers."""
+        names = []
+        if self.te_avg:
+            names += ["Te_avg", "Te_ped_ov_core", "Te_sep_ov_ped", "d_T_ped", "alpha_T1", "alpha_T2"]
+        if self.ne_avg:
+            names += ["ne_avg", "ne_ped_ov_core", "ne_sep_ov_ped", "d_n_ped", "alpha_n1", "alpha_n2"]
+        if self._ti:
+            names += ["Ti_ov_Te_ped", "Ti_ov_Te_sep"]
+        if self._ti_core:
+            names += ["Ti_ov_Te_core"]
+        return names
+
+    def _read_design(self, path):
+        """Unit-cube coordinates (rows x dims, in `_design_names` order) of the design in `path`."""
+        if path is None:
+            raise ValueError("method 'design' needs design_csv")
+        table = np.genfromtxt(path, delimiter=",", names=True)
+        table = np.atleast_1d(table)
+        names = self._design_names()
+        missing = [n for n in names if n not in table.dtype.names]
+        if missing:
+            raise ValueError(f"design_csv {path} has no column(s) {missing}")
+        unit = np.empty((len(table), len(names)))
+        for j, name in enumerate(names):
+            lo, hi = self.opt[name]
+            v = table[name]
+            if np.any(v < lo - 1e-12 * max(1.0, abs(lo))) or np.any(v > hi + 1e-12 * max(1.0, abs(hi))):
+                raise ValueError(f"design column {name} has values outside its bounds {[lo, hi]}")
+            unit[:, j] = 0.0 if hi == lo else (v - lo) / (hi - lo)
+        return np.clip(unit, 0.0, 1.0)
+
     def _u(self, lo, hi):
         """Uniform draw: next Sobol coordinate of the current sample, else pseudo-random."""
         if self._unit is not None:
             try:
                 return lo + (hi - lo) * next(self._unit)
             except StopIteration:
-                pass   # redraws after a rejected draw fall back to pseudo-random
+                if self._design is not None:
+                    raise RuntimeError("the design point ran out of numbers: a redraw would replace it by random values")
+                # redraws after a rejected draw fall back to pseudo-random
         return self.rng.uniform(lo, hi)
 
     @staticmethod
@@ -336,6 +382,9 @@ class HelenaVolumeAverageSampler(Sampler):
             alpha1, alpha2 = u(*alpha1_r), u(*alpha2_r)
             prof = self._unit_profile(ped_frac, sep_rel, delta, alpha1, alpha2)
             if prof is None:
+                if self._design is not None:
+                    raise ValueError(f"design point: the profile with pedestal-top fraction {ped_frac:.4g}, "
+                                     f"separatrix ratio {sep_rel:.4g}, width {delta:.4g} has a negative core term")
                 continue
             a0, sep, a1, t1, t2 = prof
             unit_avg = np.sum((sep + a0 * t1 + a1 * t2) * self._dv)
@@ -365,6 +414,8 @@ class HelenaVolumeAverageSampler(Sampler):
             if core_term >= 0:
                 out["Ti_ov_Te_core"] = r_core
                 return out
+            if self._design is not None:
+                raise ValueError(f"design point with Ti_ov_Te_core {r_core:.4g} has a negative Ti core term")
         raise RuntimeError(
             f"Could not draw Ti ratios with a non-negative Ti core term in {self.MAX_REDRAWS} tries; "
             "widen the Ti_ov_Te_core bounds upward or lower the pedestal/separatrix ratios."
@@ -374,7 +425,12 @@ class HelenaVolumeAverageSampler(Sampler):
         o = self.opt
         samples = []
         unit = self._sobol.random(self.batch_size) if self.method == "sobol" else None
-        for i in range(self.batch_size):
+        n = self.batch_size
+        if self._design is not None:
+            unit = self._design[self._design_row:self._design_row + self.batch_size]
+            self._design_row += len(unit)
+            n = len(unit)
+        for i in range(n):
             self._unit = iter(unit[i]) if unit is not None else None
             sample = {}
             if self.te_avg:

@@ -364,3 +364,53 @@ def test_scaling_is_exact_through_parser(tmp_path, parser):
         phys = f90nml.read(run / "fort.10")["phys"]
         assert np.sum(_profile(phys, "t", smp._psi) * smp._dv) == pytest.approx(5.0, rel=1e-9)
         assert np.sum(_profile(phys, "d", smp._psi) * smp._dv) == pytest.approx(6.0, rel=1e-9)
+
+
+def _design_sampler(tmp_path, rows, budget=None, **kw):
+    """method 'design' with Te/ne and the three Ti ratios; `rows` are dicts of the design columns."""
+    names = ["Te_avg", "ne_avg", "Te_ped_ov_core", "Te_sep_ov_ped", "ne_ped_ov_core", "ne_sep_ov_ped",
+             "Ti_ov_Te_ped", "Ti_ov_Te_sep", "Ti_ov_Te_core", "d_T_ped", "d_n_ped",
+             "alpha_T1", "alpha_T2", "alpha_n1", "alpha_n2"]
+    bounds = [[1.0, 7.0], [4.2, 8.1], [0.3, kw.pop("ped_hi", 0.8)], [0.02, 0.3], [0.3, 0.8], [0.2, 0.5], [0.5, 2.0], [0.5, 3.0],
+              [0.5, 2.0], [0.03, 0.3], [0.03, 0.3], [1.5, 2.5], [1.5, 2.5], [1.5, 2.5], [1.5, 2.5]]
+    path = tmp_path / "design.csv"
+    path.write_text(",".join(names) + "\n" + "\n".join(",".join(str(r[n]) for n in names) for r in rows) + "\n")
+    return HelenaVolumeAverageSampler(budget=budget or len(rows), parameters=names, bounds=bounds, method="design",
+                                      design_csv=str(path), batch_size=kw.pop("batch_size", len(rows)), **kw), names, bounds
+
+
+def test_design_reproduces_the_given_values(tmp_path):
+    mid = dict(Te_avg=4.0, ne_avg=6.15, Te_ped_ov_core=0.55, Te_sep_ov_ped=0.16, ne_ped_ov_core=0.55, ne_sep_ov_ped=0.35,
+               Ti_ov_Te_ped=1.25, Ti_ov_Te_sep=1.75, Ti_ov_Te_core=1.25, d_T_ped=0.165, d_n_ped=0.165,
+               alpha_T1=2.0, alpha_T2=2.0, alpha_n1=2.0, alpha_n2=2.0)
+    rows = [dict(mid), dict(mid, Te_avg=2.5), dict(mid, alpha_T1=1.7, d_n_ped=0.1)]
+    s, _, _ = _design_sampler(tmp_path, rows, batch_size=2)
+    first, second = s.get_next_samples(), s.get_next_samples()          # batches of 2 and 1
+    assert len(first) == 2 and len(second) == 1
+    got = first + second
+    assert got[0]["Te_avg_target"] == pytest.approx(4.0) and got[1]["Te_avg_target"] == pytest.approx(2.5)
+    assert got[2]["alpha_T1"] == pytest.approx(1.7) and got[2]["d_n_ped"] == pytest.approx(0.1)
+    for k in ("Ti_ov_Te_ped", "Ti_ov_Te_sep", "Ti_ov_Te_core", "ne_avg_target"):
+        assert got[0][k] == pytest.approx({"Ti_ov_Te_ped": 1.25, "Ti_ov_Te_sep": 1.75, "Ti_ov_Te_core": 1.25, "ne_avg_target": 6.15}[k])
+    assert got[0]["Te_avg_target"] == got[0]["Te_avg_target"] and got[0]["T_eped"] == pytest.approx(got[1]["T_eped"] * 4.0 / 2.5)
+
+
+def test_design_rejects_values_outside_the_bounds(tmp_path):
+    mid = dict(Te_avg=4.0, ne_avg=6.15, Te_ped_ov_core=0.55, Te_sep_ov_ped=0.16, ne_ped_ov_core=0.55, ne_sep_ov_ped=0.35,
+               Ti_ov_Te_ped=1.25, Ti_ov_Te_sep=1.75, Ti_ov_Te_core=1.25, d_T_ped=0.165, d_n_ped=0.165,
+               alpha_T1=2.0, alpha_T2=2.0, alpha_n1=2.0, alpha_n2=2.0)
+    with pytest.raises(ValueError, match="outside"):
+        _design_sampler(tmp_path, [dict(mid, Te_avg=9.0)])
+    with pytest.raises(ValueError, match="budget"):
+        _design_sampler(tmp_path, [mid, mid], budget=3)
+
+
+def test_design_never_redraws_an_invalid_point(tmp_path):
+    # pedestal top at 0.95 of the core value with a narrow pedestal and a low separatrix ratio: negative core term
+    # (with the ranges of the JT-60SA runs, T_ped / T_core <= 0.8, the core term stays positive)
+    bad = dict(Te_avg=4.0, ne_avg=6.15, Te_ped_ov_core=0.95, Te_sep_ov_ped=0.02, ne_ped_ov_core=0.55, ne_sep_ov_ped=0.35,
+               Ti_ov_Te_ped=1.25, Ti_ov_Te_sep=1.75, Ti_ov_Te_core=1.25, d_T_ped=0.03, d_n_ped=0.165,
+               alpha_T1=2.0, alpha_T2=2.0, alpha_n1=2.0, alpha_n2=2.0)
+    s, _, _ = _design_sampler(tmp_path, [bad], ped_hi=0.99)
+    with pytest.raises(ValueError, match="negative"):   # raised, not silently replaced by a random draw
+        s.get_next_samples()
