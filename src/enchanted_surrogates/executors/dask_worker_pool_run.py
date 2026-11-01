@@ -16,16 +16,16 @@ which the main process writes when it starts the scheduler.
 All workers are ordinary, separate SLURM jobs. The modes only decide when the
 main job may start:
     first_any  once ANY worker job of the first external executor has started
-               (--dependency=after:w1?after:w2?...)
-    each_any   once at least one worker job of EVERY external executor has started, and
-               the main job itself has started too: the main job is submitted at once, like
-               the workers, so it queues in parallel with them and does NOT wait in the queue
-               after the workers have started. Its script is the given one with a wait inserted
-               after the #SBATCH lines: it polls the check-in files that each worker job writes
-               when it starts (<pool dir>/checkin_each_any/<executor>.<job id>) until every
-               executor has one, and only then runs the script's commands. The walltime of the
-               main job must therefore cover this wait as well as the run (the main job is
-               small, so waiting costs little).
+    each_any   once at least one worker job of EVERY external executor has started
+               In both modes the main job is submitted at once, like the workers, so it queues
+               in parallel with them and does NOT wait in the queue after the workers have
+               started (no worker idles for a long time with no main process). Its script is the
+               given one with a wait inserted after the #SBATCH lines: it polls the check-in
+               files that each worker job writes when it starts
+               (<pool dir>/checkin_<mode>/<executor>.<job id>) until the executors of the mode
+               (the first one, or all) have one, and only then runs the script's commands. The
+               walltime of the main job must therefore cover this wait as well as the run (the
+               main job is small, so waiting costs little).
     all        everything at once: the main process and all workers form one
                heterogeneous job (#SBATCH hetjob), so no worker waits idle for the
                main job. Each worker runs as `srun --het-group=k --overlap` on its own
@@ -85,7 +85,7 @@ def build_worker_job_script(slurm_config: dict, scheduler_file: str, index: int 
 
 
 def checkin_prologue(checkin_dir: str, executor: str) -> list[str]:
-    """Lines for a worker job: record that it started (each_any: the main job waits for these files)."""
+    """Lines for a worker job: record that it started (first_any/each_any: the main job waits for these files)."""
     return [f"mkdir -p {checkin_dir} && touch {checkin_dir}/{executor}.$SLURM_JOB_ID"]
 
 
@@ -95,10 +95,11 @@ def wait_for_checkins(checkin_dir: str, executors: list[str], poll: int = 10) ->
     return [f"until {have_all}; do sleep {poll}; done"]
 
 
-def build_each_any_main_script(script: str, checkin_dir: str, executors: list[str], poll: int = 10) -> str:
-    """The main job script with the wait for the check-ins of every executor after its #SBATCH lines."""
+def build_waiting_main_script(script: str, checkin_dir: str, executors: list[str], mode: str, poll: int = 10) -> str:
+    """The main job script with the wait for the check-ins of `executors` after its #SBATCH lines."""
     directives, body = split_script(script)
-    wait = ["# each_any: wait until a worker job of every external executor has started (they check in with a file)"]
+    which = "every" if mode == "each_any" else "the first"
+    wait = [f"# {mode}: wait until a worker job of {which} external executor has started (they check in with a file)"]
     return "\n".join(["#!/bin/bash"] + directives + wait + wait_for_checkins(checkin_dir, executors, poll) + body) + "\n"
 
 
@@ -310,10 +311,12 @@ def main(argv=None):
         raise SystemExit("No executor with external_workers: true in the config")
     first_dir = os.path.dirname(os.path.abspath(next(iter(executors.values()))["scheduler_file"]))
 
-    # each_any: the workers check in when they start; the main job (submitted with them, not held) waits for the check-ins itself
+    # first_any / each_any: the workers check in when they start; the main job (submitted with them, not held, no dependency)
+    # waits for the check-ins itself
     prologue_for = {}
-    checkin_dir = os.path.join(first_dir, "checkin_each_any")
-    if args.mode == "each_any":
+    waiting_mode = args.mode in ("first_any", "each_any")
+    checkin_dir = os.path.join(first_dir, f"checkin_{args.mode}")
+    if waiting_mode:
         if not args.dry_run:
             shutil.rmtree(checkin_dir, ignore_errors=True)   # check-ins of an earlier launch would end the wait at once
         prologue_for = {name: checkin_prologue(checkin_dir, name) for name in executors}
@@ -375,22 +378,20 @@ def main(argv=None):
         else:
             print(f"submitted heterogeneous job {sbatch([het_path])} (main process + {len(het_workers)} workers)")
         return
-    if args.mode == "each_any":
-        main_path = os.path.join(first_dir, "main_each_any.sbatch")
+    if waiting_mode:
+        waits_for = list(executors) if args.mode == "each_any" else [next(iter(executors))]
+        main_path = os.path.join(first_dir, f"main_{args.mode}.sbatch")
         with open(main_path, "w") as f:
-            f.write(build_each_any_main_script(open(args.main_job_script).read(), checkin_dir, list(executors)))
+            f.write(build_waiting_main_script(open(args.main_job_script).read(), checkin_dir, waits_for, args.mode))
         if args.dry_run:
             print(f"wrote {main_path}")
         else:
-            print(f"submitted main job {sbatch([main_path])} (queues with the workers, waits for a worker of every executor to start)")
+            print(f"submitted main job {sbatch([main_path])} (queues with the workers, waits for a worker of {', '.join(waits_for)} to start)")
         return
     if args.dry_run or args.mode in ("main_on_worker", TAKEOVER):
         if args.mode in ("main_on_worker", TAKEOVER) and not args.dry_run:
             print(f"no main job: the first worker job to start runs {args.main_job_script}'s commands in the background")
         return
-    dependency = "--dependency=" + "?".join(f"after:{j}" for j in ids[next(iter(executors))])
-    main_id = sbatch([dependency, "--kill-on-invalid-dep=yes", args.main_job_script])
-    print(f"submitted main job {main_id} ({dependency})")
 
 
 if __name__ == "__main__":

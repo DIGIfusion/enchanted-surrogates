@@ -82,20 +82,19 @@ def test_modes_submission(tmp_path, monkeypatch, mode):
         wrapper = open(os.path.join(os.path.dirname(submitted[0][0]), "srun_wrapper", "srun")).read()
         assert "--het-group=${ENC_HET_GROUP:?}" in wrapper
         return
-    if mode == "each_any":    # the main job is submitted like the workers: not held, no dependency, and it waits for the check-ins itself
-        derived = [a for a in submitted if os.path.basename(a[-1]) == "main_each_any.sbatch"]
-        assert len(workers) == 4 and len(derived) == 1 and not mains
-        assert derived[0] == [derived[0][-1]]                  # no --hold, no --dependency
-        script = open(derived[0][-1]).read()
-        assert "#SBATCH -p small" in script and "#SBATCH -t 01:00:00" in script
-        assert script.index("#SBATCH -t") < script.index("until ") < script.index("python run.py")
-        assert "e0.*" in script and "e1.*" in script
-        worker = open(workers[0][0]).read()
+    # first_any / each_any: the main job is submitted like the workers (not held, no dependency) and waits for the check-ins itself
+    derived = [a for a in submitted if os.path.basename(a[-1]) == f"main_{mode}.sbatch"]
+    assert len(workers) == 4 and len(derived) == 1 and not mains
+    assert derived[0] == [derived[0][-1]]                  # no --hold, no --dependency
+    script = open(derived[0][-1]).read()
+    assert "#SBATCH -p small" in script and "#SBATCH -t 01:00:00" in script
+    assert script.index("#SBATCH -t") < script.index("until ") < script.index("python run.py")
+    assert "e0.*" in script
+    assert ("e1.*" in script) == (mode == "each_any")      # first_any waits for the first executor only, each_any for all
+    for w in workers:                                      # every worker job checks in, before its dask worker starts
+        worker = open(w[0]).read()
         assert "touch" in worker and "scontrol" not in worker
         assert worker.index("touch") < worker.index("distributed.cli.dask_worker")
-        return
-    assert len(workers) == 4 and len(mains) == 1      # ordinary separate worker jobs
-    assert mains[0][0] == "--dependency=after:101?after:102"   # first_any: workers 101..104, e0 = 101, 102
 
 
 def test_main_job_waits_until_every_executor_has_checked_in(tmp_path):
