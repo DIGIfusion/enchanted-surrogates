@@ -39,7 +39,9 @@ The `Sampler` decides how the search space is traversed and returns samples to t
 
 The user chooses the `Executor` based on the system where
 the code is running. The `Executor` initializes a cluster or a job
-queue or similar. The `Supervisor` sends the samples to the `Executor`. 
+queue or similar. Dask workers can also be submitted before the
+`Supervisor` starts, so it does not wait in the queue for them; see
+[Starting workers before the main process](queue_efficient_runs.md). The `Supervisor` sends the samples to the `Executor`. 
 The `Executor` calls `simulation_task.py` which initializes a
 `Runner` for each sample. 
 
@@ -141,6 +143,21 @@ supervisor:
       sampler: s1
       runner: r1
 ```
+
+### Long queue waits on SLURM
+
+If the main process runs as a SLURM job and the worker jobs (e.g. on GPU
+partitions) can wait in the queue for days, the main process can run out of
+walltime before any work starts. Dask executors can instead have their workers
+submitted first from the login node, with the main process started by SLURM only
+once workers are available:
+
+```bash
+python -m enchanted_surrogates.executors.dask_worker_pool_run \
+    -cf path/to/config/file --main-job-script main.sbatch --mode first_any
+```
+
+See [Starting workers before the main process](queue_efficient_runs.md).
 
 ### Output
 

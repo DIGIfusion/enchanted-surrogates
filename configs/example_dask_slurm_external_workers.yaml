@@ -1,0 +1,39 @@
+# Workers are submitted first by
+#   python -m enchanted_surrogates.executors.dask_worker_pool_run -cf <this file> --main-job-script main.sbatch [--mode first_any|each_any|all]
+# and the main job (which runs enchanted surrogates with this same file) starts once workers are available, see docs/queue_efficient_runs.md.
+logging: INFO
+
+executors:
+  e1:
+    type: DaskExecutor
+    external_workers: true
+    scheduler_file: "data_dir/dask_slurm_external/scheduler.json"  # outside base_run_dir
+    SLURMcluster_config:
+      account: "project_2009007"
+      queue: "small"
+      cores: 1
+      memory: "1GB"
+      processes: 1
+      walltime: "00:30:00"
+      interface: "ib0"
+    scale_n_jobs: 1
+samplers:
+  s1:
+    type: RandomSampler
+    bounds: [[0.0, 1.0], [0.0, 10.0]]
+    budget: 4
+    parameters: ['c1', 'c2']
+runners:
+  r1:
+    type: ExampleRunner
+    other_params: {}
+
+supervisor:
+  base_run_dir: "data_dir/dask_slurm_external/run"
+  run_order:
+  - executor: e1
+    sampler: s1
+    runner: r1
+
+storage:
+  type: hdf5
