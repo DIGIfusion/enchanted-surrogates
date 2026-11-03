@@ -49,6 +49,12 @@ main job may start:
                `run_mode: resume`. The dask workers reconnect to the new scheduler. Gives up
                after `--takeover-max` takeovers, and stops when run.py exits with code 0
                (`main_done`). See `write_takeover_files`.
+               In this mode the workers of an executor are also submitted with
+               `--dependency=after:<job>+<start_delay_minutes>` on ANY worker job of the executor before it
+               (config order; `?` = any of, see `dependency_after`), so a later executor's nodes are queued but
+               start only once an earlier executor's worker has started (plus `start_delay_minutes` of the later
+               executor, default 0, set in its executor config), and the first worker to start, which hosts the main
+               process, is one of the first executor's.
 """
 import argparse
 import os
@@ -289,6 +295,15 @@ def build_het_script(main_script: str, workers: list[tuple[str, str]], het_dir: 
     return "\n".join(lines + ["", "# workers, one per heterogeneous component"] + launch + ["", "# main process"] + main_body) + "\n"
 
 
+def dependency_after(job_ids: list[str], delay_minutes: int = 0) -> str | None:
+    """The sbatch --dependency value that lets a job start once ANY of job_ids has started, delay_minutes later.
+
+    `after:<id>[+<minutes>]` is satisfied when the job has begun (or was cancelled); '?' joins the expressions as "any of"
+    (',' would be "all of", which would hold the job behind every worker of the executor before it). None for no job ids."""
+    suffix = f"+{int(delay_minutes)}" if delay_minutes else ""
+    return "?".join(f"after:{j}{suffix}" for j in job_ids) or None
+
+
 def sbatch(args: list[str]) -> str:
     out = subprocess.run(["sbatch", "--parsable"] + args, check=True, capture_output=True, text=True)
     return out.stdout.strip().split(";")[0]
@@ -342,7 +357,16 @@ def main(argv=None):
 
     ids = {name: [] for name in executors}
     het_workers = []
+    previous = None   # the executor before this one, in config order
     for name, cfg in executors.items():
+        # main_on_worker_takeover: the workers of an executor may start only once ANY worker of the executor before it has started
+        # (+ start_delay_minutes of this executor, default 0), so the first worker to start, which hosts the main process, is always
+        # one of the first executor, and a later executor's nodes do not idle through the earlier stages
+        delay = int(cfg.get("start_delay_minutes", 0))
+        chained = args.mode == TAKEOVER and previous is not None
+        dependency = dependency_after(ids[previous], delay) if chained else None
+        if chained and args.dry_run:
+            print(f"{name} workers would be submitted with --dependency=after:<any {previous} worker job>" + (f"+{delay}" if delay else ""))
         scheduler_file = os.path.abspath(cfg["scheduler_file"])
         pool_dir = os.path.join(os.path.dirname(scheduler_file), f"worker_pool_{name}")
         os.makedirs(pool_dir, exist_ok=True)
@@ -361,10 +385,11 @@ def main(argv=None):
                 print(f"wrote {path}")
             else:
                 try:
-                    ids[name].append(sbatch([path]))
+                    ids[name].append(sbatch(([f"--dependency={dependency}"] if dependency else []) + [path]))
                 except subprocess.CalledProcessError as e:
                     raise SystemExit(e.stderr)
-                print(f"submitted worker job {ids[name][-1]} ({name} worker {i})")
+                print(f"submitted worker job {ids[name][-1]} ({name} worker {i})" + (f", --dependency={dependency}" if dependency else ""))
+        previous = name
 
     if args.mode == "all":
         het_dir = os.path.join(first_dir, "hetjob")
