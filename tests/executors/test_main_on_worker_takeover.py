@@ -138,3 +138,30 @@ def test_launch_cleans_the_state_of_an_earlier_launch(tmp_path):
     assert not [n for n in os.listdir(tmp_path) if n.startswith("main_lock") or n in ("main_heartbeat", "main_done", "main_gave_up", "main_exit_0")]
     assert not (tmp_path / "takeover_resume_config.yaml").exists(), "a config that already resumes is used as it is"
     assert ">> out.txt" in (tmp_path / "main_body_resume.sh").read_text()
+
+
+def test_dependency_after_is_any_of_the_jobs_with_a_delay():
+    from enchanted_surrogates.executors.dask_worker_pool_run import dependency_after
+    assert dependency_after([]) is None
+    assert dependency_after(["11"]) == "after:11"
+    assert dependency_after(["11"], 120) == "after:11+120"
+    assert dependency_after(["11", "12", "13"], 90) == "after:11+90?after:12+90?after:13+90"   # '?' = any of, ',' would be all of
+
+
+def test_takeover_submits_each_executor_after_any_worker_of_the_one_before(tmp_path, monkeypatch):
+    from enchanted_surrogates.executors import dask_worker_pool_run as m
+    cfg = {"base_run_dir": str(tmp_path / "run"), "executors": {
+        name: {"type": "DaskExecutor", "external_workers": True, "scheduler_file": str(tmp_path / "pool" / f"{name}.json"),
+               "scale_n_jobs": n, "start_delay_minutes": delay,
+               "SLURMcluster_config": {"cores": 2, "memory": "1GB", "walltime": "00:10:00", "queue": "small", "account": "a"}}
+        for name, n, delay in (("e1", 2, 99), ("e2", 3, 45), ("e3", 1, 0))}}
+    cf = tmp_path / "c.yaml"; cf.write_text(yaml.safe_dump(cfg))
+    main_script = tmp_path / "main.sbatch"; main_script.write_text("#!/bin/bash\n#SBATCH -J m\necho run\n")
+    calls = []
+    monkeypatch.setattr(m, "load_configuration", lambda f: type("C", (), {"executors": yaml.safe_load(open(f))["executors"]})())
+    monkeypatch.setattr(m, "sbatch", lambda a: calls.append(a) or str(100 + len(calls)))
+    m.main(["-cf", str(cf), "--main-job-script", str(main_script), "--mode", m.TAKEOVER])
+    deps = [next((x for x in a if x.startswith("--dependency=")), None) for a in calls]
+    assert deps[:2] == [None, None]                                              # the first executor depends on nothing
+    assert deps[2:5] == ["--dependency=after:101+45?after:102+45"] * 3           # e2: any worker of e1, e2's own delay (e1's 99 is not used)
+    assert deps[5] == "--dependency=after:103?after:104?after:105"                # e3: any of e2's three workers, no delay
