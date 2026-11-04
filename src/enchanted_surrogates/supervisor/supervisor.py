@@ -6,6 +6,7 @@ execution, sampling, and result aggregation for simulation runs.
 """
 
 import os
+import csv
 import sys
 import warnings
 import shutil
@@ -26,6 +27,34 @@ from enchanted_surrogates.utils.ascii_loading_bar import ascii_loading_bar
 log = get_logger(__name__)
 
 LOG_DIR = "logs"
+
+
+def append_aligned_csv(csv_path: str, dataset: pd.DataFrame):
+    """Append dataset to the csv file so that every value stays under its own column.
+
+    The columns of a batch are the keys of its runs' results, so they can differ between batches (a key that only some runs
+    return, such as an error message) and are ordered by first appearance. Appending a batch without looking at the header of the
+    file puts values under the wrong columns, or writes rows with more fields than the header (which pandas cannot read back).
+
+    - The batch is written in the column order of the header of the file; a column it lacks is left empty.
+    - A column that the file does not have yet is added: the file is rewritten (through a temporary file) with the new columns
+      after the old ones and empty for the older rows.
+    - A missing or empty file is written with a header.
+    """
+    if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+        dataset.to_csv(csv_path, mode="w", header=True, index=False)
+        return
+    with open(csv_path, newline="") as f:
+        header = next(csv.reader(f), [])
+    new_columns = [c for c in dataset.columns if c not in header]
+    if new_columns:
+        log.warning(f"{os.path.basename(csv_path)}: new column(s) {new_columns}, rewriting the file with them")
+        combined = pd.concat([pd.read_csv(csv_path), dataset], ignore_index=True)
+        tmp_path = csv_path + ".tmp"
+        combined.reindex(columns=header + new_columns).to_csv(tmp_path, index=False)
+        os.replace(tmp_path, csv_path)
+        return
+    dataset.reindex(columns=header).to_csv(csv_path, mode="a", header=False, index=False)
 
 
 class Supervisor:
@@ -301,8 +330,10 @@ class Supervisor:
         """
         log.debug(f'Writing summary to {filename} with write mode {write_mode}...')
         csv_path = os.path.join(self.base_run_dir, f"{filename}.csv")
-        write_header = write_mode != "a"
-        dataset.to_csv(csv_path, mode=write_mode, header=write_header, index=False)
+        if write_mode == "a":
+            append_aligned_csv(csv_path, dataset)
+            return
+        dataset.to_csv(csv_path, mode=write_mode, header=True, index=False)
 
     def update_runner_progress(self, group_name: str, runner_config: dict, submitted: int = 0, completed: int = 0, num_successes: int = 0):
         self.runner_progress[group_name][runner_config["__runner_name"]]['completed'] += completed
