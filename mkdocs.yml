@@ -12,6 +12,8 @@ nav:
     - Contribution: contribution.md
   - Supervisor:
     - Overview: supervisor.md
+  - Packers:
+    - Overview: packers.md
   - Executors:
     - Local Executor: executors/local_executor.md
     - Joblib Executor: executors/joblib_executor.md
