@@ -164,6 +164,11 @@ class Supervisor:
                             counters["completed"] += done
                             counters["num_successes"] += successes
 
+            # Write the run state before the first batch, so that a run that dies during its first (possibly only)
+            # batch can still be resumed: batch_number -1 means that no batch has completed at this depth yet.
+            if not (self.previous_run_data and self.previous_run_data.depth == nested_depth):
+                RunData(batch_number=-1, depth=nested_depth, submitted_samples=0).save(self.previous_run_file)
+
             while group.sampler.has_budget:
                 samples = group.sampler.get_next_samples()
                 
