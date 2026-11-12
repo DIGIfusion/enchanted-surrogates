@@ -187,6 +187,11 @@ class Supervisor:
             log.info(f"Starting nested group {nested_depth} with sampler {group.sampler.__class__.__name__}")
             self.write_current_progress_string(current_runner_name="N/A", nested_depth=nested_depth, sequential_depth=0, batch_number=batch_number, group_start_time=group_start_time)
             
+            # Write the run state before the first batch, so that a run that dies during its first (possibly only)
+            # batch can still be resumed: batch_number -1 means that no batch has completed at this depth yet.
+            if not (self.previous_run_data and self.previous_run_data.depth == nested_depth):
+                RunData(batch_number=-1, depth=nested_depth, submitted_samples=0).save(self.previous_run_file)
+
             while group.sampler.has_budget:
                 log_rss(log, f"G{nested_depth}_batch{batch_number}_start")
                 samples = group.sampler.get_next_samples()

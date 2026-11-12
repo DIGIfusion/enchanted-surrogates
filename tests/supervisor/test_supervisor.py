@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import h5py
 from enchanted_surrogates.supervisor.supervisor import Supervisor
+from enchanted_surrogates.supervisor.run_data import RunData
 from types import SimpleNamespace
 
 
@@ -463,3 +464,21 @@ def test_resume_restores_the_progress_counters_of_the_finished_level(tmp_path, p
     assert level0_progress == {"submitted": 3, "completed": 3, "num_successes": 2}
     level1_progress = next(iter(supervisor.runner_progress["G1"].values()))
     assert level1_progress["submitted"] == level1_progress["completed"] == 3   # 3 parents x 1 sample: only the new level is counted
+
+
+def test_run_state_is_written_before_the_first_batch_completes(tmp_path, patch_supervisor_imports):
+    """A run that dies during its first batch must still have an enchanted_run.yaml to resume from."""
+    samplers, executors = patch_supervisor_imports([[[{"a": 0}, {"a": 1}]]])
+    supervisor = Supervisor(make_args(tmp_path))
+    seen = {}
+    original_execute = executors[0].execute.side_effect   # the fixture's fake, which writes the results
+
+    def execute(to_run, runner):
+        seen["state"] = RunData.load(str(tmp_path / "enchanted_run.yaml"))
+        return original_execute(to_run, runner)
+
+    executors[0].execute.side_effect = execute
+    supervisor.start()
+
+    assert seen["state"] == RunData(batch_number=-1, depth=0, submitted_samples=0)
+
